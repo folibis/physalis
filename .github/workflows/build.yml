@@ -37,6 +37,11 @@ jobs:
       - name: Build
         run: cmake --build build
 
+      # The engine is found by scanning the directory the binary runs from, so
+      # when a test reports no plugins this is the first thing to look at.
+      - name: Show what was built
+        run: ls -l build | grep -Ei 'physalis|\.so|\.dll' || ls -l build
+
       - name: Test
         run: xvfb-run -a ctest --test-dir build --output-on-failure
 
@@ -48,6 +53,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Which MinGW packages exist is not guessable and changes over time, so
+      # the log carries the list. Read it here if the install below ever fails
+      # on the tool name.
+      - name: List available MinGW tools
+        run: |
+          python -m pip install --quiet "aqtinstall==3.3.*"
+          python -m aqt list-tool windows desktop | grep -i mingw
+
       # MinGW, to match what the project is developed with. Qt's MinGW builds
       # need an ABI-compatible GCC, so the toolchain comes from the same
       # installer as Qt rather than from the runner.
@@ -56,17 +69,28 @@ jobs:
         with:
           version: '6.5.1'
           arch: 'win64_mingw'
-          tools: 'tools_mingw1120'
+          tools: 'tools_mingw1310'
           cache: true
 
+      # Found rather than named, so the version in the directory cannot drift
+      # away from the version in the tool id.
       - name: Put MinGW on PATH
-        run: echo "$IQTA_TOOLS/mingw1120_64/bin" >> "$GITHUB_PATH"
+        run: |
+          bin=$(find "$IQTA_TOOLS" -maxdepth 3 -type d -name bin -path '*mingw*' | head -1)
+          test -n "$bin" || { echo "no MinGW found under $IQTA_TOOLS"; exit 1; }
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/g++.exe" --version
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build
+
+      # The engine is found by scanning the directory the binary runs from, so
+      # when a test reports no plugins this is the first thing to look at.
+      - name: Show what was built
+        run: ls -l build | grep -Ei 'physalis|\.so|\.dll' || ls -l build
 
       # CTest hands each test the Qt bin directory itself, so nothing extra is
       # needed here.
