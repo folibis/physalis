@@ -1,0 +1,76 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tests drive real widgets, and one of them sends a keystroke that
+      # only resolves while its window is active, so they need a display
+      # rather than the offscreen platform plugin.
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build xvfb libgl1-mesa-dev \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-xinerama0
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.5.1'
+          modules: 'qtsvg'
+          cache: true
+
+      # Box2D and GoogleTest are fetched by CMake, so this needs network but
+      # nothing else installed.
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: xvfb-run -a ctest --test-dir build --output-on-failure
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # MinGW, to match what the project is developed with. Qt's MinGW builds
+      # need an ABI-compatible GCC, so the toolchain comes from the same
+      # installer as Qt rather than from the runner.
+      - name: Install Qt and MinGW
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.5.1'
+          arch: 'win64_mingw'
+          modules: 'qtsvg'
+          tools: 'tools_mingw1120'
+          cache: true
+
+      - name: Put MinGW on PATH
+        run: echo "$IQTA_TOOLS/mingw1120_64/bin" >> "$GITHUB_PATH"
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      # CTest hands each test the Qt bin directory itself, so nothing extra is
+      # needed here.
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
