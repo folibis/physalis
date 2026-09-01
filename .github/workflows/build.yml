@@ -27,7 +27,6 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.5.1'
-          modules: 'qtsvg'
           cache: true
 
       # Box2D and GoogleTest are fetched by CMake, so this needs network but
@@ -57,7 +56,6 @@ jobs:
         with:
           version: '6.5.1'
           arch: 'win64_mingw'
-          modules: 'qtsvg'
           tools: 'tools_mingw1120'
           cache: true
 
