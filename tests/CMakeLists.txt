@@ -18,6 +18,13 @@ target_compile_definitions(PhysalisTests PRIVATE
 # The engine is a plugin: it has to exist before a test can find it.
 add_dependencies(PhysalisTests physalis_box2d)
 
+# The engine plugin is loaded from beside the running binary, and it is built
+# to the top of the build tree. qt_standard_project_setup() only points
+# executables there on Windows, so without this the tests land in tests/ on
+# Linux and find no engine at all.
+set_target_properties(PhysalisTests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
 # Qt6Test is the one Qt library the application itself does not use, so its DLL
 # is not already beside the executable -- and test discovery runs the binary
 # without the PATH the tests themselves are given.
