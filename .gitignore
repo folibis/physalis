@@ -1,0 +1,57 @@
+# Build output. Everything generated lands here, including the fetched
+# dependencies (Box2D, GoogleTest), the .reg files written from deploy/, and
+# any scenes saved while testing the app.
+build/
+# Qt Creator's default naming when the build directory is not "build".
+build-*/
+out/
+cmake-build-*/
+
+# Qt Creator's per-user session state: window layout, run configurations,
+# absolute paths to the local Qt kit. Never the same on two machines.
+*.user
+*.user.*
+CMakeLists.txt.user
+.qmake.stash
+
+# In-source CMake leftovers, in case someone configures without -B build.
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+compile_commands.json
+Makefile
+*.cmake.stamp
+
+# Qt's generated sources, if they ever end up beside the code they came from.
+moc_*.cpp
+moc_*.h
+ui_*.h
+qrc_*.cpp
+*_autogen/
+
+# Build artefacts
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.pdb
+*.ilk
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Claude Code's local, machine-specific settings. A shared .claude/settings.json
+# is worth committing; this one is not.
+.claude/settings.local.json

@@ -1,0 +1,8 @@
+#pragma once
+
+// Generated at build time -- do not edit. The major and minor numbers come
+// from project() in CMakeLists.txt; the build number increments on every build.
+#define PHYSALIS_VERSION_MAJOR @PHYSALIS_VERSION_MAJOR@
+#define PHYSALIS_VERSION_MINOR @PHYSALIS_VERSION_MINOR@
+#define PHYSALIS_BUILD_NUMBER  @PHYSALIS_BUILD_NUMBER@
+#define PHYSALIS_VERSION_STRING "@PHYSALIS_VERSION_MAJOR@.@PHYSALIS_VERSION_MINOR@.@PHYSALIS_BUILD_NUMBER@"

@@ -1,0 +1,7 @@
+Windows Registry Editor Version 5.00
+
+; Undoes register-phys.reg.
+
+[-HKEY_CURRENT_USER\Software\Classes\.phys]
+
+[-HKEY_CURRENT_USER\Software\Classes\Physalis.Scene]

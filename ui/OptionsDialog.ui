@@ -1,0 +1,710 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>OptionsDialog</class>
+ <widget class="QDialog" name="OptionsDialog">
+  <property name="windowTitle"><string>Options</string></property>
+  <layout class="QVBoxLayout" name="dialogLayout">
+   <item>
+    <widget class="QTabWidget" name="tabs">
+     <property name="currentIndex"><number>0</number></property>
+     <widget class="QScrollArea" name="commonScrollArea">
+      <attribute name="title"><string>Common</string></attribute>
+      <property name="widgetResizable"><bool>true</bool></property>
+      <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+      <widget class="QWidget" name="commonTab">
+       <layout class="QVBoxLayout" name="commonLayout">
+        <item>
+         <widget class="QGroupBox" name="fieldGroup">
+          <property name="title"><string>Field</string></property>
+          <layout class="QFormLayout" name="fieldGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="fieldWidth_label"><property name="text"><string>Field width:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QDoubleSpinBox" name="fieldWidth">
+           <property name="minimum"><double>100</double></property>
+           <property name="maximum"><double>1e+06</double></property>
+           <property name="singleStep"><double>100</double></property>
+           <property name="decimals"><number>0</number></property>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="fieldHeight_label"><property name="text"><string>Field height:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QDoubleSpinBox" name="fieldHeight">
+           <property name="minimum"><double>100</double></property>
+           <property name="maximum"><double>1e+06</double></property>
+           <property name="singleStep"><double>100</double></property>
+           <property name="decimals"><number>0</number></property>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="backgroundColorButton_label"><property name="text"><string>Background color:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QToolButton" name="backgroundColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="fieldGroup_row3_label"><property name="text"><string>Scale range:</string></property></widget>
+           </item>
+           <item row="3" column="1">
+          <widget class="QWidget" name="scaleRangeContainer" native="true">
+           <layout class="QHBoxLayout" name="scaleRangeLayout">
+            <property name="spacing"><number>4</number></property>
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+            <item><widget class="QDoubleSpinBox" name="scaleMin"> <property name="toolTip"><string>Minimum zoom level.</string></property> <property name="minimum"><double>0.1</double></property> <property name="maximum"><double>100000</double></property> <property name="singleStep"><double>10</double></property> <property name="decimals"><number>0</number></property> <property name="suffix"><string> %</string></property> <property name="maximumWidth"><number>80</number></property></widget></item>
+            <item><widget class="QLabel" name="scaleToLabel"><property name="text"><string>to</string></property></widget></item>
+            <item><widget class="QDoubleSpinBox" name="scaleMax"> <property name="toolTip"><string>Maximum zoom level.</string></property> <property name="minimum"><double>0.1</double></property> <property name="maximum"><double>100000</double></property> <property name="singleStep"><double>10</double></property> <property name="decimals"><number>0</number></property> <property name="suffix"><string> %</string></property> <property name="maximumWidth"><number>80</number></property></widget></item>
+            <item><widget class="QLabel" name="scaleStepLabel"><property name="text"><string>step</string></property></widget></item>
+            <item><widget class="QDoubleSpinBox" name="scaleStep"> <property name="toolTip"><string>How much the zoom level changes per wheel notch.</string></property> <property name="minimum"><double>0.1</double></property> <property name="maximum"><double>100000</double></property> <property name="singleStep"><double>10</double></property> <property name="decimals"><number>0</number></property> <property name="suffix"><string> %</string></property> <property name="maximumWidth"><number>80</number></property></widget></item>
+            <item><spacer name="scaleSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+           </layout>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="gridGroup">
+          <property name="title"><string>Grid</string></property>
+          <layout class="QFormLayout" name="gridGroupForm">
+           <item row="0" column="1">
+          <widget class="QCheckBox" name="showGrid">
+           <property name="text"><string>Show grid cells</string></property>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="cellSize_label"><property name="text"><string>Cell size:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QDoubleSpinBox" name="cellSize">
+           <property name="toolTip"><string>Spacing of the visual grid lines. Unrelated to snapping -- see the Snap group below.</string></property>
+           <property name="minimum"><double>1</double></property>
+           <property name="maximum"><double>10000</double></property>
+           <property name="singleStep"><double>1</double></property>
+           <property name="decimals"><number>0</number></property>
+           <property name="suffix"><string> px</string></property>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="gridColorButton_label"><property name="text"><string>Cell color:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QToolButton" name="gridColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="snapGroup">
+          <property name="title"><string>Snap</string></property>
+          <layout class="QFormLayout" name="snapGroupForm">
+           <item row="0" column="1">
+          <widget class="QCheckBox" name="snapToGrid">
+           <property name="toolTip"><string>Holding Shift while dragging ignores the grid for that drag, so a shape can be placed exactly without turning this off and on again.</string></property>
+           <property name="text"><string>Snap shape to grid when moving</string></property>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="snapPoint_label"><property name="text"><string>Snap point:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QComboBox" name="snapPoint">
+           <property name="toolTip"><string>Which point of the shape gets pulled onto the grid. Position (the corner) is always visible; the origin point is only drawn while rotating.</string></property>
+           <item><property name="text"><string>Position (top-left corner)</string></property></item>
+           <item><property name="text"><string>Origin point</string></property></item>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="snapStep_label"><property name="text"><string>Snap step:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QDoubleSpinBox" name="snapStep">
+           <property name="toolTip"><string>The snap point snaps to multiples of this value. Independent of the visual cell size above.</string></property>
+           <property name="minimum"><double>1</double></property>
+           <property name="maximum"><double>10000</double></property>
+           <property name="singleStep"><double>1</double></property>
+           <property name="decimals"><number>0</number></property>
+           <property name="suffix"><string> px</string></property>
+          </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="snapSensitivity_label"><property name="text"><string>Snap sensitivity:</string></property></widget>
+           </item>
+           <item row="3" column="1">
+          <widget class="QDoubleSpinBox" name="snapSensitivity">
+           <property name="toolTip"><string>How close the snap point must be to a snap-step multiple to be pulled onto it. Capped at half the snap step.</string></property>
+           <property name="minimum"><double>0</double></property>
+           <property name="maximum"><double>10000</double></property>
+           <property name="singleStep"><double>1</double></property>
+           <property name="decimals"><number>0</number></property>
+           <property name="suffix"><string> px</string></property>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="historyGroup">
+          <property name="title"><string>History</string></property>
+          <layout class="QFormLayout" name="historyGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="undoDepth_label"><property name="text"><string>Undo steps:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QSpinBox" name="undoDepth">
+           <property name="toolTip"><string>How many actions Undo can step back through. Each one holds a copy of the whole scene.</string></property>
+           <property name="minimum"><number>1</number></property>
+           <property name="maximum"><number>1000</number></property>
+           <property name="singleStep"><number>1</number></property>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item><spacer name="commonSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+       </layout>
+      </widget>
+     </widget>
+     <widget class="QScrollArea" name="shapesScrollArea">
+      <attribute name="title"><string>Shapes</string></attribute>
+      <property name="widgetResizable"><bool>true</bool></property>
+      <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+      <widget class="QWidget" name="shapesTab">
+       <layout class="QVBoxLayout" name="shapesLayout">
+        <item>
+         <widget class="QGroupBox" name="defaultStyleGroup">
+          <property name="title"><string>Default Style</string></property>
+          <property name="toolTip"><string>Applied to every newly created shape; doesn't affect shapes that already exist.</string></property>
+          <layout class="QFormLayout" name="defaultStyleGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="defaultBorderColorButton_label"><property name="text"><string>Border color:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QToolButton" name="defaultBorderColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="defaultBorderWidth_label"><property name="text"><string>Border width:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QDoubleSpinBox" name="defaultBorderWidth">
+           <property name="minimum"><double>0</double></property>
+           <property name="maximum"><double>100</double></property>
+           <property name="singleStep"><double>0.5</double></property>
+           <property name="decimals"><number>1</number></property>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="defaultBodyColorButton_label"><property name="text"><string>Body color:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QToolButton" name="defaultBodyColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="defaultStyleGroup_row3_label"><property name="text"><string>Transparency:</string></property></widget>
+           </item>
+           <item row="3" column="1">
+          <widget class="QWidget" name="defaultTransparencyContainer" native="true">
+           <layout class="QHBoxLayout" name="defaultTransparencyLayout">
+            <property name="spacing"><number>6</number></property>
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+            <item><widget class="QLabel" name="defaultTransparencyLabel"><property name="minimumSize"><size><width>32</width><height>0</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property><property name="text"><string/></property></widget></item>
+            <item><widget class="QSlider" name="defaultTransparency"> <property name="minimum"><number>0</number></property> <property name="maximum"><number>100</number></property> <property name="orientation"><enum>Qt::Horizontal</enum></property> <property name="tickPosition"><enum>QSlider::TicksBelow</enum></property> <property name="tickInterval"><number>10</number></property></widget></item>
+           </layout>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="shapeSelectionGroup">
+          <property name="title"><string>Selection</string></property>
+          <property name="toolTip"><string>The dotted ring drawn just outside a shape's border while it is selected.</string></property>
+          <layout class="QFormLayout" name="shapeSelectionGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="selectionLineStyle_label"><property name="text"><string>Line type:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QComboBox" name="selectionLineStyle">
+           <item><property name="text"><string>Dotted</string></property></item>
+           <item><property name="text"><string>Dashed</string></property></item>
+           <item><property name="text"><string>Solid</string></property></item>
+           <item><property name="text"><string>Dash-Dot</string></property></item>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="selectionLineWidth_label"><property name="text"><string>Width:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QDoubleSpinBox" name="selectionLineWidth">
+           <property name="minimum"><double>0.5</double></property>
+           <property name="maximum"><double>20</double></property>
+           <property name="singleStep"><double>0.5</double></property>
+           <property name="decimals"><number>1</number></property>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="selectionColorButton_label"><property name="text"><string>Color:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QToolButton" name="selectionColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="handleStyleGroup">
+          <property name="title"><string>Handle Style</string></property>
+          <property name="toolTip"><string>The scale handles drawn around a shape's edges/corners while it is selected.</string></property>
+          <layout class="QFormLayout" name="handleStyleGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="handleShape_label"><property name="text"><string>Type:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QComboBox" name="handleShape">
+           <item><property name="text"><string>Square</string></property></item>
+           <item><property name="text"><string>Circle</string></property></item>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="handleSize_label"><property name="text"><string>Size:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QDoubleSpinBox" name="handleSize">
+           <property name="minimum"><double>2</double></property>
+           <property name="maximum"><double>100</double></property>
+           <property name="singleStep"><double>1</double></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="suffix"><string> px</string></property>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="handleColorButton_label"><property name="text"><string>Color:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QToolButton" name="handleColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="handleBorderWidth_label"><property name="text"><string>Border width:</string></property></widget>
+           </item>
+           <item row="3" column="1">
+          <widget class="QDoubleSpinBox" name="handleBorderWidth">
+           <property name="minimum"><double>0</double></property>
+           <property name="maximum"><double>20</double></property>
+           <property name="singleStep"><double>0.5</double></property>
+           <property name="decimals"><number>1</number></property>
+          </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="handleBorderColorButton_label"><property name="text"><string>Border color:</string></property></widget>
+           </item>
+           <item row="4" column="1">
+          <widget class="QToolButton" name="handleBorderColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item><spacer name="shapesSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+       </layout>
+      </widget>
+     </widget>
+     <widget class="QScrollArea" name="physicsScrollArea">
+      <attribute name="title"><string>Physics</string></attribute>
+      <property name="widgetResizable"><bool>true</bool></property>
+      <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+      <widget class="QWidget" name="physicsTab">
+       <layout class="QVBoxLayout" name="physicsLayout">
+        <item>
+         <widget class="QGroupBox" name="bodyColorsGroup">
+          <property name="title"><string>Body Colors</string></property>
+          <layout class="QFormLayout" name="bodyColorsGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="bodyDynamicColorButton_label"><property name="text"><string>Dynamic:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QToolButton" name="bodyDynamicColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="bodyStaticColorButton_label"><property name="text"><string>Static:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QToolButton" name="bodyStaticColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="bodyKinematicColorButton_label"><property name="text"><string>Kinematic:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QToolButton" name="bodyKinematicColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="unassignedShapeColorButton_label"><property name="text"><string>Not in a body:</string></property></widget>
+           </item>
+           <item row="3" column="1">
+          <widget class="QToolButton" name="unassignedShapeColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="engineLimitsGroup">
+          <property name="title"><string>Engine Limits</string></property>
+          <layout class="QFormLayout" name="engineLimitsGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="maxPolygonVertices_label"><property name="text"><string>Max polygon points:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QSpinBox" name="maxPolygonVertices">
+           <property name="toolTip"><string>How many points a polygon may have and still be a solid, movable shape. Box2D's own limit is 8.</string></property>
+           <property name="minimum"><number>3</number></property>
+           <property name="maximum"><number>64</number></property>
+           <property name="singleStep"><number>1</number></property>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="simulationStepsPerSecond_label"><property name="text"><string>Simulation rate:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QSpinBox" name="simulationStepsPerSecond">
+           <property name="toolTip"><string>How often the physics engine is stepped. Higher is steadier and more accurate, and costs proportionally more work. It does not change how fast the scene plays.</string></property>
+           <property name="minimum"><number>15</number></property>
+           <property name="maximum"><number>480</number></property>
+           <property name="singleStep"><number>10</number></property>
+           <property name="suffix"><string> Hz</string></property>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="shapeDrawingGroup">
+          <property name="title"><string>Shape Drawing</string></property>
+          <layout class="QFormLayout" name="shapeDrawingGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="physicsBorderWidth_label"><property name="text"><string>Border width:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QDoubleSpinBox" name="physicsBorderWidth">
+           <property name="minimum"><double>0</double></property>
+           <property name="maximum"><double>20</double></property>
+           <property name="singleStep"><double>0.5</double></property>
+           <property name="decimals"><number>1</number></property>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="physicsFillAlpha_label"><property name="text"><string>Fill opacity:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QWidget" name="physicsFillAlphaContainer" native="true">
+           <layout class="QHBoxLayout" name="physicsFillAlphaLayout">
+            <property name="spacing"><number>6</number></property>
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+            <item><widget class="QLabel" name="physicsFillAlphaLabel"><property name="minimumSize"><size><width>32</width><height>0</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property><property name="text"><string/></property></widget></item>
+            <item><widget class="QSlider" name="physicsFillAlpha"> <property name="toolTip"><string>How solidly a body's color fills its shapes. The outline is always drawn at full strength.</string></property> <property name="minimum"><number>0</number></property> <property name="maximum"><number>255</number></property> <property name="orientation"><enum>Qt::Horizontal</enum></property> <property name="tickPosition"><enum>QSlider::TicksBelow</enum></property> <property name="tickInterval"><number>51</number></property></widget></item>
+           </layout>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="sleepShiftPercent_label"><property name="text"><string>Awake/asleep shift:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QWidget" name="sleepShiftPercentContainer" native="true">
+           <layout class="QHBoxLayout" name="sleepShiftPercentLayout">
+            <property name="spacing"><number>6</number></property>
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+            <item><widget class="QLabel" name="sleepShiftPercentLabel"><property name="minimumSize"><size><width>32</width><height>0</height></size></property><property name="alignment"><set>Qt::AlignRight|Qt::AlignVCenter</set></property><property name="text"><string/></property></widget></item>
+            <item><widget class="QSlider" name="sleepShiftPercent"> <property name="toolTip"><string>While a simulation runs, an awake body is drawn this much lighter and a sleeping one this much darker.</string></property> <property name="minimum"><number>0</number></property> <property name="maximum"><number>90</number></property> <property name="orientation"><enum>Qt::Horizontal</enum></property> <property name="tickPosition"><enum>QSlider::TicksBelow</enum></property> <property name="tickInterval"><number>10</number></property></widget></item>
+           </layout>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="bodyAxesGroup">
+          <property name="title"><string>Body Axes</string></property>
+          <property name="toolTip"><string>A small axis cross at each body's centre of mass, turned with the body.</string></property>
+          <layout class="QFormLayout" name="bodyAxesGroupForm">
+           <item row="0" column="1">
+          <widget class="QCheckBox" name="showBodyAxes">
+           <property name="text"><string>Show axes at centre of mass</string></property>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="bodyAxisLength_label"><property name="text"><string>Length:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QDoubleSpinBox" name="bodyAxisLength">
+           <property name="minimum"><double>1</double></property>
+           <property name="maximum"><double>1000</double></property>
+           <property name="singleStep"><double>1</double></property>
+           <property name="decimals"><number>0</number></property>
+           <property name="suffix"><string> px</string></property>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="bodyAxisWidth_label"><property name="text"><string>Line width:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QDoubleSpinBox" name="bodyAxisWidth">
+           <property name="minimum"><double>0.5</double></property>
+           <property name="maximum"><double>20</double></property>
+           <property name="singleStep"><double>0.5</double></property>
+           <property name="decimals"><number>1</number></property>
+          </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="bodyAxisXColorButton_label"><property name="text"><string>X axis color:</string></property></widget>
+           </item>
+           <item row="3" column="1">
+          <widget class="QToolButton" name="bodyAxisXColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="bodyAxisYColorButton_label"><property name="text"><string>Y axis color:</string></property></widget>
+           </item>
+           <item row="4" column="1">
+          <widget class="QToolButton" name="bodyAxisYColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="physicsSelectionGroup">
+          <property name="title"><string>Selection</string></property>
+          <property name="toolTip"><string>The ring drawn just outside a shape picked in Physics mode.</string></property>
+          <layout class="QFormLayout" name="physicsSelectionGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="physicsSelectionLineStyle_label"><property name="text"><string>Line type:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QComboBox" name="physicsSelectionLineStyle">
+           <item><property name="text"><string>Dotted</string></property></item>
+           <item><property name="text"><string>Dashed</string></property></item>
+           <item><property name="text"><string>Solid</string></property></item>
+           <item><property name="text"><string>Dash-Dot</string></property></item>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="physicsSelectionLineWidth_label"><property name="text"><string>Line width:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QDoubleSpinBox" name="physicsSelectionLineWidth">
+           <property name="minimum"><double>0.5</double></property>
+           <property name="maximum"><double>20</double></property>
+           <property name="singleStep"><double>0.5</double></property>
+           <property name="decimals"><number>1</number></property>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="physicsSelectionColorButton_label"><property name="text"><string>Color:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QToolButton" name="physicsSelectionColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item><spacer name="physicsSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+       </layout>
+      </widget>
+     </widget>
+     <widget class="QScrollArea" name="jointsScrollArea">
+      <attribute name="title"><string>Joints</string></attribute>
+      <property name="widgetResizable"><bool>true</bool></property>
+      <property name="frameShape"><enum>QFrame::NoFrame</enum></property>
+      <widget class="QWidget" name="jointsTab">
+       <layout class="QVBoxLayout" name="jointsLayout">
+        <item>
+         <widget class="QGroupBox" name="jointDrawingGroup">
+          <property name="title"><string>Joint Drawing</string></property>
+          <layout class="QFormLayout" name="jointDrawingGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="jointColorButton_label"><property name="text"><string>Default color:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QToolButton" name="jointColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="jointOutlineColorButton_label"><property name="text"><string>Outline color:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QToolButton" name="jointOutlineColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="jointAnchorRadius_label"><property name="text"><string>Anchor radius:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QDoubleSpinBox" name="jointAnchorRadius">
+           <property name="minimum"><double>2</double></property>
+           <property name="maximum"><double>100</double></property>
+           <property name="singleStep"><double>1</double></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="suffix"><string> px</string></property>
+          </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="jointAxisLength_label"><property name="text"><string>Axis marker length:</string></property></widget>
+           </item>
+           <item row="3" column="1">
+          <widget class="QDoubleSpinBox" name="jointAxisLength">
+           <property name="toolTip"><string>How long a sliding joint shows its axis when travel is unlimited. A direction, not a measurement -- with limits set, the axis is drawn to scale between them instead.</string></property>
+           <property name="minimum"><double>1</double></property>
+           <property name="maximum"><double>1000</double></property>
+           <property name="singleStep"><double>5</double></property>
+           <property name="decimals"><number>0</number></property>
+           <property name="suffix"><string> px</string></property>
+          </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="jointWaistWidth_label"><property name="text"><string>Waist width:</string></property></widget>
+           </item>
+           <item row="4" column="1">
+          <widget class="QDoubleSpinBox" name="jointWaistWidth">
+           <property name="minimum"><double>1</double></property>
+           <property name="maximum"><double>100</double></property>
+           <property name="singleStep"><double>1</double></property>
+           <property name="decimals"><number>1</number></property>
+           <property name="suffix"><string> px</string></property>
+          </widget>
+           </item>
+           <item row="5" column="0">
+            <widget class="QLabel" name="jointOutlineWidth_label"><property name="text"><string>Outline width:</string></property></widget>
+           </item>
+           <item row="5" column="1">
+          <widget class="QDoubleSpinBox" name="jointOutlineWidth">
+           <property name="minimum"><double>0</double></property>
+           <property name="maximum"><double>20</double></property>
+           <property name="singleStep"><double>0.5</double></property>
+           <property name="decimals"><number>1</number></property>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="jointTypeColorsGroup">
+          <property name="title"><string>Joint Type Colors</string></property>
+          <property name="toolTip"><string>One color per joint type the engine offers.</string></property>
+          <layout class="QFormLayout" name="jointTypeColorsGroupForm">
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="jointSelectionGroup">
+          <property name="title"><string>Joint Selection</string></property>
+          <property name="toolTip"><string>The outline drawn around a selected joint.</string></property>
+          <layout class="QFormLayout" name="jointSelectionGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="jointSelectionLineStyle_label"><property name="text"><string>Line type:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QComboBox" name="jointSelectionLineStyle">
+           <item><property name="text"><string>Dotted</string></property></item>
+           <item><property name="text"><string>Dashed</string></property></item>
+           <item><property name="text"><string>Solid</string></property></item>
+           <item><property name="text"><string>Dash-Dot</string></property></item>
+          </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="jointSelectionLineWidth_label"><property name="text"><string>Line width:</string></property></widget>
+           </item>
+           <item row="1" column="1">
+          <widget class="QDoubleSpinBox" name="jointSelectionLineWidth">
+           <property name="minimum"><double>0.5</double></property>
+           <property name="maximum"><double>20</double></property>
+           <property name="singleStep"><double>0.5</double></property>
+           <property name="decimals"><number>1</number></property>
+          </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="jointSelectionColorButton_label"><property name="text"><string>Color:</string></property></widget>
+           </item>
+           <item row="2" column="1">
+          <widget class="QToolButton" name="jointSelectionColorButton">
+           <property name="minimumSize"><size><width>60</width><height>22</height></size></property>
+           <property name="maximumSize"><size><width>60</width><height>22</height></size></property>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item><spacer name="jointsSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+       </layout>
+      </widget>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation"><enum>Qt::Horizontal</enum></property>
+     <property name="standardButtons"><set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections>
+  <connection><sender>buttonBox</sender><signal>accepted()</signal><receiver>OptionsDialog</receiver><slot>accept()</slot></connection>
+  <connection><sender>buttonBox</sender><signal>rejected()</signal><receiver>OptionsDialog</receiver><slot>reject()</slot></connection>
+ </connections>
+</ui>

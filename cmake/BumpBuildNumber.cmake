@@ -1,0 +1,19 @@
+# Run in script mode before each build: reads the counter, adds one, writes it
+# back, and regenerates the version header.
+#
+# Expects COUNTER_FILE, TEMPLATE_FILE, OUTPUT_FILE, VERSION_MAJOR, VERSION_MINOR.
+
+if(EXISTS "${COUNTER_FILE}")
+    file(READ "${COUNTER_FILE}" PHYSALIS_BUILD_NUMBER)
+    string(STRIP "${PHYSALIS_BUILD_NUMBER}" PHYSALIS_BUILD_NUMBER)
+endif()
+if(NOT PHYSALIS_BUILD_NUMBER MATCHES "^[0-9]+$")
+    set(PHYSALIS_BUILD_NUMBER 0)
+endif()
+
+math(EXPR PHYSALIS_BUILD_NUMBER "${PHYSALIS_BUILD_NUMBER} + 1")
+file(WRITE "${COUNTER_FILE}" "${PHYSALIS_BUILD_NUMBER}")
+
+set(PHYSALIS_VERSION_MAJOR ${VERSION_MAJOR})
+set(PHYSALIS_VERSION_MINOR ${VERSION_MINOR})
+configure_file("${TEMPLATE_FILE}" "${OUTPUT_FILE}" @ONLY)

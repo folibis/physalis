@@ -1,0 +1,38 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file alias="save_as.svg">icons/save_as.svg</file>
+        <file alias="options.svg">icons/options.svg</file>
+        <file alias="exit.svg">icons/exit.svg</file>
+        <file alias="undo.svg">icons/undo.svg</file>
+        <file alias="redo.svg">icons/redo.svg</file>
+        <file alias="copy.svg">icons/copy.svg</file>
+        <file alias="paste.svg">icons/paste.svg</file>
+        <file alias="new_scene.svg">icons/new_scene.svg</file>
+        <file alias="load_scene.svg">icons/load_scene.svg</file>
+        <file alias="save_scene.svg">icons/save_scene.svg</file>
+        <file alias="add.svg">icons/add.svg</file>
+        <file alias="rectangle.svg">icons/rectangle.svg</file>
+        <file alias="circle.svg">icons/circle.svg</file>
+        <file alias="polygon.svg">icons/polygon.svg</file>
+        <file alias="move.svg">icons/move.svg</file>
+        <file alias="edit.svg">icons/edit.svg</file>
+        <file alias="rotate.svg">icons/rotate.svg</file>
+        <file alias="delete.svg">icons/delete.svg</file>
+        <file alias="reset_scale.svg">icons/reset_scale.svg</file>
+        <file alias="create_body.svg">icons/create_body.svg</file>
+        <file alias="dissolve_body.svg">icons/dissolve_body.svg</file>
+        <file alias="simulate.svg">icons/simulate.svg</file>
+        <file alias="stop.svg">icons/stop.svg</file>
+        <file alias="pause.svg">icons/pause.svg</file>
+        <file alias="step.svg">icons/step.svg</file>
+        <file alias="reset_value.svg">icons/reset_value.svg</file>
+        <file alias="body.svg">icons/body.svg</file>
+        <file alias="joint.svg">icons/joint.svg</file>
+        <file alias="explosion.svg">icons/explosion.svg</file>
+        <file alias="world.svg">icons/world.svg</file>
+        <file alias="ray.svg">icons/ray.svg</file>
+    </qresource>
+    <qresource prefix="/app">
+        <file alias="icon.svg">physalis.svg</file>
+    </qresource>
+</RCC>

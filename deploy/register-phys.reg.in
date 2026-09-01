@@ -1,0 +1,20 @@
+Windows Registry Editor Version 5.00
+
+; Associates .phys scene files with Physalis for the current user only.
+; No administrator rights are needed, and nothing outside HKCU is touched.
+;
+; Do not run this file: it is a template. CMake writes the usable copy next to
+; the executable, with the path filled in, so it can never go stale the way a
+; hand-edited one does. Run that copy, and unregister-phys.reg to undo it.
+
+[HKEY_CURRENT_USER\Software\Classes\.phys]
+@="Physalis.Scene"
+
+[HKEY_CURRENT_USER\Software\Classes\Physalis.Scene]
+@="Physalis Scene"
+
+[HKEY_CURRENT_USER\Software\Classes\Physalis.Scene\DefaultIcon]
+@="@PHYSALIS_EXE_REG@,0"
+
+[HKEY_CURRENT_USER\Software\Classes\Physalis.Scene\shell\open\command]
+@="\"@PHYSALIS_EXE_REG@\" \"%1\""
