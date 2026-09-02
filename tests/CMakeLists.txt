@@ -36,8 +36,11 @@ endif()
 
 # CTest gets one entry per GoogleTest case. Discovery is deferred to test time:
 # running the binary at build time would fail, since Qt is not on PATH then.
+# Discovery times out after 5 seconds by default, and a cold Qt DLL load on a
+# Windows CI runner comfortably exceeds that, so give it room.
 gtest_discover_tests(PhysalisTests
     DISCOVERY_MODE PRE_TEST
+    DISCOVERY_TIMEOUT 60
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     # PATH goes through ENVIRONMENT_MODIFICATION because it needs prepending,
     # not overwriting -- the child would lose /usr/bin otherwise. PHYSALIS_SETTINGS

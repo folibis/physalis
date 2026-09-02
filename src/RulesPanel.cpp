@@ -242,7 +242,13 @@ QWidget *RulesPanel::buildCard(int index)
     remove->setIcon(Icons::deleteShape());
     remove->setToolTip(tr("Remove this rule"));
     remove->setAutoRaise(true);
-    connect(remove, &QToolButton::clicked, this, [this, index] { removeRule(index); });
+    // removeRule() rebuilds the whole panel and deletes this very button --
+    // doing that while the click signal is still on the stack is the crash
+    // documented at the top of CLAUDE.md. Queue it so the signal returns first.
+    connect(remove, &QToolButton::clicked, this, [this, index] {
+        QMetaObject::invokeMethod(this, [this, index] { removeRule(index); },
+                                  Qt::QueuedConnection);
+    });
     titleRow->addWidget(remove);
 
     titleRow->addStretch();
