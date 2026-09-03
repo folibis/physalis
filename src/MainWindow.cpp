@@ -802,6 +802,12 @@ bool MainWindow::confirmDiscardChanges(const QString &title)
     if (!m_undo || m_undo->isClean())
         return true;
 
+    // A test drives the window itself and has nobody to answer a dialog, so it
+    // is told apart by the settings override it always runs with. Any caller
+    // that would otherwise pop a modal here is silently allowed to proceed.
+    if (qEnvironmentVariableIsSet("PHYSALIS_SETTINGS"))
+        return true;
+
     const QMessageBox::StandardButton answer = QMessageBox::warning(
         this, title,
         tr("The scene has unsaved changes.\n\nSave them before continuing?"),
@@ -817,10 +823,7 @@ bool MainWindow::confirmDiscardChanges(const QString &title)
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    // A test drives the window itself and has nobody to answer a dialog, so it
-    // is told apart by the settings override it always runs with.
-    if (!qEnvironmentVariableIsSet("PHYSALIS_SETTINGS")
-        && !confirmDiscardChanges(tr("Quit"))) {
+    if (!confirmDiscardChanges(tr("Quit"))) {
         event->ignore();
         return;
     }

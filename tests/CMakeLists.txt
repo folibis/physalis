@@ -40,15 +40,23 @@ endif()
 
 # CTest gets one entry per GoogleTest case. Discovery is deferred to test time:
 # running the binary at build time would fail, since Qt is not on PATH then.
+# Discovery times out after 5 seconds by default, and a cold Qt DLL load on a
+# Windows CI runner comfortably exceeds that, so give it room.
 gtest_discover_tests(PhysalisTests
     DISCOVERY_MODE PRE_TEST
+    DISCOVERY_TIMEOUT 60
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    # ENVIRONMENT takes one semicolon-separated value, and PATH is full of
-    # semicolons on Windows -- so the two changes go through
-    # ENVIRONMENT_MODIFICATION, which knows how to prepend to a path list.
+    # PATH goes through ENVIRONMENT_MODIFICATION because it needs prepending,
+    # not overwriting -- the child would lose /usr/bin otherwise. PHYSALIS_SETTINGS
+    # is just set outright and goes through ENVIRONMENT, which sidesteps a
+    # gtest_discover_tests quirk: a semicolon-separated ENVIRONMENT_MODIFICATION
+    # value gets re-emitted as separate arguments to set_tests_properties, and
+    # everything after the first entry is silently mis-read as another property.
     # PHYSALIS_SETTINGS gives the run its own preferences file: a test must not
     # read, or overwrite, the settings of the application beside it.
     PROPERTIES
         ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:${PHYSALIS_QT_BIN};PHYSALIS_SETTINGS=set:${CMAKE_CURRENT_BINARY_DIR}/test-settings.ini"
+            "PATH=path_list_prepend:${PHYSALIS_QT_BIN}"
+        ENVIRONMENT
+            "PHYSALIS_SETTINGS=${CMAKE_CURRENT_BINARY_DIR}/test-settings.ini"
         TIMEOUT 180)
