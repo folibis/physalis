@@ -27,11 +27,15 @@ set_target_properties(PhysalisTests PROPERTIES
 
 # Qt6Test is the one Qt library the application itself does not use, so its DLL
 # is not already beside the executable -- and test discovery runs the binary
-# without the PATH the tests themselves are given.
+# without the PATH the tests themselves are given. Qt6Qml is there for the same
+# reason: QJSEngine runs the export converters, and it arrived after whatever
+# put the rest of the Qt runtime beside the build.
 if(WIN32)
     add_custom_command(TARGET PhysalisTests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:Qt6::Test> $<TARGET_FILE_DIR:PhysalisTests>)
+                $<TARGET_FILE:Qt6::Test> $<TARGET_FILE_DIR:PhysalisTests>
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:Qt6::Qml> $<TARGET_FILE_DIR:PhysalisTests>)
 endif()
 
 # CTest gets one entry per GoogleTest case. Discovery is deferred to test time:

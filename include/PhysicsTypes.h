@@ -169,6 +169,11 @@ struct WorldDesc {
 
     qreal maximumLinearSpeed = 400.0;   // m/s
 
+    // How many times the solver relaxes the constraints within one step. More
+    // holds a tall stack together; fewer is faster and springier. Box2D's
+    // samples use 4.
+    int subStepCount = 4;
+
     bool enableSleep = true;
     // Continuous collision, which stops fast bodies tunnelling through thin
     // ones. Off is cheaper but lets things pass through walls.
@@ -188,6 +193,9 @@ struct RayHit {
 };
 
 struct BodyState {
+    // False once the body has been taken out of the world. Everything else is
+    // then meaningless -- there is nothing left to have a position.
+    bool exists = true;
     QPointF position;
     // Where the mass actually sits, in scene units. A body rotates about this,
     // not about its origin, so it is the point worth showing.

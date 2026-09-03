@@ -1,0 +1,145 @@
+#pragma once
+
+// What Scene.cpp builds. Scene.cpp is generated from the editor's scene;
+// this file and everything else in the project are not.
+
+#include <box2d/box2d.h>
+
+#include <QColor>
+#include <QHash>
+#include <QPointF>
+#include <QPolygonF>
+#include <QString>
+#include <QVariant>
+#include <QVariantMap>
+
+#include <vector>
+
+// One drawable piece of one body, in that body's own frame and in scene
+// units. The viewport maps it through the body's transform every frame, so
+// the geometry here never changes.
+struct SceneShape {
+    enum Kind { Box, Circle, Polygon, Chain };
+
+    int body = 0;
+    QString name;
+    Kind kind = Box;
+
+    QPointF center;
+    double rotation = 0.0;      // degrees
+    QPointF halfExtents;        // Box
+    double radius = 0.0;        // Circle
+    double cornerRadius = 0.0;  // Box
+    QPolygonF points;           // Polygon, Chain
+    bool closed = false;        // Chain
+
+    QColor fill;
+    QColor border;
+    double borderWidth = 2.0;
+};
+
+// A rangefinder. It is not in the world -- nothing collides with it; it is
+// cast along its own line every step and remembers what it found, which is
+// what a rule reads and what the viewport draws.
+struct SceneRay {
+    QString name;
+    QPointF origin;             // scene units
+    double angleDegrees = 0.0;
+    double length = 0.0;
+    quint64 maskBits = ~quint64(0);
+
+    // The last reading.
+    bool hit = false;
+    QPointF point;
+    double distance = 0.0;
+    QString hitShape;
+};
+
+// A named point a rule can set off a blast at. Like a ray it never enters the
+// world; it is only somewhere for something to happen.
+struct SceneExplosion {
+    QString name;
+    QPointF position;
+    QVariantMap params;
+};
+
+// One rule, as data. Rules.cpp reads these; nothing about them is generated
+// as code, so a scene with forty rules is forty rows rather than forty
+// branches.
+struct SceneRule {
+    QString name;
+    QString subject;        // the object watched
+    QString watch;          // a readable property of it, for a value condition
+    QString compare;        // "=", "!=", ">", "<", ">=", "<="
+    QVariant when;          // the value compared against, or for an event the
+                            // object it must have happened with ("" = anything)
+    QString event;          // an event id; empty for a value condition
+
+    QString target;
+    QString property;
+    QString action;         // performed instead of writing a property
+    QVariantMap actionParams;
+
+    QString sourceObject;   // where the value is read from, if not literal
+    QString sourceProperty;
+    double sourceOffset = 0.0;
+
+    QString op = QStringLiteral("set");
+    QVariant value;
+
+    bool enabled = true;
+    bool once = false;
+};
+
+struct Scene {
+    b2WorldId world = b2_nullWorldId;
+
+    std::vector<b2BodyId> bodies;
+    std::vector<QString> bodyNames;          // parallel to bodies
+    std::vector<b2JointId> joints;
+    std::vector<QString> jointNames;         // parallel to joints
+    QHash<QString, b2ShapeId> shapesByName;
+    // Which body each named shape belongs to, so an event on a shape can name
+    // the body behind it.
+    QHash<QString, int> shapeBodies;
+
+    std::vector<SceneShape> shapes;
+    std::vector<SceneRay> rays;
+    std::vector<SceneExplosion> explosions;
+    std::vector<SceneRule> rules;
+
+    double pixelsPerMeter = 1000.0;
+    // 50 / pixelsPerMeter. The editor quotes speeds at a reference scale of
+    // 50 px/m so that the pace on screen does not change with the scale, and
+    // anything read back has to come out through the same factor.
+    double motionScale = 0.05;
+    int subStepCount = 4;
+
+    int stepsPerSecond = 60;
+    // A toolbar with Start, Pause and Stop. Without it the window opens
+    // running and there is nothing to press.
+    bool showControls = true;
+    // What the editor's debug view shows on top of the scene: each body's
+    // centre of mass and heading, and where the rays are looking. None of it
+    // is the scene -- a ray is a measurement, not a thing in the world -- so
+    // it is all one switch, and the window can flip it while it runs.
+    bool debugView = false;
+    double axisLength = 40.0;
+    double axisWidth = 2.0;
+    QColor axisXColor { 220, 50, 50 };
+    QColor axisYColor { 40, 160, 60 };
+    QColor jointColor { 0xE8, 0xC4, 0x6A };
+    double jointAnchorRadius = 7.0;
+
+    // What the window looks at, in scene units: how much, and where its middle
+    // is. The whole field centred on the origin unless the export was told to
+    // crop to the objects, in which case a box around them.
+    double width = 2000.0;
+    double height = 2000.0;
+    double viewCenterX = 0.0;
+    double viewCenterY = 0.0;
+    QColor background { Qt::white };
+};
+
+// Creates the world and everything in it. Call once.
+Scene buildScene();

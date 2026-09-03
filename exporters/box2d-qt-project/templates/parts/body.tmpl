@@ -1,0 +1,24 @@
+    // --- {{NAME}} ---
+    {
+        b2BodyDef def = b2DefaultBodyDef();
+        def.type = {{TYPE}};
+        def.position = m({{POSITION_X}}, {{POSITION_Y}});
+        def.rotation = b2MakeRot(rad({{ROTATION}}));
+        def.linearVelocity = b2Vec2 { {{VELOCITY_X}}f, {{VELOCITY_Y}}f };
+        def.angularVelocity = rad({{ANGULAR_VELOCITY}});
+        def.linearDamping = {{LINEAR_DAMPING}}f;
+        def.angularDamping = {{ANGULAR_DAMPING}}f;
+        def.gravityScale = {{GRAVITY_SCALE}}f;
+        def.enableSleep = {{ENABLE_SLEEP}};
+        def.isAwake = {{IS_AWAKE}};
+        def.sleepThreshold = {{SLEEP_THRESHOLD}}f;
+        def.fixedRotation = {{FIXED_ROTATION}};
+        def.isBullet = {{IS_BULLET}};
+        def.allowFastRotation = {{ALLOW_FAST_ROTATION}};
+        def.isEnabled = {{IS_ENABLED}};
+        const b2BodyId body = b2CreateBody(scene.world, &def);
+        scene.bodies.push_back(body);
+        scene.bodyNames.push_back("{{NAME}}");
+
+{{SHAPES}}    }
+

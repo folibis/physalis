@@ -1,6 +1,8 @@
 #include "Box2DEngine.h"
 
 #include <QLineF>
+#include <QVarLengthArray>
+#include <cmath>
 #include <QtMath>
 
 #include <utility>
@@ -53,11 +55,13 @@ Limits translationLimits(const QVariantMap &params, qreal pixelsPerMeter)
     return {lower, upper};
 }
 
+// Just inside the half-turn Box2D allows a revolute limit: its assert is a
+// strict comparison, so a value rounded up onto the bound fails it.
+constexpr float kAngleLimitBound = 0.98f * B2_PI;
+
 Limits angleLimits(const QVariantMap &params)
 {
-    // Just inside the half-turn Box2D allows: its assert is a strict
-    // comparison, so a value rounded up onto the bound fails it.
-    constexpr float kBound = 0.98f * B2_PI;
+    constexpr float kBound = kAngleLimitBound;
     float lower = qBound(-kBound, radians(params, "lowerAngle"), kBound);
     float upper = qBound(-kBound, radians(params, "upperAngle"), kBound);
     if (lower > upper)
@@ -254,8 +258,13 @@ JointHandle Box2DEngine::addJoint(const JointDesc &desc)
         def.bodyIdA = bodyA;
         def.bodyIdB = bodyB;
         // The one joint whose anchor is a world point rather than a spot on a
-        // body: it is the target being tracked, not an attachment.
-        def.target = toMeters(sceneA);
+        // body: it is the target being tracked, not an attachment. Naming a
+        // target outright overrides the anchor; leaving it at the origin means
+        // "wherever the anchor was put", the same way the distance joint reads
+        // a zero length.
+        const QPointF target(realValue(desc.params, "targetX"),
+                             realValue(desc.params, "targetY"));
+        def.target = target.isNull() ? toMeters(sceneA) : toMeters(target);
         def.hertz = static_cast<float>(realValue(desc.params, "hertz", 4.0));
         def.dampingRatio = static_cast<float>(realValue(desc.params, "dampingRatio", 1.0));
         def.maxForce = static_cast<float>(realValue(desc.params, "maxForce", 1.0));
@@ -311,6 +320,57 @@ void Box2DEngine::setJointParam(JointHandle handle, const QString &key, const QV
     // something else happened to wake it.
     b2Joint_WakeBodies(joint);
 
+    // Two things belong to every joint whatever its type: the constraint
+    // softness, which has no b2*JointDef field and is reachable only through
+    // these calls, and whether the two bodies collide.
+    if (key == QLatin1String("constraintHertz")
+        || key == QLatin1String("constraintDampingRatio")) {
+        // One call carries both, so the half not being written is read back
+        // rather than assumed to still be Box2D's default.
+        float hertz = 0.0f;
+        float dampingRatio = 0.0f;
+        b2Joint_GetConstraintTuning(joint, &hertz, &dampingRatio);
+        (key == QLatin1String("constraintHertz") ? hertz : dampingRatio) = number;
+        b2Joint_SetConstraintTuning(joint, hertz, dampingRatio);
+        return;
+    }
+    if (key == QLatin1String("collideConnected")) {
+        b2Joint_SetCollideConnected(joint, flag);
+        return;
+    }
+
+    // Where the joint holds, and which way it travels. Both are stored in a
+    // body's own frame and both are one value out of a pair, so the current
+    // one is read back, converted to scene coordinates, amended and put back.
+    if (key.startsWith(QLatin1String("anchor"))) {
+        const bool endA = key.at(6) == QLatin1Char('A');
+        const b2BodyId body = endA ? b2Joint_GetBodyA(joint) : b2Joint_GetBodyB(joint);
+        const b2Vec2 local = endA ? b2Joint_GetLocalAnchorA(joint)
+                                  : b2Joint_GetLocalAnchorB(joint);
+        QPointF world = toScene(b2Body_GetWorldPoint(body, local));
+        if (key.endsWith(QLatin1Char('X')))
+            world.setX(value.toDouble());
+        else
+            world.setY(value.toDouble());
+
+        const b2Vec2 moved = b2Body_GetLocalPoint(body, toMeters(world));
+        if (endA)
+            b2Joint_SetLocalAnchorA(joint, moved);
+        else
+            b2Joint_SetLocalAnchorB(joint, moved);
+        return;
+    }
+    if (key == QLatin1String("referenceAngleNow")) {
+        b2Joint_SetReferenceAngle(joint, radians);
+        return;
+    }
+    if (key == QLatin1String("axisAngle")) {
+        const b2Rot rotationA = b2Body_GetRotation(b2Joint_GetBodyA(joint));
+        const b2Vec2 world { std::cos(radians), std::sin(radians) };
+        b2Joint_SetLocalAxisA(joint, b2Normalize(b2InvRotateVector(rotationA, world)));
+        return;
+    }
+
     switch (b2Joint_GetType(joint)) {
     case b2_revoluteJoint:
         if (key == QLatin1String("enableMotor"))         b2RevoluteJoint_EnableMotor(joint, flag);
@@ -320,6 +380,19 @@ void Box2DEngine::setJointParam(JointHandle handle, const QString &key, const QV
         else if (key == QLatin1String("enableSpring"))   b2RevoluteJoint_EnableSpring(joint, flag);
         else if (key == QLatin1String("hertz"))          b2RevoluteJoint_SetSpringHertz(joint, number);
         else if (key == QLatin1String("dampingRatio"))   b2RevoluteJoint_SetSpringDampingRatio(joint, number);
+        else if (key == QLatin1String("targetAngle"))    b2RevoluteJoint_SetTargetAngle(joint, radians);
+        // A limit is two numbers and a rule writes one of them, so the other
+        // is read back. Both the bounds and their order are Box2D asserts, and
+        // an assert in a release solver is a crash with no message.
+        else if (key == QLatin1String("lowerAngle") || key == QLatin1String("upperAngle")) {
+            float lower = b2RevoluteJoint_GetLowerLimit(joint);
+            float upper = b2RevoluteJoint_GetUpperLimit(joint);
+            (key == QLatin1String("lowerAngle") ? lower : upper) =
+                qBound(-kAngleLimitBound, radians, kAngleLimitBound);
+            if (lower > upper)
+                std::swap(lower, upper);
+            b2RevoluteJoint_SetLimits(joint, lower, upper);
+        }
         break;
 
     case b2_prismaticJoint:
@@ -330,6 +403,19 @@ void Box2DEngine::setJointParam(JointHandle handle, const QString &key, const QV
         else if (key == QLatin1String("enableSpring"))   b2PrismaticJoint_EnableSpring(joint, flag);
         else if (key == QLatin1String("hertz"))          b2PrismaticJoint_SetSpringHertz(joint, number);
         else if (key == QLatin1String("dampingRatio"))   b2PrismaticJoint_SetSpringDampingRatio(joint, number);
+        // The smooth way to move something: the spring drives the body along
+        // the axis, rather than the body being placed there outright.
+        else if (key == QLatin1String("targetTranslation"))
+            b2PrismaticJoint_SetTargetTranslation(joint, metres);
+        else if (key == QLatin1String("lowerTranslation")
+                 || key == QLatin1String("upperTranslation")) {
+            float lower = b2PrismaticJoint_GetLowerLimit(joint);
+            float upper = b2PrismaticJoint_GetUpperLimit(joint);
+            (key == QLatin1String("lowerTranslation") ? lower : upper) = metres;
+            if (lower > upper)
+                std::swap(lower, upper);
+            b2PrismaticJoint_SetLimits(joint, lower, upper);
+        }
         break;
 
     case b2_wheelJoint:
@@ -340,6 +426,15 @@ void Box2DEngine::setJointParam(JointHandle handle, const QString &key, const QV
         else if (key == QLatin1String("enableSpring"))   b2WheelJoint_EnableSpring(joint, flag);
         else if (key == QLatin1String("hertz"))          b2WheelJoint_SetSpringHertz(joint, number);
         else if (key == QLatin1String("dampingRatio"))   b2WheelJoint_SetSpringDampingRatio(joint, number);
+        else if (key == QLatin1String("lowerTranslation")
+                 || key == QLatin1String("upperTranslation")) {
+            float lower = b2WheelJoint_GetLowerLimit(joint);
+            float upper = b2WheelJoint_GetUpperLimit(joint);
+            (key == QLatin1String("lowerTranslation") ? lower : upper) = metres;
+            if (lower > upper)
+                std::swap(lower, upper);
+            b2WheelJoint_SetLimits(joint, lower, upper);
+        }
         break;
 
     case b2_distanceJoint:
@@ -351,6 +446,19 @@ void Box2DEngine::setJointParam(JointHandle handle, const QString &key, const QV
         else if (key == QLatin1String("hertz"))          b2DistanceJoint_SetSpringHertz(joint, number);
         else if (key == QLatin1String("dampingRatio"))   b2DistanceJoint_SetSpringDampingRatio(joint, number);
         else if (key == QLatin1String("length"))         b2DistanceJoint_SetLength(joint, metres);
+        else if (key == QLatin1String("minLength") || key == QLatin1String("maxLength")) {
+            float lower = b2DistanceJoint_GetMinLength(joint);
+            float upper = b2DistanceJoint_GetMaxLength(joint);
+            // Zero maxLength stands in for unbounded here as it does at
+            // creation: Box2D's own default is an internal huge value with no
+            // public name.
+            (key == QLatin1String("minLength") ? lower : upper) =
+                (key == QLatin1String("maxLength") && value.toDouble() <= 0.0) ? 100000.0f
+                                                                              : metres;
+            if (lower > upper)
+                std::swap(lower, upper);
+            b2DistanceJoint_SetLengthRange(joint, lower, upper);
+        }
         break;
 
     case b2_motorJoint:
@@ -369,6 +477,28 @@ void Box2DEngine::setJointParam(JointHandle handle, const QString &key, const QV
             offset.y = metres;
             b2MotorJoint_SetLinearOffset(joint, offset);
         }
+        break;
+
+    case b2_mouseJoint:
+        if (key == QLatin1String("hertz"))               b2MouseJoint_SetSpringHertz(joint, number);
+        else if (key == QLatin1String("dampingRatio"))   b2MouseJoint_SetSpringDampingRatio(joint, number);
+        else if (key == QLatin1String("maxForce"))       b2MouseJoint_SetMaxForce(joint, number);
+        // Moving the target is the whole point of this joint -- it is how a
+        // body is led somewhere softly instead of being placed there.
+        else if (key == QLatin1String("targetX") || key == QLatin1String("targetY")) {
+            b2Vec2 target = b2MouseJoint_GetTarget(joint);
+            (key == QLatin1String("targetX") ? target.x : target.y) = metres;
+            b2MouseJoint_SetTarget(joint, target);
+        }
+        break;
+
+    case b2_weldJoint:
+        if (key == QLatin1String("linearHertz"))         b2WeldJoint_SetLinearHertz(joint, number);
+        else if (key == QLatin1String("angularHertz"))   b2WeldJoint_SetAngularHertz(joint, number);
+        else if (key == QLatin1String("linearDampingRatio"))
+            b2WeldJoint_SetLinearDampingRatio(joint, number);
+        else if (key == QLatin1String("angularDampingRatio"))
+            b2WeldJoint_SetAngularDampingRatio(joint, number);
         break;
 
     default:
@@ -405,6 +535,22 @@ void Box2DEngine::setBodyParam(BodyHandle handle, const QString &key, const QVar
         return;
     }
 
+    // Where it should be by the end of the step, rather than where it is:
+    // Box2D works out the velocity that arrives there, so the body travels
+    // and shoves what is in the way instead of appearing past it.
+    if (key == QLatin1String("targetX") || key == QLatin1String("targetY")
+        || key == QLatin1String("targetAngle")) {
+        b2Transform target { b2Body_GetPosition(body), b2Body_GetRotation(body) };
+        if (key == QLatin1String("targetX"))
+            target.p.x = static_cast<float>(value.toDouble() / m_pixelsPerMeter);
+        else if (key == QLatin1String("targetY"))
+            target.p.y = static_cast<float>(value.toDouble() / m_pixelsPerMeter);
+        else
+            target.q = b2MakeRot(static_cast<float>(qDegreesToRadians(value.toDouble())));
+        b2Body_SetTargetTransform(body, target, m_lastStep);
+        return;
+    }
+
     // A push, rather than a setting.
     if (key == QLatin1String("impulseX") || key == QLatin1String("impulseY")) {
         const float amount = static_cast<float>(value.toDouble() / m_pixelsPerMeter);
@@ -425,6 +571,20 @@ void Box2DEngine::setBodyParam(BodyHandle handle, const QString &key, const QVar
         return;
     }
 
+    // The turning pair of the two above. A torque is a force times a distance
+    // and both are quoted in scene units, so it comes down by the scale twice
+    // -- which is what keeps a number that looks sensible next to an impulse
+    // behaving like one.
+    if (key == QLatin1String("torque") || key == QLatin1String("angularImpulse")) {
+        const float amount = static_cast<float>(value.toDouble()
+                                                / (m_pixelsPerMeter * m_pixelsPerMeter));
+        if (key == QLatin1String("torque"))
+            b2Body_ApplyTorque(body, amount, true);
+        else
+            b2Body_ApplyAngularImpulse(body, amount, true);
+        return;
+    }
+
     // A velocity is the one thing a rule needs that is not a settings field:
     // "kick this upwards" is setting the vertical velocity, and it arrives in
     // scene units per second like every other speed the editor shows.
@@ -438,6 +598,39 @@ void Box2DEngine::setBodyParam(BodyHandle handle, const QString &key, const QVar
         b2Body_SetLinearVelocity(body, velocity);
         // A sleeping body ignores a velocity change; a kick has to wake it.
         b2Body_SetAwake(body, true);
+        return;
+    }
+
+    if (key == QLatin1String("angularVelocity")) {
+        b2Body_SetAngularVelocity(body, static_cast<float>(qDegreesToRadians(value.toDouble())));
+        b2Body_SetAwake(body, true);
+        return;
+    }
+
+    // Mass and inertia normally come from the shapes and their density.
+    // b2Body_SetMassData replaces the lot, so the two thirds not being written
+    // are read back -- and the override lasts only until a shape or the body
+    // type changes, which is Box2D's rule, not ours.
+    if (key == QLatin1String("mass") || key == QLatin1String("rotationalInertia")) {
+        b2MassData data = b2Body_GetMassData(body);
+        (key == QLatin1String("mass") ? data.mass : data.rotationalInertia) =
+            qMax(0.0f, number);
+        b2Body_SetMassData(body, data);
+        return;
+    }
+
+    if (key == QLatin1String("bodyType")) {
+        // Stored as the index into the catalogue's list, which is in
+        // b2BodyType order.
+        const int index = value.toInt();
+        if (index >= 0 && index < b2_bodyTypeCount)
+            b2Body_SetType(body, static_cast<b2BodyType>(index));
+        return;
+    }
+
+    // A speed, so quoted at the reference scale like gravity and velocity.
+    if (key == QLatin1String("sleepThreshold")) {
+        b2Body_SetSleepThreshold(body, static_cast<float>(value.toDouble() * m_motionScale));
         return;
     }
 
@@ -455,6 +648,62 @@ void Box2DEngine::setBodyParam(BodyHandle handle, const QString &key, const QVar
             b2Body_Enable(body);
         else
             b2Body_Disable(body);
+    }
+}
+
+bool Box2DEngine::preSolve(b2ShapeId shapeA, b2ShapeId shapeB)
+{
+    if (!b2Shape_IsValid(shapeA) || !b2Shape_IsValid(shapeB))
+        return true;
+
+    const auto nameOf = [this](b2ShapeId shape) {
+        const auto index =
+            static_cast<int>(reinterpret_cast<intptr_t>(b2Shape_GetUserData(shape)));
+        return (index >= 0 && index < m_shapeNames.size()) ? m_shapeNames[index] : QString();
+    };
+
+    // Both ways round, as a contact is: either shape can be the one a rule
+    // watches. Raised a step earlier than "begins contact", which is the only
+    // reason to want it.
+    const auto raise = [this, &nameOf](b2ShapeId subject, b2ShapeId other) {
+        EngineEvent event;
+        event.body = handleOf(b2Shape_GetBody(subject));
+        event.otherBody = handleOf(b2Shape_GetBody(other));
+        event.subjectShape = nameOf(subject);
+        event.otherShape = nameOf(other);
+        event.eventId = QStringLiteral("preSolve");
+        if (event.body != kInvalidBody && event.otherBody != kInvalidBody)
+            m_pendingEvents.append(event);
+    };
+    raise(shapeA, shapeB);
+    raise(shapeB, shapeA);
+
+    // Always solved. Cancelling a contact from here is what one-way platforms
+    // are built on, but nothing in the editor says which way is through.
+    return true;
+}
+
+void Box2DEngine::collectBodyEvents()
+{
+    if (!b2World_IsValid(m_worldId))
+        return;
+
+    // Box2D reports only the bodies the solver actually moved, and flags the
+    // one step on which a body settled. Nothing needs remembering: "starts
+    // moving" comes out of the rules' own rising edge, and falling asleep is
+    // a single step by construction.
+    const b2BodyEvents events = b2World_GetBodyEvents(m_worldId);
+    for (int i = 0; i < events.moveCount; ++i) {
+        const b2BodyMoveEvent &move = events.moveEvents[i];
+        const BodyHandle handle = handleOf(move.bodyId);
+        if (handle == kInvalidBody)
+            continue;
+
+        EngineEvent event;
+        event.body = handle;
+        event.eventId = move.fellAsleep ? QStringLiteral("bodyFellAsleep")
+                                        : QStringLiteral("bodyMoved");
+        m_pendingEvents.append(event);
     }
 }
 
@@ -514,13 +763,23 @@ void Box2DEngine::detectLimitEvents()
             continue;
         }
 
+        // Named fields, not an aggregate: EngineEvent carries two shape names
+        // between the handles and the id, so a positional initialiser puts the
+        // id in subjectShape and the event never reaches a rule.
+        const auto raiseLimit = [this, i](const QString &id) {
+            EngineEvent event;
+            event.joint = i;
+            event.eventId = id;
+            m_pendingEvents.append(event);
+        };
+
         if (atLower && !m_jointLimits[i].atLower) {
-            m_pendingEvents.append({i, kInvalidBody, kInvalidBody, QStringLiteral("limitLower")});
-            m_pendingEvents.append({i, kInvalidBody, kInvalidBody, QStringLiteral("limitEither")});
+            raiseLimit(QStringLiteral("limitLower"));
+            raiseLimit(QStringLiteral("limitEither"));
         }
         if (atUpper && !m_jointLimits[i].atUpper) {
-            m_pendingEvents.append({i, kInvalidBody, kInvalidBody, QStringLiteral("limitUpper")});
-            m_pendingEvents.append({i, kInvalidBody, kInvalidBody, QStringLiteral("limitEither")});
+            raiseLimit(QStringLiteral("limitUpper"));
+            raiseLimit(QStringLiteral("limitEither"));
         }
 
         m_jointLimits[i] = {atLower, atUpper, true};
@@ -549,6 +808,15 @@ void Box2DEngine::collectContactEvents()
 
     // A contact is between two *shapes*, and that is how it is reported.
     const auto raise = [this](b2ShapeId a, b2ShapeId b, const QString &id) {
+        // A rule can destroy a body, and Box2D then reports the contacts it
+        // left behind as ended -- naming shapes that no longer exist. Asking
+        // one of those which body it belongs to is not a wrong answer, it is a
+        // crash. The sensor events below have always checked for this; the
+        // contact ones did not, because until a rule could remove something
+        // there was nothing to find.
+        if (!b2Shape_IsValid(a) || !b2Shape_IsValid(b))
+            return;
+
         const BodyHandle firstBody = handleOf(b2Shape_GetBody(a));
         const BodyHandle secondBody = handleOf(b2Shape_GetBody(b));
         if (firstBody == kInvalidBody || secondBody == kInvalidBody)
@@ -590,9 +858,29 @@ void Box2DEngine::collectContactEvents()
     }
     // A hit is a contact hard enough to matter -- Box2D raises it separately,
     // above the world's hit threshold, and only for shapes asking for it.
+    // Unlike a begin or end, it arrives with numbers: how fast the two were
+    // closing and where they met. An EngineEvent carries only names, so the
+    // numbers are kept per shape for shapeValue to answer.
     for (int i = 0; i < events.hitCount; ++i) {
-        raise(events.hitEvents[i].shapeIdA, events.hitEvents[i].shapeIdB,
-              QStringLiteral("contactHit"));
+        const b2ContactHitEvent &e = events.hitEvents[i];
+        const auto record = [this, &e](b2ShapeId shape, float normalSign) {
+            if (!b2Shape_IsValid(shape))
+                return;
+            const auto index =
+                static_cast<int>(reinterpret_cast<intptr_t>(b2Shape_GetUserData(shape)));
+            if (index < 0 || index >= m_shapeNames.size() || m_shapeNames[index].isEmpty())
+                return;
+            HitRecord hit;
+            hit.speed = e.approachSpeed * m_pixelsPerMeter;
+            hit.point = toScene(e.point);
+            // Box2D's normal points from A to B, so B sees it the other way.
+            hit.normal = QPointF(e.normal.x * normalSign, e.normal.y * normalSign);
+            m_lastHit.insert(m_shapeNames[index], hit);
+        };
+        record(e.shapeIdA, 1.0f);
+        record(e.shapeIdB, -1.0f);
+
+        raise(e.shapeIdA, e.shapeIdB, QStringLiteral("contactHit"));
     }
 
     // Sensors are a separate stream: overlaps, not collisions. Reported the
@@ -625,6 +913,11 @@ void Box2DEngine::explodeAt(const b2Vec2 &position, const QVariantMap &params) c
     blast.impulsePerLength =
         static_cast<float>(params.value(QStringLiteral("impulse"), 0.0).toDouble()
                            / m_pixelsPerMeter);
+    // Zero means everything, so an older scene with no such setting is
+    // unchanged by it.
+    const double mask = params.value(QStringLiteral("maskBits"), 0.0).toDouble();
+    if (mask > 0.0)
+        blast.maskBits = static_cast<uint64_t>(mask);
     if (blast.radius > 0.0f)
         b2World_Explode(m_worldId, &blast);
 }
@@ -632,7 +925,7 @@ void Box2DEngine::explodeAt(const b2Vec2 &position, const QVariantMap &params) c
 void Box2DEngine::performAction(const QString &id, BodyHandle target,
                                 const QVariantMap &params)
 {
-    if (id != QLatin1String("explode") || !b2World_IsValid(m_worldId))
+    if (!b2World_IsValid(m_worldId))
         return;
     if (target < 0 || target >= static_cast<BodyHandle>(m_bodies.size()))
         return;
@@ -640,8 +933,57 @@ void Box2DEngine::performAction(const QString &id, BodyHandle target,
     if (!b2Body_IsValid(body))
         return;
 
-    // The named body says only where.
-    explodeAt(b2Body_GetPosition(body), params);
+    if (id == QLatin1String("explode")) {
+        // The named body says only where.
+        explodeAt(b2Body_GetPosition(body), params);
+        return;
+    }
+
+    // b2Body_ApplyLinearImpulse: the same kick as the impulse property, but
+    // landing somewhere in particular. Off the centre of mass it also turns
+    // the body, which is the only reason to name a point at all.
+    if (id == QLatin1String("pushAt")) {
+        const auto metres = [this](const QVariantMap &from, const char *key) {
+            return static_cast<float>(from.value(QLatin1String(key), 0.0).toDouble()
+                                      / m_pixelsPerMeter);
+        };
+        const b2Vec2 impulse { metres(params, "impulseX"), metres(params, "impulseY") };
+        const b2Vec2 centre = b2Body_GetWorldCenterOfMass(body);
+        const b2Vec2 point { centre.x + metres(params, "offsetX"),
+                             centre.y + metres(params, "offsetY") };
+        b2Body_ApplyLinearImpulse(body, impulse, point, true);
+        return;
+    }
+
+    if (id == QLatin1String("removeBody")) {
+        // Box2D takes the body's shapes and joints with it. The handle stays
+        // where it is so the editor's indices keep meaning what they meant --
+        // it just stops naming anything, which every reader here checks for.
+        b2DestroyBody(body);
+        m_bodies[target] = b2_nullBodyId;
+        return;
+    }
+}
+
+void Box2DEngine::performJointAction(const QString &id, JointHandle target,
+                                     const QVariantMap &params)
+{
+    Q_UNUSED(params);
+    if (!b2World_IsValid(m_worldId))
+        return;
+    if (target < 0 || target >= m_joints.size())
+        return;
+    const b2JointId joint = m_joints[target];
+    if (!b2Joint_IsValid(joint))
+        return;
+
+    if (id == QLatin1String("breakJoint")) {
+        // The two bodies were asleep against each other as often as not, and a
+        // sleeping body would not notice the joint had gone.
+        b2Joint_WakeBodies(joint);
+        b2DestroyJoint(joint);
+        m_joints[target] = b2_nullJointId;
+    }
 }
 
 void Box2DEngine::performActionAt(const QString &id, const QPointF &position,
@@ -658,6 +1000,12 @@ void Box2DEngine::setShapeParam(const QString &name, const QString &key, const Q
     if (it == m_shapesByName.constEnd() || !b2Shape_IsValid(*it))
         return;
 
+    // A settled body is asleep, and a sleeping body does not notice what its
+    // shapes are made of -- a conveyor switched on by a rule would carry
+    // nothing until something else disturbed it. Same reasoning as
+    // b2Joint_WakeBodies in setJointParam.
+    b2Body_SetAwake(b2Shape_GetBody(*it), true);
+
     const float number = static_cast<float>(value.toDouble());
     if (key == QLatin1String("density")) {
         // Recomputes the body's mass, or the change has no effect until
@@ -667,8 +1015,45 @@ void Box2DEngine::setShapeParam(const QString &name, const QString &key, const Q
         b2Shape_SetFriction(*it, number);
     } else if (key == QLatin1String("restitution")) {
         b2Shape_SetRestitution(*it, number);
+    } else if (key == QLatin1String("rollingResistance")
+               || key == QLatin1String("tangentSpeed")) {
+        // The rest of the surface goes in one struct, so the half not being
+        // written is read back. Tangent speed is a speed, and converts like
+        // one; rolling resistance is a ratio and does not.
+        b2SurfaceMaterial material = b2Shape_GetSurfaceMaterial(*it);
+        if (key == QLatin1String("rollingResistance"))
+            material.rollingResistance = number;
+        else
+            material.tangentSpeed = static_cast<float>(value.toDouble() / m_pixelsPerMeter);
+        b2Shape_SetSurfaceMaterial(*it, material);
+    } else if (key == QLatin1String("categoryBits") || key == QLatin1String("maskBits")
+               || key == QLatin1String("groupIndex")) {
+        b2Filter filter = b2Shape_GetFilter(*it);
+        if (key == QLatin1String("categoryBits"))
+            filter.categoryBits = static_cast<uint64_t>(qMax(0.0, value.toDouble()));
+        else if (key == QLatin1String("maskBits"))
+            filter.maskBits = static_cast<uint64_t>(qMax(0.0, value.toDouble()));
+        else
+            filter.groupIndex = value.toInt();
+        b2Shape_SetFilter(*it, filter);
+    } else if (key == QLatin1String("enableContactEvents")) {
+        b2Shape_EnableContactEvents(*it, value.toBool());
+    } else if (key == QLatin1String("enableHitEvents")) {
+        b2Shape_EnableHitEvents(*it, value.toBool());
+    } else if (key == QLatin1String("enableSensorEvents")) {
+        b2Shape_EnableSensorEvents(*it, value.toBool());
+    } else if (key == QLatin1String("enablePreSolveEvents")) {
+        b2Shape_EnablePreSolveEvents(*it, value.toBool());
+    } else if (key == QLatin1String("radius")) {
+        // Box2D can swap a shape's outline in place, but only for the kind it
+        // already is -- so this is a circle's radius and nothing else's.
+        if (b2Shape_GetType(*it) == b2_circleShape) {
+            b2Circle circle = b2Shape_GetCircle(*it);
+            circle.radius = static_cast<float>(qMax(0.0, value.toDouble()) / m_pixelsPerMeter);
+            b2Shape_SetCircle(*it, &circle);
+        }
     } else if (key == QLatin1String("isSensor")) {
-        // Not settable in Box2D once a shape exists; listed nowhere, and
+        // Not settable in Box2D once a shape exists; published read-only, and
         // ignored here rather than silently doing nothing somewhere else.
         return;
     }
@@ -683,6 +1068,61 @@ QVariant Box2DEngine::shapeValue(const QString &name, const QString &key) const
     if (key == QLatin1String("density"))     return b2Shape_GetDensity(*it);
     if (key == QLatin1String("friction"))    return b2Shape_GetFriction(*it);
     if (key == QLatin1String("restitution")) return b2Shape_GetRestitution(*it);
+
+    if (key == QLatin1String("rollingResistance"))
+        return b2Shape_GetSurfaceMaterial(*it).rollingResistance;
+    if (key == QLatin1String("tangentSpeed"))
+        return b2Shape_GetSurfaceMaterial(*it).tangentSpeed * m_pixelsPerMeter;
+
+    if (key == QLatin1String("isSensor"))            return b2Shape_IsSensor(*it);
+    if (key == QLatin1String("enableContactEvents")) return b2Shape_AreContactEventsEnabled(*it);
+    if (key == QLatin1String("enableHitEvents"))     return b2Shape_AreHitEventsEnabled(*it);
+    if (key == QLatin1String("enableSensorEvents"))  return b2Shape_AreSensorEventsEnabled(*it);
+    if (key == QLatin1String("enablePreSolveEvents"))
+        return b2Shape_ArePreSolveEventsEnabled(*it);
+
+    if (key == QLatin1String("categoryBits"))
+        return static_cast<double>(b2Shape_GetFilter(*it).categoryBits);
+    if (key == QLatin1String("maskBits"))
+        return static_cast<double>(b2Shape_GetFilter(*it).maskBits);
+    if (key == QLatin1String("groupIndex")) return b2Shape_GetFilter(*it).groupIndex;
+
+    if (key == QLatin1String("radius")) {
+        if (b2Shape_GetType(*it) != b2_circleShape)
+            return {};
+        return b2Shape_GetCircle(*it).radius * m_pixelsPerMeter;
+    }
+    if (key == QLatin1String("mass")) return b2Shape_GetMassData(*it).mass;
+
+    // How many things are inside a sensor right now -- what the begin and end
+    // events cannot say without the rule keeping a tally of its own. The list
+    // has to be fetched rather than just measured: Box2D warns it can name
+    // shapes destroyed since the last step.
+    if (key == QLatin1String("sensorOverlapCount")) {
+        const int capacity = b2Shape_GetSensorCapacity(*it);
+        if (capacity <= 0)
+            return 0;   // not a sensor, or nothing in it
+        QVarLengthArray<b2ShapeId, 32> overlaps(capacity);
+        const int found = b2Shape_GetSensorOverlaps(*it, overlaps.data(), capacity);
+        int alive = 0;
+        for (int i = 0; i < found; ++i)
+            alive += b2Shape_IsValid(overlaps[i]) ? 1 : 0;
+        return alive;
+    }
+
+    // What the last hit on this shape was like. The event says it happened;
+    // these say how hard and where, which is what a rule wants to compare.
+    const auto hit = m_lastHit.constFind(name);
+    if (hit != m_lastHit.constEnd()) {
+        if (key == QLatin1String("lastHitSpeed"))   return hit->speed;
+        if (key == QLatin1String("lastHitX"))       return hit->point.x();
+        if (key == QLatin1String("lastHitY"))       return hit->point.y();
+        if (key == QLatin1String("lastHitNormalX")) return hit->normal.x();
+        if (key == QLatin1String("lastHitNormalY")) return hit->normal.y();
+    } else if (key.startsWith(QLatin1String("lastHit"))) {
+        // Nothing has hit it yet -- zero, so a comparison is still answerable.
+        return 0.0;
+    }
     return {};
 }
 

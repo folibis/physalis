@@ -1,0 +1,109 @@
+#pragma once
+
+#include "Scene.h"
+
+#include <QHash>
+#include <QString>
+#include <QStringList>
+#include <QVariant>
+
+#include <vector>
+
+// The scene's rules, running.
+//
+// Nothing here is generated. The rules arrive as data in Scene::rules and this
+// reads them, the same way the editor does: it casts the rays, collects the
+// step's events, works out which conditions have just become true, and writes
+// or performs what each one asks for.
+//
+// A rule fires on the *rising edge* of its condition. "While touching" would
+// otherwise fire sixty times a second, and a rule that reverses a motor has to
+// fire once.
+class RuleRunner
+{
+public:
+    explicit RuleRunner(Scene *scene);
+
+    // Call after every b2World_Step. Casts the rays, drains Box2D's event
+    // buffers and applies whatever has come true.
+    void afterStep(double dt);
+
+    double elapsed() const { return m_elapsed; }
+    qint64 frame() const { return m_frame; }
+
+    // Bodies a rule has removed. The viewport stops drawing them.
+    bool bodyRemoved(int index) const;
+    // Joints a rule has broken, by name.
+    bool jointBroken(const QString &name) const;
+
+private:
+    struct Event {
+        QString id;
+        QString subjectShape;
+        QString otherShape;
+        int body = -1;
+        int otherBody = -1;
+        int joint = -1;
+    };
+
+    void castRays();
+    void collectEvents();
+    void applyRules();
+
+    bool evaluate(const SceneRule &rule, QString *other) const;
+    void perform(const SceneRule &rule, const QString &other);
+
+    // --- reading and writing, by name and key -----------------------------
+    QVariant readValue(const QString &object, const QString &key) const;
+    void writeValue(const QString &object, const QString &key, const QVariant &value);
+    void performAction(const QString &object, const QString &id, const QVariantMap &params);
+
+    QVariant readWorld(const QString &key) const;
+    QVariant readBody(int index, const QString &key) const;
+    QVariant readShape(const QString &name, const QString &key) const;
+    QVariant readJoint(int index, const QString &key) const;
+    QVariant readRay(const SceneRay &ray, const QString &key) const;
+
+    void writeWorld(const QString &key, const QVariant &value);
+    void writeBody(int index, const QString &key, const QVariant &value);
+    void writeShape(const QString &name, const QString &key, const QVariant &value);
+    void writeJoint(int index, const QString &key, const QVariant &value);
+
+    int bodyIndex(const QString &name) const;
+    int jointIndex(const QString &name) const;
+    // The body a shape belongs to, or -1.
+    int bodyOfShape(const QString &shapeName) const;
+
+    double toMetres(double sceneUnits) const { return sceneUnits / m_scene->pixelsPerMeter; }
+    double toScene(double metres) const { return metres * m_scene->pixelsPerMeter; }
+
+    Scene *m_scene = nullptr;
+
+    double m_elapsed = 0.0;
+    qint64 m_frame = 0;
+    float m_lastStep = 1.0f / 60.0f;
+
+    std::vector<Event> m_events;
+
+    struct RuleState { bool wasTrue = false; bool fired = false; };
+    std::vector<RuleState> m_state;
+
+    // Whether each joint with a limit was sitting against it after the last
+    // step, so arriving at one is an edge rather than a state.
+    struct LimitState { bool atLower = false; bool atUpper = false; bool sampled = false; };
+    std::vector<LimitState> m_limits;
+
+    // What the last hit on a shape was like: the event says it happened, and
+    // these say how hard and where.
+    struct HitRecord { double speed = 0.0; QPointF point; QPointF normal; };
+    QHash<QString, HitRecord> m_lastHit;
+
+    std::vector<bool> m_removedBodies;
+    QStringList m_brokenJoints;
+
+    // Contact tuning has no getters in Box2D, so what the world was told is
+    // remembered for a rule that changes one of the three.
+    float m_contactHertz = 30.0f;
+    float m_contactDamping = 10.0f;
+    float m_contactPush = 3.0f;
+};

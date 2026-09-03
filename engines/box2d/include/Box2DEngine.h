@@ -39,11 +39,17 @@ public:
     // joint catalogue lives in Box2DJointTypes.cpp.
     PropertyList bodyProperties() const override;
     QVector<ActionType> bodyActions() const override;
+    QVector<ActionType> jointActions() const override;
     void performAction(const QString &id, BodyHandle target,
                        const QVariantMap &params) override;
+    void performJointAction(const QString &id, JointHandle target,
+                            const QVariantMap &params) override;
     void performActionAt(const QString &id, const QPointF &position,
                          const QVariantMap &params) override;
     PropertyList shapeProperties() const override;
+    PropertyList worldProperties() const override;
+    void setWorldParam(const QString &key, const QVariant &value) override;
+    QVariant worldValue(const QString &key) const override;
     PropertyList jointReadables(const QString &typeId) const override;
     QVector<EventType> bodyEvents() const override;
     QVector<EventType> shapeEvents() const override;
@@ -66,6 +72,15 @@ public:
     // Turns Box2D's begin/end touch events into ours, once per body involved
     // so that either side of a contact can be the one a rule triggers on.
     void collectContactEvents();
+    // b2World_GetBodyEvents: which bodies the solver carried this step, and
+    // which of them settled on it.
+    void collectBodyEvents();
+    // Registered with b2World_SetPreSolveCallback. Called from inside the
+    // step, once per contact between shapes that asked for it, before the
+    // solver has done anything about it. Never cancels a contact -- it only
+    // raises the event, which is what the shape's Pre-Solve Events flag is
+    // asking for.
+    bool preSolve(b2ShapeId shapeA, b2ShapeId shapeB);
     // The handle a b2BodyId stands for, or kInvalidBody. Box2D carries it in
     // the body's user data, set when the body is added.
     BodyHandle handleOf(b2BodyId body) const;
@@ -119,6 +134,34 @@ private:
     QVector<QString> m_shapeNames;
     // Where a named shape ended up, so a rule can change one while running.
     QHash<QString, b2ShapeId> m_shapesByName;
+
+    // What b2ContactHitEvent said the last time this shape was hit. The event
+    // itself only says that it happened; the numbers that came with it are
+    // kept here so a rule can ask how hard, and where.
+    struct HitRecord {
+        qreal speed = 0.0;      // scene units per second
+        QPointF point;          // scene coordinates
+        QPointF normal;
+    };
+    QHash<QString, HitRecord> m_lastHit;
+
+    // Contact tuning goes in through one call carrying three numbers, and
+    // Box2D offers no getters for any of them -- so what the world was made
+    // with is kept here, for a rule that changes one of the three to put the
+    // other two back unaltered. Speculative contacts are the same story: a
+    // setter and no getter.
+    struct ContactTuning {
+        float hertz = 30.0f;
+        float dampingRatio = 10.0f;
+        float pushSpeed = 3.0f;
+    };
+    ContactTuning m_contactTuning;
+    bool m_speculative = true;
+
+    // How long the last step was. b2Body_SetTargetTransform needs it to work
+    // out the velocity that would arrive on time, and nothing else carries it
+    // down to a property write.
+    float m_lastStep = 1.0f / 60.0f;
     // Scene units per metre, straight from WorldDesc: what the solver is told
     // the shapes measure.
     qreal m_pixelsPerMeter = kReferencePixelsPerMeter;
@@ -130,9 +173,10 @@ private:
     // Joints, indexed by the JointHandle handed back.
     QVector<b2JointId> m_joints;
 
-    // Box2D's solver iteration count per step. 4 is the value Box2D's own
-    // samples use; higher trades speed for stiffer stacks.
-    static constexpr int kSubStepCount = 4;
+    // Box2D's solver iteration count per step, as the world asked for it.
+    // 4 is the value Box2D's own samples use; higher trades speed for stiffer
+    // stacks.
+    int m_subStepCount = 4;
 };
 
 } // namespace physics

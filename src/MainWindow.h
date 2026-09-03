@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <QHash>
+#include <QVariantMap>
 #include <QList>
 #include "OptionsDialog.h"
 #include "EditorMode.h"
@@ -51,6 +52,9 @@ private slots:
     void on_actionAddPolygon_triggered();
     void onActiveItemChanged(ShapeItem *item);
     void on_actionOptions_triggered();
+    // Built fresh each time the menu opens, so a converter dropped into the
+    // folder appears without a restart.
+    void refreshExportMenu();
     void on_actionAbout_triggered();
     // Where preferences live. Redirectable through PHYSALIS_SETTINGS so a
     // test run cannot read -- or overwrite -- the settings of the installed
@@ -85,6 +89,12 @@ public:
     void setVersion(const QString &version);
 
 private:
+    // Where the export converters live. Not a scene property, so unlike the
+    // rest of the settings it has nowhere else to be kept.
+    QString m_converterPath;
+    // What each converter asked to be asked, by converter id.
+    QHash<QString, QVariantMap> m_converterSettings;
+
     QString m_version;
 
 private slots:

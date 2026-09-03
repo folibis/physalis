@@ -41,6 +41,13 @@ public:
     bool isAsleep() const { return m_asleep; }
     void setAsleep(bool asleep);
 
+    // Run state, not document state: a rule took this body out of the world,
+    // so nothing of it is drawn until the run ends -- its shapes, its axes and
+    // the joints that were attached to it. Never saved; the scene still has
+    // the body, and stopping brings all of it back.
+    bool isRemoved() const { return m_removed; }
+    void setRemoved(bool removed);
+
 signals:
     void propertyChanged();
     // Old name first. See setName().
@@ -54,4 +61,5 @@ private:
 
     QVector<ShapeItem *> m_shapes;
     bool m_asleep = false;
+    bool m_removed = false;
 };

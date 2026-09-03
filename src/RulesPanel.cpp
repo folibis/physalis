@@ -392,7 +392,10 @@ QWidget *RulesPanel::buildCard(int index)
             updated.actionParams.clear();
         } else {
             updated.propertyKey.clear();
-            updated.actionParams.clear();
+            // An action's settings are its own, and a rule that carried none
+            // performed it with every number at zero -- a blast of radius
+            // nothing. Start them where the engine says they should start.
+            updated.actionParams = defaultActionParams(action);
         }
         commit(index, updated);
         m_rows[index].op->setVisible(action.isEmpty());
@@ -563,6 +566,9 @@ QVector<RuleChoice> RulesPanel::targetChoices() const
         return choices;
     choices.append({Rule::otherObject(), tr("the shape that touched it")});
     choices.append({Rule::otherObjectBody(), tr("the body that touched it")});
+    // The world is a target as well as a subject: gravity and the solver's own
+    // thresholds can be changed while it runs.
+    choices.append({Rule::world(), tr("World"), Icons::world()});
     for (Joint *joint : m_scene->joints())
         choices.append({joint->name(), joint->name(),
                         ObjectIcons::forJoint(m_scene->jointTypeColor(joint->typeId()))});
@@ -626,10 +632,12 @@ QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
         return choices;
     }
 
-    // The run has no events, only two numbers that climb as it goes.
+    // The run has no events: two numbers that climb as it goes, and whatever
+    // the engine says its world can still be asked about.
     if (name == Rule::world()) {
         choices.append({QStringLiteral("time"), tr("Elapsed Time (s)")});
         choices.append({QStringLiteral("frame"), tr("Frame")});
+        addReadable(engine->worldProperties());
         return choices;
     }
 
@@ -694,6 +702,24 @@ void RulesPanel::refreshConditionEditor(int index)
             commit(index, updated);
         });
         row.condition = combo;
+    } else if (propertyIsChoice(rule.subjectName, rule.conditionKey)) {
+        // Compared as its index, so "is Dynamic" is a comparison the same way
+        // any other is -- but chosen by name.
+        const physics::JointParam *param = describe(rule.subjectName, rule.conditionKey);
+        auto *combo = new QComboBox(row.conditionHolder);
+        combo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+        combo->addItems(param->choices);
+        combo->setToolTip(param->tooltip);
+        combo->setCurrentIndex(qBound(0, rule.conditionValue.toInt(),
+                                      param->choices.size() - 1));
+        connect(combo, &QComboBox::currentIndexChanged, this, [this, index](int at) {
+            if (m_building)
+                return;
+            Rule updated = m_scene->rules().at(index);
+            updated.conditionValue = at;
+            commit(index, updated);
+        });
+        row.condition = combo;
     } else {
         auto *spin = new QDoubleSpinBox(row.conditionHolder);
         spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
@@ -738,6 +764,11 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
         }
     };
 
+    if (name == Rule::world()) {
+        addSettable(engine->worldProperties(), false);
+        return result;
+    }
+
     for (Joint *joint : m_scene->joints()) {
         if (joint->name() != name)
             continue;
@@ -745,6 +776,12 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
             if (type.id == joint->typeId())
                 addSettable(type.params, true);
         }
+        // Not everything settable on a joint is one of its type's creation
+        // parameters -- some belong to any joint at all, and arrive with the
+        // readables.
+        addSettable(engine->jointReadables(joint->typeId()), false);
+        for (const physics::ActionType &action : engine->jointActions())
+            result.append({actionKey(action.id), action.label});
         return result;
     }
     const auto addActions = [&result, &engine] {
@@ -757,23 +794,32 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
         return result;
     }
 
+    // Bodies and shapes get the engine's body actions as well as its
+    // properties -- the same dropdown offers both, and a rule that names a
+    // shape performs the action on the body that owns it. Without this the
+    // actions existed and were reachable only by editing a scene file.
     for (PhysicsBody *body : m_scene->bodies()) {
         if (body->name() == name) {
             addSettable(engine->bodyProperties(), false);
+            addActions();
             return result;
         }
     }
     for (ShapeItem *shape : m_scene->shapes()) {
         if (shape->name() == name) {
             addSettable(engine->shapeProperties(), false);
+            addActions();
             return result;
         }
     }
 
-    if (name == Rule::otherObject())
+    if (name == Rule::otherObject()) {
         addSettable(engine->shapeProperties(), false);
-    else if (name == Rule::otherObjectBody())
+        addActions();
+    } else if (name == Rule::otherObjectBody()) {
         addSettable(engine->bodyProperties(), false);
+        addActions();
+    }
     return result;
 }
 
@@ -784,13 +830,87 @@ QVariantMap RulesPanel::defaultActionParams(const QString &id) const
         m_scene ? m_scene->simulationEngineName() : QString());
     if (!engine)
         return params;
-    for (const physics::ActionType &action : engine->bodyActions()) {
+    for (const physics::ActionType &action : engine->bodyActions() + engine->jointActions()) {
         if (action.id != id)
             continue;
         for (const physics::JointParam &param : action.params)
             params.insert(param.key, param.defaultValue);
     }
     return params;
+}
+
+QWidget *RulesPanel::buildActionParamEditor(int index, const Rule &rule,
+                                            QWidget *parent)
+{
+    auto engine = physics::EngineRegistry::create(
+        m_scene ? m_scene->simulationEngineName() : QString());
+
+    QVector<physics::JointParam> params;
+    QString description;
+    if (engine) {
+        for (const physics::ActionType &action :
+             engine->bodyActions() + engine->jointActions()) {
+            if (action.id != rule.actionId)
+                continue;
+            params = action.params;
+            description = action.description;
+        }
+    }
+
+    if (params.isEmpty()) {
+        // Breaking a joint or removing a body takes no settings: doing it is
+        // the whole of it.
+        auto *label = new QLabel(tr("(nothing to set)"), parent);
+        label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+        label->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
+        label->setToolTip(description);
+        return label;
+    }
+
+    auto *holder = new QWidget(parent);
+    auto *form = new QFormLayout(holder);
+    form->setContentsMargins(0, 0, 0, 0);
+    form->setSpacing(2);
+    form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    holder->setToolTip(description);
+
+    for (const physics::JointParam &param : params) {
+        const QVariant current = rule.actionParams.value(param.key, param.defaultValue);
+
+        if (param.type == physics::ParamType::Bool) {
+            auto *check = new QCheckBox(holder);
+            check->setChecked(current.toBool());
+            check->setToolTip(param.tooltip);
+            connect(check, &QCheckBox::toggled, this, [this, index, key = param.key](bool on) {
+                if (m_building)
+                    return;
+                Rule updated = m_scene->rules().at(index);
+                updated.actionParams.insert(key, on);
+                commit(index, updated);
+            });
+            form->addRow(param.label, check);
+            continue;
+        }
+
+        auto *spin = new QDoubleSpinBox(holder);
+        spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+        spin->setMinimumWidth(70);
+        spin->setRange(param.minValue, param.maxValue);
+        spin->setDecimals(param.decimals);
+        spin->setSingleStep(param.step);
+        spin->setToolTip(param.tooltip);
+        spin->setValue(current.toDouble());
+        connect(spin, &QDoubleSpinBox::valueChanged, this,
+                [this, index, key = param.key](double v) {
+                    if (m_building)
+                        return;
+                    Rule updated = m_scene->rules().at(index);
+                    updated.actionParams.insert(key, v);
+                    commit(index, updated);
+                });
+        form->addRow(param.label, spin);
+    }
+    return holder;
 }
 
 QString RulesPanel::actionKey(const QString &id)
@@ -822,7 +942,8 @@ void RulesPanel::refreshProperties(int index)
         Rule updated = rule;
         action = actionIdOf(shown);
         updated.actionId = action;
-        updated.actionParams.clear();
+        updated.actionParams = action.isEmpty() ? QVariantMap()
+                                                : defaultActionParams(action);
         updated.propertyKey = action.isEmpty() ? shown : QString();
         commit(index, updated);
     }
@@ -963,13 +1084,18 @@ void RulesPanel::refreshValueEditor(int index)
     const bool wasBuilding = m_building;
     m_building = true;
 
-    if (rule.isAction()) {
-        // Nothing to edit here -- an action's settings belong to the object it
-        // happens to, so the rule only says when.
+    if (rule.isAction() && m_scene->explosionNamed(rule.targetName)) {
+        // Aimed at an explosion, the settings belong to that object -- it is
+        // placed, sized and tuned on the canvas, and the rule only says when.
         auto *label = new QLabel(tr("(set on the object)"), row.valueHolder);
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
         label->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
         row.value = label;
+    } else if (rule.isAction()) {
+        // Aimed at anything else there is no object to carry them, so the
+        // action's own parameters are edited here. Without this they stayed at
+        // whatever they were seeded with and the rule could not be tuned.
+        row.value = buildActionParamEditor(index, rule, row.valueHolder);
     } else if (!Rule::usesValue(rule.op)) {
         auto *label = new QLabel(tr("(current value)"), row.valueHolder);
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
@@ -986,6 +1112,21 @@ void RulesPanel::refreshValueEditor(int index)
             commit(index, updated);
         });
         row.value = check;
+    } else if (propertyIsChoice(rule.targetName, rule.propertyKey)) {
+        auto *combo = new QComboBox(row.valueHolder);
+        combo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+        const physics::JointParam *param = describe(rule.targetName, rule.propertyKey);
+        combo->addItems(param->choices);
+        combo->setToolTip(param->tooltip);
+        combo->setCurrentIndex(qBound(0, rule.value.toInt(), param->choices.size() - 1));
+        connect(combo, &QComboBox::currentIndexChanged, this, [this, index](int at) {
+            if (m_building)
+                return;
+            Rule updated = m_scene->rules().at(index);
+            updated.value = at;
+            commit(index, updated);
+        });
+        row.value = combo;
     } else {
         auto *spin = new QDoubleSpinBox(row.valueHolder);
         spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
@@ -1130,6 +1271,10 @@ const physics::JointParam *RulesPanel::describe(const QString &objectName,
 
     physics::PropertyList candidates;
     bool matched = false;
+    if (objectName == Rule::world()) {
+        candidates = engine->worldProperties();
+        matched = true;
+    }
     for (Joint *joint : m_scene->joints()) {
         if (joint->name() != objectName)
             continue;
@@ -1178,6 +1323,12 @@ bool RulesPanel::propertyIsFlag(const QString &objectName, const QString &key) c
 {
     const physics::JointParam *param = describe(objectName, key);
     return param && param->type == physics::ParamType::Bool;
+}
+
+bool RulesPanel::propertyIsChoice(const QString &objectName, const QString &key) const
+{
+    const physics::JointParam *param = describe(objectName, key);
+    return param && param->type == physics::ParamType::Choice && !param->choices.isEmpty();
 }
 
 void RulesPanel::commit(int index, const Rule &rule)

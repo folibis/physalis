@@ -1,0 +1,16 @@
+        b2WheelJointDef def = b2DefaultWheelJointDef();
+        def.bodyIdA = a;
+        def.bodyIdB = b;
+        def.localAnchorA = anchorA;
+        def.localAnchorB = anchorB;
+        def.localAxisA = axis;
+        def.enableSpring = {{ENABLE_SPRING}};
+        def.hertz = {{HERTZ}}f;
+        def.dampingRatio = {{DAMPING_RATIO}}f;
+        def.enableLimit = {{ENABLE_LIMIT}};
+        def.lowerTranslation = {{LOWER_TRANSLATION}}f;
+        def.upperTranslation = {{UPPER_TRANSLATION}}f;
+        def.enableMotor = {{ENABLE_MOTOR}};
+        def.maxMotorTorque = {{MAX_MOTOR_TORQUE}}f;
+        def.motorSpeed = rad({{MOTOR_SPEED}});
+        def.collideConnected = {{COLLIDE_CONNECTED}};

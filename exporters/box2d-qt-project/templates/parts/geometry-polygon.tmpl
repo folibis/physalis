@@ -1,0 +1,18 @@
+            const b2Vec2 points[] = {
+{{POINTS}}            };
+            const int count = int(sizeof(points) / sizeof(points[0]));
+
+            const b2Hull hull = b2ComputeHull(points, count);
+            if (hull.count >= 3) {
+                const b2Polygon polygon = b2MakePolygon(&hull, 0.0f);
+                created = b2CreatePolygonShape(body, &shapeDef, &polygon);
+            } else {
+                // Not a hull Box2D will take. The editor falls back to the
+                // edges around the same outline, so this does too.
+                for (int i = 0; i < count; ++i) {
+                    const b2Segment segment { points[i], points[(i + 1) % count] };
+                    const b2ShapeId edge = b2CreateSegmentShape(body, &shapeDef, &segment);
+                    if (!b2Shape_IsValid(created))
+                        created = edge;
+                }
+            }

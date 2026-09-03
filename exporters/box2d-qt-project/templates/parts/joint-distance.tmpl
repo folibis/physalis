@@ -1,0 +1,16 @@
+        b2DistanceJointDef def = b2DefaultDistanceJointDef();
+        def.bodyIdA = a;
+        def.bodyIdB = b;
+        def.localAnchorA = anchorA;
+        def.localAnchorB = anchorB;
+        def.length = {{LENGTH}}f;
+        def.enableSpring = {{ENABLE_SPRING}};
+        def.hertz = {{HERTZ}}f;
+        def.dampingRatio = {{DAMPING_RATIO}}f;
+        def.enableLimit = {{ENABLE_LIMIT}};
+        def.minLength = {{MIN_LENGTH}}f;
+        def.maxLength = {{MAX_LENGTH}}f;
+        def.enableMotor = {{ENABLE_MOTOR}};
+        def.maxMotorForce = {{MAX_MOTOR_FORCE}}f;
+        def.motorSpeed = {{MOTOR_SPEED}}f;
+        def.collideConnected = {{COLLIDE_CONNECTED}};

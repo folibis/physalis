@@ -43,6 +43,10 @@ private:
     // Actions share the property dropdown, tagged so they can be told from
     // real properties.
     QVariantMap defaultActionParams(const QString &id) const;
+    // The editors for one action's own parameters, stacked into a single
+    // widget the value column can hold. Returns a plain label when the action
+    // has none, so there is always something to put there.
+    QWidget *buildActionParamEditor(int index, const Rule &rule, QWidget *parent);
     static QString actionKey(const QString &id);
     static QString actionIdOf(const QString &key);
     static void setCollapseLook(QToolButton *button, bool collapsed);
@@ -103,6 +107,10 @@ private:
     void applyWatchChoice(int index, const QString &chosen);
     const physics::JointParam *describe(const QString &objectName, const QString &key) const;
     bool propertyIsFlag(const QString &objectName, const QString &key) const;
+    // A property the engine offers as one of a fixed set rather than as a
+    // number. The editor knows nothing about what the choices mean; it shows
+    // the labels it was given and stores the index.
+    bool propertyIsChoice(const QString &objectName, const QString &key) const;
 
     QVector<RuleChoice> sourceChoices() const;
     QVector<RuleChoice> watchChoices(const QString &name) const;

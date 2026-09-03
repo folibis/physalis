@@ -22,7 +22,7 @@ set(CMAKE_AUTOUIC ON)
 # Forms live in ui/, not beside the sources that use them.
 set(CMAKE_AUTOUIC_SEARCH_PATHS ${CMAKE_CURRENT_SOURCE_DIR}/ui)
 
-find_package(Qt6 COMPONENTS Widgets Svg Test REQUIRED)
+find_package(Qt6 COMPONENTS Widgets Svg Qml Test REQUIRED)
 
 qt_standard_project_setup()
 
@@ -127,6 +127,8 @@ add_library(PhysalisCore OBJECT
     src/SimulationController.cpp
     src/SceneSerializer.h
     src/SceneSerializer.cpp
+    src/SceneExporter.h
+    src/SceneExporter.cpp
     src/Icons.h
     src/Icons.cpp
     src/ObjectIcons.cpp
@@ -153,8 +155,10 @@ target_include_directories(PhysalisCore PUBLIC
     include
     src
     ${CMAKE_BINARY_DIR}/generated)
-# No Box2D here any more: the engine lives in a plugin.
-target_link_libraries(PhysalisCore PUBLIC Qt6::Widgets Qt6::Svg)
+# No Box2D here any more: the engine lives in a plugin. Qml is here for
+# QJSEngine alone -- export converters are JavaScript, and nothing in the
+# application uses QML itself.
+target_link_libraries(PhysalisCore PUBLIC Qt6::Widgets Qt6::Svg Qt6::Qml)
 
 # The header has to exist for any build, stamped or not. Written once here at
 # configure time, with whatever the counter last reached.
@@ -180,6 +184,14 @@ target_link_libraries(Physalis PRIVATE PhysalisCore)
 # Only a build that stamps needs to wait for the stamp.
 if(PHYSALIS_STAMPS_BUILDS)
     add_dependencies(Physalis PhysalisVersion)
+endif()
+
+# QJSEngine runs the export converters, and Qt6Qml is not among the DLLs that
+# the rest of the Qt runtime was deployed with.
+if(WIN32)
+    add_custom_command(TARGET Physalis POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:Qt6::Qml> $<TARGET_FILE_DIR:Physalis>)
 endif()
 
 add_subdirectory(engines/box2d)

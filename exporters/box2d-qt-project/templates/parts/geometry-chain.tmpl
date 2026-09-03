@@ -1,0 +1,13 @@
+            const b2Vec2 points[] = {
+{{POINTS}}            };
+            const int count = int(sizeof(points) / sizeof(points[0]));
+
+            // One two-sided segment per edge rather than a b2Chain: a chain is
+            // one-sided and needs four points, and a line drawn across a canvas
+            // is expected to stop things arriving from either side of it.
+            for (int i = 0; i < {{LAST_EDGE}}; ++i) {
+                const b2Segment segment { points[i], points[(i + 1) % count] };
+                const b2ShapeId edge = b2CreateSegmentShape(body, &shapeDef, &segment);
+                if (!b2Shape_IsValid(created))
+                    created = edge;   // an outline is many shapes; the first stands for it
+            }

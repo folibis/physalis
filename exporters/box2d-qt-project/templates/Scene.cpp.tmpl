@@ -1,0 +1,30 @@
+// Generated from a Physalis scene. Edit the scene, not this file.
+
+#include "Scene.h"
+
+#include <cmath>
+
+namespace {
+
+// Scene units to metres, at this scene's scale.
+constexpr float kPixelsPerMeter = {{PIXELS_PER_METER}}f;
+inline b2Vec2 m(double x, double y)
+{
+    return b2Vec2 { float(x / kPixelsPerMeter), float(y / kPixelsPerMeter) };
+}
+
+// Degrees to radians. M_PI is not standard C++ and is missing under a
+// conforming compiler, so the constant is spelled out here.
+constexpr double kPi = 3.14159265358979323846;
+inline float rad(double degrees) { return float(degrees * kPi / 180.0); }
+
+} // namespace
+
+Scene buildScene()
+{
+    Scene scene;
+{{SETTINGS}}
+{{WORLD}}
+{{BODIES}}{{JOINTS}}{{FIELD_BOUNDS}}{{RAYS}}{{EXPLOSIONS}}{{RULES}}
+    return scene;
+}

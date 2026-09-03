@@ -68,6 +68,19 @@ void PhysicsBody::setAsleep(bool asleep)
         shape->update();
 }
 
+void PhysicsBody::setRemoved(bool removed)
+{
+    if (m_removed == removed)
+        return;
+    m_removed = removed;
+
+    // The shapes go with it. Hiding them is what stops them being drawn,
+    // dragged or hit-tested; the flag is what stops everything drawn *about*
+    // the body, which is not any one shape's business.
+    for (ShapeItem *shape : m_shapes)
+        shape->setVisible(!removed);
+}
+
 namespace {
 
 bool polygonAreaAndCentroid(const QVector<QPointF> &points, qreal *area, QPointF *centroid)

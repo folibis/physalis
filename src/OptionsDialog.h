@@ -4,6 +4,8 @@
 
 #include <memory>
 #include <QColor>
+#include <QHash>
+#include <QVariantMap>
 #include "CanvasScene.h"
 
 class QDoubleSpinBox;
@@ -11,6 +13,8 @@ class QSpinBox;
 QT_BEGIN_NAMESPACE
 namespace Ui { class OptionsDialog; }
 QT_END_NAMESPACE
+
+namespace SceneExporter { struct ConverterSetting; }
 
 class QCheckBox;
 class QToolButton;
@@ -91,6 +95,14 @@ public:
         qreal jointWaistWidth = 3.5;
         qreal jointOutlineWidth = 1.6;
 
+        // Where the export converters live: one folder per converter, each
+        // with a manifest.json naming it and an export.js doing the work.
+        QString converterPath;
+        // What each converter asked to be asked, by converter id. The
+        // application stores and renders these without knowing what any of
+        // them mean -- the same bargain it has with the engine plugins.
+        QHash<QString, QVariantMap> converterSettings;
+
         QPointF gravity { 0.0, 9.81 };
         qreal pixelsPerMeter = 1000.0;
         bool fieldBoundsSolid = false;
@@ -110,6 +122,29 @@ private:
     std::unique_ptr<Ui::OptionsDialog> m_ui;
 
     void bindSwatch(QToolButton *button, QColor &color, const QString &title);
+    // Builds the Export tab from whatever converters are under `path`, and
+    // removes it again when there are none. Called when the dialog opens and
+    // whenever the folder is changed while it is open.
+    void rebuildExportTab(const QString &path);
+
+    // One editor on that tab, remembered so its value can be read back.
+    struct ConverterField {
+        QString converter;
+        QString key;
+        QString type;
+        QWidget *editor = nullptr;
+    };
+    // The widget a declared setting is edited with, and the value back out of
+    // it. A swatch button holds no colour of its own, so that one keeps it as
+    // a dynamic property rather than anywhere else.
+    QWidget *makeConverterEditor(const SceneExporter::ConverterSetting &setting,
+                                 const QVariant &value, QWidget *parent);
+    QVariant fieldValue(const ConverterField &field) const;
+    QVector<ConverterField> m_converterFields;
+    QWidget *m_exportTab = nullptr;
+    // What was loaded, so a converter whose folder is missing right now does
+    // not lose its settings the next time they are saved.
+    QHash<QString, QVariantMap> m_converterSettings;
     void bindSliderValue(QSlider *slider, QLabel *label, const QString &suffix);
 
     QColor m_gridColor;

@@ -171,6 +171,28 @@ std::vector<PropertyRow> FieldPropertyPane::worldRows(physics::WorldDesc *world,
            &physics::WorldDesc::maximumLinearSpeed, 1.0, 10000.0, 0, 10.0,
            QObject::tr("Nothing in the world may move faster than this."));
 
+    // An int rather than a qreal, so it cannot go through number() above.
+    {
+        PropertyRow row;
+        row.label = QObject::tr("Solver Sub-steps");
+        row.type = PropertyFieldType::Numeric;
+        row.getter = [world] { return world->subStepCount; };
+        row.setter = [world, changed](const QVariant &v) {
+            world->subStepCount = qBound(1, v.toInt(), 64);
+            changed();
+        };
+        row.minValue = 1.0;
+        row.maxValue = 64.0;
+        row.decimals = 0;
+        row.step = 1.0;
+        row.section = solver;
+        row.defaultValue = factory.subStepCount;
+        row.tooltip = QObject::tr("How many passes the solver makes within one step. "
+                                  "More holds a tall stack together; fewer is faster "
+                                  "and springier.");
+        result.push_back(std::move(row));
+    }
+
     flag(QObject::tr("Allow Sleeping"), &physics::WorldDesc::enableSleep,
          QObject::tr("Lets settled bodies stop being simulated. Turning this "
                      "off costs speed but keeps everything responsive."));

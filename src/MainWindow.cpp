@@ -19,6 +19,10 @@
 #include "PhysicsBody.h"
 #include "Joint.h"
 #include "SimulationController.h"
+#include "SceneExporter.h"
+
+#include <QJsonObject>
+#include <QJsonValue>
 #include "SceneSerializer.h"
 #include "Naming.h"
 #include "EngineRegistry.h"
@@ -144,6 +148,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_jointTypeMenu->setObjectName(QStringLiteral("menuJointType"));
 
     m_ui->actionAddShape->setMenu(m_ui->menuAddShape);
+    // Rebuilt as the menu opens rather than at startup, so a converter added
+    // to the folder is there the moment it is looked for.
+    connect(m_ui->menuExport, &QMenu::aboutToShow, this, &MainWindow::refreshExportMenu);
     m_ui->actionAddJoint->setMenu(m_jointTypeMenu);
     for (QAction *action : { static_cast<QAction *>(m_ui->actionAddShape), m_ui->actionAddJoint }) {
         if (auto *button = qobject_cast<QToolButton *>(toolBar->widgetForAction(action)))
@@ -1310,6 +1317,104 @@ void MainWindow::on_actionAbout_triggered()
     dialog.exec();
 }
 
+// The whole preferences file, as it is stored: every group, every key. A
+// converter needs the parts the scene itself does not carry -- which colour a
+// dynamic body is drawn in, and so on -- and reading the lot means the app
+// does not have to decide in advance which of them matter to somebody else's
+// format.
+// One QSettings group, and everything under it, as nested objects. Groups
+// nest -- a converter's own settings live under Export/<id> -- so this has to
+// recurse or a script would be handed keys with slashes in them.
+static QJsonObject groupAsJson(QSettings &settings)
+{
+    QJsonObject values;
+    for (const QString &key : settings.childKeys())
+        values.insert(key, QJsonValue::fromVariant(settings.value(key)));
+    for (const QString &group : settings.childGroups()) {
+        settings.beginGroup(group);
+        values.insert(group, groupAsJson(settings));
+        settings.endGroup();
+    }
+    return values;
+}
+
+// The whole preferences file, as it is stored. A converter needs the parts the
+// scene itself does not carry -- which colour a dynamic body is drawn in, and
+// so on -- and reading the lot means the app does not have to decide in
+// advance which of them matter to somebody else's format.
+static QJsonObject settingsAsJson(const QString &path)
+{
+    QSettings settings(path, QSettings::IniFormat);
+    return groupAsJson(settings);
+}
+
+void MainWindow::refreshExportMenu()
+{
+    QMenu *menu = m_ui->menuExport;
+    menu->clear();
+
+    const QVector<SceneExporter::Converter> converters =
+        SceneExporter::discover(m_converterPath);
+    if (converters.isEmpty()) {
+        QAction *none = menu->addAction(m_converterPath.isEmpty()
+                                            ? tr("No converters folder set...")
+                                            : tr("No converters in %1").arg(m_converterPath));
+        none->setEnabled(false);
+        return;
+    }
+
+    for (const SceneExporter::Converter &converter : converters) {
+        QAction *action = menu->addAction(converter.name);
+        action->setToolTip(converter.description);
+        action->setStatusTip(converter.description);
+        connect(action, &QAction::triggered, this, [this, converter] {
+            const QString folder = QFileDialog::getExistingDirectory(
+                this, tr("Export %1 into").arg(converter.name));
+            if (folder.isEmpty())
+                return;
+
+            QString error;
+            QStringList written;
+            QStringList log;
+            const bool converted =
+                SceneExporter::run(converter, m_scene, folder,
+                                   settingsAsJson(settingsFilePath()), &error, &written, &log);
+
+            // Whatever the converter had to say for itself, under whichever
+            // message it gets. It is the only thing that knows what it did.
+            const QString said = log.join(QLatin1Char('\n'));
+
+            if (!converted) {
+                QMessageBox failed(this);
+                failed.setIcon(QMessageBox::Critical);
+                failed.setWindowTitle(tr("Export failed"));
+                failed.setText(tr("%1 could not convert this scene.").arg(converter.name));
+                failed.setInformativeText(error);
+                if (!said.isEmpty())
+                    failed.setDetailedText(said);
+                failed.exec();
+                return;
+            }
+
+            QMessageBox done(this);
+            done.setIcon(QMessageBox::Information);
+            done.setWindowTitle(tr("Export finished"));
+            done.setText(tr("%1 wrote %n file(s).", nullptr, written.size())
+                             .arg(converter.name));
+            done.setInformativeText(folder);
+            // The file list belongs behind Show Details: it is worth having,
+            // and a converter that writes thirty files should not fill the
+            // screen with them.
+            QStringList details = written;
+            if (!said.isEmpty())
+                details << QString() << said;
+            done.setDetailedText(details.join(QLatin1Char('\n')));
+            done.exec();
+        });
+    }
+    menu->setToolTipsVisible(true);
+}
+
 void MainWindow::on_actionOptions_triggered()
 {
     OptionsDialog dialog(currentSettingsSnapshot(), this);
@@ -1329,6 +1434,8 @@ void MainWindow::onFieldSettingsChanged()
 OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
 {
     OptionsDialog::Settings current;
+    current.converterPath = m_converterPath;
+    current.converterSettings = m_converterSettings;
     current.fieldWidth = m_scene->fieldWidth();
     current.fieldHeight = m_scene->fieldHeight();
     current.backgroundColor = m_scene->backgroundColor();
@@ -1393,6 +1500,8 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
 
 void MainWindow::applySettings(const OptionsDialog::Settings &s)
 {
+    m_converterPath = s.converterPath;
+    m_converterSettings = s.converterSettings;
     m_scene->setFieldSize(s.fieldWidth, s.fieldHeight);
     m_scene->setBackgroundColor(s.backgroundColor);
     m_scene->setShowGrid(s.showGrid);
@@ -1536,6 +1645,21 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
     s.jointOutlineWidth = settings.value("jointOutlineWidth", s.jointOutlineWidth).toDouble();
 
     s.undoDepth = settings.value("undoDepth", s.undoDepth).toInt();
+    s.converterPath = settings.value("converterPath", s.converterPath).toString();
+
+    // One group per converter, keyed by its folder name. Read back whole
+    // rather than by declared key: a converter that is not installed right now
+    // still keeps whatever was set for it.
+    settings.beginGroup("Export");
+    for (const QString &converter : settings.childGroups()) {
+        settings.beginGroup(converter);
+        QVariantMap values;
+        for (const QString &key : settings.childKeys())
+            values.insert(key, settings.value(key));
+        settings.endGroup();
+        s.converterSettings.insert(converter, values);
+    }
+    settings.endGroup();
     s.jointSelectionColor = QColor(settings.value("jointSelectionColor",
         s.jointSelectionColor.name(QColor::HexArgb)).toString());
     s.jointSelectionLineWidth =
@@ -1625,6 +1749,18 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("jointOutlineWidth", s.jointOutlineWidth);
 
     settings.setValue("undoDepth", s.undoDepth);
+    settings.setValue("converterPath", s.converterPath);
+
+    settings.beginGroup("Export");
+    settings.remove(QString());   // converters that have gone leave nothing behind
+    for (auto it = s.converterSettings.constBegin();
+         it != s.converterSettings.constEnd(); ++it) {
+        settings.beginGroup(it.key());
+        for (auto value = it.value().constBegin(); value != it.value().constEnd(); ++value)
+            settings.setValue(value.key(), value.value());
+        settings.endGroup();
+    }
+    settings.endGroup();
     settings.setValue("jointSelectionColor", s.jointSelectionColor.name(QColor::HexArgb));
     settings.setValue("jointSelectionLineWidth", s.jointSelectionLineWidth);
     settings.setValue("jointSelectionLineStyle", static_cast<int>(s.jointSelectionLineStyle));

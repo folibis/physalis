@@ -1,0 +1,1034 @@
+#include "Rules.h"
+
+#include <QLineF>
+#include <QtMath>
+
+#include <cmath>
+
+namespace {
+
+constexpr double kPi = 3.14159265358979323846;
+inline float rad(double degrees) { return float(degrees * kPi / 180.0); }
+inline double deg(double radians) { return radians * 180.0 / kPi; }
+
+const QString kWorld = QStringLiteral("@world");
+const QString kOther = QStringLiteral("@other");
+const QString kOtherBody = QStringLiteral("@otherBody");
+
+} // namespace
+
+RuleRunner::RuleRunner(Scene *scene)
+    : m_scene(scene)
+{
+    m_state.resize(m_scene->rules.size());
+    m_limits.resize(m_scene->joints.size());
+    m_removedBodies.assign(m_scene->bodies.size(), false);
+}
+
+bool RuleRunner::bodyRemoved(int index) const
+{
+    return index >= 0 && index < int(m_removedBodies.size()) && m_removedBodies[index];
+}
+
+bool RuleRunner::jointBroken(const QString &name) const
+{
+    return m_brokenJoints.contains(name);
+}
+
+void RuleRunner::afterStep(double dt)
+{
+    m_lastStep = float(dt);
+    m_elapsed += dt;
+    ++m_frame;
+
+    m_events.clear();
+    castRays();
+    collectEvents();
+    applyRules();
+}
+
+// --- lookups ---------------------------------------------------------------
+
+int RuleRunner::bodyIndex(const QString &name) const
+{
+    for (int i = 0; i < int(m_scene->bodyNames.size()); ++i) {
+        if (m_scene->bodyNames[i] == name)
+            return i;
+    }
+    return -1;
+}
+
+int RuleRunner::jointIndex(const QString &name) const
+{
+    for (int i = 0; i < int(m_scene->jointNames.size()); ++i) {
+        if (m_scene->jointNames[i] == name)
+            return i;
+    }
+    return -1;
+}
+
+int RuleRunner::bodyOfShape(const QString &shapeName) const
+{
+    return m_scene->shapeBodies.value(shapeName, -1);
+}
+
+// --- rays ------------------------------------------------------------------
+
+void RuleRunner::castRays()
+{
+    for (SceneRay &ray : m_scene->rays) {
+        ray.hit = false;
+        ray.distance = 0.0;
+        ray.hitShape.clear();
+        ray.point = QPointF();
+
+        const double angle = ray.angleDegrees * kPi / 180.0;
+        const QPointF reach(std::cos(angle) * ray.length, std::sin(angle) * ray.length);
+
+        b2QueryFilter filter = b2DefaultQueryFilter();
+        filter.maskBits = ray.maskBits;
+
+        const b2Vec2 origin { float(toMetres(ray.origin.x())), float(toMetres(ray.origin.y())) };
+        const b2Vec2 translation { float(toMetres(reach.x())), float(toMetres(reach.y())) };
+        const b2RayResult found =
+            b2World_CastRayClosest(m_scene->world, origin, translation, filter);
+        if (!found.hit)
+            continue;
+
+        ray.hit = true;
+        ray.point = QPointF(toScene(found.point.x), toScene(found.point.y));
+        ray.distance = QLineF(ray.origin, ray.point).length();
+
+        // Which shape it struck. Box2D answers with an id, and the scene keeps
+        // the names, so this is a walk over what there is.
+        if (b2Shape_IsValid(found.shapeId)) {
+            for (auto it = m_scene->shapesByName.constBegin();
+                 it != m_scene->shapesByName.constEnd(); ++it) {
+                if (B2_ID_EQUALS(it.value(), found.shapeId)) {
+                    ray.hitShape = it.key();
+                    break;
+                }
+            }
+        }
+    }
+}
+
+// --- events ----------------------------------------------------------------
+
+void RuleRunner::collectEvents()
+{
+    const auto nameOf = [this](b2ShapeId shape) -> QString {
+        if (!b2Shape_IsValid(shape))
+            return {};
+        for (auto it = m_scene->shapesByName.constBegin();
+             it != m_scene->shapesByName.constEnd(); ++it) {
+            if (B2_ID_EQUALS(it.value(), shape))
+                return it.key();
+        }
+        return {};
+    };
+
+    // Raised for both shapes: either side of a contact can be the one a rule
+    // is watching.
+    const auto raise = [this, &nameOf](b2ShapeId a, b2ShapeId b, const QString &id) {
+        // A rule can destroy a body, and Box2D then reports the contacts it
+        // left behind as ended -- naming shapes that no longer exist.
+        if (!b2Shape_IsValid(a) || !b2Shape_IsValid(b))
+            return;
+        const QString first = nameOf(a);
+        const QString second = nameOf(b);
+
+        Event one;
+        one.id = id;
+        one.subjectShape = first;
+        one.otherShape = second;
+        one.body = bodyOfShape(first);
+        one.otherBody = bodyOfShape(second);
+        m_events.push_back(one);
+
+        Event two;
+        two.id = id;
+        two.subjectShape = second;
+        two.otherShape = first;
+        two.body = one.otherBody;
+        two.otherBody = one.body;
+        m_events.push_back(two);
+    };
+
+    const b2ContactEvents contacts = b2World_GetContactEvents(m_scene->world);
+    for (int i = 0; i < contacts.beginCount; ++i)
+        raise(contacts.beginEvents[i].shapeIdA, contacts.beginEvents[i].shapeIdB,
+              QStringLiteral("contactBegin"));
+    for (int i = 0; i < contacts.endCount; ++i)
+        raise(contacts.endEvents[i].shapeIdA, contacts.endEvents[i].shapeIdB,
+              QStringLiteral("contactEnd"));
+    for (int i = 0; i < contacts.hitCount; ++i) {
+        const b2ContactHitEvent &e = contacts.hitEvents[i];
+        const auto record = [this, &e, &nameOf](b2ShapeId shape, float sign) {
+            const QString name = nameOf(shape);
+            if (name.isEmpty())
+                return;
+            HitRecord hit;
+            hit.speed = toScene(e.approachSpeed);
+            hit.point = QPointF(toScene(e.point.x), toScene(e.point.y));
+            hit.normal = QPointF(e.normal.x * sign, e.normal.y * sign);
+            m_lastHit.insert(name, hit);
+        };
+        record(e.shapeIdA, 1.0f);
+        record(e.shapeIdB, -1.0f);
+        raise(e.shapeIdA, e.shapeIdB, QStringLiteral("contactHit"));
+    }
+
+    // Sensors are a separate stream: overlaps, not collisions. The sensor
+    // comes first, whatever entered it second.
+    const b2SensorEvents sensors = b2World_GetSensorEvents(m_scene->world);
+    for (int i = 0; i < sensors.beginCount; ++i)
+        raise(sensors.beginEvents[i].sensorShapeId, sensors.beginEvents[i].visitorShapeId,
+              QStringLiteral("sensorBegin"));
+    for (int i = 0; i < sensors.endCount; ++i)
+        raise(sensors.endEvents[i].sensorShapeId, sensors.endEvents[i].visitorShapeId,
+              QStringLiteral("sensorEnd"));
+
+    const b2BodyEvents moves = b2World_GetBodyEvents(m_scene->world);
+    for (int i = 0; i < moves.moveCount; ++i) {
+        const b2BodyMoveEvent &move = moves.moveEvents[i];
+        for (int b = 0; b < int(m_scene->bodies.size()); ++b) {
+            if (!B2_ID_EQUALS(m_scene->bodies[b], move.bodyId))
+                continue;
+            Event event;
+            event.id = move.fellAsleep ? QStringLiteral("bodyFellAsleep")
+                                       : QStringLiteral("bodyMoved");
+            event.body = b;
+            m_events.push_back(event);
+            break;
+        }
+    }
+
+    // What each ray is looking at, phrased as an event so a rule can name the
+    // shape it cares about.
+    for (const SceneRay &ray : m_scene->rays) {
+        if (!ray.hit)
+            continue;
+        Event event;
+        event.id = QStringLiteral("rayDetects");
+        event.subjectShape = ray.name;
+        event.otherShape = ray.hitShape;
+        m_events.push_back(event);
+    }
+
+    // Arriving at a joint limit, which is an edge and not a state.
+    m_limits.resize(m_scene->joints.size());
+    for (int i = 0; i < int(m_scene->joints.size()); ++i) {
+        const b2JointId joint = m_scene->joints[i];
+        if (!b2Joint_IsValid(joint))
+            continue;
+
+        float value = 0.0f, lower = 0.0f, upper = 0.0f;
+        bool limited = false;
+        switch (b2Joint_GetType(joint)) {
+        case b2_revoluteJoint:
+            limited = b2RevoluteJoint_IsLimitEnabled(joint);
+            value = b2RevoluteJoint_GetAngle(joint);
+            lower = b2RevoluteJoint_GetLowerLimit(joint);
+            upper = b2RevoluteJoint_GetUpperLimit(joint);
+            break;
+        case b2_prismaticJoint:
+            limited = b2PrismaticJoint_IsLimitEnabled(joint);
+            value = b2PrismaticJoint_GetTranslation(joint);
+            lower = b2PrismaticJoint_GetLowerLimit(joint);
+            upper = b2PrismaticJoint_GetUpperLimit(joint);
+            break;
+        default:
+            break;
+        }
+        if (!limited) {
+            m_limits[i] = { false, false, true };
+            continue;
+        }
+
+        constexpr float kSlack = 0.005f;
+        const bool atLower = value <= lower + kSlack;
+        const bool atUpper = value >= upper - kSlack;
+
+        if (!m_limits[i].sampled) {
+            m_limits[i] = { atLower, atUpper, true };
+            continue;
+        }
+
+        const auto raiseLimit = [this, i](const QString &id) {
+            Event event;
+            event.id = id;
+            event.joint = i;
+            m_events.push_back(event);
+        };
+        if (atLower && !m_limits[i].atLower) {
+            raiseLimit(QStringLiteral("limitLower"));
+            raiseLimit(QStringLiteral("limitEither"));
+        }
+        if (atUpper && !m_limits[i].atUpper) {
+            raiseLimit(QStringLiteral("limitUpper"));
+            raiseLimit(QStringLiteral("limitEither"));
+        }
+        m_limits[i] = { atLower, atUpper, true };
+    }
+}
+
+// --- the rules themselves --------------------------------------------------
+
+void RuleRunner::applyRules()
+{
+    m_state.resize(m_scene->rules.size());
+
+    for (int i = 0; i < int(m_scene->rules.size()); ++i) {
+        const SceneRule &rule = m_scene->rules[i];
+        if (!rule.enabled)
+            continue;
+        if (rule.once && m_state[i].fired)
+            continue;
+
+        QString other;
+        const bool nowTrue = evaluate(rule, &other);
+        const bool rising = nowTrue && !m_state[i].wasTrue;
+        m_state[i].wasTrue = nowTrue;
+        if (!rising)
+            continue;
+
+        perform(rule, other);
+        m_state[i].fired = true;
+    }
+}
+
+bool RuleRunner::evaluate(const SceneRule &rule, QString *other) const
+{
+    if (!rule.event.isEmpty()) {
+        const QString wanted = rule.when.toString();
+        for (const Event &event : m_events) {
+            if (event.id != rule.event)
+                continue;
+            // A rule names a shape, a body, a joint or a ray; an event knows
+            // all four, so any of them may be the subject.
+            const bool isSubject =
+                event.subjectShape == rule.subject
+                || (event.body >= 0 && m_scene->bodyNames[event.body] == rule.subject)
+                || (event.joint >= 0 && m_scene->jointNames[event.joint] == rule.subject);
+            if (!isSubject)
+                continue;
+
+            const QString partner = event.otherShape.isEmpty() && event.otherBody >= 0
+                                        ? m_scene->bodyNames[event.otherBody]
+                                        : event.otherShape;
+            if (wanted.isEmpty() || partner == wanted) {
+                *other = partner;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    const QVariant current = readValue(rule.subject, rule.watch);
+    if (!current.isValid())
+        return false;
+
+    if (current.typeId() == QMetaType::Bool) {
+        const bool a = current.toBool();
+        const bool b = rule.when.toBool();
+        if (rule.compare == QLatin1String("="))  return a == b;
+        if (rule.compare == QLatin1String("!=")) return a != b;
+        return false;
+    }
+
+    const double a = current.toDouble();
+    const double b = rule.when.toDouble();
+    if (rule.compare == QLatin1String("="))  return qFuzzyCompare(a + 1.0, b + 1.0);
+    if (rule.compare == QLatin1String("!=")) return !qFuzzyCompare(a + 1.0, b + 1.0);
+    if (rule.compare == QLatin1String("<"))  return a < b;
+    if (rule.compare == QLatin1String(">=")) return a >= b;
+    if (rule.compare == QLatin1String("<=")) return a <= b;
+    return a > b;
+}
+
+void RuleRunner::perform(const SceneRule &rule, const QString &other)
+{
+    // "the shape that touched it" and "the body that touched it" are resolved
+    // when the rule fires, from whatever the event reported.
+    QString target = rule.target;
+    if (target == kOther || target == kOtherBody) {
+        if (other.isEmpty())
+            return;
+        target = other;
+        if (rule.target == kOtherBody) {
+            const int owner = bodyOfShape(other);
+            if (owner >= 0)
+                target = m_scene->bodyNames[owner];
+        }
+    }
+
+    if (!rule.action.isEmpty()) {
+        performAction(target, rule.action, rule.actionParams);
+        return;
+    }
+
+    // A literal, or whatever the named property reads right now plus an
+    // offset -- that is how one object follows another.
+    const QVariant applied =
+        (!rule.sourceObject.isEmpty() && !rule.sourceProperty.isEmpty())
+            ? QVariant(readValue(rule.sourceObject, rule.sourceProperty).toDouble()
+                       + rule.sourceOffset)
+            : rule.value;
+
+    const QVariant current = readValue(target, rule.property);
+    QVariant updated = applied;
+    if (rule.op == QLatin1String("toggle"))
+        updated = QVariant(!current.toBool());
+    else if (rule.op == QLatin1String("negate"))
+        updated = QVariant(-current.toDouble());
+    else if (rule.op == QLatin1String("add"))
+        updated = QVariant(current.toDouble() + applied.toDouble());
+
+    writeValue(target, rule.property, updated);
+}
+
+// --- reading ---------------------------------------------------------------
+
+QVariant RuleRunner::readValue(const QString &object, const QString &key) const
+{
+    if (object == kWorld)
+        return readWorld(key);
+
+    for (const SceneRay &ray : m_scene->rays) {
+        if (ray.name == object)
+            return readRay(ray, key);
+    }
+    const int joint = jointIndex(object);
+    if (joint >= 0)
+        return readJoint(joint, key);
+    const int body = bodyIndex(object);
+    if (body >= 0)
+        return readBody(body, key);
+    if (m_scene->shapesByName.contains(object))
+        return readShape(object, key);
+    return {};
+}
+
+QVariant RuleRunner::readWorld(const QString &key) const
+{
+    if (key == QLatin1String("time"))  return m_elapsed;
+    if (key == QLatin1String("frame")) return double(m_frame);
+
+    const double unscale = 1.0 / m_scene->motionScale;
+    if (key == QLatin1String("gravityX")) return b2World_GetGravity(m_scene->world).x * unscale;
+    if (key == QLatin1String("gravityY")) return b2World_GetGravity(m_scene->world).y * unscale;
+    if (key == QLatin1String("restitutionThreshold"))
+        return b2World_GetRestitutionThreshold(m_scene->world) * unscale;
+    if (key == QLatin1String("hitEventThreshold"))
+        return b2World_GetHitEventThreshold(m_scene->world) * unscale;
+    if (key == QLatin1String("maximumLinearSpeed"))
+        return b2World_GetMaximumLinearSpeed(m_scene->world) * unscale;
+    if (key == QLatin1String("contactHertz"))        return double(m_contactHertz);
+    if (key == QLatin1String("contactDampingRatio")) return double(m_contactDamping);
+    if (key == QLatin1String("maxContactPushSpeed")) return m_contactPush * unscale;
+    if (key == QLatin1String("enableSleep"))      return b2World_IsSleepingEnabled(m_scene->world);
+    if (key == QLatin1String("enableContinuous"))  return b2World_IsContinuousEnabled(m_scene->world);
+    if (key == QLatin1String("enableWarmStarting")) return b2World_IsWarmStartingEnabled(m_scene->world);
+    if (key == QLatin1String("awakeBodyCount")) return b2World_GetAwakeBodyCount(m_scene->world);
+    return {};
+}
+
+QVariant RuleRunner::readRay(const SceneRay &ray, const QString &key) const
+{
+    if (key == QLatin1String("distance")) return ray.distance;
+    if (key == QLatin1String("hit"))      return ray.hit;
+    if (key == QLatin1String("hitName"))  return ray.hitShape;
+    if (key == QLatin1String("hitX"))     return ray.point.x();
+    if (key == QLatin1String("hitY"))     return ray.point.y();
+    return {};
+}
+
+QVariant RuleRunner::readBody(int index, const QString &key) const
+{
+    const b2BodyId body = m_scene->bodies[index];
+    if (!b2Body_IsValid(body))
+        return {};
+
+    if (key == QLatin1String("positionX")) return toScene(b2Body_GetPosition(body).x);
+    if (key == QLatin1String("positionY")) return toScene(b2Body_GetPosition(body).y);
+    if (key == QLatin1String("angle"))     return deg(b2Rot_GetAngle(b2Body_GetRotation(body)));
+    if (key == QLatin1String("velocityX")) return toScene(b2Body_GetLinearVelocity(body).x);
+    if (key == QLatin1String("velocityY")) return toScene(b2Body_GetLinearVelocity(body).y);
+    if (key == QLatin1String("speed"))     return toScene(b2Length(b2Body_GetLinearVelocity(body)));
+    if (key == QLatin1String("angularVelocity")) return deg(b2Body_GetAngularVelocity(body));
+    if (key == QLatin1String("isAwake"))       return b2Body_IsAwake(body);
+    if (key == QLatin1String("isEnabled"))     return b2Body_IsEnabled(body);
+    if (key == QLatin1String("gravityScale"))  return double(b2Body_GetGravityScale(body));
+    if (key == QLatin1String("linearDamping")) return double(b2Body_GetLinearDamping(body));
+    if (key == QLatin1String("angularDamping")) return double(b2Body_GetAngularDamping(body));
+    if (key == QLatin1String("fixedRotation")) return b2Body_IsFixedRotation(body);
+    if (key == QLatin1String("isBullet"))      return b2Body_IsBullet(body);
+    if (key == QLatin1String("enableSleep"))   return b2Body_IsSleepEnabled(body);
+    if (key == QLatin1String("sleepThreshold"))
+        return b2Body_GetSleepThreshold(body) / m_scene->motionScale;
+    if (key == QLatin1String("bodyType"))  return int(b2Body_GetType(body));
+    if (key == QLatin1String("mass"))      return double(b2Body_GetMass(body));
+    if (key == QLatin1String("rotationalInertia")) return double(b2Body_GetRotationalInertia(body));
+    if (key == QLatin1String("centerOfMassX")) return toScene(b2Body_GetWorldCenterOfMass(body).x);
+    if (key == QLatin1String("centerOfMassY")) return toScene(b2Body_GetWorldCenterOfMass(body).y);
+    return {};
+}
+
+QVariant RuleRunner::readShape(const QString &name, const QString &key) const
+{
+    const b2ShapeId shape = m_scene->shapesByName.value(name);
+    if (!b2Shape_IsValid(shape))
+        return {};
+
+    if (key == QLatin1String("density"))     return double(b2Shape_GetDensity(shape));
+    if (key == QLatin1String("friction"))    return double(b2Shape_GetFriction(shape));
+    if (key == QLatin1String("restitution")) return double(b2Shape_GetRestitution(shape));
+    if (key == QLatin1String("rollingResistance"))
+        return double(b2Shape_GetSurfaceMaterial(shape).rollingResistance);
+    if (key == QLatin1String("tangentSpeed"))
+        return toScene(b2Shape_GetSurfaceMaterial(shape).tangentSpeed);
+    if (key == QLatin1String("isSensor"))    return b2Shape_IsSensor(shape);
+    if (key == QLatin1String("enableContactEvents")) return b2Shape_AreContactEventsEnabled(shape);
+    if (key == QLatin1String("enableHitEvents"))     return b2Shape_AreHitEventsEnabled(shape);
+    if (key == QLatin1String("enableSensorEvents"))  return b2Shape_AreSensorEventsEnabled(shape);
+    if (key == QLatin1String("categoryBits"))
+        return double(b2Shape_GetFilter(shape).categoryBits);
+    if (key == QLatin1String("maskBits")) return double(b2Shape_GetFilter(shape).maskBits);
+    if (key == QLatin1String("groupIndex")) return b2Shape_GetFilter(shape).groupIndex;
+    if (key == QLatin1String("radius")) {
+        if (b2Shape_GetType(shape) != b2_circleShape)
+            return {};
+        return toScene(b2Shape_GetCircle(shape).radius);
+    }
+    if (key == QLatin1String("mass")) return double(b2Shape_GetMassData(shape).mass);
+
+    const auto hit = m_lastHit.constFind(name);
+    if (hit != m_lastHit.constEnd()) {
+        if (key == QLatin1String("lastHitSpeed"))   return hit->speed;
+        if (key == QLatin1String("lastHitX"))       return hit->point.x();
+        if (key == QLatin1String("lastHitY"))       return hit->point.y();
+        if (key == QLatin1String("lastHitNormalX")) return hit->normal.x();
+        if (key == QLatin1String("lastHitNormalY")) return hit->normal.y();
+    } else if (key.startsWith(QLatin1String("lastHit"))) {
+        return 0.0;
+    }
+    return {};
+}
+
+QVariant RuleRunner::readJoint(int index, const QString &key) const
+{
+    const b2JointId joint = m_scene->joints[index];
+    if (!b2Joint_IsValid(joint))
+        return {};
+
+    if (key == QLatin1String("constraintForce")) {
+        const b2Vec2 force = b2Joint_GetConstraintForce(joint);
+        return std::hypot(double(force.x), double(force.y));
+    }
+    if (key == QLatin1String("constraintTorque")) return double(b2Joint_GetConstraintTorque(joint));
+    if (key == QLatin1String("linearSeparation")) return toScene(b2Joint_GetLinearSeparation(joint));
+    if (key == QLatin1String("angularSeparation")) return deg(b2Joint_GetAngularSeparation(joint));
+    if (key == QLatin1String("collideConnected")) return b2Joint_GetCollideConnected(joint);
+
+    switch (b2Joint_GetType(joint)) {
+    case b2_revoluteJoint:
+        if (key == QLatin1String("angle"))       return deg(b2RevoluteJoint_GetAngle(joint));
+        if (key == QLatin1String("motorSpeed"))  return deg(b2RevoluteJoint_GetMotorSpeed(joint));
+        if (key == QLatin1String("motorTorque")) return double(b2RevoluteJoint_GetMotorTorque(joint));
+        if (key == QLatin1String("springEnabled")) return b2RevoluteJoint_IsSpringEnabled(joint);
+        if (key == QLatin1String("limitEnabled"))  return b2RevoluteJoint_IsLimitEnabled(joint);
+        if (key == QLatin1String("motorEnabled"))  return b2RevoluteJoint_IsMotorEnabled(joint);
+        break;
+    case b2_prismaticJoint:
+        if (key == QLatin1String("translation")) return toScene(b2PrismaticJoint_GetTranslation(joint));
+        if (key == QLatin1String("speed"))       return toScene(b2PrismaticJoint_GetSpeed(joint));
+        if (key == QLatin1String("motorSpeed"))  return toScene(b2PrismaticJoint_GetMotorSpeed(joint));
+        if (key == QLatin1String("motorForce"))  return double(b2PrismaticJoint_GetMotorForce(joint));
+        if (key == QLatin1String("springEnabled")) return b2PrismaticJoint_IsSpringEnabled(joint);
+        if (key == QLatin1String("limitEnabled"))  return b2PrismaticJoint_IsLimitEnabled(joint);
+        if (key == QLatin1String("motorEnabled"))  return b2PrismaticJoint_IsMotorEnabled(joint);
+        break;
+    case b2_distanceJoint:
+        if (key == QLatin1String("length"))        return toScene(b2DistanceJoint_GetLength(joint));
+        if (key == QLatin1String("currentLength")) return toScene(b2DistanceJoint_GetCurrentLength(joint));
+        if (key == QLatin1String("motorSpeed"))    return toScene(b2DistanceJoint_GetMotorSpeed(joint));
+        if (key == QLatin1String("motorForce"))    return double(b2DistanceJoint_GetMotorForce(joint));
+        if (key == QLatin1String("springEnabled")) return b2DistanceJoint_IsSpringEnabled(joint);
+        if (key == QLatin1String("limitEnabled"))  return b2DistanceJoint_IsLimitEnabled(joint);
+        if (key == QLatin1String("motorEnabled"))  return b2DistanceJoint_IsMotorEnabled(joint);
+        break;
+    case b2_wheelJoint:
+        if (key == QLatin1String("motorSpeed"))  return deg(b2WheelJoint_GetMotorSpeed(joint));
+        if (key == QLatin1String("motorTorque")) return double(b2WheelJoint_GetMotorTorque(joint));
+        if (key == QLatin1String("springEnabled")) return b2WheelJoint_IsSpringEnabled(joint);
+        if (key == QLatin1String("limitEnabled"))  return b2WheelJoint_IsLimitEnabled(joint);
+        if (key == QLatin1String("motorEnabled"))  return b2WheelJoint_IsMotorEnabled(joint);
+        break;
+    case b2_mouseJoint:
+        if (key == QLatin1String("targetX")) return toScene(b2MouseJoint_GetTarget(joint).x);
+        if (key == QLatin1String("targetY")) return toScene(b2MouseJoint_GetTarget(joint).y);
+        break;
+    default:
+        break;
+    }
+    return {};
+}
+
+// --- writing ---------------------------------------------------------------
+
+void RuleRunner::writeValue(const QString &object, const QString &key, const QVariant &value)
+{
+    if (object == kWorld) {
+        writeWorld(key, value);
+        return;
+    }
+    const int joint = jointIndex(object);
+    if (joint >= 0) {
+        writeJoint(joint, key, value);
+        return;
+    }
+    const int body = bodyIndex(object);
+    if (body >= 0) {
+        writeBody(body, key, value);
+        return;
+    }
+    if (m_scene->shapesByName.contains(object))
+        writeShape(object, key, value);
+}
+
+void RuleRunner::writeWorld(const QString &key, const QVariant &value)
+{
+    const bool flag = value.toBool();
+    const float scaled = float(value.toDouble() * m_scene->motionScale);
+
+    if (key == QLatin1String("gravityX") || key == QLatin1String("gravityY")) {
+        b2Vec2 gravity = b2World_GetGravity(m_scene->world);
+        (key == QLatin1String("gravityX") ? gravity.x : gravity.y) = scaled;
+        b2World_SetGravity(m_scene->world, gravity);
+    } else if (key == QLatin1String("restitutionThreshold")) {
+        b2World_SetRestitutionThreshold(m_scene->world, scaled);
+    } else if (key == QLatin1String("hitEventThreshold")) {
+        b2World_SetHitEventThreshold(m_scene->world, scaled);
+    } else if (key == QLatin1String("maximumLinearSpeed")) {
+        b2World_SetMaximumLinearSpeed(m_scene->world, scaled);
+    } else if (key == QLatin1String("contactHertz")
+               || key == QLatin1String("contactDampingRatio")
+               || key == QLatin1String("maxContactPushSpeed")) {
+        if (key == QLatin1String("contactHertz"))
+            m_contactHertz = float(value.toDouble());
+        else if (key == QLatin1String("contactDampingRatio"))
+            m_contactDamping = float(value.toDouble());
+        else
+            m_contactPush = scaled;
+        b2World_SetContactTuning(m_scene->world, m_contactHertz, m_contactDamping, m_contactPush);
+    } else if (key == QLatin1String("enableSleep")) {
+        b2World_EnableSleeping(m_scene->world, flag);
+    } else if (key == QLatin1String("enableContinuous")) {
+        b2World_EnableContinuous(m_scene->world, flag);
+    } else if (key == QLatin1String("enableWarmStarting")) {
+        b2World_EnableWarmStarting(m_scene->world, flag);
+    } else if (key == QLatin1String("enableSpeculative")) {
+        b2World_EnableSpeculative(m_scene->world, flag);
+    }
+}
+
+void RuleRunner::writeBody(int index, const QString &key, const QVariant &value)
+{
+    const b2BodyId body = m_scene->bodies[index];
+    if (!b2Body_IsValid(body))
+        return;
+
+    const float number = float(value.toDouble());
+    const bool flag = value.toBool();
+    const float metres = float(toMetres(value.toDouble()));
+
+    // Placing a body: it arrives without travelling.
+    if (key == QLatin1String("positionX") || key == QLatin1String("positionY")
+        || key == QLatin1String("angle")) {
+        b2Vec2 position = b2Body_GetPosition(body);
+        b2Rot rotation = b2Body_GetRotation(body);
+        if (key == QLatin1String("positionX"))
+            position.x = metres;
+        else if (key == QLatin1String("positionY"))
+            position.y = metres;
+        else
+            rotation = b2MakeRot(rad(value.toDouble()));
+        b2Body_SetTransform(body, position, rotation);
+        b2Body_SetAwake(body, true);
+        return;
+    }
+    // Where it should be by the end of the step, rather than where it is.
+    if (key == QLatin1String("targetX") || key == QLatin1String("targetY")
+        || key == QLatin1String("targetAngle")) {
+        b2Transform target { b2Body_GetPosition(body), b2Body_GetRotation(body) };
+        if (key == QLatin1String("targetX"))
+            target.p.x = metres;
+        else if (key == QLatin1String("targetY"))
+            target.p.y = metres;
+        else
+            target.q = b2MakeRot(rad(value.toDouble()));
+        b2Body_SetTargetTransform(body, target, m_lastStep);
+        return;
+    }
+    if (key == QLatin1String("impulseX") || key == QLatin1String("impulseY")) {
+        const b2Vec2 impulse = key == QLatin1String("impulseX") ? b2Vec2 { metres, 0.0f }
+                                                                : b2Vec2 { 0.0f, metres };
+        b2Body_ApplyLinearImpulseToCenter(body, impulse, true);
+        return;
+    }
+    if (key == QLatin1String("forceX") || key == QLatin1String("forceY")) {
+        const b2Vec2 force = key == QLatin1String("forceX") ? b2Vec2 { metres, 0.0f }
+                                                            : b2Vec2 { 0.0f, metres };
+        b2Body_ApplyForceToCenter(body, force, true);
+        return;
+    }
+    // A torque is a force times a distance, and both are in scene units.
+    if (key == QLatin1String("torque") || key == QLatin1String("angularImpulse")) {
+        const float amount = float(value.toDouble()
+                                   / (m_scene->pixelsPerMeter * m_scene->pixelsPerMeter));
+        if (key == QLatin1String("torque"))
+            b2Body_ApplyTorque(body, amount, true);
+        else
+            b2Body_ApplyAngularImpulse(body, amount, true);
+        return;
+    }
+    if (key == QLatin1String("velocityX") || key == QLatin1String("velocityY")) {
+        b2Vec2 velocity = b2Body_GetLinearVelocity(body);
+        (key == QLatin1String("velocityX") ? velocity.x : velocity.y) = metres;
+        b2Body_SetLinearVelocity(body, velocity);
+        b2Body_SetAwake(body, true);
+        return;
+    }
+    if (key == QLatin1String("angularVelocity")) {
+        b2Body_SetAngularVelocity(body, rad(value.toDouble()));
+        b2Body_SetAwake(body, true);
+        return;
+    }
+    if (key == QLatin1String("mass") || key == QLatin1String("rotationalInertia")) {
+        b2MassData data = b2Body_GetMassData(body);
+        (key == QLatin1String("mass") ? data.mass : data.rotationalInertia) =
+            qMax(0.0f, number);
+        b2Body_SetMassData(body, data);
+        return;
+    }
+    if (key == QLatin1String("bodyType")) {
+        const int wanted = value.toInt();
+        if (wanted >= 0 && wanted < b2_bodyTypeCount)
+            b2Body_SetType(body, b2BodyType(wanted));
+        return;
+    }
+    if (key == QLatin1String("sleepThreshold")) {
+        b2Body_SetSleepThreshold(body, float(value.toDouble() * m_scene->motionScale));
+        return;
+    }
+
+    if (key == QLatin1String("gravityScale"))        b2Body_SetGravityScale(body, number);
+    else if (key == QLatin1String("linearDamping"))  b2Body_SetLinearDamping(body, number);
+    else if (key == QLatin1String("angularDamping")) b2Body_SetAngularDamping(body, number);
+    else if (key == QLatin1String("fixedRotation"))  b2Body_SetFixedRotation(body, flag);
+    else if (key == QLatin1String("isBullet"))       b2Body_SetBullet(body, flag);
+    else if (key == QLatin1String("enableSleep"))    b2Body_EnableSleep(body, flag);
+    else if (key == QLatin1String("isAwake"))        b2Body_SetAwake(body, flag);
+    else if (key == QLatin1String("isEnabled")) {
+        if (flag)
+            b2Body_Enable(body);
+        else
+            b2Body_Disable(body);
+    }
+}
+
+void RuleRunner::writeShape(const QString &name, const QString &key, const QVariant &value)
+{
+    const b2ShapeId shape = m_scene->shapesByName.value(name);
+    if (!b2Shape_IsValid(shape))
+        return;
+
+    // A settled body does not notice what its shapes are made of.
+    b2Body_SetAwake(b2Shape_GetBody(shape), true);
+
+    const float number = float(value.toDouble());
+    if (key == QLatin1String("density")) {
+        b2Shape_SetDensity(shape, number, true);
+    } else if (key == QLatin1String("friction")) {
+        b2Shape_SetFriction(shape, number);
+    } else if (key == QLatin1String("restitution")) {
+        b2Shape_SetRestitution(shape, number);
+    } else if (key == QLatin1String("rollingResistance")
+               || key == QLatin1String("tangentSpeed")) {
+        b2SurfaceMaterial material = b2Shape_GetSurfaceMaterial(shape);
+        if (key == QLatin1String("rollingResistance"))
+            material.rollingResistance = number;
+        else
+            material.tangentSpeed = float(toMetres(value.toDouble()));
+        b2Shape_SetSurfaceMaterial(shape, material);
+    } else if (key == QLatin1String("categoryBits") || key == QLatin1String("maskBits")
+               || key == QLatin1String("groupIndex")) {
+        b2Filter filter = b2Shape_GetFilter(shape);
+        if (key == QLatin1String("categoryBits"))
+            filter.categoryBits = quint64(qMax(0.0, value.toDouble()));
+        else if (key == QLatin1String("maskBits"))
+            filter.maskBits = quint64(qMax(0.0, value.toDouble()));
+        else
+            filter.groupIndex = value.toInt();
+        b2Shape_SetFilter(shape, filter);
+    } else if (key == QLatin1String("enableContactEvents")) {
+        b2Shape_EnableContactEvents(shape, value.toBool());
+    } else if (key == QLatin1String("enableHitEvents")) {
+        b2Shape_EnableHitEvents(shape, value.toBool());
+    } else if (key == QLatin1String("enableSensorEvents")) {
+        b2Shape_EnableSensorEvents(shape, value.toBool());
+    } else if (key == QLatin1String("radius")) {
+        if (b2Shape_GetType(shape) == b2_circleShape) {
+            b2Circle circle = b2Shape_GetCircle(shape);
+            circle.radius = float(toMetres(qMax(0.0, value.toDouble())));
+            b2Shape_SetCircle(shape, &circle);
+        }
+    }
+}
+
+void RuleRunner::writeJoint(int index, const QString &key, const QVariant &value)
+{
+    const b2JointId joint = m_scene->joints[index];
+    if (!b2Joint_IsValid(joint))
+        return;
+
+    const float number = float(value.toDouble());
+    const bool flag = value.toBool();
+    const float metres = float(toMetres(value.toDouble()));
+    const float radians = rad(value.toDouble());
+
+    // A sleeping body ignores its joints, so a motor switched on by a rule
+    // would do nothing until something else woke it.
+    b2Joint_WakeBodies(joint);
+
+    if (key == QLatin1String("constraintHertz")
+        || key == QLatin1String("constraintDampingRatio")) {
+        float hertz = 0.0f, damping = 0.0f;
+        b2Joint_GetConstraintTuning(joint, &hertz, &damping);
+        (key == QLatin1String("constraintHertz") ? hertz : damping) = number;
+        b2Joint_SetConstraintTuning(joint, hertz, damping);
+        return;
+    }
+    if (key == QLatin1String("collideConnected")) {
+        b2Joint_SetCollideConnected(joint, flag);
+        return;
+    }
+
+    switch (b2Joint_GetType(joint)) {
+    case b2_revoluteJoint:
+        if (key == QLatin1String("enableMotor"))         b2RevoluteJoint_EnableMotor(joint, flag);
+        else if (key == QLatin1String("motorSpeed"))     b2RevoluteJoint_SetMotorSpeed(joint, radians);
+        else if (key == QLatin1String("maxMotorTorque")) b2RevoluteJoint_SetMaxMotorTorque(joint, number);
+        else if (key == QLatin1String("enableLimit"))    b2RevoluteJoint_EnableLimit(joint, flag);
+        else if (key == QLatin1String("enableSpring"))   b2RevoluteJoint_EnableSpring(joint, flag);
+        else if (key == QLatin1String("hertz"))          b2RevoluteJoint_SetSpringHertz(joint, number);
+        else if (key == QLatin1String("dampingRatio"))   b2RevoluteJoint_SetSpringDampingRatio(joint, number);
+        else if (key == QLatin1String("targetAngle"))    b2RevoluteJoint_SetTargetAngle(joint, radians);
+        else if (key == QLatin1String("lowerAngle") || key == QLatin1String("upperAngle")) {
+            float lower = b2RevoluteJoint_GetLowerLimit(joint);
+            float upper = b2RevoluteJoint_GetUpperLimit(joint);
+            (key == QLatin1String("lowerAngle") ? lower : upper) =
+                qBound(-0.98f * B2_PI, radians, 0.98f * B2_PI);
+            if (lower > upper)
+                std::swap(lower, upper);
+            b2RevoluteJoint_SetLimits(joint, lower, upper);
+        }
+        break;
+
+    case b2_prismaticJoint:
+        if (key == QLatin1String("enableMotor"))        b2PrismaticJoint_EnableMotor(joint, flag);
+        else if (key == QLatin1String("motorSpeed"))    b2PrismaticJoint_SetMotorSpeed(joint, metres);
+        else if (key == QLatin1String("maxMotorForce")) b2PrismaticJoint_SetMaxMotorForce(joint, number);
+        else if (key == QLatin1String("enableLimit"))   b2PrismaticJoint_EnableLimit(joint, flag);
+        else if (key == QLatin1String("enableSpring"))  b2PrismaticJoint_EnableSpring(joint, flag);
+        else if (key == QLatin1String("hertz"))         b2PrismaticJoint_SetSpringHertz(joint, number);
+        else if (key == QLatin1String("dampingRatio"))  b2PrismaticJoint_SetSpringDampingRatio(joint, number);
+        else if (key == QLatin1String("targetTranslation"))
+            b2PrismaticJoint_SetTargetTranslation(joint, metres);
+        else if (key == QLatin1String("lowerTranslation")
+                 || key == QLatin1String("upperTranslation")) {
+            float lower = b2PrismaticJoint_GetLowerLimit(joint);
+            float upper = b2PrismaticJoint_GetUpperLimit(joint);
+            (key == QLatin1String("lowerTranslation") ? lower : upper) = metres;
+            if (lower > upper)
+                std::swap(lower, upper);
+            b2PrismaticJoint_SetLimits(joint, lower, upper);
+        }
+        break;
+
+    case b2_wheelJoint:
+        if (key == QLatin1String("enableMotor"))         b2WheelJoint_EnableMotor(joint, flag);
+        else if (key == QLatin1String("motorSpeed"))     b2WheelJoint_SetMotorSpeed(joint, radians);
+        else if (key == QLatin1String("maxMotorTorque")) b2WheelJoint_SetMaxMotorTorque(joint, number);
+        else if (key == QLatin1String("enableLimit"))    b2WheelJoint_EnableLimit(joint, flag);
+        else if (key == QLatin1String("enableSpring"))   b2WheelJoint_EnableSpring(joint, flag);
+        else if (key == QLatin1String("hertz"))          b2WheelJoint_SetSpringHertz(joint, number);
+        else if (key == QLatin1String("dampingRatio"))   b2WheelJoint_SetSpringDampingRatio(joint, number);
+        else if (key == QLatin1String("lowerTranslation")
+                 || key == QLatin1String("upperTranslation")) {
+            float lower = b2WheelJoint_GetLowerLimit(joint);
+            float upper = b2WheelJoint_GetUpperLimit(joint);
+            (key == QLatin1String("lowerTranslation") ? lower : upper) = metres;
+            if (lower > upper)
+                std::swap(lower, upper);
+            b2WheelJoint_SetLimits(joint, lower, upper);
+        }
+        break;
+
+    case b2_distanceJoint:
+        if (key == QLatin1String("enableMotor"))        b2DistanceJoint_EnableMotor(joint, flag);
+        else if (key == QLatin1String("motorSpeed"))    b2DistanceJoint_SetMotorSpeed(joint, metres);
+        else if (key == QLatin1String("maxMotorForce")) b2DistanceJoint_SetMaxMotorForce(joint, number);
+        else if (key == QLatin1String("enableLimit"))   b2DistanceJoint_EnableLimit(joint, flag);
+        else if (key == QLatin1String("enableSpring"))  b2DistanceJoint_EnableSpring(joint, flag);
+        else if (key == QLatin1String("hertz"))         b2DistanceJoint_SetSpringHertz(joint, number);
+        else if (key == QLatin1String("dampingRatio"))  b2DistanceJoint_SetSpringDampingRatio(joint, number);
+        else if (key == QLatin1String("length"))        b2DistanceJoint_SetLength(joint, metres);
+        else if (key == QLatin1String("minLength") || key == QLatin1String("maxLength")) {
+            float lower = b2DistanceJoint_GetMinLength(joint);
+            float upper = b2DistanceJoint_GetMaxLength(joint);
+            (key == QLatin1String("minLength") ? lower : upper) =
+                (key == QLatin1String("maxLength") && value.toDouble() <= 0.0) ? 100000.0f
+                                                                               : metres;
+            if (lower > upper)
+                std::swap(lower, upper);
+            b2DistanceJoint_SetLengthRange(joint, lower, upper);
+        }
+        break;
+
+    case b2_motorJoint:
+        if (key == QLatin1String("maxForce"))              b2MotorJoint_SetMaxForce(joint, number);
+        else if (key == QLatin1String("maxTorque"))        b2MotorJoint_SetMaxTorque(joint, number);
+        else if (key == QLatin1String("correctionFactor")) b2MotorJoint_SetCorrectionFactor(joint, number);
+        else if (key == QLatin1String("angularOffset"))    b2MotorJoint_SetAngularOffset(joint, radians);
+        else if (key == QLatin1String("linearOffsetX") || key == QLatin1String("linearOffsetY")) {
+            b2Vec2 offset = b2MotorJoint_GetLinearOffset(joint);
+            (key == QLatin1String("linearOffsetX") ? offset.x : offset.y) = metres;
+            b2MotorJoint_SetLinearOffset(joint, offset);
+        }
+        break;
+
+    case b2_mouseJoint:
+        if (key == QLatin1String("hertz"))             b2MouseJoint_SetSpringHertz(joint, number);
+        else if (key == QLatin1String("dampingRatio")) b2MouseJoint_SetSpringDampingRatio(joint, number);
+        else if (key == QLatin1String("maxForce"))     b2MouseJoint_SetMaxForce(joint, number);
+        else if (key == QLatin1String("targetX") || key == QLatin1String("targetY")) {
+            b2Vec2 target = b2MouseJoint_GetTarget(joint);
+            (key == QLatin1String("targetX") ? target.x : target.y) = metres;
+            b2MouseJoint_SetTarget(joint, target);
+        }
+        break;
+
+    case b2_weldJoint:
+        if (key == QLatin1String("linearHertz"))         b2WeldJoint_SetLinearHertz(joint, number);
+        else if (key == QLatin1String("angularHertz"))   b2WeldJoint_SetAngularHertz(joint, number);
+        else if (key == QLatin1String("linearDampingRatio"))
+            b2WeldJoint_SetLinearDampingRatio(joint, number);
+        else if (key == QLatin1String("angularDampingRatio"))
+            b2WeldJoint_SetAngularDampingRatio(joint, number);
+        break;
+
+    default:
+        break;
+    }
+}
+
+// --- actions ---------------------------------------------------------------
+
+void RuleRunner::performAction(const QString &object, const QString &id,
+                               const QVariantMap &params)
+{
+    const auto number = [&params](const char *key, double fallback) {
+        return params.value(QLatin1String(key), fallback).toDouble();
+    };
+
+    // An explosion is a bare coordinate; the object named only says where.
+    QPointF where;
+    bool located = false;
+    for (const SceneExplosion &explosion : m_scene->explosions) {
+        if (explosion.name != object)
+            continue;
+        where = explosion.position;
+        located = true;
+        break;
+    }
+
+    int body = bodyIndex(object);
+    if (body < 0)
+        body = bodyOfShape(object);
+
+    if (id == QLatin1String("explode")) {
+        QVariantMap settings = params;
+        if (located) {
+            // The explosion object carries its own settings over the rule's.
+            for (const SceneExplosion &explosion : m_scene->explosions) {
+                if (explosion.name != object)
+                    continue;
+                for (auto it = explosion.params.constBegin();
+                     it != explosion.params.constEnd(); ++it)
+                    settings.insert(it.key(), it.value());
+            }
+        } else if (body >= 0 && b2Body_IsValid(m_scene->bodies[body])) {
+            const b2Vec2 at = b2Body_GetPosition(m_scene->bodies[body]);
+            where = QPointF(toScene(at.x), toScene(at.y));
+            located = true;
+        }
+        if (!located)
+            return;
+
+        const auto setting = [&settings](const char *key, double fallback) {
+            return settings.value(QLatin1String(key), fallback).toDouble();
+        };
+        b2ExplosionDef blast = b2DefaultExplosionDef();
+        blast.position = b2Vec2 { float(toMetres(where.x())), float(toMetres(where.y())) };
+        blast.radius = float(toMetres(setting("radius", 0.0)));
+        blast.falloff = float(toMetres(setting("falloff", 0.0)));
+        blast.impulsePerLength = float(toMetres(setting("impulse", 0.0)));
+        const double mask = setting("maskBits", 0.0);
+        if (mask > 0.0)
+            blast.maskBits = quint64(mask);
+        if (blast.radius > 0.0f)
+            b2World_Explode(m_scene->world, &blast);
+        return;
+    }
+
+    if (id == QLatin1String("pushAt")) {
+        if (body < 0 || !b2Body_IsValid(m_scene->bodies[body]))
+            return;
+        const b2BodyId target = m_scene->bodies[body];
+        const b2Vec2 impulse { float(toMetres(number("impulseX", 0.0))),
+                               float(toMetres(number("impulseY", 0.0))) };
+        const b2Vec2 centre = b2Body_GetWorldCenterOfMass(target);
+        const b2Vec2 point { centre.x + float(toMetres(number("offsetX", 0.0))),
+                             centre.y + float(toMetres(number("offsetY", 0.0))) };
+        b2Body_ApplyLinearImpulse(target, impulse, point, true);
+        return;
+    }
+
+    if (id == QLatin1String("removeBody")) {
+        if (body < 0 || !b2Body_IsValid(m_scene->bodies[body]))
+            return;
+        // Box2D takes the body's shapes and joints with it, so the names that
+        // pointed at them stop pointing at anything.
+        b2DestroyBody(m_scene->bodies[body]);
+        m_scene->bodies[body] = b2_nullBodyId;
+        m_removedBodies[body] = true;
+        for (int i = 0; i < int(m_scene->joints.size()); ++i) {
+            if (!b2Joint_IsValid(m_scene->joints[i]))
+                m_brokenJoints << m_scene->jointNames[i];
+        }
+        return;
+    }
+
+    if (id == QLatin1String("breakJoint")) {
+        const int joint = jointIndex(object);
+        if (joint < 0 || !b2Joint_IsValid(m_scene->joints[joint]))
+            return;
+        b2Joint_WakeBodies(m_scene->joints[joint]);
+        b2DestroyJoint(m_scene->joints[joint]);
+        m_scene->joints[joint] = b2_nullJointId;
+        m_brokenJoints << m_scene->jointNames[joint];
+        return;
+    }
+}

@@ -1,0 +1,11 @@
+        b2WeldJointDef def = b2DefaultWeldJointDef();
+        def.bodyIdA = a;
+        def.bodyIdB = b;
+        def.localAnchorA = anchorA;
+        def.localAnchorB = anchorB;
+        def.referenceAngle = resting + rad({{REFERENCE_ANGLE}});
+        def.linearHertz = {{LINEAR_HERTZ}}f;
+        def.angularHertz = {{ANGULAR_HERTZ}}f;
+        def.linearDampingRatio = {{LINEAR_DAMPING_RATIO}}f;
+        def.angularDampingRatio = {{ANGULAR_DAMPING_RATIO}}f;
+        def.collideConnected = {{COLLIDE_CONNECTED}};

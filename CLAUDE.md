@@ -17,9 +17,12 @@ not know what a "friction" or a "prismatic joint" or a "contact begin" is. It
 asks the loaded plugin for:
 
 - body and shape properties (`IPhysicsEngine::bodyProperties()`, `shapeProperties()`)
-- joint types and their parameters (`jointTypes()`)
-- events a rule can watch (`bodyEvents()`, `jointEvents()`)
-- actions a rule can perform (`bodyActions()`)
+- what the running world itself will still answer to (`worldProperties()`)
+- joint types and their parameters (`jointTypes()`), and what a joint measures
+  once it exists (`jointReadables()`)
+- events a rule can watch (`bodyEvents()`, `shapeEvents()`, and each joint
+  type's own `events`)
+- actions a rule can perform (`bodyActions()`, `jointActions()`)
 
 and builds its property panes, rule menus and combo boxes from the answers.
 Adding a joint type to the Box2D plugin makes it appear in the UI with no
@@ -45,11 +48,15 @@ src/              the application (Qt widgets, canvas, panels, serialization)
     PropertyPanel + PropertyPane/*   property tables, one pane per selection kind
     SimulationController   drives the engine, polls events, applies rules
     SceneSerializer   *.phys read/write
+    SceneExporter     finds export converters and runs one
     MainWindow, UndoStack, OptionsDialog, AboutDialog, SceneTree
 ui/               .ui forms (AUTOUIC searches here, not beside the sources)
 resources/        icons (physalis.svg), the .rc that gives the exe its icon
 engines/box2d/    one plugin: its own CMakeLists, include/ and src/
 tests/            one .cpp per scenario, all built into a single binary
+exporters/        export converters -- one folder each, all JavaScript
+    box2d-qt-project/  manifest.json, export.js, templates/ (a whole runnable
+                       Qt + Box2D project, rules included)
 deploy/           the *.phys file association template
 cmake/            Version.h.in
 ```
@@ -126,10 +133,67 @@ and which keys are settable while running. The rest does the work.
   See `RulesPanel::scheduleValueEditorRefresh`.
 - **Setting a body's position teleports it.** `b2Body_SetTransform` bypasses the
   solver: no velocity, no contacts on the way, overlapping shapes left behind.
-  To move something smoothly, drive a joint instead (a motor joint's
-  `linearOffsetX`, a prismatic's `targetTranslation`).
+  To move something smoothly use *Glide To X/Y* (`b2Body_SetTargetTransform`,
+  which sets the velocity that arrives there by the end of the step), or drive
+  a joint instead (a motor joint's `linearOffsetX`, a prismatic's
+  `targetTranslation`).
+- **`EngineEvent` is not safe to build positionally.** Two shape names sit
+  between the handles and `eventId`, so `{joint, body, other, "limitLower"}`
+  puts the id in `subjectShape` and the event reaches no rule at all. Joint
+  limit events were dead this way for a while, silently. Assign the fields.
+- **Torque and angular impulse come down by the scale twice.** A torque is a
+  force times a distance and both are quoted in scene units, so `setBodyParam`
+  divides by `pixelsPerMeter²` where a linear impulse divides by it once.
+  Without that, a number that looks sensible next to an impulse is a million
+  times too large.
+- **Joint limits lose to an overpowered motor.** They are constraints, not
+  walls; a `maxMotorForce` far beyond what the bodies weigh drives straight
+  through one. At `ppm: 1000` a 40×40 box weighs about two grams, so tenths of
+  a newton are already generous.
 - **`stop()` restores the snapshot**, so reading positions after it gives you
   the pre-run state.
+
+## Exporting
+
+**File -> Export to -> ...** is built from whatever converters are found under
+the folder named in Options -> Common -> Converters folder. A converter is a
+folder holding a `manifest.json` (name and description) and an `export.js`
+defining `exportScene(scene, io)`; anything else beside them -- templates, a
+README -- is the converter's own business.
+
+The same rule as the plugins applies, one step further out: **the application
+converts nothing and knows no formats.** It hands over the scene and two
+functions, and everything else is the script's.
+
+- `scene` is the saved `.phys` document -- shapes, bodies, joints, rules,
+  rays, explosions, world, field -- plus `scene.simulation` (bodies and joints
+  as the *engine* receives them: transforms resolved, geometry in body-local
+  coordinates, which a saved file does not carry) and `scene.engine` (the
+  loaded engine's catalogue) and `scene.settings` (the application's own
+  preferences, grouped as the INI stores them -- the physics view's colours
+  live there rather than in the scene).
+- `io.read(path)` reads from the converter's own folder and nowhere else;
+  `io.write(path, text)` writes into the folder the user chose and nowhere
+  else. Both are path-jailed, and `QJSEngine` opens no other door.
+  `io.log(text)` says something for the finished message to carry -- only the
+  converter knows what it did.
+
+A run always ends in a dialog: what was written and where, or why it failed
+and on which line. A converter that writes no files has not converted
+anything, whatever it thinks, and is reported as a failure.
+
+A converter may also declare **its own settings** in the manifest -- name,
+label, type (`string`, `int`, `double`, `bool`, `color`, `choice`, `path`,
+`file`), default, range. A type this build has never heard of falls back to a
+text box, so a converter written against a later one is still usable. The app renders them on an **Options -> Export** tab, one page per
+converter, stores them under `Export/<folder name>` in the same INI as
+everything else, and hands each converter its own resolved values as
+`scene.converterSettings` with defaults already applied. It never interprets
+one -- the same bargain it has with the engine catalogues.
+
+Discovery parses manifests and never evaluates a script: opening the File menu,
+or the Options dialog, is not consent to run somebody's code -- which is why
+the settings are declared in the manifest and not in `export.js`.
 
 ## Versioning
 

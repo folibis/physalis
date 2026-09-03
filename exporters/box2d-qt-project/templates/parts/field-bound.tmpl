@@ -1,0 +1,12 @@
+    {
+        b2BodyDef def = b2DefaultBodyDef();
+        def.type = b2_staticBody;
+        def.position = m({{X}}, {{Y}});
+        const b2BodyId body = b2CreateBody(scene.world, &def);
+        scene.bodies.push_back(body);
+        scene.bodyNames.push_back("field_bounds");
+
+        b2ShapeDef shapeDef = b2DefaultShapeDef();
+        const b2Polygon box = b2MakeBox({{HALF_WIDTH}}f, {{HALF_HEIGHT}}f);
+        b2CreatePolygonShape(body, &shapeDef, &box);
+    }

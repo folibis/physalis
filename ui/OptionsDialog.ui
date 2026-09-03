@@ -172,6 +172,37 @@
           </layout>
          </widget>
         </item>
+        <item>
+         <widget class="QGroupBox" name="exportGroup">
+          <property name="title"><string>Export</string></property>
+          <layout class="QFormLayout" name="exportGroupForm">
+           <item row="0" column="0">
+            <widget class="QLabel" name="converterPath_label"><property name="text"><string>Converters folder:</string></property></widget>
+           </item>
+           <item row="0" column="1">
+          <widget class="QWidget" name="converterPathContainer" native="true">
+           <layout class="QHBoxLayout" name="converterPathLayout">
+            <property name="spacing"><number>4</number></property>
+            <property name="leftMargin"><number>0</number></property>
+            <property name="topMargin"><number>0</number></property>
+            <property name="rightMargin"><number>0</number></property>
+            <property name="bottomMargin"><number>0</number></property>
+            <item>
+             <widget class="QLineEdit" name="converterPath">
+              <property name="toolTip"><string>Where the export converters live. One folder per converter, each holding a manifest.json and an export.js.</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QToolButton" name="converterPathBrowse">
+              <property name="text"><string>...</string></property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
         <item><spacer name="commonSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
        </layout>
       </widget>

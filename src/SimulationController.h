@@ -106,6 +106,10 @@ private:
                   QString *other) const;
 
     void applyAction(const Rule &rule);
+    // Takes a body the engine no longer has off the canvas -- its shapes, its
+    // axes, and the joints the engine destroyed along with it. Run state only;
+    // stop() puts every bit of it back.
+    void takeOutOfView(PhysicsBody *body);
     QVariantMap defaultsFor(const QString &actionId) const;
     void stepWorld(qreal dt);
     void syncRays();

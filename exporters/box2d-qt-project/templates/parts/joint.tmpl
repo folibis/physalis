@@ -1,0 +1,21 @@
+    {
+        const b2BodyId a = scene.bodies[{{BODY_A}}];
+        const b2BodyId b = scene.bodies[{{BODY_B}}];
+        // Anchors arrive in scene coordinates; Box2D wants them in each body's
+        // own frame, which is what b2Body_GetLocalPoint is for.
+        const b2Vec2 anchorA = b2Body_GetLocalPoint(a, m({{ANCHOR_A_X}}, {{ANCHOR_A_Y}}));
+        const b2Vec2 anchorB = b2Body_GetLocalPoint(b, m({{ANCHOR_B_X}}, {{ANCHOR_B_Y}}));
+        // The axis is a direction: rotated into body A's frame, not translated.
+        const b2Vec2 axis = b2InvRotateVector(b2Body_GetRotation(a),
+                                              b2Normalize(b2Vec2 { {{AXIS_X}}f, {{AXIS_Y}}f }));
+        // The angle the bodies already stand at, so a joint made in place
+        // starts unstrained.
+        const float resting = b2Rot_GetAngle(b2Body_GetRotation(b))
+                              - b2Rot_GetAngle(b2Body_GetRotation(a));
+        (void)anchorA; (void)anchorB; (void)axis; (void)resting;
+
+{{DEF}}        const b2JointId joint = b2Create{{TYPE}}Joint(scene.world, &def);
+{{TUNING}}        scene.joints.push_back(joint);
+        scene.jointNames.push_back("{{NAME}}");
+    }
+

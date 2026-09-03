@@ -59,6 +59,13 @@ bool isLiveSettable(const QString &key)
         QStringLiteral("correctionFactor"),
         QStringLiteral("linearOffsetX"), QStringLiteral("linearOffsetY"),
         QStringLiteral("angularOffset"),
+        QStringLiteral("targetX"),       QStringLiteral("targetY"),
+        QStringLiteral("linearHertz"),   QStringLiteral("angularHertz"),
+        QStringLiteral("linearDampingRatio"), QStringLiteral("angularDampingRatio"),
+        // b2Joint_SetConstraintTuning takes these on a joint that already
+        // exists, so they are as live as anything else here even though no
+        // b2*JointDef carries them.
+        QStringLiteral("constraintHertz"), QStringLiteral("constraintDampingRatio"),
     };
     return settable.contains(key);
 }
@@ -505,6 +512,20 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                     " otherwise.");
         t.anchorCount = 1;
         t.visual = JointVisual::Pivot;
+
+        // b2MouseJoint_SetTarget is the only way this joint does anything
+        // interesting: moved by a rule, it leads a body across the scene
+        // without ever placing it, which is what setting a position cannot do.
+        t.params.append(lengthParam(QStringLiteral("targetX"), QObject::tr("Target X"),
+                                    jointSection(), 0.0,
+                                    QObject::tr("Where the body is pulled towards, in scene"
+                                                " coordinates. Leave both at zero to use the"
+                                                " anchor the joint was placed at.")));
+        t.params.append(lengthParam(QStringLiteral("targetY"), QObject::tr("Target Y"),
+                                    jointSection(), 0.0,
+                                    QObject::tr("Where the body is pulled towards, in scene"
+                                                " coordinates. Leave both at zero to use the"
+                                                " anchor the joint was placed at.")));
 
         t.params.append(hertzParam(QStringLiteral("hertz"), QObject::tr("Frequency (Hz)"),
                                    springSection(), 4.0,

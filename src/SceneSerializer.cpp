@@ -286,6 +286,7 @@ QJsonObject save(const CanvasScene *scene)
         {"contactDampingRatio", world.contactDampingRatio},
         {"maxContactPushSpeed", world.maxContactPushSpeed},
         {"maximumLinearSpeed", world.maximumLinearSpeed},
+        {"subStepCount", world.subStepCount},
         {"enableSleep", world.enableSleep},
         {"enableContinuous", world.enableContinuous},
     });
@@ -484,6 +485,7 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
         world.value("maxContactPushSpeed").toDouble(factory.maxContactPushSpeed);
     tuning.maximumLinearSpeed =
         world.value("maximumLinearSpeed").toDouble(factory.maximumLinearSpeed);
+    tuning.subStepCount = world.value("subStepCount").toInt(factory.subStepCount);
     tuning.enableSleep = world.value("enableSleep").toBool(factory.enableSleep);
     tuning.enableContinuous = world.value("enableContinuous").toBool(factory.enableContinuous);
     scene->setFieldBoundsSolid(world.value("solidBounds").toBool(scene->fieldBoundsSolid()));

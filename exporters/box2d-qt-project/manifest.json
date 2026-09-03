@@ -1,0 +1,69 @@
+{
+    "name": "Box2D / Qt project",
+    "description": "A standalone CMake project: a Qt window that fetches Box2D, builds this scene and runs it.",
+    "settings": [
+        {
+            "key": "projectName",
+            "label": "Project name",
+            "type": "string",
+            "default": "PhysalisScene",
+            "tooltip": "The CMake project, the executable and the window title. Letters, digits and underscores."
+        },
+        {
+            "key": "addControls",
+            "label": "Add controls",
+            "type": "bool",
+            "default": true,
+            "tooltip": "A toolbar with Start, Pause and Stop. Without it the window opens running and there is nothing to press."
+        },
+        {
+            "key": "qtPath",
+            "label": "Qt prefix path",
+            "type": "path",
+            "default": "",
+            "tooltip": "Where Qt is installed, e.g. C:/Qt/6.5.1/mingw_64. Written into the project as CMAKE_PREFIX_PATH so it configures without being told on the command line. Leave empty to let CMake find Qt itself."
+        },
+        {
+            "key": "stepsPerSecond",
+            "label": "Steps per second",
+            "type": "int",
+            "default": 60,
+            "min": 15,
+            "max": 480,
+            "tooltip": "How often the exported project steps the world. The editor's own setting is not carried across, since it is a preference rather than part of the scene."
+        },
+        {
+            "key": "debugView",
+            "label": "Debug view",
+            "type": "bool",
+            "default": true,
+            "tooltip": "Adds a Debug view switch to the controls: body axes and where the rays are looking, drawn over the scene."
+        },
+        {
+            "key": "box2dRepository",
+            "label": "Box2D repository",
+            "type": "string",
+            "default": "https://github.com/erincatto/box2d.git",
+            "tooltip": "The git repository the generated project fetches Box2D from. Point it at a fork, a mirror or a local clone. Whatever is there has to speak the Box2D v3 API, which is what the generated code is written against."
+        },
+        {
+            "key": "box2dRef",
+            "label": "Box2D tag or branch",
+            "type": "string",
+            "default": "v3.1.1",
+            "tooltip": "Which commit of that repository to build. Pinned to a tag by default, so the project builds the same way twice."
+        },
+        {
+            "key": "cxxStandard",
+            "label": "C++ standard",
+            "type": "choice",
+            "choices": [
+                "17",
+                "20",
+                "23"
+            ],
+            "default": "17",
+            "tooltip": "What the generated project is compiled as. The generated code itself is C++17; raise it for whatever you add to the project afterwards."
+        }
+    ]
+}

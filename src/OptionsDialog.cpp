@@ -4,9 +4,15 @@
 
 #include "EngineRegistry.h"
 #include "JointTypes.h"
+#include "SceneExporter.h"
 
 #include <QCheckBox>
 #include <QColorDialog>
+#include <QFileDialog>
+#include <QGroupBox>
+#include <QLineEdit>
+#include <QTabWidget>
+#include <QVBoxLayout>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -85,6 +91,20 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     selectData(m_ui->snapPoint, int(current.snapPoint));
     m_ui->snapStep->setValue(current.snapStep);
     m_ui->undoDepth->setValue(current.undoDepth);
+    m_ui->converterPath->setText(current.converterPath);
+    m_converterSettings = current.converterSettings;
+    connect(m_ui->converterPathBrowse, &QToolButton::clicked, this, [this] {
+        const QString chosen = QFileDialog::getExistingDirectory(
+            this, tr("Converters folder"), m_ui->converterPath->text());
+        if (!chosen.isEmpty())
+            m_ui->converterPath->setText(chosen);
+    });
+    // Point it somewhere else and the converters there are asked what they
+    // want, without closing the dialog first.
+    connect(m_ui->converterPath, &QLineEdit::editingFinished, this, [this] {
+        rebuildExportTab(m_ui->converterPath->text());
+    });
+    rebuildExportTab(current.converterPath);
 
     m_ui->defaultBorderWidth->setValue(current.defaultBorderWidth);
     m_ui->defaultTransparency->setValue(qRound((1.0 - current.defaultBodyColor.alphaF()) * 100.0));
@@ -209,9 +229,190 @@ void OptionsDialog::bindSwatch(QToolButton *button, QColor &color, const QString
     });
 }
 
+QWidget *OptionsDialog::makeConverterEditor(const SceneExporter::ConverterSetting &setting,
+                                            const QVariant &value, QWidget *parent)
+{
+    const QString &type = setting.type;
+
+    if (type == QLatin1String("bool")) {
+        auto *check = new QCheckBox(parent);
+        check->setChecked(value.toBool());
+        return check;
+    }
+    if (type == QLatin1String("int")) {
+        auto *spin = new QSpinBox(parent);
+        // A converter that names no range gets a generous one rather than
+        // Qt's default 0..99, which would silently clamp what it asked for.
+        const bool ranged = setting.minValue != 0.0 || setting.maxValue != 0.0;
+        spin->setRange(ranged ? int(setting.minValue) : -1000000,
+                       ranged ? int(setting.maxValue) : 1000000);
+        spin->setValue(value.toInt());
+        return spin;
+    }
+    if (type == QLatin1String("double")) {
+        auto *spin = new QDoubleSpinBox(parent);
+        const bool ranged = setting.minValue != 0.0 || setting.maxValue != 0.0;
+        spin->setRange(ranged ? setting.minValue : -1e9, ranged ? setting.maxValue : 1e9);
+        spin->setDecimals(setting.decimals);
+        spin->setValue(value.toDouble());
+        return spin;
+    }
+    if (type == QLatin1String("choice")) {
+        auto *combo = new QComboBox(parent);
+        combo->addItems(setting.choices);
+        const int at = setting.choices.indexOf(value.toString());
+        combo->setCurrentIndex(at >= 0 ? at : 0);
+        return combo;
+    }
+    if (type == QLatin1String("color")) {
+        auto *button = new QToolButton(parent);
+        button->setMinimumSize(60, 22);
+        button->setMaximumSize(60, 22);
+        const QColor initial = QColor(value.toString()).isValid() ? QColor(value.toString())
+                                                                  : QColor(Qt::white);
+        // The button carries the colour itself, so nothing else has to be kept
+        // in step with it.
+        button->setProperty("chosenColour", initial);
+        button->setStyleSheet(colorSwatchStyle(initial));
+        connect(button, &QToolButton::clicked, this, [this, button, label = setting.label] {
+            const QColor was = button->property("chosenColour").value<QColor>();
+            const QColor chosen = QColorDialog::getColor(was, this, label,
+                                                         QColorDialog::ShowAlphaChannel);
+            if (!chosen.isValid())
+                return;
+            button->setProperty("chosenColour", chosen);
+            button->setStyleSheet(colorSwatchStyle(chosen));
+        });
+        return button;
+    }
+
+    if (type == QLatin1String("path") || type == QLatin1String("file")) {
+        // A box and a browse button, the way the converters folder itself is
+        // chosen. Typing a path stays possible -- it is often quicker, and it
+        // is the only way to enter one that does not exist yet.
+        const bool wantsFolder = type == QLatin1String("path");
+
+        auto *holder = new QWidget(parent);
+        auto *row = new QHBoxLayout(holder);
+        row->setContentsMargins(0, 0, 0, 0);
+        row->setSpacing(4);
+
+        auto *edit = new QLineEdit(holder);
+        edit->setText(value.toString());
+        row->addWidget(edit);
+
+        auto *browse = new QToolButton(holder);
+        browse->setText(QStringLiteral("..."));
+        row->addWidget(browse);
+
+        connect(browse, &QToolButton::clicked, this,
+                [this, edit, wantsFolder, label = setting.label] {
+                    const QString chosen =
+                        wantsFolder ? QFileDialog::getExistingDirectory(this, label, edit->text())
+                                    : QFileDialog::getOpenFileName(this, label, edit->text());
+                    if (!chosen.isEmpty())
+                        edit->setText(chosen);
+                });
+        return holder;
+    }
+
+    // "string", and anything this version has never heard of: a converter
+    // written against a later one still gets a usable box rather than nothing.
+    auto *edit = new QLineEdit(parent);
+    edit->setText(value.toString());
+    return edit;
+}
+
+QVariant OptionsDialog::fieldValue(const ConverterField &field) const
+{
+    // A path is a box beside a button, so the value is one level in.
+    if (field.type == QLatin1String("path") || field.type == QLatin1String("file")) {
+        auto *edit = field.editor ? field.editor->findChild<QLineEdit *>() : nullptr;
+        return edit ? edit->text() : QString();
+    }
+    if (auto *check = qobject_cast<QCheckBox *>(field.editor))
+        return check->isChecked();
+    if (auto *spin = qobject_cast<QSpinBox *>(field.editor))
+        return spin->value();
+    if (auto *spin = qobject_cast<QDoubleSpinBox *>(field.editor))
+        return spin->value();
+    if (auto *combo = qobject_cast<QComboBox *>(field.editor))
+        return combo->currentText();
+    if (auto *button = qobject_cast<QToolButton *>(field.editor))
+        return button->property("chosenColour").value<QColor>().name(QColor::HexArgb);
+    if (auto *edit = qobject_cast<QLineEdit *>(field.editor))
+        return edit->text();
+    return {};
+}
+
+void OptionsDialog::rebuildExportTab(const QString &path)
+{
+    // Whatever is on the page now goes first: it may belong to converters that
+    // are no longer there, and its widgets are about to be deleted.
+    for (const ConverterField &field : std::as_const(m_converterFields)) {
+        if (!field.editor)
+            continue;
+        m_converterSettings[field.converter].insert(field.key, fieldValue(field));
+    }
+    m_converterFields.clear();
+
+    if (m_exportTab) {
+        m_ui->tabs->removeTab(m_ui->tabs->indexOf(m_exportTab));
+        delete m_exportTab;
+        m_exportTab = nullptr;
+    }
+
+    const QVector<SceneExporter::Converter> converters = SceneExporter::discover(path);
+    if (converters.isEmpty())
+        return;   // nothing to configure, so no tab at all
+
+    m_exportTab = new QWidget(m_ui->tabs);
+    auto *outer = new QVBoxLayout(m_exportTab);
+    auto *pages = new QTabWidget(m_exportTab);
+    outer->addWidget(pages);
+
+    for (const SceneExporter::Converter &converter : converters) {
+        auto *page = new QWidget(pages);
+        auto *form = new QFormLayout(page);
+
+        if (!converter.description.isEmpty()) {
+            auto *about = new QLabel(converter.description, page);
+            about->setWordWrap(true);
+            about->setStyleSheet(QStringLiteral("color: #6f6f6f;"));
+            form->addRow(about);
+        }
+        if (converter.settings.isEmpty()) {
+            auto *none = new QLabel(tr("This converter has nothing to set."), page);
+            none->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
+            form->addRow(none);
+        }
+
+        const QVariantMap stored = m_converterSettings.value(converter.id);
+        for (const SceneExporter::ConverterSetting &setting : converter.settings) {
+            const QVariant value = stored.contains(setting.key) ? stored.value(setting.key)
+                                                                : setting.defaultValue;
+            ConverterField field;
+            field.converter = converter.id;
+            field.key = setting.key;
+            field.type = setting.type;
+            field.editor = makeConverterEditor(setting, value, page);
+            if (!field.editor)
+                continue;
+            field.editor->setToolTip(setting.tooltip);
+            form->addRow(setting.label, field.editor);
+            m_converterFields.append(field);
+        }
+        pages->addTab(page, converter.name);
+    }
+    m_ui->tabs->addTab(m_exportTab, tr("Export"));
+}
+
 OptionsDialog::Settings OptionsDialog::settings() const
 {
     Settings s;
+    s.converterSettings = m_converterSettings;
+    for (const ConverterField &field : m_converterFields)
+        s.converterSettings[field.converter].insert(field.key, fieldValue(field));
     s.bodyDynamicColor = m_bodyDynamicColor;
     s.bodyStaticColor = m_bodyStaticColor;
     s.bodyKinematicColor = m_bodyKinematicColor;
@@ -237,6 +438,7 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.jointWaistWidth = m_ui->jointWaistWidth->value();
     s.jointOutlineWidth = m_ui->jointOutlineWidth->value();
     s.undoDepth = m_ui->undoDepth->value();
+    s.converterPath = m_ui->converterPath->text().trimmed();
     s.jointTypeColors = m_jointTypeColors;
     s.jointSelectionLineStyle =
         static_cast<Qt::PenStyle>(m_ui->jointSelectionLineStyle->currentData().toInt());

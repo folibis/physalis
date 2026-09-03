@@ -140,3 +140,11 @@ void Joint::setCollideConnected(bool collide)
     m_collideConnected = collide;
     emit propertyChanged();
 }
+
+void Joint::setBroken(bool broken)
+{
+    if (m_broken == broken)
+        return;
+    m_broken = broken;
+    emit propertyChanged();
+}

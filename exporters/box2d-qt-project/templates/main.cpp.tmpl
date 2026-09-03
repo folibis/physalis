@@ -1,0 +1,80 @@
+#include "Viewport.h"
+
+#include <QAction>
+#include <QApplication>
+#include <QMainWindow>
+#include <QScreen>
+#include <QStatusBar>
+#include <QToolBar>
+
+int main(int argc, char *argv[])
+{
+    QApplication app(argc, argv);
+
+    QMainWindow window;
+    window.setWindowTitle(QStringLiteral("{{TITLE}}"));
+
+    auto *viewport = new Viewport(&window);
+    window.setCentralWidget(viewport);
+
+    // What the export asked the window to show.
+    const bool wantsControls = viewport->wantsControls();
+    const bool wantsDebug = viewport->debugVisible();
+
+    if (wantsControls || wantsDebug) {
+        auto *bar = window.addToolBar(QObject::tr("Controls"));
+        bar->setMovable(false);
+
+        if (wantsControls) {
+            QAction *start = bar->addAction(QObject::tr("Start"));
+            QAction *pause = bar->addAction(QObject::tr("Pause"));
+            QAction *stop = bar->addAction(QObject::tr("Stop"));
+            start->setToolTip(QObject::tr("Run the scene. (Space)"));
+            pause->setToolTip(QObject::tr("Leave it where it is. (Space)"));
+            stop->setToolTip(QObject::tr("Back to the beginning. (R)"));
+
+            QObject::connect(start, &QAction::triggered, viewport, &Viewport::start);
+            QObject::connect(pause, &QAction::triggered, viewport, &Viewport::pause);
+            QObject::connect(stop, &QAction::triggered, viewport, &Viewport::stop);
+
+            // Only one of Start and Pause is ever the thing to press, and the
+            // keyboard can change which, so they follow the viewport.
+            const auto follow = [start, pause](bool running) {
+                start->setEnabled(!running);
+                pause->setEnabled(running);
+            };
+            follow(viewport->isRunning());
+            QObject::connect(viewport, &Viewport::runningChanged, viewport, follow);
+        }
+
+        if (wantsDebug) {
+            if (wantsControls)
+                bar->addSeparator();
+            QAction *debug = bar->addAction(QObject::tr("Debug view"));
+            debug->setCheckable(true);
+            debug->setChecked(viewport->debugVisible());
+            debug->setToolTip(QObject::tr("Body axes and rays, over the scene. (D)"));
+            QObject::connect(debug, &QAction::toggled, viewport, &Viewport::setDebugVisible);
+            QObject::connect(viewport, &Viewport::debugVisibleChanged, debug,
+                             &QAction::setChecked);
+        }
+    }
+
+    window.statusBar()->showMessage(
+        QObject::tr("Space runs and pauses, R starts it over."));
+    window.resize(viewport->sizeHint());
+
+    // Middle of the screen it opens on, rather than wherever the window
+    // manager would have put it.
+    if (const QScreen *screen = QGuiApplication::primaryScreen()) {
+        const QRect available = screen->availableGeometry();
+        window.move(available.center() - window.frameGeometry().center()
+                    + window.frameGeometry().topLeft());
+    }
+    window.show();
+
+    // The viewport answers the keyboard, so it should have it to begin with.
+    viewport->setFocus();
+
+    return app.exec();
+}

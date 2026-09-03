@@ -71,7 +71,29 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
 
     worldDef.enableSleep = desc.enableSleep;
     worldDef.enableContinuous = desc.enableContinuous;
+
+    // b2World_SetContactTuning takes all three at once and Box2D has no
+    // getters for them, so what the world starts with is remembered here.
+    m_contactTuning = { worldDef.contactHertz, worldDef.contactDampingRatio,
+                        worldDef.maxContactPushSpeed };
+    m_speculative = true;
+    // Not part of b2WorldDef -- it is an argument to every b2World_Step, so it
+    // is kept rather than handed over.
+    m_subStepCount = qBound(1, desc.subStepCount, 64);
+
     m_worldId = b2CreateWorld(&worldDef);
+
+    // Without this the shapes' Pre-Solve Events flag reaches Box2D and then
+    // has nowhere to go. Box2D calls it only for shapes that asked, and only
+    // for awake dynamic bodies, so it costs nothing where it is not wanted.
+    // No task system is supplied, so the step runs serially on this thread and
+    // the callback can queue an event without locking.
+    b2World_SetPreSolveCallback(
+        m_worldId,
+        [](b2ShapeId shapeA, b2ShapeId shapeB, b2Manifold *, void *context) {
+            return static_cast<Box2DEngine *>(context)->preSolve(shapeA, shapeB);
+        },
+        this);
 }
 
 void Box2DEngine::destroyWorld()
@@ -84,6 +106,11 @@ void Box2DEngine::destroyWorld()
     m_worldId = b2_nullWorldId;
     m_bodies.clear();
     m_joints.clear();
+    m_jointLimits.clear();
+    m_pendingEvents.clear();
+    m_shapeNames.clear();
+    m_shapesByName.clear();
+    m_lastHit.clear();
 }
 
 bool Box2DEngine::attachSmoothChain(b2BodyId bodyId, const Geometry &geometry,
@@ -314,11 +341,16 @@ void Box2DEngine::step(qreal dt)
     if (!b2World_IsValid(m_worldId))
         return;
 
-    b2World_Step(m_worldId, static_cast<float>(dt), kSubStepCount);
+    // Kept because b2Body_SetTargetTransform asks how long it has to get
+    // there, and a property write has no other way of knowing.
+    m_lastStep = static_cast<float>(dt);
+
+    b2World_Step(m_worldId, static_cast<float>(dt), m_subStepCount);
     // After the solver, so a joint reports where it actually ended up rather
     // than where it was before the step that carried it into its limit.
     detectLimitEvents();
     collectContactEvents();
+    collectBodyEvents();
 }
 
 BodyState Box2DEngine::bodyState(BodyHandle handle) const
@@ -328,6 +360,12 @@ BodyState Box2DEngine::bodyState(BodyHandle handle) const
         return state;
 
     const b2BodyId bodyId = m_bodies[handle];
+    // A rule may have removed it. The handle survives so the editor's indices
+    // stay put, but there is nothing behind it any more.
+    if (!b2Body_IsValid(bodyId)) {
+        state.exists = false;
+        return state;
+    }
     state.position = toScene(b2Body_GetPosition(bodyId));
     state.rotationDegrees = qRadiansToDegrees(b2Rot_GetAngle(b2Body_GetRotation(bodyId)));
     state.centerOfMass = toScene(b2Body_GetWorldCenterOfMass(bodyId));

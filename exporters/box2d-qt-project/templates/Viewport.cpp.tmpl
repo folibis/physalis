@@ -1,0 +1,287 @@
+#include "Viewport.h"
+
+#include <QKeyEvent>
+#include <QPainter>
+#include <QPainterPath>
+#include <QTimer>
+#include <QLineF>
+#include <QTransform>
+#include <QtMath>
+
+#include <cmath>
+
+Viewport::Viewport(QWidget *parent)
+    : QWidget(parent)
+{
+    setFocusPolicy(Qt::StrongFocus);
+    m_scene = buildScene();
+    m_rules = std::make_unique<RuleRunner>(&m_scene);
+
+    m_timer = new QTimer(this);
+    m_timer->setTimerType(Qt::PreciseTimer);
+    m_timer->setInterval(1000 / qMax(1, m_scene.stepsPerSecond));
+    connect(m_timer, &QTimer::timeout, this, &Viewport::step);
+
+    m_timer->start();
+}
+
+Viewport::~Viewport()
+{
+    if (b2World_IsValid(m_scene.world))
+        b2DestroyWorld(m_scene.world);
+}
+
+QSize Viewport::sizeHint() const
+{
+    // The objects, at one pixel per scene unit -- see paintEvent for why that
+    // is not negotiable. A scene wider than this is not shrunk to fit; the
+    // window shows the middle of it.
+    constexpr double kMaxWidth = 1400.0;
+    constexpr double kMaxHeight = 800.0;
+    return QSize(qBound(480, int(m_scene.width), int(kMaxWidth)),
+                 qBound(320, int(m_scene.height), int(kMaxHeight)));
+}
+
+void Viewport::step()
+{
+    const double dt = 1.0 / double(qMax(1, m_scene.stepsPerSecond));
+    b2World_Step(m_scene.world, float(dt), m_scene.subStepCount);
+    // After the solver, so a rule watching a joint's limit sees where it
+    // actually ended up rather than where it was before the step.
+    m_rules->afterStep(dt);
+    update();
+}
+
+void Viewport::setRunning(bool running)
+{
+    if (m_running == running)
+        return;
+    m_running = running;
+    if (running)
+        m_timer->start();
+    else
+        m_timer->stop();
+    emit runningChanged(running);
+}
+
+void Viewport::start()
+{
+    setRunning(true);
+}
+
+void Viewport::pause()
+{
+    setRunning(false);
+}
+
+void Viewport::togglePaused()
+{
+    setRunning(!m_running);
+}
+
+void Viewport::setDebugVisible(bool on)
+{
+    if (m_scene.debugView == on)
+        return;
+    m_scene.debugView = on;
+    emit debugVisibleChanged(on);
+    update();
+}
+
+void Viewport::stop()
+{
+    // Rebuilding puts every generated value back, including whether the debug
+    // view was on -- and that one is the viewer's choice by now, not the
+    // export's, so it is carried across.
+    const bool debug = m_scene.debugView;
+
+    if (b2World_IsValid(m_scene.world))
+        b2DestroyWorld(m_scene.world);
+    m_scene = buildScene();
+    m_scene.debugView = debug;
+    m_rules = std::make_unique<RuleRunner>(&m_scene);
+
+    // Stopped, not paused: back at the beginning and waiting to be started.
+    setRunning(false);
+    update();
+}
+
+void Viewport::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_Space: togglePaused(); return;
+    case Qt::Key_R:     stop();         return;
+    case Qt::Key_D:     setDebugVisible(!m_scene.debugView); return;
+    default:            break;
+    }
+    QWidget::keyPressEvent(event);
+}
+
+void Viewport::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    painter.fillRect(rect(), m_scene.background);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // One pixel per scene unit: the same thing the editor shows at 100%, so a
+    // scene looks the size it was drawn. Fitting the field to the window
+    // instead would rescale it by whatever the window happened to be, and
+    // nothing would be the size it was laid out at.
+    //
+    // The middle of the window is the middle of the objects, not the middle of
+    // the editor's field: a field is usually mostly empty, and framing all of
+    // it would put the scene in a corner of the picture.
+    painter.translate(width() / 2.0 - m_scene.viewCenterX,
+                      height() / 2.0 - m_scene.viewCenterY);
+
+    const double ppm = m_scene.pixelsPerMeter;
+
+    for (const SceneShape &shape : m_scene.shapes) {
+        if (shape.body < 0 || shape.body >= int(m_scene.bodies.size()))
+            continue;
+        // A rule can take a body out of the world; nothing of it is drawn
+        // after that.
+        if (m_rules->bodyRemoved(shape.body))
+            continue;
+        const b2BodyId body = m_scene.bodies[shape.body];
+        if (!b2Body_IsValid(body))
+            continue;
+
+        // Where the body has got to, back in scene units.
+        const b2Vec2 position = b2Body_GetPosition(body);
+        const float angle = b2Rot_GetAngle(b2Body_GetRotation(body));
+
+        QTransform toScene;
+        toScene.translate(position.x * ppm, position.y * ppm);
+        toScene.rotate(qRadiansToDegrees(angle));
+        toScene.translate(shape.center.x(), shape.center.y());
+        toScene.rotate(shape.rotation);
+
+        painter.save();
+        painter.setTransform(toScene, true);
+
+        QPen pen(shape.border);
+        pen.setWidthF(shape.borderWidth);
+        painter.setPen(pen);
+        painter.setBrush(shape.fill);
+
+        switch (shape.kind) {
+        case SceneShape::Box: {
+            const QRectF box(-shape.halfExtents.x(), -shape.halfExtents.y(),
+                             shape.halfExtents.x() * 2.0, shape.halfExtents.y() * 2.0);
+            if (shape.cornerRadius > 0.0)
+                painter.drawRoundedRect(box, shape.cornerRadius, shape.cornerRadius);
+            else
+                painter.drawRect(box);
+            break;
+        }
+        case SceneShape::Circle:
+            painter.drawEllipse(QPointF(0, 0), shape.radius, shape.radius);
+            break;
+        case SceneShape::Polygon:
+            painter.drawPolygon(shape.points);
+            break;
+        case SceneShape::Chain:
+            painter.setBrush(Qt::NoBrush);
+            if (shape.closed)
+                painter.drawPolygon(shape.points);
+            else
+                painter.drawPolyline(shape.points);
+            break;
+        }
+        painter.restore();
+    }
+
+    if (!m_scene.debugView)
+        return;
+
+    // --- the debug view: joints, body axes, rays ---------------------------
+    //
+    // None of it is the scene. It is what the editor draws on top of one, and
+    // the three of them go together: joints hold the scene up, the axes say
+    // which way a body is facing, and a ray says what it can see.
+
+    // Joints first, under the axes: a line between the two points a joint
+    // holds, with a ring on each. Where those points are is the joint's, not
+    // the scene's -- ask it every frame, because they move.
+    for (int j = 0; j < int(m_scene.joints.size()); ++j) {
+        const b2JointId joint = m_scene.joints[j];
+        if (!b2Joint_IsValid(joint))
+            continue;
+
+        const b2Vec2 a = b2Body_GetWorldPoint(b2Joint_GetBodyA(joint),
+                                              b2Joint_GetLocalAnchorA(joint));
+        const b2Vec2 b = b2Body_GetWorldPoint(b2Joint_GetBodyB(joint),
+                                              b2Joint_GetLocalAnchorB(joint));
+        const QPointF from(a.x * ppm, a.y * ppm);
+        const QPointF to(b.x * ppm, b.y * ppm);
+
+        QPen pen(m_scene.jointColor);
+        pen.setWidthF(m_scene.axisWidth);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawLine(from, to);
+
+        const double ring = m_scene.jointAnchorRadius;
+        painter.drawEllipse(from, ring, ring);
+        // An anchorless joint has both ends in the same place; one ring is
+        // then the whole of it.
+        if (QLineF(from, to).length() > 1.0)
+            painter.drawEllipse(to, ring, ring);
+    }
+
+    // Each body's centre of mass and the direction it faces. A body turns
+    // about its centre of mass, not about its origin, so that is the point
+    // worth marking.
+    for (int b = 0; b < int(m_scene.bodies.size()); ++b) {
+        if (m_rules->bodyRemoved(b) || !b2Body_IsValid(m_scene.bodies[b]))
+            continue;
+        const b2BodyId body = m_scene.bodies[b];
+        const b2Vec2 centre = b2Body_GetWorldCenterOfMass(body);
+        const QPointF origin(centre.x * ppm, centre.y * ppm);
+
+        QTransform toScene;
+        toScene.translate(origin.x(), origin.y());
+        toScene.rotate(qRadiansToDegrees(b2Rot_GetAngle(b2Body_GetRotation(body))));
+
+        QPen axis;
+        axis.setWidthF(m_scene.axisWidth);
+        axis.setCapStyle(Qt::RoundCap);
+
+        axis.setColor(m_scene.axisXColor);
+        painter.setPen(axis);
+        painter.drawLine(origin, toScene.map(QPointF(m_scene.axisLength, 0.0)));
+
+        axis.setColor(m_scene.axisYColor);
+        painter.setPen(axis);
+        painter.drawLine(origin, toScene.map(QPointF(0.0, m_scene.axisLength)));
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(m_scene.axisXColor);
+        painter.drawEllipse(origin, m_scene.axisWidth, m_scene.axisWidth);
+    }
+
+    // Rays: a line as far as the ray reached, a dashed continuation to where
+    // it was looking, and a mark on what it found.
+    for (const SceneRay &ray : m_scene.rays) {
+        const double angle = qDegreesToRadians(ray.angleDegrees);
+        const QPointF reach = ray.origin
+                              + QPointF(std::cos(angle), std::sin(angle)) * ray.length;
+        const QPointF stop = ray.hit ? ray.point : reach;
+
+        QPen pen(ray.hit ? QColor(0xE8, 0x6A, 0x6A) : QColor(0x9A, 0x9A, 0x9A));
+        pen.setWidthF(1.5);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawLine(ray.origin, stop);
+
+        if (ray.hit) {
+            pen.setStyle(Qt::DotLine);
+            painter.setPen(pen);
+            painter.drawLine(stop, reach);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(0xE8, 0x6A, 0x6A));
+            painter.drawEllipse(ray.point, 4.0, 4.0);
+        }
+    }
+}

@@ -49,6 +49,11 @@ public:
     // has no body, so there is no handle to name.
     virtual void performActionAt(const QString &, const QPointF &, const QVariantMap &) {}
 
+    // And the same again for joints -- things done to one rather than values
+    // written to it, such as taking it out of the world altogether.
+    virtual QVector<ActionType> jointActions() const { return {}; }
+    virtual void performJointAction(const QString &, JointHandle, const QVariantMap &) {}
+
     virtual void setJointParam(JointHandle, const QString &, const QVariant &) {}
     virtual void setBodyParam(BodyHandle, const QString &, const QVariant &) {}
 
@@ -57,6 +62,14 @@ public:
 
     virtual PropertyList bodyProperties() const { return {}; }
     virtual PropertyList shapeProperties() const { return {}; }
+
+    // The world's own settings, as far as they can be changed once it is
+    // running -- gravity, thresholds, whether bodies may sleep. Same shape as
+    // the lists above, so the editor renders and rules address them the same
+    // way. A backend whose world is fixed once created returns nothing.
+    virtual PropertyList worldProperties() const { return {}; }
+    virtual void setWorldParam(const QString &, const QVariant &) {}
+    virtual QVariant worldValue(const QString &) const { return {}; }
 
     virtual PropertyList jointReadables(const QString &) const { return {}; }
 

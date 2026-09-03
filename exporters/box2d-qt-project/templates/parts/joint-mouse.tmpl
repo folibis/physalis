@@ -1,0 +1,10 @@
+        // Box2D asserts rather than fails if body A can move, and an assert in
+        // a release solver is a crash with no message.
+        b2MouseJointDef def = b2DefaultMouseJointDef();
+        def.bodyIdA = a;
+        def.bodyIdB = b;
+        def.target = m({{TARGET_X}}, {{TARGET_Y}});
+        def.hertz = {{HERTZ}}f;
+        def.dampingRatio = {{DAMPING_RATIO}}f;
+        def.maxForce = {{MAX_FORCE}}f;
+        def.collideConnected = {{COLLIDE_CONNECTED}};

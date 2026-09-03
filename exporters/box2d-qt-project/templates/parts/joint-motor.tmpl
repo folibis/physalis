@@ -1,0 +1,9 @@
+        b2MotorJointDef def = b2DefaultMotorJointDef();
+        def.bodyIdA = a;
+        def.bodyIdB = b;
+        def.linearOffset = m({{LINEAR_OFFSET_X}}, {{LINEAR_OFFSET_Y}});
+        def.angularOffset = rad({{ANGULAR_OFFSET}});
+        def.maxForce = {{MAX_FORCE}}f;
+        def.maxTorque = {{MAX_TORQUE}}f;
+        def.correctionFactor = {{CORRECTION_FACTOR}}f;
+        def.collideConnected = {{COLLIDE_CONNECTED}};

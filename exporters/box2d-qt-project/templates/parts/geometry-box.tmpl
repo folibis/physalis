@@ -1,0 +1,4 @@
+            const b2Rot local = b2MakeRot(rad({{ROTATION}}));
+            const b2Polygon box = b2MakeOffsetBox({{HALF_WIDTH}}f, {{HALF_HEIGHT}}f,
+                                                  m({{CENTER_X}}, {{CENTER_Y}}), local);
+            created = b2CreatePolygonShape(body, &shapeDef, &box);

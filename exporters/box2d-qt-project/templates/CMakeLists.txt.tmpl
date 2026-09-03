@@ -1,0 +1,36 @@
+cmake_minimum_required(VERSION 3.16)
+project({{PROJECT}} LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD {{CXX_STANDARD}})
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_AUTOMOC ON)
+
+{{QT_PREFIX}}find_package(Qt6 COMPONENTS Widgets REQUIRED)
+
+# Box2D is fetched rather than expected: this project is meant to be built
+# anywhere, out of the box, with nothing installed but Qt and a compiler.
+include(FetchContent)
+set(BOX2D_SAMPLES OFF CACHE BOOL "" FORCE)
+set(BOX2D_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(BOX2D_DOCS OFF CACHE BOOL "" FORCE)
+set(BOX2D_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(BOX2D_VALIDATE OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(box2d
+    GIT_REPOSITORY {{BOX2D_REPO}}
+    # Whatever is here has to speak the Box2D v3 API: that is what the
+    # generated code below is written against.
+    GIT_TAG {{BOX2D_REF}}
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(box2d)
+
+add_executable({{PROJECT}}
+    main.cpp
+    Viewport.h
+    Viewport.cpp
+    Scene.h
+    Scene.cpp
+    Rules.h
+    Rules.cpp
+)
+target_link_libraries({{PROJECT}} PRIVATE Qt6::Widgets box2d)

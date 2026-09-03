@@ -1,0 +1,11 @@
+    b2WorldDef worldDef = b2DefaultWorldDef();
+    worldDef.gravity = b2Vec2 { {{GRAVITY_X}}f, {{GRAVITY_Y}}f };
+    worldDef.maximumLinearSpeed = {{MAX_LINEAR_SPEED}}f;
+    worldDef.maxContactPushSpeed = {{MAX_CONTACT_PUSH_SPEED}}f;
+    worldDef.restitutionThreshold = {{RESTITUTION_THRESHOLD}}f;
+    worldDef.hitEventThreshold = {{HIT_EVENT_THRESHOLD}}f;
+    worldDef.contactHertz = {{CONTACT_HERTZ}}f;
+    worldDef.contactDampingRatio = {{CONTACT_DAMPING_RATIO}}f;
+    worldDef.enableSleep = {{ENABLE_SLEEP}};
+    worldDef.enableContinuous = {{ENABLE_CONTINUOUS}};
+    scene.world = b2CreateWorld(&worldDef);

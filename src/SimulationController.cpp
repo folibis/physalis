@@ -302,7 +302,12 @@ void SimulationController::stop()
 
     for (const BoundBody &bound : m_bound) {
         bound.body->setAsleep(false);
+        // A body a rule removed was only removed from the world; the scene
+        // still has it, and the run is over.
+        bound.body->setRemoved(false);
     }
+    for (Joint *joint : m_scene->joints())
+        joint->setBroken(false);
 
     m_bound.clear();
     m_state = State::Stopped;
@@ -483,7 +488,8 @@ QVariant SimulationController::readValue(const QString &name, const QString &key
             return m_elapsedSeconds;
         if (key == QLatin1String("frame"))
             return double(m_frameCount);
-        return {};
+        // Everything else the world can be asked is the engine's to answer.
+        return m_engine->worldValue(key);
     }
 
     const auto joint = m_jointByName.constFind(name);
@@ -502,7 +508,7 @@ QVariantMap SimulationController::defaultsFor(const QString &actionId) const
     QVariantMap params;
     if (!m_engine)
         return params;
-    for (const physics::ActionType &action : m_engine->bodyActions()) {
+    for (const physics::ActionType &action : m_engine->bodyActions() + m_engine->jointActions()) {
         if (action.id != actionId)
             continue;
         for (const physics::JointParam &param : action.params)
@@ -511,27 +517,73 @@ QVariantMap SimulationController::defaultsFor(const QString &actionId) const
     return params;
 }
 
+void SimulationController::takeOutOfView(PhysicsBody *body)
+{
+    if (!body || body->isRemoved())
+        return;
+
+    // The body and its shapes first -- setRemoved() hides those.
+    body->setRemoved(true);
+
+    // Then the joints. The engine destroyed them along with the body, and
+    // nothing in the scene would know: a joint left attached to a body that
+    // has just vanished goes on being drawn between it and thin air.
+    for (Joint *joint : m_scene->joints()) {
+        if ((joint->bodyA() && joint->bodyA() == body)
+            || (joint->bodyB() && joint->bodyB() == body))
+            joint->setBroken(true);
+    }
+
+    // The axes are painted in the foreground, which no shape's own repaint
+    // covers.
+    m_scene->update();
+}
+
 void SimulationController::applyAction(const Rule &rule)
 {
     // An action is performed on the named body rather than written to it.
     if (rule.isAction()) {
         if (!m_engine)
             return;
+
+        // Whatever the rule stored, over the top of what the engine says the
+        // action starts at. A rule written before the card could edit these
+        // carried none at all, and performing a blast of radius zero looks
+        // exactly like the rule not firing.
+        QVariantMap params = defaultsFor(rule.actionId);
+        for (auto it = rule.actionParams.constBegin();
+             it != rule.actionParams.constEnd(); ++it)
+            params.insert(it.key(), it.value());
+
         // A explosion is a bare coordinate -- it has no body to name.
         // An explosion carries its own settings; the rule only says when.
         if (ExplosionItem *explosion = m_scene->explosionNamed(rule.targetName)) {
-            QVariantMap params = defaultsFor(rule.actionId);
             for (auto it = explosion->params().constBegin();
                  it != explosion->params().constEnd(); ++it)
                 params.insert(it.key(), it.value());
             m_engine->performActionAt(rule.actionId, explosion->pos(), params);
             return;
         }
+        // A joint has its own actions -- breaking is not something that can be
+        // done to a body, and removing is not something that can be done to a
+        // joint, so which list the id came from follows from what was named.
+        const auto joint = m_jointByName.constFind(rule.targetName);
+        if (joint != m_jointByName.constEnd()) {
+            m_engine->performJointAction(rule.actionId, *joint, params);
+            // The scene still holds the joint -- the document is not touched by
+            // a run -- so it is marked instead, and stops being drawn until the
+            // run ends.
+            for (Joint *item : m_scene->joints()) {
+                if (item->name() == rule.targetName)
+                    item->setBroken(true);
+            }
+            return;
+        }
         for (int i = 0; i < m_bodyNames.size(); ++i) {
             if (m_bodyNames[i] != rule.targetName)
                 continue;
             m_engine->performAction(rule.actionId, static_cast<physics::BodyHandle>(i),
-                                    rule.actionParams);
+                                    params);
             return;
         }
         // A shape was named: the action lands on the body that owns it.
@@ -542,7 +594,7 @@ void SimulationController::applyAction(const Rule &rule)
             if (index >= 0)
                 m_engine->performAction(rule.actionId,
                                         static_cast<physics::BodyHandle>(index),
-                                        rule.actionParams);
+                                        params);
             return;
         }
         return;
@@ -574,6 +626,15 @@ void SimulationController::applyAction(const Rule &rule)
         }
         return applied;
     };
+
+    // The world is not in the scene, so it is answered before anything is
+    // looked up by name. Nothing of it is stored in the document: the change
+    // lasts as long as the run does.
+    if (target == Rule::world()) {
+        m_engine->setWorldParam(rule.propertyKey,
+                                compute(m_engine->worldValue(rule.propertyKey)));
+        return;
+    }
 
     for (Joint *joint : m_scene->joints()) {
         if (joint->name() != target)
@@ -623,6 +684,13 @@ void SimulationController::syncTransforms()
 {
     for (const BoundBody &bound : m_bound) {
         const BodyState state = m_engine->bodyState(bound.handle);
+        // Gone from the world. Asking the engine rather than watching for a
+        // particular action means anything that ends up removing a body is
+        // taken off the canvas the same way.
+        if (!state.exists) {
+            takeOutOfView(bound.body);
+            continue;
+        }
         bound.body->setAsleep(!state.awake);
 
         QTransform bodyToScene;

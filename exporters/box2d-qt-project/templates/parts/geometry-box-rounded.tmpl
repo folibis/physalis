@@ -1,0 +1,8 @@
+            const b2Rot local = b2MakeRot(rad({{ROTATION}}));
+            // Box2D grows a rounded polygon outward by its radius, so the hull
+            // is inset by the same amount -- otherwise it would collide larger
+            // than it is drawn. The editor does exactly this.
+            const b2Polygon box = b2MakeOffsetRoundedBox({{HALF_WIDTH}}f, {{HALF_HEIGHT}}f,
+                                                         m({{CENTER_X}}, {{CENTER_Y}}), local,
+                                                         {{CORNER_RADIUS}}f);
+            created = b2CreatePolygonShape(body, &shapeDef, &box);

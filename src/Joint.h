@@ -45,6 +45,12 @@ public:
     bool collideConnected() const { return m_collideConnected; }
     void setCollideConnected(bool collide);
 
+    // Run state, not document state: a rule took this joint out of the world,
+    // so it stops being drawn until the run ends. Never saved -- the joint is
+    // still every bit as much part of the scene.
+    bool isBroken() const { return m_broken; }
+    void setBroken(bool broken);
+
     physics::JointDesc toJointDesc(int bodyHandleA, int bodyHandleB) const;
 
 signals:
@@ -69,4 +75,5 @@ private:
 
     QVariantMap m_params;
     bool m_collideConnected = false;
+    bool m_broken = false;
 };

@@ -1704,6 +1704,10 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
         painter->setRenderHint(QPainter::Antialiasing, true);
 
         for (Joint *joint : std::as_const(m_joints)) {
+            // Broken by a rule: gone from the world, so it is gone from the
+            // picture too. It comes back when the run ends.
+            if (joint->isBroken())
+                continue;
             const bool selected = joint == m_selectedJoint && !simulationRunning();
 
             const int anchors = joint->anchorCount();
@@ -1867,7 +1871,9 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
         painter->setRenderHint(QPainter::Antialiasing, true);
 
         for (PhysicsBody *body : std::as_const(m_bodies)) {
-            if (body->isEmpty())
+            // Removed by a rule: gone from the world, so its axes go with it.
+            // They come back when the run ends.
+            if (body->isEmpty() || body->isRemoved())
                 continue;
 
             const QPointF origin = body->centerOfMassScenePos();

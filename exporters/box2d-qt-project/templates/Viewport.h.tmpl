@@ -1,0 +1,59 @@
+#pragma once
+
+#include "Rules.h"
+#include "Scene.h"
+
+#include <QWidget>
+
+#include <memory>
+
+class QTimer;
+
+// The window's whole contents: it owns the world, steps it on a timer and
+// paints what it finds. Nothing here is generated.
+class Viewport : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit Viewport(QWidget *parent = nullptr);
+    ~Viewport() override;
+
+    QSize sizeHint() const override;
+
+    bool isRunning() const { return m_running; }
+    // What the export asked the window to put on screen. The viewport already
+    // holds the scene, so nothing else has to build one to find out.
+    bool wantsControls() const { return m_scene.showControls; }
+    // Whether the debug view is on: body axes and rays, over the scene. The
+    // export decides what it starts as; after that it is a switch, because
+    // deciding at export time whether you will want to look is too early.
+    bool debugVisible() const { return m_scene.debugView; }
+
+public slots:
+    void start();
+    void pause();
+    // Back to the beginning, and stopped: the scene as it was exported.
+    void stop();
+    void togglePaused();
+    void setDebugVisible(bool on);
+
+signals:
+    // So the controls showing these stay right when the keyboard changes them.
+    void runningChanged(bool running);
+    void debugVisibleChanged(bool on);
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+
+private:
+    void step();
+    void setRunning(bool running);
+
+    Scene m_scene;
+    // Owns nothing of the world; it reads and writes the one above.
+    std::unique_ptr<RuleRunner> m_rules;
+    QTimer *m_timer = nullptr;
+    bool m_running = true;
+};

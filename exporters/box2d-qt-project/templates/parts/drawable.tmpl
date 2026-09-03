@@ -1,0 +1,14 @@
+            SceneShape drawn;
+            drawn.body = {{BODY}};
+            drawn.name = "{{NAME}}";
+            drawn.kind = SceneShape::{{KIND}};
+            drawn.center = QPointF({{CENTER_X}}, {{CENTER_Y}});
+            drawn.rotation = {{ROTATION}};
+            drawn.halfExtents = QPointF({{HALF_WIDTH}}, {{HALF_HEIGHT}});
+            drawn.radius = {{RADIUS}};
+            drawn.cornerRadius = {{CORNER_RADIUS}};
+            drawn.closed = {{CLOSED}};
+{{POINTS}}            drawn.fill = QColor("{{FILL}}");
+            drawn.border = QColor("{{BORDER}}");
+            drawn.borderWidth = {{BORDER_WIDTH}};
+            scene.shapes.push_back(drawn);

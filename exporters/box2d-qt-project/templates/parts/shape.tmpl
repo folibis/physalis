@@ -1,0 +1,19 @@
+        {
+            b2ShapeDef shapeDef = b2DefaultShapeDef();
+            shapeDef.density = {{DENSITY}}f;
+            shapeDef.material.friction = {{FRICTION}}f;
+            shapeDef.material.restitution = {{RESTITUTION}}f;
+            shapeDef.material.rollingResistance = {{ROLLING_RESISTANCE}}f;
+            shapeDef.material.tangentSpeed = {{TANGENT_SPEED}}f;
+            shapeDef.filter.categoryBits = {{CATEGORY_BITS}}ull;
+            shapeDef.filter.maskBits = {{MASK_BITS}}ull;
+            shapeDef.filter.groupIndex = {{GROUP_INDEX}};
+            shapeDef.isSensor = {{IS_SENSOR}};
+            shapeDef.enableSensorEvents = {{SENSOR_EVENTS}};
+            shapeDef.enableContactEvents = {{CONTACT_EVENTS}};
+            shapeDef.enableHitEvents = {{HIT_EVENTS}};
+            shapeDef.enablePreSolveEvents = {{PRE_SOLVE_EVENTS}};
+            b2ShapeId created = b2_nullShapeId;
+{{GEOMETRY}}{{REGISTER}}
+{{DRAWABLE}}        }
+
