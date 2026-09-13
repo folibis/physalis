@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QTextStream>
+#include <QTransform>
 
 namespace SceneExporter {
 
@@ -213,19 +214,7 @@ QJsonObject partToJson(const physics::ShapePart &part)
         {"closed", g.closed},
         {"cornerRadius", g.cornerRadius},
         {"smoothChain", g.smoothChain},
-        {"density", part.density},
-        {"friction", part.material.friction},
-        {"restitution", part.material.restitution},
-        {"rollingResistance", part.material.rollingResistance},
-        {"tangentSpeed", part.material.tangentSpeed},
-        {"categoryBits", QString::number(part.filter.categoryBits)},
-        {"maskBits", QString::number(part.filter.maskBits)},
-        {"groupIndex", part.filter.groupIndex},
-        {"isSensor", part.isSensor},
-        {"enableSensorEvents", part.enableSensorEvents},
-        {"enableContactEvents", part.enableContactEvents},
-        {"enableHitEvents", part.enableHitEvents},
-        {"enablePreSolveEvents", part.enablePreSolveEvents},
+        {"physics", QJsonObject::fromVariantMap(part.params)},
     };
 }
 
@@ -246,6 +235,17 @@ QJsonObject simulationView(const CanvasScene *scene)
         indices.insert(body, bodies.size());
 
         const physics::BodyDesc desc = body->toBodyDesc();
+
+        // Where the editor draws the body's axes, as an offset from its
+        // origin in the body's own frame. Box2D answers this itself for a
+        // dynamic body, but a static one has no mass and so reports its
+        // origin instead -- which is why axes drawn from the engine alone sit
+        // in the wrong place on every piece of scenery.
+        QTransform intoBody;
+        intoBody.rotate(-body->rotationDegrees());
+        const QPointF localCentre =
+            intoBody.map(body->centerOfMassScenePos() - body->originScenePos());
+
         QJsonArray parts;
         for (const physics::ShapePart &part : desc.parts)
             parts.append(partToJson(part));
@@ -256,18 +256,12 @@ QJsonObject simulationView(const CanvasScene *scene)
             {"type", types[int(desc.type)]},
             {"position", pointToJson(desc.position)},
             {"rotation", desc.rotationDegrees},
-            {"linearVelocity", pointToJson(desc.linearVelocity)},
-            {"angularVelocity", desc.angularVelocityDegrees},
-            {"linearDamping", desc.linearDamping},
-            {"angularDamping", desc.angularDamping},
-            {"gravityScale", desc.gravityScale},
-            {"enableSleep", desc.enableSleep},
-            {"isAwake", desc.isAwake},
-            {"sleepThreshold", desc.sleepThreshold},
-            {"fixedRotation", desc.fixedRotation},
-            {"isBullet", desc.isBullet},
-            {"allowFastRotation", desc.allowFastRotation},
+            {"centerOfMass", pointToJson(localCentre)},
             {"isEnabled", desc.isEnabled},
+            // What the engine says a body has, under the names it publishes --
+            // the same names its catalogue carries, a few lines further down
+            // in this same document.
+            {"physics", QJsonObject::fromVariantMap(desc.params)},
             {"parts", parts},
         });
     }

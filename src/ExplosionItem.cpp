@@ -63,6 +63,12 @@ void ExplosionItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *opt
     Q_UNUSED(option);
     Q_UNUSED(widget);
 
+    // A blast is a thing a rule sets off, not a thing in the scene, and the
+    // view's own switch says whether it is drawn.
+    const auto *canvas = qobject_cast<const CanvasScene *>(scene());
+    if (canvas && !canvas->layerVisible(CanvasScene::RunLayer::Explosions))
+        return;
+
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, true);
 

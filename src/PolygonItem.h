@@ -29,6 +29,13 @@ public:
         return m_closed ? QStringLiteral("polygon") : QStringLiteral("polyline");
     }
     const QPolygonF &points() const { return m_points; }
+
+    // Closed, convex and within the scene's point limit, and not asked to be
+    // hollow: the one case the engine builds as a filled polygon. Everything
+    // else is an outline, whatever its Filled setting once said.
+    bool isSolid() const;
+    bool hasInterior() const override { return isSolid(); }
+    bool outlineIsClosed() const override { return m_closed; }
     void closeShape() override;
     int nodeCount() const override { return m_points.size(); }
     void setSelectedNodes(const QSet<int> &indices) override;

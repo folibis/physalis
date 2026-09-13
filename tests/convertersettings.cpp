@@ -272,11 +272,12 @@ TEST(ConverterSettings, QtProjectHonoursItsOwn)
     EXPECT_TRUE(cmake.contains(QStringLiteral("GIT_TAG our-v3-branch")));
     EXPECT_FALSE(cmake.contains(QStringLiteral("{{"))) << "every placeholder was filled in";
 
-    const QString generated = contentsOf(output.filePath(QStringLiteral("Scene.cpp")));
-    EXPECT_TRUE(generated.contains(QStringLiteral("scene.stepsPerSecond = 120")));
-    EXPECT_TRUE(generated.contains(QStringLiteral("scene.showControls = true")));
-    EXPECT_TRUE(generated.contains(QStringLiteral("scene.debugView = true")));
-    EXPECT_TRUE(generated.contains(QStringLiteral("scene.axisLength = 55.0")))
+    const QString generated = contentsOf(output.filePath(QStringLiteral("main.cpp")));
+    EXPECT_TRUE(generated.contains(QStringLiteral("step(1.0f / 120);")));
+    EXPECT_TRUE(generated.contains(QStringLiteral("toolbar->addAction(\"Start\")")));
+    EXPECT_TRUE(generated.contains(QStringLiteral("bool debug = true;")));
+    EXPECT_TRUE(generated.contains(QStringLiteral("const float length = 0.055f;")))
         << "and the axes take their look from the editor's own settings";
-    EXPECT_TRUE(generated.contains(QStringLiteral("scene.axisXColor = QColor(\"#ff010203\")")));
+    EXPECT_TRUE(generated.contains(QStringLiteral("b2HexColor(0x010203)")));
+    EXPECT_FALSE(generated.contains(QStringLiteral("{{")));
 }

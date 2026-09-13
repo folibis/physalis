@@ -60,6 +60,60 @@ std::vector<PropertyRow> JointPropertyPane::rows(EditorMode mode) const
     }
     for (PropertyRow &row : parameterRows(joint, type))
         result.push_back(std::move(row));
+    for (PropertyRow &row : measuredRows(joint, type))
+        result.push_back(std::move(row));
+
+    return result;
+}
+
+// What the joint reports about itself once it is running -- an angle, a
+// translation, the force it is carrying. There is nothing to set here: these
+// come from the engine's own getters, and the row exists so they can be read
+// and, more to the point, logged.
+std::vector<PropertyRow> JointPropertyPane::measuredRows(Joint *joint,
+                                                         const physics::JointType &type) const
+{
+    std::vector<PropertyRow> result;
+
+    auto engine = physics::EngineRegistry::create(
+        m_scene ? m_scene->simulationEngineName() : QString());
+    if (!engine)
+        return result;
+
+
+    // Only while a run is going: nothing else can answer these, and a row
+    // showing a flat zero whatever is happening looks like a measurement
+    // without being one.
+    if (m_scene && m_scene->simulationRunning()) {
+        const QString group = QObject::tr("Measured");
+        for (const physics::JointParam &param : engine->jointReadables(type.id)) {
+            // Anything the joint already offers as a setting is shown there; this
+            // is only for what can be read and not written. A readable that merely
+            // reports such a setting is the same row twice, and the engine says so.
+            if (param.liveSettable || param.mirrorsSetting)
+                continue;
+
+            PropertyRow row;
+            row.label = param.label;
+            row.key = param.key;
+            row.type = fieldTypeFor(param.type);
+            row.section = jointSection();
+            row.group = group;
+            row.minValue = param.minValue;
+            row.maxValue = param.maxValue;
+            row.choices = param.choices;
+            row.decimals = param.decimals;
+            row.step = param.step;
+            row.tooltip = param.tooltip;
+            row.readOnly = true;
+            // Filled by the engine while a run is going, and blank outside one --
+            // the same bargain the body's position and speed rows make.
+            row.getter = [] { return QVariant(); };
+            row.setter = [](const QVariant &) {};
+
+            result.push_back(std::move(row));
+        }
+    }
 
     return result;
 }
@@ -81,6 +135,8 @@ std::vector<PropertyRow> JointPropertyPane::defaultRows(EditorMode mode) const
         result.push_back({QObject::tr("Axis Angle (deg)"), PropertyFieldType::Numeric,
             [value] { return value; }, [](const QVariant &) {},
             -360.0, 360.0, {}, 1, 1.0, jointSection(), jointSection()});
+        result.back().tooltip = QObject::tr("The direction the joint slides or springs"
+                                            " along. 0 points right, 90 points down.");
     }
 
     for (const physics::JointParam &param : type.params) {
@@ -89,6 +145,7 @@ std::vector<PropertyRow> JointPropertyPane::defaultRows(EditorMode mode) const
             [value] { return value; }, [](const QVariant &) {},
             param.minValue, param.maxValue, param.choices,
             param.decimals, param.step, jointSection(), param.section});
+        result.back().tooltip = param.tooltip;
     }
     return result;
 }
@@ -103,21 +160,34 @@ std::vector<PropertyRow> JointPropertyPane::identityRows(Joint *joint,
         [joint] { return joint->name(); },
         [joint](const QVariant &v) { joint->setName(v.toString()); },
         -100000.0, 100000.0, {}, -1, 0.0, section});
+    result.back().tooltip = QObject::tr("What rules call this joint. Names have to be unique:"
+                                        " a rule finds its target by this and nothing else.");
 
     result.push_back({QObject::tr("Type"), PropertyFieldType::String,
         [joint, type] { return type.label.isEmpty() ? joint->typeId() : type.label; },
-        [](const QVariant &) {},   // read-only: a joint's type is fixed once made
+        [](const QVariant &) {},   // a joint's type is fixed once it is made
         -100000.0, 100000.0, {}, -1, 0.0, section});
+    result.back().readOnly = true;
+    result.back().tooltip = type.description.isEmpty()
+        ? QObject::tr("What kind of joint this is. Fixed once it is made.")
+        : type.description;
 
     result.push_back({QObject::tr("Body A"), PropertyFieldType::String,
         [joint] { return joint->bodyA() ? joint->bodyA()->name() : QObject::tr("(none)"); },
         [](const QVariant &) {},
         -100000.0, 100000.0, {}, -1, 0.0, section});
+    result.back().readOnly = true;   // which bodies it joins is fixed when it is made
+    result.back().tooltip = QObject::tr("The first of the two bodies the joint holds"
+                                        " together. Anything measured along an axis is"
+                                        " measured in this one's frame.");
 
     result.push_back({QObject::tr("Body B"), PropertyFieldType::String,
         [joint] { return joint->bodyB() ? joint->bodyB()->name() : QObject::tr("(none)"); },
         [](const QVariant &) {},
         -100000.0, 100000.0, {}, -1, 0.0, section});
+    result.back().readOnly = true;   // which bodies it joins is fixed when it is made
+    result.back().tooltip = QObject::tr("The second body. A motor drives this one relative"
+                                        " to the first, so swapping them reverses it.");
 
     const auto anchorRow = [&result, joint, &section](const QString &label, Joint::End end,
                                                       bool horizontal) {
@@ -135,6 +205,9 @@ std::vector<PropertyRow> JointPropertyPane::identityRows(Joint *joint,
                 joint->setAnchorScenePos(end, p);
             },
             -1000000.0, 1000000.0, {}, 1, 1.0, section});
+        result.back().tooltip =
+            QObject::tr("Where the joint holds, in scene coordinates. Each body has its"
+                        " own anchor, and they are rarely the same place.");
     };
 
     if (type.anchorCount > 0) {
@@ -157,12 +230,17 @@ std::vector<PropertyRow> JointPropertyPane::identityRows(Joint *joint,
                 joint->setAxisScene(QPointF(std::cos(radians), std::sin(radians)));
             },
             -360.0, 360.0, {}, 1, 1.0, section});
+        result.back().tooltip = QObject::tr("The direction the joint slides or springs"
+                                            " along. 0 points right, 90 points down.");
     }
 
     result.push_back({QObject::tr("Bodies Collide"), PropertyFieldType::Boolean,
         [joint] { return joint->collideConnected(); },
         [joint](const QVariant &v) { joint->setCollideConnected(v.toBool()); },
         -100000.0, 100000.0, {}, -1, 0.0, section});
+    result.back().tooltip = QObject::tr("While off, the two bodies pass through each other."
+                                        " If one of them is scenery, the other falls"
+                                        " straight through it.");
 
     return result;
 }
@@ -187,6 +265,7 @@ std::vector<PropertyRow> JointPropertyPane::parameterRows(Joint *joint,
         row.choices = param.choices;
         row.decimals = param.decimals;
         row.step = param.step;
+        row.tooltip = param.tooltip;
 
         row.getter = [joint, key, fallback] {
             const auto it = joint->params().constFind(key);

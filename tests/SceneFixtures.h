@@ -63,7 +63,7 @@ inline void buildCart(CanvasScene *scene)
         PhysicsBody *body = scene->createBodyFromSelection();
         body->props().type = type;
         // Contact events on everything, so a contact rule has both sides.
-        shape->part().enableContactEvents = true;
+        shape->part().params["enableContactEvents"] = true;
         scene->clearPhysicsSelection();
         return body;
     };

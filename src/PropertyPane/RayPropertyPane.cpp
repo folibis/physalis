@@ -100,31 +100,36 @@ std::vector<PropertyRow> RayPropertyPane::rows(EditorMode mode) const
     result.push_back(std::move(mask));
 
     // Filled by the run. Read-only, and loggable like any other row.
-    const auto reading = [&](const QString &label, const QString &key,
-                             PropertyFieldType type, const QString &tip) {
-        PropertyRow row;
-        row.label = label;
-        row.key = key;
-        row.type = type;
-        row.section = section;
-        row.readOnly = true;
-        row.decimals = type == PropertyFieldType::Numeric ? 1 : -1;
-        row.minValue = -1e9;
-        row.maxValue = 1e9;
-        row.getter = [] { return QVariant(); };   // the engine answers while running
-        row.setter = [](const QVariant &) {};
-        row.tooltip = tip;
-        result.push_back(std::move(row));
-    };
-    reading(QObject::tr("Distance"), QStringLiteral("distance"), PropertyFieldType::Numeric,
-            QObject::tr("How far to the first thing in the way, while a run is going. "
-                        "Reads its full length when nothing is."));
-    reading(QObject::tr("Hit"), QStringLiteral("hit"), PropertyFieldType::Boolean,
-            QObject::tr("Whether anything is within reach."));
-    reading(QObject::tr("Hit X"), QStringLiteral("hitX"), PropertyFieldType::Numeric,
-            QObject::tr("Where it struck."));
-    reading(QObject::tr("Hit Y"), QStringLiteral("hitY"), PropertyFieldType::Numeric,
-            QObject::tr("Where it struck."));
+    // Only while a run is going: a ray sees nothing when nothing is
+    // stepping, and a row reading a flat zero looks like a measurement
+    // without being one.
+    if (m_scene && m_scene->simulationRunning()) {
+        const auto reading = [&](const QString &label, const QString &key,
+                                 PropertyFieldType type, const QString &tip) {
+            PropertyRow row;
+            row.label = label;
+            row.key = key;
+            row.type = type;
+            row.section = section;
+            row.readOnly = true;
+            row.decimals = type == PropertyFieldType::Numeric ? 1 : -1;
+            row.minValue = -1e9;
+            row.maxValue = 1e9;
+            row.getter = [] { return QVariant(); };   // the engine answers while running
+            row.setter = [](const QVariant &) {};
+            row.tooltip = tip;
+            result.push_back(std::move(row));
+        };
+        reading(QObject::tr("Distance"), QStringLiteral("distance"), PropertyFieldType::Numeric,
+                QObject::tr("How far to the first thing in the way, while a run is going. "
+                            "Reads its full length when nothing is."));
+        reading(QObject::tr("Hit"), QStringLiteral("hit"), PropertyFieldType::Boolean,
+                QObject::tr("Whether anything is within reach."));
+        reading(QObject::tr("Hit X"), QStringLiteral("hitX"), PropertyFieldType::Numeric,
+                QObject::tr("Where it struck."));
+        reading(QObject::tr("Hit Y"), QStringLiteral("hitY"), PropertyFieldType::Numeric,
+                QObject::tr("Where it struck."));
+    }
 
     return result;
 }

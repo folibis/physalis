@@ -57,10 +57,12 @@ TEST(RuleHead, Behaves)
 
     EXPECT_TRUE(buttons.size() >= 2) << "has a collapse arrow and a delete button" << " -- " << (QStringLiteral("%1 buttons").arg(buttons.size())).toStdString();
 
+    // By name, not by "has an icon": the header carries the ordering buttons
+    // too, and they would answer to that just as well.
     QToolButton *arrow = nullptr, *del = nullptr;
     for (QToolButton *b : buttons) {
-        if (b->objectName() == QStringLiteral("collapseButton")) arrow = b;
-        else if (!b->icon().isNull())                            del = b;
+        if (b->objectName() == QStringLiteral("collapseButton"))        arrow = b;
+        else if (b->objectName() == QStringLiteral("removeRuleButton")) del = b;
     }
     EXPECT_TRUE(arrow != nullptr) << "the arrow is there";
     EXPECT_TRUE(del != nullptr) << "the delete button is there";

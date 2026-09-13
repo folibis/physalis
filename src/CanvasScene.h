@@ -8,6 +8,8 @@
 #include <QStringList>
 #include "ShapeItem.h"
 #include "EditorMode.h"
+
+#include <functional>
 #include "Rule.h"
 #include "PhysicsTypes.h"
 #include "JointTypes.h"
@@ -28,6 +30,11 @@ enum class SnapPoint {
 
 enum class HandleShape { Circle, Square };
 
+// How the line between a joint's two ends is drawn. A rod is the solid waisted
+// shaft joints have always been drawn with; the rest are plain strokes, for
+// telling one kind of joint from another at a glance.
+enum class JointStyle { Rod, Solid, Dashed, Dotted, DashDot };
+
 class ExplosionItem;
 class RayItem;
 
@@ -39,6 +46,16 @@ public:
     explicit CanvasScene(QObject *parent = nullptr);
 
     RectangleItem *addRectangle(const QPointF &scenePos = QPointF(0, 0));
+    // Turns a rectangle into the polygon of its four corners, in place: same
+    // name, same position, same physics, same place in the same body, so
+    // rules and joints that named it go on naming it. Returns the shape that
+    // replaced it, or nullptr if it was not a rectangle to begin with.
+    ShapeItem *convertToPolygon(ShapeItem *shape);
+
+    // Moves whatever is picked by `delta` scene units, whichever mode we are
+    // in. Returns false if there was nothing to move, so the key that asked
+    // can fall through to whatever else wanted it.
+    bool nudgeSelection(const QPointF &delta);
     CircleItem *addCircle(const QPointF &scenePos = QPointF(0, 0));
 
     void startPolygonDrawing();
@@ -47,6 +64,10 @@ public:
     ShapeItem *activeItem() const { return m_active; }
 
     QVector<ShapeItem *> shapes() const;
+
+    // What every shape, ray and explosion covers together, in scene
+    // coordinates; a null rect for an empty scene.
+    QRectF contentBounds() const;
 
     // Named points, used as somewhere for a position-based rule action to
     // happen. They are not shapes and never reach the physics world.
@@ -162,15 +183,50 @@ public:
     void setJointSelectionLineStyle(Qt::PenStyle style);
     Qt::PenStyle jointSelectionLineStyle() const { return m_jointSelectionLineStyle; }
 
-    void setJointTypeColor(const QString &typeId, const QColor &color);
+    // Joints are coloured and drawn by *kind*, not by type: every engine tags
+    // each of its joint types with one of five, and those five are the same
+    // whichever engine is loaded. A type name belongs to one engine; a kind
+    // belongs to all of them, so a scene moved between engines keeps its look
+    // and the settings do not grow a row per engine.
+    QColor jointKindColor(physics::JointVisual kind) const;
+    void setJointKindColor(physics::JointVisual kind, const QColor &color);
+    JointStyle jointKindStyle(physics::JointVisual kind) const;
+    void setJointKindStyle(physics::JointVisual kind, JointStyle style);
+    // Keyed by the kind cast to an int, which is how they are stored and
+    // handed to the options dialog.
+    QHash<int, QColor> jointKindColors() const { return m_jointKindColors; }
+    void setJointKindColors(const QHash<int, QColor> &colors);
+    QHash<int, JointStyle> jointKindStyles() const { return m_jointKindStyles; }
+    void setJointKindStyles(const QHash<int, JointStyle> &styles);
+    // The five, in the order they are shown, with the name each is stored
+    // under and what to call it on screen.
+    static QVector<physics::JointVisual> jointKinds();
+    static QString jointKindKey(physics::JointVisual kind);
+    static QString jointKindLabel(physics::JointVisual kind);
+    static QString jointKindDescription(physics::JointVisual kind);
+    static QString jointStyleLabel(JointStyle style);
+    static QColor defaultJointKindColor(physics::JointVisual kind);
+    static JointStyle defaultJointKindStyle(physics::JointVisual kind);
+    static QVector<JointStyle> jointStyles();
+
+    // What a joint of this type is drawn in: its kind's colour.
     QColor jointTypeColor(const QString &typeId) const;
     // How the engine says a joint of this type should be drawn.
     physics::JointVisual jointVisual(const QString &typeId) const;
+
+    // Two questions the editor has to ask about a shape to draw it, answered
+    // through whichever property the engine tagged for the purpose. An engine
+    // that has no such property leaves a shape solid and weightless-looking.
+    bool isSensorShape(const ShapeItem *shape) const;
+    void setSensorShape(ShapeItem *shape, bool sensor);
+    bool hasSensorProperty() const;
+    // The engine's name for it, for a pane that shows the rest of a shape's
+    // properties and must not show this one twice.
+    QString sensorPropertyKey() const;
+    qreal shapeDensity(const ShapeItem *shape) const;
     // The engine whose catalogue describes this scene: the one set for
     // simulation, or the default when none has been set yet.
     QString describingEngineName() const;
-    QHash<QString, QColor> jointTypeColors() const { return m_jointTypeColors; }
-    void setJointTypeColors(const QHash<QString, QColor> &colors);
     QColor jointColor() const { return m_jointColor; }
 
     void setJointAnchorRadius(qreal radius);
@@ -186,6 +242,13 @@ public:
     void setJointOutlineWidth(qreal width);
     qreal jointOutlineWidth() const { return m_jointOutlineWidth; }
 
+    // How solidly a joint's anchors and shaft are filled. An anchor sits on
+    // top of the very place it is holding, and drawn solid it hides it -- most
+    // of all where several joints meet on one body. The outline stays at full
+    // strength, so the joint is still plain against whatever is underneath.
+    int jointFillAlpha() const { return m_jointFillAlpha; }
+    void setJointFillAlpha(int alpha) { m_jointFillAlpha = qBound(0, alpha, 255); update(); }
+
     void setJointOutlineColor(const QColor &color);
     QColor jointOutlineColor() const { return m_jointOutlineColor; }
 
@@ -200,9 +263,6 @@ public:
     qreal fieldHeight() const { return m_fieldHeight; }
 
     // --- Physics (the field acts as the simulation's world) -----------
-    // Gravitational acceleration in m/s^2.
-    void setGravity(const QPointF &gravity);
-    QPointF gravity() const { return m_world.gravity; }
 
     // How many scene units make up one simulated meter.
     void setPixelsPerMeter(qreal pixelsPerMeter);
@@ -231,6 +291,15 @@ public:
     // Sensors are pass-through, and look nothing like something solid.
     QColor sensorColor() const { return m_sensorColor; }
     void setSensorColor(const QColor &color) { m_sensorColor = color; update(); }
+
+    // A sensor is an area things pass through, so it is marked out rather than
+    // filled in: the hatching says "open", and filling behind it would say the
+    // opposite just as loudly.
+    Qt::BrushStyle sensorPattern() const { return m_sensorPattern; }
+    void setSensorPattern(Qt::BrushStyle style) { m_sensorPattern = style; update(); }
+
+    bool sensorFillsBody() const { return m_sensorFillsBody; }
+    void setSensorFillsBody(bool fills) { m_sensorFillsBody = fills; update(); }
 
     void setUnassignedShapeColor(const QColor &color);
     QColor unassignedShapeColor() const { return m_unassignedShapeColor; }
@@ -275,8 +344,23 @@ public:
     // geometry. The solver moves the shape, so these follow a run too.
     QVariant readSceneValue(const QString &objectName, const QString &key) const;
 
-    void setDebugView(bool on);
-    bool debugView() const { return m_debugView; }
+    // What a *run* shows. While editing the canvas draws everything it has --
+    // joints and rays are being placed then, and hiding them would make them
+    // unusable -- so these only take effect once the simulation is running,
+    // where the picture wants to be clean. Sleep shading is the odd one out: it
+    // adds nothing to the picture, it tints the bodies by whether the solver
+    // still has them awake, and there is nothing to tint outside a run.
+    enum class RunLayer { Grid, Joints, BodyAxes, Rays, Explosions, SleepShading, Count };
+
+    bool runLayer(RunLayer layer) const { return m_runLayers[static_cast<int>(layer)]; }
+    void setRunLayer(RunLayer layer, bool on);
+
+    // Whether a layer is drawn right now: everything while editing, and once a
+    // run is going, whatever its switches allow.
+    bool layerVisible(RunLayer layer) const
+    {
+        return !simulationRunning() || runLayer(layer);
+    }
 
     void setShowBodyAxes(bool show);
     bool showBodyAxes() const { return m_showBodyAxes; }
@@ -305,6 +389,17 @@ public:
     bool simulationRunning() const { return m_simulationRunning; }
 
     bool selectionAllowed() const { return !m_simulationRunning; }
+
+    // What the running engine says a property is worth. The rows for these --
+    // where a body got to, how fast it is going -- have no answer in the
+    // document, and are only shown while there is a run to answer them.
+    using LiveValueFn = std::function<QVariant(const QString &, const QString &)>;
+    void setLiveValueProvider(LiveValueFn provider) { m_liveValue = std::move(provider); }
+    QVariant liveValue(const QString &objectName, const QString &key) const
+    {
+        return m_liveValue ? m_liveValue(objectName, key) : QVariant();
+    }
+
 
     void setShowGrid(bool show);
     bool showGrid() const { return m_showGrid; }
@@ -360,6 +455,18 @@ public:
 
     void setHandleColor(const QColor &color);
     QColor handleColor() const { return m_handleColor; }
+
+    // A handle sits on top of the corner it is for, and that corner is the
+    // thing being aimed at. Drawn solid it hides what it is pointing to --
+    // most of all on a small shape, where the eight of them cover it. So a
+    // handle is never painted more solid than this, whatever colour it is
+    // given; a colour chosen fainter than it stays as chosen.
+    static constexpr int kHandleAlpha = 150;
+    static QColor throughHandle(QColor colour)
+    {
+        colour.setAlpha(qMin(colour.alpha(), kHandleAlpha));
+        return colour;
+    }
 
     void setHandleBorderWidth(qreal width);
     qreal handleBorderWidth() const { return m_handleBorderWidth; }
@@ -499,10 +606,16 @@ private:
     int m_draggedJointEnd = 0;
 
     QColor m_jointColor { 0xE8, 0xC4, 0x6A };
-    QHash<QString, QColor> m_jointTypeColors;
+    QHash<int, QColor> m_jointKindColors;
+    QHash<int, JointStyle> m_jointKindStyles;
     // Filled from the engine on first use; cleared when the engine changes.
     mutable QHash<QString, physics::JointVisual> m_jointVisuals;
     mutable QString m_jointVisualsEngine;
+    // The engine's names for the two properties above, asked for once.
+    mutable QString m_sensorKey;
+    mutable QString m_densityKey;
+    mutable QString m_roleKeysEngine;
+    void loadRoleKeys() const;
     QColor m_jointSelectionColor { 230, 140, 40 };
     qreal m_jointSelectionLineWidth = 2.0;
     Qt::PenStyle m_jointSelectionLineStyle = Qt::DotLine;
@@ -511,6 +624,7 @@ private:
     qreal m_jointAxisLength = 40.0;
     qreal m_jointWaistWidth = 3.5;
     qreal m_jointOutlineWidth = 1.6;
+    int m_jointFillAlpha = 170;
 
     ShapeItem *m_active = nullptr;
 
@@ -535,8 +649,8 @@ private:
     qreal m_rotateStartAngle = 0.0;
     qreal m_itemStartRotation = 0.0;
 
-    qreal m_fieldWidth = 2000.0;
-    qreal m_fieldHeight = 2000.0;
+    qreal m_fieldWidth = 1000.0;
+    qreal m_fieldHeight = 1000.0;
     bool m_showGrid = true;
     qreal m_gridCellSize = 20.0;
     QColor m_gridColor = QColor(230, 230, 230);
@@ -544,6 +658,8 @@ private:
     bool m_snapToGrid = false;
 
     QColor m_sensorColor { 0x05, 0xC9, 0x36 };
+    Qt::BrushStyle m_sensorPattern = Qt::DiagCrossPattern;
+    bool m_sensorFillsBody = false;
     QVector<ExplosionItem *> m_explosions;
     QVector<RayItem *> m_rays;
     RayItem *m_selectedRay = nullptr;
@@ -563,7 +679,7 @@ private:
     qreal m_physicsSelectionLineWidth = 2.0;
     QColor m_physicsSelectionColor { 230, 140, 40 };
     QVector<Watch> m_watches;
-    bool m_debugView = true;
+    bool m_runLayers[static_cast<int>(RunLayer::Count)] = {true, true, true, true, true, true};
     bool m_showBodyAxes = true;
     qreal m_bodyAxisLength = 40.0;
     qreal m_bodyAxisWidth = 2.0;
@@ -572,6 +688,7 @@ private:
     int m_sleepShiftPercent = 25;
     int m_maxPolygonVertices = 8;
     bool m_simulationRunning = false;
+    LiveValueFn m_liveValue;
 
     SnapPoint m_snapPoint = SnapPoint::Position;
     qreal m_snapStep = 20.0;

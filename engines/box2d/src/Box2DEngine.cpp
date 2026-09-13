@@ -1,12 +1,46 @@
 #include "Box2DEngine.h"
 
 #include <QByteArray>
+#include <QFileInfo>
+#include <QObject>
+#include <QSet>
 #include <QtMath>
 #include <algorithm>
 
 namespace physics {
 
 namespace {
+
+// What the editor stored for this object, under the names this engine
+// published in its catalogue. A key that is not there was never changed from
+// what the catalogue said it starts as, which is the fallback given here.
+double number(const QVariantMap &params, const char *key, double fallback)
+{
+    return params.value(QLatin1String(key), fallback).toDouble();
+}
+
+bool flag(const QVariantMap &params, const char *key, bool fallback)
+{
+    return params.value(QLatin1String(key), fallback).toBool();
+}
+
+// Box2D checks its own arithmetic and, left alone, ends the process when a
+// check fails -- which takes the editor with it. A scene is allowed to ask for
+// the impossible, so the check is caught instead: the message is kept, the
+// step is allowed to finish, and step() cleans up after it. Returning zero is
+// what tells Box2D not to break.
+QString g_lastAssertion;
+
+int rememberAssertion(const char *condition, const char *fileName, int lineNumber)
+{
+    if (g_lastAssertion.isEmpty()) {
+        g_lastAssertion = QStringLiteral("%1 (%2:%3)")
+                              .arg(QString::fromLatin1(condition),
+                                   QFileInfo(QString::fromLatin1(fileName)).fileName())
+                              .arg(lineNumber);
+    }
+    return 0;
+}
 
 b2BodyType toB2BodyType(BodyType type)
 {
@@ -51,26 +85,40 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
     // world and the shrinking gravity cancel exactly.
     m_motionScale = kReferencePixelsPerMeter / m_pixelsPerMeter;
 
+    // Box2D's tolerances are lengths too, and fixed for a world measured in
+    // metres: 5 mm of slop, and a contact made once two shapes are within
+    // 2 cm. At 1000 px per metre a drawn box is a few centimetres, so those
+    // show on screen -- "begins contact" arrived while shapes were still 20 px
+    // apart. Box2D scales them by its length unit, which is set to the same
+    // reference the pace is quoted at, so they are what they would be at
+    // 50 px per metre whatever the scene's scale. Set before the world is made.
+    b2SetLengthUnitsPerMeter(static_cast<float>(m_motionScale));
+
+    const QVariantMap &world = desc.params;
     b2WorldDef worldDef = b2DefaultWorldDef();
     // Box2D already works in meters and seconds, so an m/s^2 acceleration
     // needs no conversion -- unlike the geometry, which is in scene units.
-    worldDef.gravity = b2Vec2 { static_cast<float>(desc.gravity.x() * m_motionScale),
-                                static_cast<float>(desc.gravity.y() * m_motionScale) };
+    worldDef.gravity = b2Vec2 { static_cast<float>(number(world, "gravityX", 0.0) * m_motionScale),
+                                static_cast<float>(number(world, "gravityY", 9.81) * m_motionScale) };
 
     // Box2D's own tuning thresholds are speeds in m/s, so they have to move
     // with the scale as well -- otherwise a small scene trips every one of
     // them at once and a large scene trips none.
-    worldDef.maximumLinearSpeed = static_cast<float>(desc.maximumLinearSpeed * m_motionScale);
-    worldDef.maxContactPushSpeed = static_cast<float>(desc.maxContactPushSpeed * m_motionScale);
-    worldDef.restitutionThreshold = static_cast<float>(desc.restitutionThreshold * m_motionScale);
-    worldDef.hitEventThreshold = static_cast<float>(desc.hitEventThreshold * m_motionScale);
+    worldDef.maximumLinearSpeed =
+        static_cast<float>(number(world, "maximumLinearSpeed", 400.0) * m_motionScale);
+    worldDef.maxContactPushSpeed =
+        static_cast<float>(number(world, "maxContactPushSpeed", 3.0) * m_motionScale);
+    worldDef.restitutionThreshold =
+        static_cast<float>(number(world, "restitutionThreshold", 1.0) * m_motionScale);
+    worldDef.hitEventThreshold =
+        static_cast<float>(number(world, "hitEventThreshold", 1.0) * m_motionScale);
 
     // Stiffness and damping are not speeds, so the scale leaves them alone.
-    worldDef.contactHertz = static_cast<float>(desc.contactHertz);
-    worldDef.contactDampingRatio = static_cast<float>(desc.contactDampingRatio);
+    worldDef.contactHertz = static_cast<float>(number(world, "contactHertz", 30.0));
+    worldDef.contactDampingRatio = static_cast<float>(number(world, "contactDampingRatio", 10.0));
 
-    worldDef.enableSleep = desc.enableSleep;
-    worldDef.enableContinuous = desc.enableContinuous;
+    worldDef.enableSleep = flag(world, "enableSleep", true);
+    worldDef.enableContinuous = flag(world, "enableContinuous", true);
 
     // b2World_SetContactTuning takes all three at once and Box2D has no
     // getters for them, so what the world starts with is remembered here.
@@ -79,8 +127,10 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
     m_speculative = true;
     // Not part of b2WorldDef -- it is an argument to every b2World_Step, so it
     // is kept rather than handed over.
-    m_subStepCount = qBound(1, desc.subStepCount, 64);
+    m_subStepCount = qBound(1, static_cast<int>(number(world, "subStepCount", 4.0)), 64);
 
+    b2SetAssertFcn(rememberAssertion);
+    g_lastAssertion.clear();
     m_worldId = b2CreateWorld(&worldDef);
 
     // Without this the shapes' Pre-Solve Events flag reaches Box2D and then
@@ -106,11 +156,14 @@ void Box2DEngine::destroyWorld()
     m_worldId = b2_nullWorldId;
     m_bodies.clear();
     m_joints.clear();
+    m_travelOrigins.clear();
     m_jointLimits.clear();
     m_pendingEvents.clear();
     m_shapeNames.clear();
     m_shapesByName.clear();
     m_lastHit.clear();
+    m_problems.clear();
+    m_ruined.clear();
 }
 
 bool Box2DEngine::attachSmoothChain(b2BodyId bodyId, const Geometry &geometry,
@@ -127,6 +180,12 @@ bool Box2DEngine::attachSmoothChain(b2BodyId bodyId, const Geometry &geometry,
     chainDef.isLoop = geometry.closed;
     chainDef.filter = shapeDef.filter;
     chainDef.enableSensorEvents = shapeDef.enableSensorEvents;
+    // Every other shape carries the index of its name here, and the segments a
+    // chain is made of are shapes like any other. Left unset they come back
+    // with none, which reads as index zero -- so the chain answered to the
+    // first shape's name, that shape stopped answering to its own, and the
+    // chain itself could not be named by a rule at all.
+    chainDef.userData = shapeDef.userData;
 
     // A chain carries its material per segment rather than on the shape def.
     b2SurfaceMaterial material = b2DefaultSurfaceMaterial();
@@ -248,27 +307,31 @@ BodyHandle Box2DEngine::addBody(const BodyDesc &desc)
     if (!b2World_IsValid(m_worldId))
         return kInvalidBody;
 
+    const QVariantMap &body = desc.params;
     b2BodyDef bodyDef = b2DefaultBodyDef();
     bodyDef.type = toB2BodyType(desc.type);
     bodyDef.position = toMeters(desc.position);
     bodyDef.rotation = b2MakeRot(static_cast<float>(qDegreesToRadians(desc.rotationDegrees)));
     // Same reasoning as gravity: quoted at the reference scale.
-    bodyDef.linearVelocity = b2Vec2 { static_cast<float>(desc.linearVelocity.x() * m_motionScale),
-                                      static_cast<float>(desc.linearVelocity.y() * m_motionScale) };
-    bodyDef.angularVelocity = static_cast<float>(qDegreesToRadians(desc.angularVelocityDegrees));
-    bodyDef.linearDamping = static_cast<float>(desc.linearDamping);
-    bodyDef.angularDamping = static_cast<float>(desc.angularDamping);
-    bodyDef.gravityScale = static_cast<float>(desc.gravityScale);
-    bodyDef.enableSleep = desc.enableSleep;
-    bodyDef.isAwake = desc.isAwake;
+    bodyDef.linearVelocity =
+        b2Vec2 { static_cast<float>(number(body, "velocityX", 0.0) * m_motionScale),
+                 static_cast<float>(number(body, "velocityY", 0.0) * m_motionScale) };
+    bodyDef.angularVelocity =
+        static_cast<float>(qDegreesToRadians(number(body, "angularVelocity", 0.0)));
+    bodyDef.linearDamping = static_cast<float>(number(body, "linearDamping", 0.0));
+    bodyDef.angularDamping = static_cast<float>(number(body, "angularDamping", 0.0));
+    bodyDef.gravityScale = static_cast<float>(number(body, "gravityScale", 1.0));
+    bodyDef.enableSleep = flag(body, "enableSleep", true);
+    bodyDef.isAwake = flag(body, "isAwake", true);
     // A speed, so quoted at the reference scale like gravity and velocity.
     // Without this a small-scale scene puts bodies to sleep in mid-air: the
     // default 0.05 m/s threshold is never exceeded when the whole world is
     // only centimetres across, so everything "stops moving" while falling.
-    bodyDef.sleepThreshold = static_cast<float>(desc.sleepThreshold * m_motionScale);
-    bodyDef.fixedRotation = desc.fixedRotation;
-    bodyDef.isBullet = desc.isBullet;
-    bodyDef.allowFastRotation = desc.allowFastRotation;
+    bodyDef.sleepThreshold =
+        static_cast<float>(number(body, "sleepThreshold", 0.05) * m_motionScale);
+    bodyDef.fixedRotation = flag(body, "fixedRotation", false);
+    bodyDef.isBullet = flag(body, "isBullet", false);
+    bodyDef.allowFastRotation = flag(body, "allowFastRotation", false);
     bodyDef.isEnabled = desc.isEnabled;
     // b2BodyDef borrows the name rather than copying it, so it has to outlive
     // b2CreateBody -- keep the encoded bytes alive until after the call.
@@ -287,20 +350,33 @@ BodyHandle Box2DEngine::addBody(const BodyDesc &desc)
     // have to be representable -- a body that silently dropped one of its
     // pieces would collide differently from what's drawn.
     for (const ShapePart &part : desc.parts) {
+        const QVariantMap &shape = part.params;
         b2ShapeDef shapeDef = b2DefaultShapeDef();
-        shapeDef.density = static_cast<float>(std::max(0.0, part.density));
-        shapeDef.material.friction = static_cast<float>(std::max(0.0, part.material.friction));
-        shapeDef.material.restitution = static_cast<float>(std::max(0.0, part.material.restitution));
-        shapeDef.material.rollingResistance = static_cast<float>(std::max(0.0, part.material.rollingResistance));
-        shapeDef.material.tangentSpeed = static_cast<float>(part.material.tangentSpeed);
-        shapeDef.filter.categoryBits = part.filter.categoryBits;
-        shapeDef.filter.maskBits = part.filter.maskBits;
-        shapeDef.filter.groupIndex = part.filter.groupIndex;
-        shapeDef.isSensor = part.isSensor;
-        shapeDef.enableSensorEvents = part.enableSensorEvents;
-        shapeDef.enableContactEvents = part.enableContactEvents;
-        shapeDef.enableHitEvents = part.enableHitEvents;
-        shapeDef.enablePreSolveEvents = part.enablePreSolveEvents;
+        shapeDef.density = static_cast<float>(std::max(0.0, number(shape, "density", 1.0)));
+        shapeDef.material.friction =
+            static_cast<float>(std::max(0.0, number(shape, "friction", 0.6)));
+        shapeDef.material.restitution =
+            static_cast<float>(std::max(0.0, number(shape, "restitution", 0.0)));
+        shapeDef.material.rollingResistance =
+            static_cast<float>(std::max(0.0, number(shape, "rollingResistance", 0.0)));
+        shapeDef.material.tangentSpeed = static_cast<float>(number(shape, "tangentSpeed", 0.0));
+        shapeDef.filter.categoryBits =
+            static_cast<uint64_t>(std::max(0.0, number(shape, "categoryBits", 1.0)));
+        shapeDef.filter.maskBits = static_cast<uint64_t>(
+            std::max(0.0, number(shape, "maskBits", 9007199254740991.0)));
+        shapeDef.filter.groupIndex = static_cast<int>(number(shape, "groupIndex", 0.0));
+        shapeDef.isSensor = flag(shape, "isSensor", false);
+        shapeDef.enableSensorEvents = flag(shape, "enableSensorEvents", false);
+        shapeDef.enableContactEvents = flag(shape, "enableContactEvents", false);
+        shapeDef.enableHitEvents = flag(shape, "enableHitEvents", false);
+        shapeDef.enablePreSolveEvents = flag(shape, "enablePreSolveEvents", false);
+        // A rule watches this shape. Box2D reports nothing about a shape that
+        // did not ask, so whatever it takes is switched on here rather than by
+        // an editor that would have to know these flags exist.
+        if (part.watchedByRules) {
+            shapeDef.enableContactEvents = true;
+            shapeDef.enableHitEvents = true;
+        }
         // The name travels in the shape's user data, so a contact event can
         // report which shape it was rather than only which body.
         m_shapeNames.append(part.name);
@@ -346,11 +422,53 @@ void Box2DEngine::step(qreal dt)
     m_lastStep = static_cast<float>(dt);
 
     b2World_Step(m_worldId, static_cast<float>(dt), m_subStepCount);
+    collectWreckage();
     // After the solver, so a joint reports where it actually ended up rather
     // than where it was before the step that carried it into its limit.
     detectLimitEvents();
     collectContactEvents();
     collectBodyEvents();
+}
+
+void Box2DEngine::collectWreckage()
+{
+    // A body whose position or velocity is no longer a number cannot be
+    // brought back: whatever it was doing is gone, and every contact it takes
+    // part in spreads the damage. It is taken out of the world and named, once.
+    for (size_t i = 0; i < m_bodies.size(); ++i) {
+        const b2BodyId body = m_bodies[i];
+        if (!b2Body_IsValid(body) || !b2Body_IsEnabled(body))
+            continue;
+        const b2Vec2 position = b2Body_GetPosition(body);
+        const b2Vec2 velocity = b2Body_GetLinearVelocity(body);
+        if (b2IsValidVec2(position) && b2IsValidVec2(velocity)
+            && b2IsValidFloat(b2Body_GetAngularVelocity(body)))
+            continue;
+
+        const QString name = QString::fromUtf8(b2Body_GetName(body));
+        b2Body_Disable(body);
+        if (m_ruined.contains(name))
+            continue;
+        m_ruined.insert(name);
+        m_problems.append(
+            QObject::tr("%1 was thrown out of the world by the solver and has been taken"
+                        " out of the run. A joint pulling far harder than what it holds"
+                        " weighs is the usual cause.")
+                .arg(name.isEmpty() ? QObject::tr("A body") : name));
+    }
+
+    if (!g_lastAssertion.isEmpty()) {
+        m_problems.append(QObject::tr("Box2D could not finish a step: %1.")
+                              .arg(g_lastAssertion));
+        g_lastAssertion.clear();
+    }
+}
+
+QStringList Box2DEngine::takeProblems()
+{
+    QStringList problems;
+    problems.swap(m_problems);
+    return problems;
 }
 
 BodyState Box2DEngine::bodyState(BodyHandle handle) const

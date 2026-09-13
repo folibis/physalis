@@ -13,6 +13,10 @@ FetchContent_Declare(box2d
     GIT_REPOSITORY https://github.com/erincatto/box2d.git
     GIT_TAG v3.1.1
     GIT_SHALLOW TRUE
+    # Box2D installs its own library and headers when asked to install; a
+    # subdirectory brought in this way has those rules ignored, which keeps a
+    # Physalis package to Physalis.
+    EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(box2d)
 
@@ -44,3 +48,9 @@ set_target_properties(physalis_box2d PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
     PREFIX ""
 )
+
+# Beside the executable in an installed copy too, which is the only place the
+# loader looks.
+install(TARGETS physalis_box2d
+        RUNTIME DESTINATION ${PHYSALIS_INSTALL_DIR}
+        LIBRARY DESTINATION ${PHYSALIS_INSTALL_DIR})

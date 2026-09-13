@@ -10,11 +10,14 @@
 #include "ObjectIcons.h"
 #include "EngineRegistry.h"
 
+#include <QApplication>
 #include <QCheckBox>
+#include <QMouseEvent>
 #include <algorithm>
 
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QFontMetrics>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -121,41 +124,86 @@ QIcon tintedIcon(const QIcon &icon, const QColor &colour, int size)
     return QIcon(pm);
 }
 
+// Painted rather than typed, for the same reason the collapse marker is: the
+// arrow glyphs differ wildly between fonts and some render as a box.
+//
+// It is drawn with a shaft, and the collapse marker is a bare triangle. Side
+// by side in the same header at the same size, the outline is the only thing
+// that tells them apart -- two plain triangles read as the same button.
+QIcon arrowIcon(bool up)
+{
+    const int side = 14;
+    QPixmap pm(side, side);
+    pm.fill(Qt::transparent);
+
+    QPainter painter(&pm);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0x50, 0x50, 0x50));
+
+    QPolygonF head;
+    if (up) {
+        head << QPointF(7, 2) << QPointF(12, 7.5) << QPointF(2, 7.5);
+        painter.drawPolygon(head);
+        painter.drawRect(QRectF(5.5, 7.0, 3.0, 5.0));
+    } else {
+        head << QPointF(2, 6.5) << QPointF(12, 6.5) << QPointF(7, 12);
+        painter.drawPolygon(head);
+        painter.drawRect(QRectF(5.5, 2.0, 3.0, 5.0));
+    }
+    painter.end();
+
+    // A rule at either end has nowhere to go that way, and the button says so
+    // by being disabled. Qt's own faded version of a flat grey glyph is close
+    // enough to the live one to be missed, so the off state is drawn.
+    QPixmap off(side, side);
+    off.fill(Qt::transparent);
+    QPainter faded(&off);
+    faded.setRenderHint(QPainter::Antialiasing, true);
+    faded.setPen(Qt::NoPen);
+    faded.setBrush(QColor(0xc4, 0xc4, 0xc4));
+    if (up) {
+        faded.drawPolygon(QPolygonF({QPointF(7, 2), QPointF(12, 7.5), QPointF(2, 7.5)}));
+        faded.drawRect(QRectF(5.5, 7.0, 3.0, 5.0));
+    } else {
+        faded.drawPolygon(QPolygonF({QPointF(2, 6.5), QPointF(12, 6.5), QPointF(7, 12)}));
+        faded.drawRect(QRectF(5.5, 2.0, 3.0, 5.0));
+    }
+    faded.end();
+
+    QIcon icon(pm);
+    icon.addPixmap(off, QIcon::Disabled);
+    return icon;
+}
+
 } // namespace
 
 void RulesPanel::buildUi()
 {
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setContentsMargins(4, 4, 4, 4);   // as the property panel has them
     layout->setSpacing(4);
 
-    // The whole strip is green, not just a badge behind the words.
-    auto *headerBar = new QWidget(this);
-    headerBar->setObjectName(QStringLiteral("rulesHeader"));
-    headerBar->setStyleSheet(QStringLiteral(
-        "QWidget#rulesHeader { background: #05C936; }"   // the icon's leaf green
-        "QWidget#rulesHeader QLabel { color: #000000; font-weight: bold; background: transparent; }"
-        "QWidget#rulesHeader QToolButton { border: none; background: transparent; }"));
+    // The same header every pane has -- a bold title on the left -- rather
+    // than a strip of its own. The colour is the one the Edit mode button and
+    // the app icon are drawn in, so the panel is recognisably the same family.
+    const QColor accent = EditorModes::accent(EditorMode::Edit);
 
+    auto *headerBar = new QWidget(this);
     auto *header = new QHBoxLayout(headerBar);
-    header->setContentsMargins(6, 4, 6, 4);
+    header->setContentsMargins(0, 0, 0, 0);
+
+    auto *title = new QLabel(tr("Rules"), headerBar);
+    title->setStyleSheet(QStringLiteral("font-weight: bold; padding: 2px; color: %1;")
+                             .arg(accent.name()));
 
     auto *add = new QToolButton(headerBar);
-    // The plus is drawn in the same green as the bar, so it has to be
-    // recoloured or it disappears into it.
-    add->setIcon(tintedIcon(Icons::add(), QColor(0, 0, 0), 16));
+    // Drawn in the title's colour, so the two read as one heading.
+    add->setIcon(tintedIcon(Icons::add(), accent, 16));
     add->setToolTip(tr("Add a rule"));
     add->setAutoRaise(true);
     connect(add, &QToolButton::clicked, this, &RulesPanel::addRule);
 
-    auto *title = new QLabel(tr("Add rule"), headerBar);
-
-    // A spacer opposite the button, so the caption is centred on the bar
-    // rather than on what is left beside it.
-    auto *balance = new QWidget(headerBar);
-    balance->setFixedWidth(add->sizeHint().width());
-    header->addWidget(balance);
-    header->addStretch();
     header->addWidget(title);
     header->addStretch();
     header->addWidget(add);
@@ -164,6 +212,10 @@ void RulesPanel::buildUi()
     auto *scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
+    // The panel is a narrow dock and the cards are built to shrink into it.
+    // Left on, a card that momentarily wants a few pixels more puts a bar
+    // across the bottom and takes the height away from every card at once.
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     auto *host = new QWidget(scroll);
     m_cards = new QVBoxLayout(host);
     m_cards->setContentsMargins(6, 6, 6, 6);
@@ -220,15 +272,27 @@ QWidget *RulesPanel::buildCard(int index)
     card->setFrameShape(QFrame::NoFrame);
     // Drawn here rather than left to the style: QFrame::StyledPanel gave some
     // cards no top border at all, and the panel behind is the same grey.
-    card->setStyleSheet(QStringLiteral(
-        "QFrame#ruleCard { border: 1px solid #c9c9c9; border-radius: 4px;"
-        " background: #fcfcfc; }"));
+    // Styled through the helper, so the switched-off look and the live one
+    // are described in one place.
+    setCardEnabledLook(card, nullptr, rule.enabled);
+    // No margins of its own: the header band has to reach the card's edges,
+    // so the padding belongs to the header and the body separately.
     auto *outer = new QVBoxLayout(card);
-    outer->setContentsMargins(8, 6, 8, 8);
-    outer->setSpacing(4);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
 
     auto *titleRow = new QHBoxLayout;
     titleRow->setSpacing(2);
+
+    // Whether the rule runs at all. Off, it is still here and still saved --
+    // the simulation simply passes over it. Trying something without a rule in
+    // the way should not mean deleting the rule and writing it again.
+    auto *enabled = new QCheckBox(card);
+    enabled->setObjectName(QStringLiteral("ruleEnabled"));
+    enabled->setChecked(rule.enabled);
+    enabled->setToolTip(tr("Whether this rule runs. Unticked it is kept and saved,"
+                           " and the simulation passes over it."));
+    titleRow->addWidget(enabled);
 
     auto *collapse = new QToolButton(card);
     collapse->setObjectName(QStringLiteral("collapseButton"));
@@ -239,6 +303,7 @@ QWidget *RulesPanel::buildCard(int index)
     titleRow->addWidget(collapse);
 
     auto *remove = new QToolButton(card);
+    remove->setObjectName(QStringLiteral("removeRuleButton"));
     remove->setIcon(Icons::deleteShape());
     remove->setToolTip(tr("Remove this rule"));
     remove->setAutoRaise(true);
@@ -252,9 +317,10 @@ QWidget *RulesPanel::buildCard(int index)
     titleRow->addWidget(remove);
 
     titleRow->addStretch();
-    auto *heading = new QLabel(captionFor(index), card);
+    auto *heading = new QLabel(card);
     heading->setStyleSheet(QStringLiteral("font-weight: bold; color: #6f6f6f;"));
-    heading->setToolTip(tr("Double-click to rename this rule."));
+    heading->setAlignment(Qt::AlignCenter);
+    setHeadingText(heading, captionFor(index));
     heading->installEventFilter(this);
     heading->setProperty("ruleIndex", index);
     titleRow->addWidget(heading);
@@ -272,18 +338,79 @@ QWidget *RulesPanel::buildCard(int index)
 
     titleRow->addStretch();
 
-    // Balances the two buttons, so the title sits centred on the card rather
-    // than centred on what is left over beside them.
-    auto *balance = new QWidget(card);
-    balance->setFixedWidth(collapse->sizeHint().width() + remove->sizeHint().width() + 2);
-    titleRow->addWidget(balance);
+    // Rules are applied in the order they are listed, so moving one is an
+    // edit like any other. Two buttons rather than a drag: the card is a form
+    // full of controls, and there is nowhere on it to grab that does not
+    // already belong to one of them.
+    const int lastIndex = m_scene->rules().size() - 1;
 
-    outer->addLayout(titleRow);
+    auto *moveUp = new QToolButton(card);
+    moveUp->setObjectName(QStringLiteral("moveRuleUp"));
+    moveUp->setIcon(arrowIcon(true));
+    moveUp->setToolTip(tr("Move this rule up. Rules are applied in the order"
+                          " they are listed."));
+    moveUp->setAutoRaise(true);
+    moveUp->setEnabled(index > 0);
+    // Moving rebuilds every card, this button included, and doing that while
+    // its own click is still on the stack is the crash at the top of CLAUDE.md.
+    connect(moveUp, &QToolButton::clicked, this, [this, index] {
+        QMetaObject::invokeMethod(this, [this, index] { moveRule(index, index - 1); },
+                                  Qt::QueuedConnection);
+    });
+
+    auto *moveDown = new QToolButton(card);
+    moveDown->setObjectName(QStringLiteral("moveRuleDown"));
+    moveDown->setIcon(arrowIcon(false));
+    moveDown->setToolTip(tr("Move this rule down."));
+    moveDown->setAutoRaise(true);
+    moveDown->setEnabled(index < lastIndex);
+    connect(moveDown, &QToolButton::clicked, this, [this, index] {
+        QMetaObject::invokeMethod(this, [this, index] { moveRule(index, index + 1); },
+                                  Qt::QueuedConnection);
+    });
+
+    // Balances the left pair against the right, so the title sits centred on
+    // the card rather than on what is left over between them.
+    auto *balance = new QWidget(card);
+    balance->setFixedWidth(qMax(0, enabled->sizeHint().width()
+                                       + collapse->sizeHint().width()
+                                       + remove->sizeHint().width()
+                                       - moveUp->sizeHint().width()
+                                       - moveDown->sizeHint().width()));
+    titleRow->addWidget(balance);
+    titleRow->addWidget(moveUp);
+    titleRow->addWidget(moveDown);
+
+    auto *headerBand = new QWidget(card);
+    headerBand->setObjectName(QStringLiteral("ruleCardHeader"));
+    headerBand->setLayout(titleRow);
+    titleRow->setContentsMargins(6, 3, 6, 3);
+    outer->addWidget(headerBand);
 
     auto *form = new QFormLayout;
     form->setContentsMargins(0, 0, 0, 0);
     form->setSpacing(4);
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    // A row stays on its line. Letting the fields wrap under their labels was
+    // what put "Set to" and the number on a line of their own, which reads as
+    // two separate things rather than one instruction -- so the captions are
+    // kept short ("Then:", "Do:") and the controls give up width instead.
+    form->setRowWrapPolicy(QFormLayout::DontWrapRows);
+
+    // Now the caption exists, so the pale look can reach it too.
+    setCardEnabledLook(card, heading, rule.enabled);
+    connect(enabled, &QCheckBox::toggled, this, [this, index, card, heading](bool on) {
+        if (m_building)
+            return;
+        Rule updated = m_scene->rules().at(index);
+        if (updated.enabled == on)
+            return;
+        updated.enabled = on;
+        commit(index, updated);
+        // Only the look changes, so there is nothing to rebuild -- and
+        // rebuilding here would delete the box while its signal is delivered.
+        setCardEnabledLook(card, heading, on);
+    });
 
     Row row;
     row.card = card;
@@ -367,13 +494,16 @@ QWidget *RulesPanel::buildCard(int index)
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
-        updated.targetName = m_rows[index].target->currentData().toString();
+        const QString picked = m_rows[index].target->currentData().toString();
+        if (picked == updated.targetName)
+            return; // the list was rebuilt under it; the rule has not changed
+        updated.targetName = picked;
         updated.propertyKey.clear(); // a different object has different properties
         commit(index, updated);
         refreshProperties(index);
         scheduleValueEditorRefresh(index);
     });
-    form->addRow(tr("Then change:"), row.target);
+    form->addRow(tr("Then:"), row.target);
 
     row.property = new ObjectComboBox(
         [this, index] {
@@ -474,16 +604,14 @@ QWidget *RulesPanel::buildCard(int index)
     });
     doRow->addWidget(row.valueMode);
 
-    doRow->addStretch(1);
-    form->addRow(tr("Do:"), doRow);
-
-    // The editor gets its own line. Sharing the Do row with the operation and
-    // the mode picker squeezed it down to nothing on a card this narrow.
+    // The number reads as part of the sentence -- "Set to 12.5" -- so it sits
+    // on the same line as the operation it belongs to, and takes whatever
+    // width is left over.
     row.valueHolder = new QWidget(card);
     auto *holderLayout = new QHBoxLayout(row.valueHolder);
     holderLayout->setContentsMargins(0, 0, 0, 0);
-    form->addRow(tr("Value:"), row.valueHolder);
-    row.valueRow = form->rowCount() - 1;
+    doRow->addWidget(row.valueHolder, 1);
+    form->addRow(tr("Do:"), doRow);
 
     // Where the number comes from, on its own line. Four controls crammed into
     // the Do row left the picker 39 px wide and effectively invisible.
@@ -502,6 +630,7 @@ QWidget *RulesPanel::buildCard(int index)
     auto *body = new QWidget(card);
     body->setLayout(form);
     body->setVisible(!m_collapsed.contains(index));
+    body->setContentsMargins(8, 6, 8, 8);
     outer->addWidget(body);
 
     row.body = body;
@@ -606,6 +735,52 @@ void RulesPanel::refreshEvents(int index)
     m_rows[index].compare->setVisible(!rule.isEvent());
 }
 
+QVector<physics::EventType> RulesPanel::eventsFor(const QString &name) const
+{
+    if (!m_scene)
+        return {};
+
+    // The ray's own event is the application's, not an engine's: a ray is
+    // something the editor casts, and what it saw is named the same way a
+    // touch is.
+    if (m_scene->rayNamed(name)) {
+        return { {QStringLiteral("rayDetects"), tr("detects"),
+                  tr("Raised while the ray is looking at the named shape."), true} };
+    }
+
+    auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName());
+    if (!engine || name == Rule::world())
+        return {};
+
+    for (Joint *joint : m_scene->joints()) {
+        if (joint->name() != name)
+            continue;
+        for (const physics::JointType &type : engine->jointTypes()) {
+            if (type.id == joint->typeId())
+                return type.events;
+        }
+        return {};
+    }
+    for (PhysicsBody *body : m_scene->bodies()) {
+        if (body->name() == name)
+            return engine->bodyEvents();
+    }
+    for (ShapeItem *shape : m_scene->shapes()) {
+        if (shape->name() == name)
+            return engine->shapeEvents();
+    }
+    return {};
+}
+
+bool RulesPanel::eventNamesOther(const QString &name, const QString &eventId) const
+{
+    for (const physics::EventType &event : eventsFor(name)) {
+        if (event.id == eventId)
+            return event.namesOther;
+    }
+    return true; // an event nothing published: leave the chooser alone
+}
+
 QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
 {
     QVector<RuleChoice> choices;
@@ -630,7 +805,7 @@ QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
     if (m_scene->rayNamed(name)) {
         // Naming what it sees, so a rule can single out one shape rather than
         // firing on whatever happens to be in the way.
-        choices.append({kEventPrefix + QStringLiteral("rayDetects"), tr("detects")});
+        addEvents(eventsFor(name));
         choices.append({QStringLiteral("distance"), tr("Distance")});
         choices.append({QStringLiteral("hit"), tr("Hit")});
         choices.append({QStringLiteral("hitX"), tr("Hit X")});
@@ -650,24 +825,21 @@ QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
     for (Joint *joint : m_scene->joints()) {
         if (joint->name() != name)
             continue;
-        for (const physics::JointType &type : engine->jointTypes()) {
-            if (type.id == joint->typeId())
-                addEvents(type.events);
-        }
+        addEvents(eventsFor(name));
         addReadable(engine->jointReadables(joint->typeId()));
         return choices;
     }
     for (PhysicsBody *body : m_scene->bodies()) {
         if (body->name() != name)
             continue;
-        addEvents(engine->bodyEvents());
+        addEvents(eventsFor(name));
         addReadable(engine->bodyProperties());
         return choices;
     }
     for (ShapeItem *shape : m_scene->shapes()) {
         if (shape->name() != name)
             continue;
-        addEvents(engine->shapeEvents());
+        addEvents(eventsFor(name));
         addReadable(engine->shapeProperties());
         return choices;
     }
@@ -687,7 +859,45 @@ void RulesPanel::refreshConditionEditor(int index)
     const bool wasBuilding = m_building;
     m_building = true;
 
-    if (rule.isEvent()) {
+    // What can sensibly be asked of the thing being watched. A flag is true or
+    // false: "is greater than 0.5" is not a question about it, and offering
+    // the ordering tests is how a rule ends up written that way.
+    const bool watchingFlag =
+        !rule.isEvent() && propertyIsFlag(rule.subjectName, rule.conditionKey);
+    if (row.compare) {
+        row.compare->clear();
+        if (!watchingFlag) {
+            row.compare->addItem(tr("is greater than"),
+                                 Rule::compareName(Rule::Compare::Greater));
+            row.compare->addItem(tr("is less than"), Rule::compareName(Rule::Compare::Less));
+            row.compare->addItem(tr("is at least"),
+                                 Rule::compareName(Rule::Compare::GreaterEqual));
+            row.compare->addItem(tr("is at most"), Rule::compareName(Rule::Compare::LessEqual));
+            row.compare->addItem(tr("equals"), Rule::compareName(Rule::Compare::Equal));
+            row.compare->addItem(tr("differs from"),
+                                 Rule::compareName(Rule::Compare::NotEqual));
+        } else {
+            row.compare->addItem(tr("is"), Rule::compareName(Rule::Compare::Equal));
+            row.compare->addItem(tr("is not"), Rule::compareName(Rule::Compare::NotEqual));
+        }
+        int at = row.compare->findData(Rule::compareName(rule.compare));
+        if (at < 0) {
+            // The test it carried is not one that can be asked any more --
+            // switched from a number to a flag. Equals is the one that always
+            // means something.
+            at = row.compare->findData(Rule::compareName(Rule::Compare::Equal));
+            Rule updated = rule;
+            updated.compare = Rule::Compare::Equal;
+            commit(index, updated);
+        }
+        row.compare->setCurrentIndex(qMax(0, at));
+    }
+
+    if (rule.isEvent() && !eventNamesOther(rule.subjectName, rule.eventId)) {
+        // Nothing to choose. A joint arriving at its limit, a body coming to
+        // rest -- these happen to one object, and offering "or anything" here
+        // only invited the question of what the objects had to do with it.
+    } else if (rule.isEvent()) {
         auto *combo = new ObjectComboBox(
             [this] {
                 QVector<RuleChoice> choices;
@@ -698,6 +908,7 @@ void RulesPanel::refreshConditionEditor(int index)
                 return choices;
             },
             row.conditionHolder);
+        combo->setObjectName(QStringLiteral("conditionOther"));
         combo->setToolTip(tr("Which object, or anything."));
         combo->selectData(rule.conditionValue.toString());
         connect(combo, &QComboBox::currentIndexChanged, this, [this, index, combo](int) {
@@ -726,6 +937,24 @@ void RulesPanel::refreshConditionEditor(int index)
             commit(index, updated);
         });
         row.condition = combo;
+    } else if (watchingFlag) {
+        // True or false, chosen by name. A spin box here is what let a switch
+        // be tested against 0.5.
+        auto *combo = new QComboBox(row.conditionHolder);
+        combo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+        combo->addItem(tr("true"), true);
+        combo->addItem(tr("false"), false);
+        combo->setCurrentIndex(rule.conditionValue.toBool() ? 0 : 1);
+        if (const physics::JointParam *param = describe(rule.subjectName, rule.conditionKey))
+            combo->setToolTip(param->tooltip);
+        connect(combo, &QComboBox::currentIndexChanged, this, [this, index, combo](int) {
+            if (m_building)
+                return;
+            Rule updated = m_scene->rules().at(index);
+            updated.conditionValue = combo->currentData().toBool();
+            commit(index, updated);
+        });
+        row.condition = combo;
     } else {
         auto *spin = new QDoubleSpinBox(row.conditionHolder);
         spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
@@ -744,7 +973,10 @@ void RulesPanel::refreshConditionEditor(int index)
         row.condition = spin;
     }
 
-    row.conditionHolder->layout()->addWidget(row.condition);
+    // There may be nothing to add: an event that names no second object asks
+    // nothing further, and the holder stays empty.
+    if (row.condition)
+        row.conditionHolder->layout()->addWidget(row.condition);
     m_building = wasBuilding;
 }
 
@@ -772,6 +1004,9 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
 
     if (name == Rule::world()) {
         addSettable(engine->worldProperties(), false);
+        // The run itself, which is the application's to end or hold.
+        result.append({actionKey(Rule::stopRunAction()), tr("Stop the simulation")});
+        result.append({actionKey(Rule::holdRunAction()), tr("Hold the simulation")});
         return result;
     }
 
@@ -942,9 +1177,16 @@ void RulesPanel::refreshProperties(int index)
     // Same fallback problem as the watch list: what is shown has to be what
     // is stored, or the first click on the entry already displayed does
     // nothing at all.
+    //
+    // Only ever to fill a blank, though. A rule that already names a property
+    // keeps it even when the box cannot show it -- the list is built from the
+    // target's joint type, and a moment where that is not resolvable yet used
+    // to rewrite the rule to whatever happened to be on top and save it that
+    // way. Silently, and permanently: "stop the motor" became "set the solver
+    // damping" and nothing ever stopped.
     const QString shown = m_rows[index].property->currentData().toString();
     QString action = rule.actionId;
-    if (shown != stored && !shown.isEmpty()) {
+    if (shown != stored && !shown.isEmpty() && stored.isEmpty()) {
         Rule updated = rule;
         action = actionIdOf(shown);
         updated.actionId = action;
@@ -969,7 +1211,8 @@ void RulesPanel::applyWatchChoice(int index, const QString &chosen)
     if (chosen.startsWith(kEventPrefix)) {
         updated.eventId = chosen.mid(kEventPrefix.size());
         updated.conditionKey.clear();
-        if (updated.conditionValue.typeId() != QMetaType::QString)
+        if (updated.conditionValue.typeId() != QMetaType::QString
+            || !eventNamesOther(updated.subjectName, updated.eventId))
             updated.conditionValue = QString();
     } else {
         updated.conditionKey = chosen;
@@ -1028,7 +1271,7 @@ void RulesPanel::finishRename(int index, bool keep)
     }
 
     row.headingEdit->setVisible(false);
-    row.heading->setText(captionFor(index));
+    setHeadingText(row.heading, captionFor(index));
     row.heading->setVisible(true);
 }
 
@@ -1056,6 +1299,34 @@ bool RulesPanel::eventFilter(QObject *watched, QEvent *event)
         }
     }
     return QWidget::eventFilter(watched, event);
+}
+
+void RulesPanel::moveRule(int from, int to)
+{
+    if (!m_scene)
+        return;
+    QVector<Rule> rules = m_scene->rules();
+    if (from < 0 || from >= rules.size() || to < 0 || to >= rules.size() || from == to)
+        return;
+
+    const QString name = captionFor(from);
+
+    // Folded state belongs to the card, not to the slot it happens to sit in.
+    QVector<bool> folded(rules.size());
+    for (int i = 0; i < rules.size(); ++i)
+        folded[i] = m_collapsed.contains(i);
+    folded.move(from, to);
+    m_collapsed.clear();
+    for (int i = 0; i < folded.size(); ++i) {
+        if (folded[i])
+            m_collapsed.insert(i);
+    }
+
+    rules.move(from, to);
+    m_scene->setRules(rules);        // rebuilds the panel through rulesChanged
+    // The order is part of what the scene means -- rules are applied in it --
+    // so it is an edit, and undoable like any other.
+    m_scene->notifyEdit(tr("Move %1").arg(name));
 }
 
 void RulesPanel::scheduleValueEditorRefresh(int index)
@@ -1090,6 +1361,20 @@ void RulesPanel::refreshValueEditor(int index)
     const bool wasBuilding = m_building;
     m_building = true;
 
+    // A control showing a number nobody typed is a lie: the rule carries no
+    // value at all. One without a value is dropped as half-filled -- never
+    // written to the file, never run -- so "set the motor to 0" could not be
+    // written by leaving the box on the 0 it already showed. Whatever the
+    // editor ends up displaying is what the rule holds from here on. Written
+    // straight into the scene rather than through commit(): making a shown
+    // default real is not an edit the user made, and it has no business in
+    // the undo history as one.
+    const auto seedShownValue = [this, index](const QVariant &shown) {
+        if (index >= m_scene->rules().size() || m_scene->rules().at(index).value.isValid())
+            return;
+        m_scene->rules()[index].value = shown;
+    };
+
     if (rule.isAction() && m_scene->explosionNamed(rule.targetName)) {
         // Aimed at an explosion, the settings belong to that object -- it is
         // placed, sized and tuned on the canvas, and the rule only says when.
@@ -1110,6 +1395,7 @@ void RulesPanel::refreshValueEditor(int index)
     } else if (propertyIsFlag(rule.targetName, rule.propertyKey)) {
         auto *check = new QCheckBox(row.valueHolder);
         check->setChecked(rule.value.toBool());
+        seedShownValue(check->isChecked());
         connect(check, &QCheckBox::toggled, this, [this, index](bool on) {
             if (m_building)
                 return;
@@ -1125,6 +1411,7 @@ void RulesPanel::refreshValueEditor(int index)
         combo->addItems(param->choices);
         combo->setToolTip(param->tooltip);
         combo->setCurrentIndex(qBound(0, rule.value.toInt(), param->choices.size() - 1));
+        seedShownValue(combo->currentIndex());
         connect(combo, &QComboBox::currentIndexChanged, this, [this, index](int at) {
             if (m_building)
                 return;
@@ -1168,6 +1455,9 @@ void RulesPanel::refreshValueEditor(int index)
             }
         }
         spin->setValue(rule.value.toDouble());
+        // Read back rather than assumed: the range the engine declared may not
+        // reach zero, and the box has already clamped into it.
+        seedShownValue(spin->value());
         connect(spin, &QDoubleSpinBox::valueChanged, this, [this, index](double v) {
             if (m_building)
                 return;
@@ -1193,8 +1483,7 @@ void RulesPanel::refreshValueEditor(int index)
         row.form->setRowVisible(row.sourceRow, sourced);
     // The two are alternatives, so the typed editor goes away entirely rather
     // than sitting there greyed out next to the object that replaced it.
-    if (row.form)
-        row.form->setRowVisible(row.valueRow, !sourced);
+    row.valueHolder->setVisible(!sourced);
 
     if (sourced) {
         auto *layout = qobject_cast<QFormLayout *>(row.sourceHolder->layout());
@@ -1367,6 +1656,49 @@ void RulesPanel::addRule()
     rules.append(rule);
     m_scene->setRules(rules);
     m_scene->notifyEdit(tr("Add rule"));
+}
+
+void RulesPanel::setCardEnabledLook(QWidget *card, QLabel *heading, bool enabled)
+{
+    card->setStyleSheet(
+        enabled
+            ? QStringLiteral(
+                  "QFrame#ruleCard { border: 1px solid #c9c9c9; border-radius: 4px;"
+                  " background: #f4f4f4; }"
+                  // A band across the top, darker than the card, so where one
+                  // rule ends and the next begins is obvious down a column.
+                  "QWidget#ruleCardHeader { background: #dcdcdc;"
+                  " border-bottom: 1px solid #c9c9c9;"
+                  " border-top-left-radius: 3px; border-top-right-radius: 3px; }")
+            : QStringLiteral(
+                  "QFrame#ruleCard { border: 1px dashed #cfcfcf; border-radius: 4px;"
+                  " background: #fafafa; }"
+                  "QWidget#ruleCardHeader { background: #eeeeee;"
+                  " border-bottom: 1px solid #dcdcdc;"
+                  " border-top-left-radius: 3px; border-top-right-radius: 3px; }"));
+    if (heading) {
+        heading->setStyleSheet(enabled
+                                   ? QStringLiteral("font-weight: bold; color: #6f6f6f;")
+                                   : QStringLiteral("font-weight: bold; color: #b0b0b0;"));
+    }
+}
+
+void RulesPanel::setHeadingText(QLabel *label, const QString &caption)
+{
+    // Cut to a width a docked panel can hold. Left to itself the label reports
+    // the whole name as its minimum, and that becomes a width the card can
+    // never go below: one long name would push the fields off the right-hand
+    // edge with nothing to scroll them back. A fixed bound rather than the
+    // width it happens to have -- re-eliding as it is resized changes what it
+    // asks for, which resizes it again, and it never settles.
+    constexpr int kCaptionWidth = 100;
+    label->setProperty("fullCaption", caption);
+    const QFontMetrics metrics(label->font());
+    const QString shown = metrics.elidedText(caption, Qt::ElideRight, kCaptionWidth);
+    label->setText(shown);
+    label->setToolTip(shown == caption
+                          ? tr("Double-click to rename this rule.")
+                          : tr("%1\n\nDouble-click to rename this rule.").arg(caption));
 }
 
 void RulesPanel::setCollapseLook(QToolButton *button, bool collapsed)

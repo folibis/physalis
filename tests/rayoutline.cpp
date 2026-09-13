@@ -91,7 +91,7 @@ int rayPixels(CanvasScene *scene, const QRectF &source)
 
 // A ray measures the scene, it is not part of it -- so a run without Debug
 // View leaves it out, the same as the joints.
-TEST(RayOutline, HidesDuringARunWithoutDebugView)
+TEST(RayOutline, FollowsTheRaysLayer)
 {
     MainWindow window;
     window.resize(1000, 700);
@@ -125,15 +125,18 @@ TEST(RayOutline, HidesDuringARunWithoutDebugView)
     const int drawn = rayPixels(scene, area);
     EXPECT_GT(drawn, 100) << "the ray is there while editing";
 
-    scene->setDebugView(false);
+    scene->setRunLayer(CanvasScene::RunLayer::Rays, false);
+    EXPECT_GT(rayPixels(scene, area), 100) << "the layer is about the run, so editing is"
+                                              " unaffected";
     sim->start();
     ASSERT_TRUE(scene->simulationRunning()) << "the run really started";
     for (int i = 0; i < 5; ++i)
         sim->stepFrame();
-    EXPECT_EQ(rayPixels(scene, area), 0) << "and gone once the run starts";
+    EXPECT_EQ(rayPixels(scene, area), 0) << "and gone once the run starts, with the Rays"
+                                            " layer switched off";
 
-    scene->setDebugView(true);
-    EXPECT_GT(rayPixels(scene, area), 100) << "unless Debug View is on";
+    scene->setRunLayer(CanvasScene::RunLayer::Rays, true);
+    EXPECT_GT(rayPixels(scene, area), 100) << "and back when it is switched on again";
 
     sim->stop();
     window.close();

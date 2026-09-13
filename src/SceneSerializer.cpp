@@ -118,25 +118,6 @@ Qt::PenJoinStyle joinStyleFromName(const QString &name)
 
 // --- shape ------------------------------------------------------------------
 
-QJsonObject partToJson(const physics::ShapePart &part)
-{
-    return QJsonObject {
-        {"density", part.density},
-        {"friction", part.material.friction},
-        {"restitution", part.material.restitution},
-        {"rollingResistance", part.material.rollingResistance},
-        {"tangentSpeed", part.material.tangentSpeed},
-        {"isSensor", part.isSensor},
-        {"categoryBits", QStringLiteral("0x%1").arg(part.filter.categoryBits, 16, 16, QLatin1Char('0'))},
-        {"maskBits", QStringLiteral("0x%1").arg(part.filter.maskBits, 16, 16, QLatin1Char('0'))},
-        {"groupIndex", part.filter.groupIndex},
-        {"enableContactEvents", part.enableContactEvents},
-        {"enableSensorEvents", part.enableSensorEvents},
-        {"enableHitEvents", part.enableHitEvents},
-        {"enablePreSolveEvents", part.enablePreSolveEvents},
-    };
-}
-
 quint64 bitsFromJson(const QJsonValue &v, quint64 fallback)
 {
     QString text = v.toString().trimmed();
@@ -149,22 +130,25 @@ quint64 bitsFromJson(const QJsonValue &v, quint64 fallback)
     return ok ? value : fallback;
 }
 
+QJsonObject partToJson(const physics::ShapePart &part)
+{
+    // Whatever the engine said a shape has, under the names it gave them. The
+    // serializer neither knows nor checks what any of them mean.
+    return QJsonObject::fromVariantMap(part.params);
+}
+
 void partFromJson(const QJsonObject &o, physics::ShapePart *part)
 {
-    const physics::ShapePart d;
-    part->density = o.value("density").toDouble(d.density);
-    part->material.friction = o.value("friction").toDouble(d.material.friction);
-    part->material.restitution = o.value("restitution").toDouble(d.material.restitution);
-    part->material.rollingResistance = o.value("rollingResistance").toDouble(d.material.rollingResistance);
-    part->material.tangentSpeed = o.value("tangentSpeed").toDouble(d.material.tangentSpeed);
-    part->isSensor = o.value("isSensor").toBool(d.isSensor);
-    part->filter.categoryBits = bitsFromJson(o.value("categoryBits"), d.filter.categoryBits);
-    part->filter.maskBits = bitsFromJson(o.value("maskBits"), d.filter.maskBits);
-    part->filter.groupIndex = o.value("groupIndex").toInt(d.filter.groupIndex);
-    part->enableContactEvents = o.value("enableContactEvents").toBool(d.enableContactEvents);
-    part->enableSensorEvents = o.value("enableSensorEvents").toBool(d.enableSensorEvents);
-    part->enableHitEvents = o.value("enableHitEvents").toBool(d.enableHitEvents);
-    part->enablePreSolveEvents = o.value("enablePreSolveEvents").toBool(d.enablePreSolveEvents);
+    part->params = o.toVariantMap();
+
+    // Written before there was more than one engine, the collision bits were
+    // hex text rather than numbers. The keys are the same either way.
+    for (const char *bits : { "categoryBits", "maskBits" }) {
+        const QString key = QLatin1String(bits);
+        const QVariant value = part->params.value(key);
+        if (value.typeId() == QMetaType::QString)
+            part->params.insert(key, double(bitsFromJson(o.value(key), 0)));
+    }
 }
 
 QJsonObject shapeGeometryToJson(const ShapeItem *shape)
@@ -180,6 +164,7 @@ QJsonObject shapeGeometryToJson(const ShapeItem *shape)
         {"borderWidth", shape->borderWidth()},
         {"cornerRadius", shape->cornerRadius()},
         {"smoothChain", shape->smoothChain()},
+        {"outline", shape->preferOutline()},
         {"filled", shape->filled()},
         {"capStyle", capStyleName(shape->capStyle())},
         {"joinStyle", joinStyleName(shape->joinStyle())},
@@ -236,6 +221,7 @@ void applyShapeProperties(const QJsonObject &o, ShapeItem *shape)
     shape->setBorderWidth(o.value("borderWidth").toDouble(shape->borderWidth()));
     shape->setCornerRadius(o.value("cornerRadius").toDouble(0.0));
     shape->setSmoothChain(o.value("smoothChain").toBool(false));
+    shape->setPreferOutline(o.value("outline").toBool(false));
     shape->setFilled(o.value("filled").toBool(shape->filled()));
     shape->setCapStyle(capStyleFromName(o.value("capStyle").toString()));
     shape->setJoinStyle(joinStyleFromName(o.value("joinStyle").toString()));
@@ -264,6 +250,9 @@ QJsonObject save(const CanvasScene *scene)
     QJsonObject document {
         {"format", QLatin1String(kFormatTag)},
         {"version", kFormatVersion},
+        // Which engine the scene was built for. Its joints, and half its
+        // properties, only mean anything to that one.
+        {"engine", scene->simulationEngineName()},
     };
 
     document.insert("field", QJsonObject {
@@ -275,20 +264,12 @@ QJsonObject save(const CanvasScene *scene)
         {"gridColor", toJson(scene->gridColor())},
     });
 
-    const physics::WorldDesc &world = scene->world();
     document.insert("world", QJsonObject {
-        {"gravity", toJson(world.gravity)},
-        {"pixelsPerMeter", world.pixelsPerMeter},
+        {"pixelsPerMeter", scene->world().pixelsPerMeter},
         {"solidBounds", scene->fieldBoundsSolid()},
-        {"restitutionThreshold", world.restitutionThreshold},
-        {"hitEventThreshold", world.hitEventThreshold},
-        {"contactHertz", world.contactHertz},
-        {"contactDampingRatio", world.contactDampingRatio},
-        {"maxContactPushSpeed", world.maxContactPushSpeed},
-        {"maximumLinearSpeed", world.maximumLinearSpeed},
-        {"subStepCount", world.subStepCount},
-        {"enableSleep", world.enableSleep},
-        {"enableContinuous", world.enableContinuous},
+        // Gravity, the solver's tuning, whether bodies may sleep: the engine
+        // named every one of these, and they are written back as they came.
+        {"physics", QJsonObject::fromVariantMap(scene->world().params)},
     });
 
     // Ids are handed out here and only exist so bodies can name their shapes.
@@ -320,17 +301,9 @@ QJsonObject save(const CanvasScene *scene)
             {"name", body->name()},
             {"type", bodyTypeName(p.type)},
             {"isEnabled", p.isEnabled},
-            {"linearVelocity", toJson(p.linearVelocity)},
-            {"angularVelocity", p.angularVelocityDegrees},
-            {"linearDamping", p.linearDamping},
-            {"angularDamping", p.angularDamping},
-            {"gravityScale", p.gravityScale},
-            {"fixedRotation", p.fixedRotation},
-            {"isBullet", p.isBullet},
-            {"allowFastRotation", p.allowFastRotation},
-            {"enableSleep", p.enableSleep},
-            {"isAwake", p.isAwake},
-            {"sleepThreshold", p.sleepThreshold},
+            // Everything else a body has is the engine's, and is kept under
+            // the names it published.
+            {"physics", QJsonObject::fromVariantMap(p.params)},
             {"shapes", members},
         });
     }
@@ -338,24 +311,29 @@ QJsonObject save(const CanvasScene *scene)
 
     QJsonArray joints;
     for (const Joint *joint : scene->joints()) {
-        if (!joint->bodyA() || !joint->bodyB())
+        if (!joint->bodyA())
             continue;
 
         QJsonObject params;
         for (auto it = joint->params().constBegin(); it != joint->params().constEnd(); ++it)
             params.insert(it.key(), QJsonValue::fromVariant(it.value()));
 
-        joints.append(QJsonObject {
+        QJsonObject entry {
             {"name", joint->name()},
             {"type", joint->typeId()},
             {"bodyA", joint->bodyA()->name()},
-            {"bodyB", joint->bodyB()->name()},
             {"anchorA", toJson(joint->anchorScenePos(Joint::End::A))},
             {"anchorB", toJson(joint->anchorScenePos(Joint::End::B))},
             {"axis", toJson(joint->axisScene())},
             {"collideConnected", joint->collideConnected()},
             {"params", params},
-        });
+        };
+        // Absent rather than empty when the joint holds a body to a point in
+        // the world: there is no second body, and naming one that is not there
+        // would be read back as a joint that had lost an end.
+        if (joint->bodyB())
+            entry.insert(QStringLiteral("bodyB"), joint->bodyB()->name());
+        joints.append(entry);
     }
     document.insert("joints", joints);
 
@@ -456,7 +434,20 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
                         .arg(version).arg(kFormatVersion));
     }
 
+    // Refused before anything is touched: a scene half-loaded without the
+    // engine its joints were written for is worse than one not loaded at all.
+    const QString engineName = document.value("engine").toString();
+    if (!engineName.isEmpty()
+        && !physics::EngineRegistry::availableEngines().contains(engineName)) {
+        return fail(QObject::tr("This scene was built for the %1 engine, which is not"
+                                " installed. Its plugin has to sit beside the"
+                                " application.").arg(engineName));
+    }
+
     scene->clearContents();
+    // Before the joints: how many anchors a joint has is its engine's answer.
+    if (!engineName.isEmpty())
+        scene->setSimulationEngineName(engineName);
 
     const QJsonObject field = document.value("field").toObject();
     scene->setFieldSize(field.value("width").toDouble(scene->fieldWidth()),
@@ -467,27 +458,28 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
     scene->setGridColor(colorFromJson(field.value("gridColor"), scene->gridColor()));
 
     const QJsonObject world = document.value("world").toObject();
-    scene->setGravity(pointFromJson(world.value("gravity").toObject(), scene->gravity()));
     scene->setPixelsPerMeter(world.value("pixelsPerMeter").toDouble(scene->pixelsPerMeter()));
+    scene->world().params = world.value("physics").toObject().toVariantMap();
 
-    // Absent keys keep the default, so a scene written before these existed
-    // still loads with Box2D's own tuning.
-    physics::WorldDesc &tuning = scene->world();
-    const physics::WorldDesc factory;
-    tuning.restitutionThreshold =
-        world.value("restitutionThreshold").toDouble(factory.restitutionThreshold);
-    tuning.hitEventThreshold =
-        world.value("hitEventThreshold").toDouble(factory.hitEventThreshold);
-    tuning.contactHertz = world.value("contactHertz").toDouble(factory.contactHertz);
-    tuning.contactDampingRatio =
-        world.value("contactDampingRatio").toDouble(factory.contactDampingRatio);
-    tuning.maxContactPushSpeed =
-        world.value("maxContactPushSpeed").toDouble(factory.maxContactPushSpeed);
-    tuning.maximumLinearSpeed =
-        world.value("maximumLinearSpeed").toDouble(factory.maximumLinearSpeed);
-    tuning.subStepCount = world.value("subStepCount").toInt(factory.subStepCount);
-    tuning.enableSleep = world.value("enableSleep").toBool(factory.enableSleep);
-    tuning.enableContinuous = world.value("enableContinuous").toBool(factory.enableContinuous);
+    // A scene written before the engine described its own world kept those
+    // settings loose in the world object, under the names Box2D uses -- which
+    // are the names its catalogue publishes, so they carry straight over.
+    if (!world.contains("physics")) {
+        QVariantMap &params = scene->world().params;
+        const QJsonObject gravity = world.value("gravity").toObject();
+        if (!gravity.isEmpty()) {
+            params.insert(QStringLiteral("gravityX"), gravity.value("x").toDouble());
+            params.insert(QStringLiteral("gravityY"), gravity.value("y").toDouble());
+        }
+        for (const char *key : { "restitutionThreshold", "hitEventThreshold", "contactHertz",
+                                 "contactDampingRatio", "maxContactPushSpeed",
+                                 "maximumLinearSpeed", "subStepCount", "enableSleep",
+                                 "enableContinuous" }) {
+            const QJsonValue value = world.value(QLatin1String(key));
+            if (!value.isUndefined())
+                params.insert(QLatin1String(key), value.toVariant());
+        }
+    }
     scene->setFieldBoundsSolid(world.value("solidBounds").toBool(scene->fieldBoundsSolid()));
 
     QHash<int, ShapeItem *> byId;
@@ -525,17 +517,25 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
         const physics::BodyDesc d;
         p.type = bodyTypeFromName(o.value("type").toString());
         p.isEnabled = o.value("isEnabled").toBool(d.isEnabled);
-        p.linearVelocity = pointFromJson(o.value("linearVelocity").toObject(), d.linearVelocity);
-        p.angularVelocityDegrees = o.value("angularVelocity").toDouble(d.angularVelocityDegrees);
-        p.linearDamping = o.value("linearDamping").toDouble(d.linearDamping);
-        p.angularDamping = o.value("angularDamping").toDouble(d.angularDamping);
-        p.gravityScale = o.value("gravityScale").toDouble(d.gravityScale);
-        p.fixedRotation = o.value("fixedRotation").toBool(d.fixedRotation);
-        p.isBullet = o.value("isBullet").toBool(d.isBullet);
-        p.allowFastRotation = o.value("allowFastRotation").toBool(d.allowFastRotation);
-        p.enableSleep = o.value("enableSleep").toBool(d.enableSleep);
-        p.isAwake = o.value("isAwake").toBool(d.isAwake);
-        p.sleepThreshold = o.value("sleepThreshold").toDouble(d.sleepThreshold);
+        p.params = o.value("physics").toObject().toVariantMap();
+
+        // Older scenes kept the engine's settings loose in the body object,
+        // under Box2D's names -- which are the names its catalogue publishes.
+        if (!o.contains("physics")) {
+            const QJsonObject velocity = o.value("linearVelocity").toObject();
+            if (!velocity.isEmpty()) {
+                p.params.insert(QStringLiteral("velocityX"), velocity.value("x").toDouble());
+                p.params.insert(QStringLiteral("velocityY"), velocity.value("y").toDouble());
+            }
+            for (const char *key : { "angularVelocity", "linearDamping", "angularDamping",
+                                     "gravityScale", "fixedRotation", "isBullet",
+                                     "allowFastRotation", "enableSleep", "isAwake",
+                                     "sleepThreshold" }) {
+                const QJsonValue value = o.value(QLatin1String(key));
+                if (!value.isUndefined())
+                    p.params.insert(QLatin1String(key), value.toVariant());
+            }
+        }
 
         for (ShapeItem *shape : members)
             body->addShape(shape);
@@ -571,8 +571,12 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
         const QJsonObject o = v.toObject();
         PhysicsBody *bodyA = bodiesByName.value(o.value("bodyA").toString(), nullptr);
         PhysicsBody *bodyB = bodiesByName.value(o.value("bodyB").toString(), nullptr);
-        if (!bodyA || !bodyB || bodyA == bodyB)
-            continue; // a joint missing an end holds nothing
+        // No "bodyB" at all is a joint to a point in the world; a "bodyB" that
+        // names a body no longer here is a joint that has lost an end.
+        if (!bodyA || bodyA == bodyB)
+            continue;
+        if (o.contains(QStringLiteral("bodyB")) && !bodyB)
+            continue;
 
         const QString typeId = o.value("type").toString();
         int anchorCount = 2;

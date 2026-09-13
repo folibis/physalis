@@ -61,10 +61,10 @@ TEST(OptionsVisual, Behaves)
     EXPECT_TRUE(dialog.findChild<QSpinBox *>("undoDepth")->value() == 50) << "undo depth kept its value";
     EXPECT_TRUE(qFuzzyCompare(dialog.findChild<QDoubleSpinBox *>("snapSensitivity")->maximum(), 5.0)) << "snap sensitivity capped at half the step";
 
-    // The joint-type rows are built from the engine, not the form.
+    // The joint rows are built in code, one per kind, not by the form.
     auto *jointGroup = dialog.findChild<QWidget *>("jointTypeColorsGroup");
     const int jointSwatches = jointGroup ? jointGroup->findChildren<QToolButton *>().size() : 0;
-    EXPECT_TRUE(jointSwatches >= 6) << "joint type colour rows built from the engine" << " -- " << (QStringLiteral("%1 swatches").arg(jointSwatches)).toStdString();
+    EXPECT_TRUE(jointSwatches >= 5) << "a colour row per kind of joint" << " -- " << (QStringLiteral("%1 swatches").arg(jointSwatches)).toStdString();
 
     for (const char *name : {"defaultTransparency", "physicsFillAlpha", "sleepShiftPercent"}) {
         auto *sl = dialog.findChild<QSlider *>(name);
@@ -79,7 +79,7 @@ TEST(OptionsVisual, Behaves)
     EXPECT_TRUE(out.fieldWidth == 2000.0 && out.fieldHeight == 600.0) << "field size round-trips";
     EXPECT_TRUE(out.undoDepth == 50) << "undo depth round-trips";
     EXPECT_TRUE(out.gridCellSize == 20.0) << "grid cell size round-trips";
-    EXPECT_TRUE(!out.jointTypeColors.isEmpty()) << "a joint type colour came back" << " -- " << (QStringLiteral("%1 types").arg(out.jointTypeColors.size())).toStdString();
+    EXPECT_TRUE(out.jointKindColors.size() == 5 && out.jointKindStyles.size() == 5) << "a colour and a style came back for each kind" << " -- " << (QStringLiteral("%1 colours, %2 styles").arg(out.jointKindColors.size()).arg(out.jointKindStyles.size())).toStdString();
 
     dialog.close();
 }

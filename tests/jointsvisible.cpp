@@ -76,11 +76,16 @@ TEST(JointsVisible, Behaves)
             joint->setAnchorScenePos(Joint::End::B, QPointF(290, 120));
 
         const QRectF area(60, 60, 320, 140);
-        const QColor colour = scene.jointTypeColor(type);
+        // The outline, not the fill: a joint is filled at whatever opacity the
+        // settings ask for, so the fill that reaches the picture is blended
+        // with everything under it. The outline is always drawn at full
+        // strength -- that is what makes a joint plain on top of a body -- so
+        // it is the part worth looking for.
+        const QColor colour = scene.jointOutlineColor();
 
-        // Outside a run the joint is always drawn -- that is when it is being
-        // placed, and hiding it then would make it uneditable.
-        scene.setDebugView(false);
+        // The Joints layer is about the run: a joint being placed is always
+        // drawn, and the switch says whether the run keeps showing it.
+        scene.setRunLayer(CanvasScene::RunLayer::Joints, false);
         const int idle = jointPixels(shoot(&scene, area), colour);
 
         SimulationController sim(&scene, nullptr);
@@ -89,15 +94,15 @@ TEST(JointsVisible, Behaves)
         for (int i = 0; i < 10; ++i)
             sim.stepFrame();
 
-        scene.setDebugView(true);
-        const int on = jointPixels(shoot(&scene, area), colour);
-        scene.setDebugView(false);
         const QImage offImage = shoot(&scene, area);
         const int off = jointPixels(offImage, colour);
+        scene.setRunLayer(CanvasScene::RunLayer::Joints, true);
+        const int on = jointPixels(shoot(&scene, area), colour);
         sim.stop();
 
         const bool ok = idle > 0 && on > 0 && off == 0;
-        EXPECT_TRUE(ok) << "joint shows with debug view on and hides without";
+        EXPECT_TRUE(ok) << "a run shows the joint with the Joints layer on and hides it"
+                           " without, and editing shows it either way";
 
         offImage.save(QString::fromLatin1(kScratch) + QStringLiteral("joints_%1_off.png").arg(type));
     }

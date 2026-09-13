@@ -27,12 +27,14 @@ void UndoStack::reset()
     m_states.append({SceneSerializer::save(m_scene), QString(), QString()});
     m_index = 0;
     m_cleanIndex = 0;
+    m_touched = false;
     emit changed();
 }
 
 void UndoStack::markClean()
 {
     m_cleanIndex = m_index;
+    m_touched = false;
     emit changed();
 }
 
@@ -45,8 +47,18 @@ void UndoStack::push(const QString &label, const QString &mergeKey)
 
     // Nothing actually changed. Recording it would put a do-nothing step in
     // the history that has to be undone twice to get past.
-    if (document == m_states[m_index].document)
+    //
+    // It is still an edit, though. A rule is left out of the saved document
+    // until it is complete, so every step of filling one in lands here -- and
+    // if that left the stack looking clean, Save would be greyed out for the
+    // whole time the rule was being written.
+    if (document == m_states[m_index].document) {
+        if (!m_touched) {
+            m_touched = true;
+            emit changed();
+        }
         return;
+    }
 
     // The user has taken a different branch; keeping the old future would let
     // redo jump to a state that never followed from this one.
@@ -61,12 +73,14 @@ void UndoStack::push(const QString &label, const QString &mergeKey)
         m_states[m_index].document = document;
         if (m_cleanIndex == m_index)
             m_cleanIndex = -1;
+        m_touched = false;
         emit changed();
         return;
     }
 
     m_states.append({document, label, mergeKey});
     ++m_index;
+    m_touched = false;
     trim();
     emit changed();
 }
@@ -103,6 +117,9 @@ void UndoStack::restore(int index)
     if (SceneSerializer::load(m_scene, m_states[index].document, &error))
         m_index = index;
     m_restoring = false;
+    // Undo puts a recorded state back on screen, so whatever was half-typed
+    // on top of it is gone with it.
+    m_touched = false;
 
     emit changed();
 }

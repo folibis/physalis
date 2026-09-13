@@ -46,7 +46,7 @@ struct Arm
         PhysicsBody *arm = scene.createBodyFromSelection();
         // Gravity would swing the arm down past the limit before the motor had
         // a say; this is about the limit, not about the fall.
-        arm->props().gravityScale = 0.0;
+        arm->props().params["gravityScale"] = 0.0;
         scene.clearPhysicsSelection();
 
         QVariantMap params;

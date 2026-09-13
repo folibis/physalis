@@ -3,6 +3,8 @@
 #include "CanvasScene.h"
 #include "PhysicsBody.h"
 #include "ShapeItem.h"
+#include "CatalogueRows.h"
+#include "EngineRegistry.h"
 
 void SensorPropertyPane::attach(QObject *target)
 {
@@ -31,10 +33,21 @@ std::vector<PropertyRow> SensorPropertyPane::rows(EditorMode mode) const
     PropertyRow isSensor;
     isSensor.label = QObject::tr("Sensor");
     isSensor.type = PropertyFieldType::Boolean;
-    isSensor.getter = [part] { return part->isSensor; };
-    isSensor.setter = [part, changed](const QVariant &v) {
-        part->isSensor = v.toBool();
+    isSensor.getter = [scene, shape] { return scene->isSensorShape(shape); };
+    isSensor.setter = [scene, shape, changed, pane = const_cast<SensorPropertyPane *>(this)](
+                          const QVariant &v) {
+        // Only when it actually turns over. Rebuilding the pane builds this
+        // box again and sets it to what it already is; asking for another
+        // rebuild from that would never stop.
+        if (v.toBool() == scene->isSensorShape(shape))
+            return;
+        scene->setSensorShape(shape, v.toBool());
         changed();
+        // Turning it off makes this a solid shape again, which is the physics
+        // pane's business rather than this one's. Queued: the rebuild deletes
+        // the very checkbox whose signal is still on the stack.
+        QMetaObject::invokeMethod(pane, [pane] { emit pane->paneKindChanged(); },
+                                  Qt::QueuedConnection);
     };
     isSensor.section = section;
     isSensor.tooltip = QObject::tr(
@@ -84,34 +97,19 @@ std::vector<PropertyRow> SensorPropertyPane::rows(EditorMode mode) const
         "falls out of the scene as soon as a run starts.");
     result.push_back(std::move(movement));
 
-    // What it can notice. The same filtering every shape has, named for what
-    // it does here rather than for the bits behind it.
-    const auto bits = [&](const QString &label, quint64 physics::Filter::*field,
-                          const QString &tip) {
-        PropertyRow row;
-        row.label = label;
-        row.type = PropertyFieldType::String;
-        row.getter = [part, field] {
-            return QStringLiteral("0x%1").arg(part->filter.*field, 16, 16, QLatin1Char('0'));
-        };
-        row.setter = [part, field, changed](const QVariant &v) {
-            bool ok = false;
-            const quint64 value = v.toString().trimmed().toULongLong(&ok, 0);
-            if (!ok)
-                return;
-            part->filter.*field = value;
-            changed();
-        };
-        row.section = section;
-        row.tooltip = tip;
-        result.push_back(std::move(row));
-    };
-
-    bits(QObject::tr("Is In Group"), &physics::Filter::categoryBits,
-         QObject::tr("Which group this area belongs to."));
-    bits(QObject::tr("Notices Groups"), &physics::Filter::maskBits,
-         QObject::tr("Which groups it can notice. Whatever enters must also "
-                     "have Sensor Events turned on before it is reported."));
+    // Everything else a shape has, as the engine describes it -- the groups it
+    // belongs to and notices among them. The sensor switch itself is already
+    // the first row, so it is not repeated here.
+    if (auto engine = physics::EngineRegistry::create(scene->simulationEngineName())) {
+        const QString sensorKey = scene->sensorPropertyKey();
+        for (PropertyRow &row : rowsFromCatalogue(engine->shapeProperties(), &shape->part().params,
+                                                  changed, section)) {
+            if (row.key == sensorKey)
+                continue;
+            row.section = section;
+            result.push_back(std::move(row));
+        }
+    }
 
     return result;
 }

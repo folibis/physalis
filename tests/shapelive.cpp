@@ -101,8 +101,8 @@ TEST(ShapeLive, SurfaceSpeedCarriesWhatIsOnIt)
 TEST(ShapeLive, ImpactSpeedIsReadableAfterAHit)
 {
     Floor drop(-200.0);
-    drop.crate->part().enableHitEvents = true;
-    drop.crate->part().enableContactEvents = true;
+    drop.crate->part().params["enableHitEvents"] = true;
+    drop.crate->part().params["enableContactEvents"] = true;
 
     SimulationController sim(&drop.scene, nullptr);
     sim.setEngineName(QStringLiteral("Box2D"));

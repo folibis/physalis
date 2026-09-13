@@ -45,7 +45,17 @@ private:
     void connectScene();
 
     QTreeWidgetItem *makeItem(QTreeWidgetItem *parent, NodeKind kind, void *object,
-                              const QIcon &icon, const QString &label, const QString &tooltip);
+                              const QIcon &icon, const QString &label, const QString &tooltip,
+                              const QString &key = QString());
+
+    // Which rows are folded, by a key that survives a rebuild -- the tree is
+    // built again whenever the scene changes, and a row identified by its own
+    // text would lose its place the moment a count in a caption moved.
+    QSet<QString> m_collapsedKeys;
+    static QString keyOf(const QTreeWidgetItem *item);
+    void rememberExpansion();
+    void applyExpansion();
+    void showContextMenu(const QPoint &pos);
     QTreeWidgetItem *itemFor(void *object) const;
 
     static NodeKind kindOf(const QTreeWidgetItem *item);

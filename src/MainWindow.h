@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QVariantMap>
 #include <QList>
+#include <QPointer>
 #include "OptionsDialog.h"
 #include "EditorMode.h"
 
@@ -27,6 +28,8 @@ class SimulationController;
 class QLabel;
 class QComboBox;
 class QToolButton;
+class FullScreenView;
+class ViewLayersCombo;
 
 class MainWindow : public QMainWindow
 {
@@ -92,6 +95,16 @@ private:
     // Where the export converters live. Not a scene property, so unlike the
     // rest of the settings it has nowhere else to be kept.
     QString m_converterPath;
+    // Which engine a new scene is built for. An open scene keeps its own.
+    QString m_defaultEngineName;
+    QString engineForNewScenes() const;
+    // Points the scene, the simulation, the joint menu and the panels at one
+    // engine.
+    void useEngine(const QString &name);
+    // Moves the editor to another engine, closing the open scene first --
+    // asking whether to save it. False if the user decided to keep it.
+    bool adoptEngine(const QString &name);
+    bool confirmCloseForEngine(const QString &name);
     // What each converter asked to be asked, by converter id.
     QHash<QString, QVariantMap> m_converterSettings;
 
@@ -121,12 +134,24 @@ private:
     std::unique_ptr<Ui::MainWindow> m_ui;
     // Not in the form: filled from the engine at run time.
     QMenu *m_jointTypeMenu = nullptr;
+    void rebuildJointMenu();
     CanvasScene *m_scene = nullptr;
     UndoStack *m_undo = nullptr;
-    QCheckBox *m_debugViewCheck = nullptr;
+    // What the canvas draws -- see the kLayer* keys in MainWindow.cpp.
+    ViewLayersCombo *m_layers = nullptr;
+    void applyLayer(const QString &key, bool on);
+    // Show the run full screen, with the keys standing in for the transport.
+    QCheckBox *m_fullScreenCheck = nullptr;
+    QPointer<FullScreenView> m_fullScreen;
+    void updateFullScreenView();
+    // How fast a run plays, next to the transport buttons it belongs with.
+    QComboBox *m_speedCombo = nullptr;
     // The log readout, pinned to the canvas corner.
     QLabel *m_logOverlay = nullptr;
     void updateLogOverlay();
+    // The heading a logged property sits under, worked out again rather than
+    // taken from what the watch was named when it was added.
+    QString logLabelFor(const CanvasScene::Watch &watch) const;
 public:
     // Reachable from tests: the menu items themselves cannot be clicked
     // without pumping a blocking popup.
@@ -137,12 +162,14 @@ public:
     bool saveSceneAs(QString path);
 
     bool openSceneForTest(const QString &path) { return openScene(path); }
+    bool adoptEngineForTest(const QString &name) { return adoptEngine(name); }
     bool saveSceneForTest() { return onSaveScene(); }
     bool saveSceneAsForTest(const QString &path) { return saveSceneAs(path); }
 
 private:
     void duplicateShape(ShapeItem *item);
     void flipShape(ShapeItem *item, bool horizontally);
+    void convertToPolygon(ShapeItem *item);
 
     // Toolbar contents, shown and hidden with their editor mode.
     QList<QAction *> m_editModeActions;
@@ -151,7 +178,6 @@ private:
 
     QString m_scenePath;
     int m_pasteCount = 0;
-    QComboBox *m_engineCombo = nullptr;
     SimulationController *m_simulation = nullptr;
     QAction *m_resetScaleAction = nullptr;
     QLabel *m_statusHelpLabel = nullptr;

@@ -161,6 +161,12 @@ void ShapeItem::setSmoothChain(bool smooth)
     emit propertyChanged();
 }
 
+void ShapeItem::setPreferOutline(bool outline)
+{
+    m_preferOutline = outline;
+    emit propertyChanged();
+}
+
 void ShapeItem::setBorderWidth(qreal width)
 {
     m_borderWidth = width;
@@ -214,14 +220,19 @@ void ShapeItem::paintPhysicsView(QPainter *painter, const CanvasScene *canvas) c
     if (assigned) {
         outline = canvas->bodyColor(m_body->props().type);
 
-        if (canvas->simulationRunning() && canvas->debugView()) {
+        if (canvas->simulationRunning() && canvas->runLayer(CanvasScene::RunLayer::SleepShading)) {
             const int shift = 100 + canvas->sleepShiftPercent();
             outline = m_body->isAsleep() ? outline.darker(shift) : outline.lighter(shift);
         }
 
         QColor fill = outline;
         fill.setAlpha(canvas->physicsFillAlpha());
-        brush = QBrush(fill);
+        // A sensor is left open unless the setting says otherwise: hatching
+        // over a solid fill says "you can pass through this" and "this is a
+        // wall" at the same time. An outline has no inside to fill either way.
+        const bool open = !hasInterior()
+                          || (canvas->isSensorShape(this) && !canvas->sensorFillsBody());
+        brush = open ? QBrush(Qt::NoBrush) : QBrush(fill);
     } else {
         outline = canvas->unassignedShapeColor();
         brush = QBrush(outline, Qt::DiagCrossPattern);
@@ -237,10 +248,10 @@ void ShapeItem::paintPhysicsView(QPainter *painter, const CanvasScene *canvas) c
     // A sensor is an ordinary shape wearing a flag, so it keeps the colour of
     // the body it belongs to and gains hatching on top -- which says you can
     // pass through it without hiding what kind of body it is part of.
-    if (assigned && m_part.isSensor) {
+    if (assigned && canvas->isSensorShape(this)) {
         painter->save();
         painter->setPen(Qt::NoPen);
-        painter->setBrush(QBrush(canvas->sensorColor(), Qt::BDiagPattern));
+        painter->setBrush(QBrush(canvas->sensorColor(), canvas->sensorPattern()));
         paintShape(painter, m_rect);
         painter->restore();
     }
@@ -275,7 +286,7 @@ void ShapeItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidg
     painter->setPen(pen);
     // Both branches must already be QBrush: a QColor/Qt::NoBrush ternary
     // resolves via QColor(QRgb) and turns NoBrush into opaque black.
-    painter->setBrush(m_filled ? QBrush(m_bodyColor) : QBrush(Qt::NoBrush));
+    painter->setBrush(drawsFilled() ? QBrush(m_bodyColor) : QBrush(Qt::NoBrush));
     paintShape(painter, m_rect);
 
     const bool showSelection = !(canvas && canvas->simulationRunning());
@@ -333,8 +344,9 @@ void ShapeItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidg
             handleShape = canvasScene->handleShape();
         }
 
-        painter->setPen(QPen(handleBorderColor, handleBorderWidth));
-        painter->setBrush(handleColor);
+        painter->setPen(QPen(CanvasScene::throughHandle(handleBorderColor),
+                             handleBorderWidth));
+        painter->setBrush(CanvasScene::throughHandle(handleColor));
         const bool showHandles = canvas && canvas->geometryEditingAllowed()
                                  && !canvas->movingShape() && !inGroup;
         for (HandleId id : showHandles ? activeHandles() : std::vector<HandleId>{}) {
@@ -396,7 +408,11 @@ QPainterPath ShapeItem::hitTestPath() const
     const QPainterPath path = localShapePath();
     QPainterPathStroker stroker;
     stroker.setWidth(qMax(m_borderWidth, 1.0) + 6.0);
-    return path.united(stroker.createStroke(path));
+    const QPainterPath band = stroker.createStroke(path);
+    // united() works on filled areas, and filling an open path closes it --
+    // so uniting one in would make the empty space a line happens to span
+    // clickable, as though the line joined its own ends.
+    return outlineIsClosed() ? path.united(band) : band;
 }
 
 QPainterPath ShapeItem::selectionIndicatorPath() const
@@ -409,7 +425,10 @@ QPainterPath ShapeItem::selectionIndicatorPath() const
     const qreal margin = m_borderWidth / 2.0 + indicatorWidth / 2.0 + 1.0;
     QPainterPathStroker stroker;
     stroker.setWidth(margin * 2.0);
-    return stroker.createStroke(path).united(path);
+    const QPainterPath band = stroker.createStroke(path);
+    // Same reason as above: uniting the path in draws the outline of a closed
+    // shape, joining the last point back to the first on one that is open.
+    return outlineIsClosed() ? band.united(path) : band;
 }
 
 QRectF ShapeItem::adjustedRectForHandle(HandleId id, const QPointF &localPos) const

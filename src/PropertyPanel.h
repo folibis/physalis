@@ -49,6 +49,10 @@ private:
         QString key;
         QString section;
         QString label;
+        // The heading the row sits under -- Motor, Limit, Spring. Three of
+        // them carry a switch called "Enabled", so the group is what tells
+        // them apart once the row is out of the table.
+        QString group;
     };
 
     void setActivePane(PropertyPane *pane);

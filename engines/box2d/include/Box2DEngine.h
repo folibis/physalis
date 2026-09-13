@@ -63,9 +63,14 @@ public:
     void setJointParam(JointHandle handle, const QString &key, const QVariant &value) override;
     void setBodyParam(BodyHandle handle, const QString &key, const QVariant &value) override;
     QVector<EngineEvent> pollEvents() override;
+    QStringList takeProblems() override;
     RayHit castRay(const QPointF &origin, const QPointF &translation,
                    quint64 maskBits) const override;
 
+    // Looks over the bodies after a step for anything the solver could not
+    // keep a number, and takes it out of the world rather than letting it
+    // spread through every contact it has.
+    void collectWreckage();
     // Compares each limited joint against its bounds and queues an event on
     // arrival. Called from step(), after the solver has run.
     void detectLimitEvents();
@@ -109,6 +114,13 @@ private:
     bool attachEdgeChain(b2BodyId bodyId, const QVector<QPointF> &points, bool closed,
                          const b2ShapeDef &shapeDef) const;
 
+    // Box2D's joint defs all name two bodies. A joint that holds one body to
+    // a point in the world has only one, so this static, shapeless body fills
+    // the other slot. Made on first use and owned by the world; the scene has
+    // no idea it exists.
+    b2BodyId worldAnchorBody();
+    b2BodyId m_worldAnchor = b2_nullBodyId;
+
     b2WorldId m_worldId = b2_nullWorldId;
     std::vector<b2BodyId> m_bodies;
 
@@ -127,6 +139,12 @@ private:
     };
     std::vector<LimitState> m_jointLimits;
     QVector<EngineEvent> m_pendingEvents;
+    // What went wrong in the run: an assertion Box2D would otherwise have
+    // aborted on, or a body the solver left holding an impossible value.
+    QStringList m_problems;
+    // Once a body is beyond saving it is taken out and named once, rather than
+    // reported again every step for the rest of the run.
+    QSet<QString> m_ruined;
 
     // The editor's name for each shape handed to Box2D, indexed by what is
     // stashed in that shape's user data. Contacts are reported per shape, so
@@ -172,6 +190,15 @@ private:
 
     // Joints, indexed by the JointHandle handed back.
     QVector<b2JointId> m_joints;
+    // Where a sliding joint stood when it was made. Box2D measures a
+    // prismatic joint's travel between its two anchors, so a joint whose
+    // anchors are apart starts at whatever that distance is -- and limits
+    // written as "200 units of travel" would sit somewhere behind it. The
+    // editor means travel from where the joint starts, so the offset is kept
+    // and added to the limits going in and taken off the translation coming
+    // back out. Zero for every other kind of joint, and for the usual case
+    // where the two anchors are dropped on the same point.
+    QVector<float> m_travelOrigins;
 
     // Box2D's solver iteration count per step, as the world asked for it.
     // 4 is the value Box2D's own samples use; higher trades speed for stiffer

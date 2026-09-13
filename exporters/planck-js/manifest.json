@@ -1,0 +1,75 @@
+{
+    "name": "Planck.js / web page",
+    "description": "A standalone web page: an index.html that runs this scene in Planck.js on a canvas.",
+    "settings": [
+        {
+            "key": "projectName",
+            "label": "Project name",
+            "type": "string",
+            "default": "PhysalisScene",
+            "tooltip": "The page title and the folder name inside package.json. Letters, digits and underscores."
+        },
+        {
+            "key": "addControls",
+            "label": "Add controls",
+            "type": "bool",
+            "default": true,
+            "tooltip": "Start, Pause and Stop buttons above the canvas. Without them the page opens running and there is nothing to press."
+        },
+        {
+            "key": "debugView",
+            "label": "Debug view",
+            "type": "bool",
+            "default": true,
+            "tooltip": "Adds a Debug view switch to the controls: joints, each body's centre of mass and heading, and where the rays are looking, drawn over the scene."
+        },
+        {
+            "key": "stepsPerSecond",
+            "label": "Steps per second",
+            "type": "int",
+            "default": 60,
+            "min": 15,
+            "max": 480,
+            "tooltip": "How often the exported page steps the world. The editor's own setting is not carried across, since it is a preference rather than part of the scene."
+        },
+        {
+            "key": "librarySource",
+            "label": "Where Planck.js comes from",
+            "type": "choice",
+            "choices": [
+                "cdn",
+                "npm"
+            ],
+            "default": "cdn",
+            "tooltip": "cdn: index.html loads the library straight from the URL below, so the exported folder carries no copy of it and needs a network to open. npm: a package.json is written and the page expects node_modules, so 'npm install' fetches the repository and ref below."
+        },
+        {
+            "key": "libraryUrl",
+            "label": "Planck.js URL",
+            "type": "string",
+            "default": "https://cdn.jsdelivr.net/npm/planck@{version}/dist/planck.js",
+            "tooltip": "What index.html points its script tag at. {version} is replaced by the version below. Point it at a fork, a mirror, a company proxy or a copy you keep beside the page; whatever answers has to be a Planck.js v1 UMD build, which is what the generated code is written against."
+        },
+        {
+            "key": "libraryVersion",
+            "label": "Planck.js version",
+            "type": "string",
+            "default": "1.0.0",
+            "tooltip": "Which release the URL above asks for, and what package.json depends on. The generated code is written against the v1 API."
+        },
+        {
+            "key": "libraryRepository",
+            "label": "Planck.js repository",
+            "type": "string",
+            "default": "https://github.com/piqnt/planck.js.git",
+            "tooltip": "Used by the npm choice: package.json depends on this repository rather than on the registry. Point it at a fork or a mirror."
+        },
+        {
+            "key": "libraryRef",
+            "label": "Planck.js tag or branch",
+            "type": "string",
+            "default": "v1.0.0",
+            "tooltip": "Which commit of that repository npm should take. Pinned to a tag by default, so the page builds the same way twice."
+        }
+    ]
+}

@@ -1,5 +1,7 @@
 #include "FieldPropertyPane.h"
 #include "../CanvasScene.h"
+#include "CatalogueRows.h"
+#include "EngineRegistry.h"
 
 std::vector<PropertyRow> FieldPropertyPane::rows(EditorMode mode) const
 {
@@ -10,13 +12,18 @@ std::vector<PropertyRow> FieldPropertyPane::rows(EditorMode mode) const
     CanvasScene *scene = m_scene;
 
     if (mode == EditorMode::Physics) {
-        std::vector<PropertyRow> world = worldRows(&scene->world(),
-                                                   [scene] { scene->notifyFieldPropertyChanged(); });
+        std::vector<PropertyRow> world =
+            worldRows(scene->simulationRunning(), &scene->world(),
+                      [scene] { scene->notifyFieldPropertyChanged(); },
+                      scene->simulationEngineName());
 
         world.push_back({QObject::tr("Solid Field Bounds"), PropertyFieldType::Boolean,
             [scene] { return scene->fieldBoundsSolid(); },
             [scene](const QVariant &v) { scene->setFieldBoundsSolid(v.toBool()); },
             -100000.0, 100000.0, {}, -1, 0.0, QObject::tr("World")});
+        world.back().tooltip =
+            QObject::tr("Walls the edges of the field, so nothing can leave it. Off,"
+                        " whatever falls out keeps falling.");
 
         for (PropertyRow &row : world)
             result.push_back(std::move(row));
@@ -30,175 +37,105 @@ std::vector<PropertyRow> FieldPropertyPane::rows(EditorMode mode) const
         [scene] { return scene->fieldWidth(); },
         [scene](const QVariant &v) { scene->setFieldSize(qMax(100.0, v.toDouble()), scene->fieldHeight()); },
         100.0, 1000000.0, {}});
+    result.back().tooltip = QObject::tr("How wide the drawing area is. The field is centred on the origin,"
+                                        " so this is half of it either side.");
 
     result.push_back({QObject::tr("Field Height"), PropertyFieldType::Numeric,
         [scene] { return scene->fieldHeight(); },
         [scene](const QVariant &v) { scene->setFieldSize(scene->fieldWidth(), qMax(100.0, v.toDouble())); },
         100.0, 1000000.0, {}});
+    result.back().tooltip = QObject::tr("How tall the drawing area is. Nothing stops a shape being placed"
+                                        " outside it.");
 
     result.push_back({QObject::tr("Background Color"), PropertyFieldType::Color,
         [scene] { return scene->backgroundColor(); },
         [scene](const QVariant &v) { scene->setBackgroundColor(v.value<QColor>()); },
         -100000.0, 100000.0, {}});
+    result.back().tooltip = QObject::tr("What the field is painted with, behind everything else. Saved"
+                                        " with the scene, and exports use it too.");
 
     result.push_back({QObject::tr("Show Grid"), PropertyFieldType::Boolean,
         [scene] { return scene->showGrid(); },
         [scene](const QVariant &v) { scene->setShowGrid(v.toBool()); },
         -100000.0, 100000.0, {}});
+    result.back().tooltip = QObject::tr("Whether the grid is drawn. It is a drawing aid only -- snapping"
+                                        " is set in Options.");
 
     result.push_back({QObject::tr("Grid Cell Size"), PropertyFieldType::Numeric,
         [scene] { return scene->gridCellSize(); },
         [scene](const QVariant &v) { scene->setGridCellSize(qMax(1.0, v.toDouble())); },
         1.0, 10000.0, {}});
+    result.back().tooltip = QObject::tr("How far apart the grid lines are, in scene units.");
 
     result.push_back({QObject::tr("Grid Color"), PropertyFieldType::Color,
         [scene] { return scene->gridColor(); },
         [scene](const QVariant &v) { scene->setGridColor(v.value<QColor>()); },
         -100000.0, 100000.0, {}});
+    result.back().tooltip = QObject::tr("What the grid lines are drawn in. Appearance only.");
 
     result.push_back({QObject::tr("Scale (%)"), PropertyFieldType::Numeric,
         [scene] { return scene->currentScale(); },
         [scene](const QVariant &v) { scene->setCurrentScale(v.toDouble()); },
         scene->scaleMin(), scene->scaleMax(), {}});
+    result.back().tooltip = QObject::tr("How far the view is zoomed in. It changes what you see and"
+                                        " nothing about the scene itself.");
 
     return result;
 }
 
-std::vector<PropertyRow> FieldPropertyPane::worldRows(physics::WorldDesc *world,
-                                                      const std::function<void()> &changed)
+std::vector<PropertyRow> FieldPropertyPane::worldRows(bool running, physics::WorldDesc *world,
+                                                      const std::function<void()> &changed,
+                                                      const QString &engineName)
 {
     std::vector<PropertyRow> result;
     const QString section = QObject::tr("World");
 
-    result.push_back({QObject::tr("Gravity X (m/s²)"), PropertyFieldType::Numeric,
-        [world] { return world->gravity.x(); },
-        [world, changed](const QVariant &v) { world->gravity.setX(v.toDouble()); changed(); },
-        -1000.0, 1000.0, {}, 2, 0.1, section});
-
-    result.push_back({QObject::tr("Gravity Y (m/s²)"), PropertyFieldType::Numeric,
-        [world] { return world->gravity.y(); },
-        [world, changed](const QVariant &v) { world->gravity.setY(v.toDouble()); changed(); },
-        -1000.0, 1000.0, {}, 2, 0.1, section});
-
-    // Filled by the run while it is going. Read-only, and loggable like any
-    // other row -- right-click the name to watch one.
-    for (const auto &live : { qMakePair(QObject::tr("Elapsed Time (s)"), QStringLiteral("time")),
-                              qMakePair(QObject::tr("Frame"), QStringLiteral("frame")) }) {
-        PropertyRow row;
-        row.label = live.first;
-        row.key = live.second;
-        row.type = PropertyFieldType::Numeric;
-        row.section = section;
-        row.decimals = live.second == QLatin1String("frame") ? 0 : 2;
-        row.minValue = 0.0;
-        row.maxValue = 1e12;
-        row.getter = [] { return QVariant(); };   // the engine answers while running
-        row.setter = [](const QVariant &) {};
-        row.readOnly = true;
-        row.tooltip = QObject::tr("Counted from the moment the run starts.");
-        result.push_back(std::move(row));
+    // Only while a run is going: nothing else can answer these, and a row
+    // showing a flat zero whatever is happening looks like a measurement
+    // without being one.
+    if (running) {
+        for (const auto &live : { qMakePair(QObject::tr("Elapsed Time (s)"), QStringLiteral("time")),
+                                  qMakePair(QObject::tr("Frame"), QStringLiteral("frame")) }) {
+            PropertyRow row;
+            row.label = live.first;
+            row.key = live.second;
+            row.type = PropertyFieldType::Numeric;
+            row.section = section;
+            row.decimals = live.second == QLatin1String("frame") ? 0 : 2;
+            row.minValue = 0.0;
+            row.maxValue = 1e12;
+            row.getter = [] { return QVariant(); };   // the engine answers while running
+            row.setter = [](const QVariant &) {};
+            row.readOnly = true;
+            row.tooltip = QObject::tr("Counted from the moment the run starts.");
+            result.push_back(std::move(row));
+        }
     }
 
+    // The scene's own scale, not a physics setting: the editor draws, measures
+    // and exports with it, and hands it to whichever engine runs the scene.
     result.push_back({QObject::tr("Pixels per Meter"), PropertyFieldType::Numeric,
         [world] { return world->pixelsPerMeter; },
         [world, changed](const QVariant &v) { world->pixelsPerMeter = qMax(1.0, v.toDouble()); changed(); },
         1.0, 10000.0, {}, -1, 0.0, section});
+    result.back().defaultValue = physics::WorldDesc().pixelsPerMeter;
+    result.back().tooltip = QObject::tr("How many scene units make a metre. It sets the scale of"
+                                        " everything: at a large value a drawn box weighs"
+                                        " a few grams, and forces have to shrink to match.");
 
-    // The solver's tuning. Its defaults are Box2D's own, and the reset arrow
-    // on each row puts them back.
-    const QString solver = QObject::tr("Solver");
-    static const physics::WorldDesc factory;
-
-    const auto number = [&](const QString &label, qreal physics::WorldDesc::*field,
-                            qreal lo, qreal hi, int decimals, qreal step,
-                            const QString &tip) {
-        PropertyRow row;
-        row.label = label;
-        row.type = PropertyFieldType::Numeric;
-        row.getter = [world, field] { return world->*field; };
-        row.setter = [world, changed, field](const QVariant &v) {
-            world->*field = v.toDouble();
-            changed();
-        };
-        row.minValue = lo;
-        row.maxValue = hi;
-        row.decimals = decimals;
-        row.step = step;
-        row.section = solver;
-        row.defaultValue = factory.*field;
-        row.tooltip = tip;
-        result.push_back(std::move(row));
-    };
-
-    const auto flag = [&](const QString &label, bool physics::WorldDesc::*field,
-                          const QString &tip) {
-        PropertyRow row;
-        row.label = label;
-        row.type = PropertyFieldType::Boolean;
-        row.getter = [world, field] { return world->*field; };
-        row.setter = [world, changed, field](const QVariant &v) {
-            world->*field = v.toBool();
-            changed();
-        };
-        row.section = solver;
-        row.defaultValue = factory.*field;
-        row.tooltip = tip;
-        result.push_back(std::move(row));
-    };
-
-    number(QObject::tr("Restitution Threshold (m/s)"),
-           &physics::WorldDesc::restitutionThreshold, 0.0, 100.0, 2, 0.1,
-           QObject::tr("Below this closing speed restitution is ignored, so a "
-                       "bouncy shape moving slower than this will not bounce "
-                       "at all."));
-    number(QObject::tr("Hit Event Threshold (m/s)"),
-           &physics::WorldDesc::hitEventThreshold, 0.0, 100.0, 2, 0.1,
-           QObject::tr("How hard an impact must be before a shape with Hit "
-                       "Events raises one."));
-    number(QObject::tr("Contact Stiffness (Hz)"),
-           &physics::WorldDesc::contactHertz, 1.0, 240.0, 1, 1.0,
-           QObject::tr("How quickly overlapping shapes are pushed apart. "
-                       "Higher recovers faster but can jitter."));
-    number(QObject::tr("Contact Damping"),
-           &physics::WorldDesc::contactDampingRatio, 0.0, 100.0, 1, 0.5,
-           QObject::tr("Damping on that recovery. Lower resolves overlap more "
-                       "energetically."));
-    number(QObject::tr("Max Push Speed (m/s)"),
-           &physics::WorldDesc::maxContactPushSpeed, 0.0, 100.0, 2, 0.5,
-           QObject::tr("A cap on how fast overlap recovery may push, whatever "
-                       "the stiffness asks for."));
-    number(QObject::tr("Max Speed (m/s)"),
-           &physics::WorldDesc::maximumLinearSpeed, 1.0, 10000.0, 0, 10.0,
-           QObject::tr("Nothing in the world may move faster than this."));
-
-    // An int rather than a qreal, so it cannot go through number() above.
-    {
-        PropertyRow row;
-        row.label = QObject::tr("Solver Sub-steps");
-        row.type = PropertyFieldType::Numeric;
-        row.getter = [world] { return world->subStepCount; };
-        row.setter = [world, changed](const QVariant &v) {
-            world->subStepCount = qBound(1, v.toInt(), 64);
-            changed();
-        };
-        row.minValue = 1.0;
-        row.maxValue = 64.0;
-        row.decimals = 0;
-        row.step = 1.0;
-        row.section = solver;
-        row.defaultValue = factory.subStepCount;
-        row.tooltip = QObject::tr("How many passes the solver makes within one step. "
-                                  "More holds a tall stack together; fewer is faster "
-                                  "and springier.");
-        result.push_back(std::move(row));
+    // Everything else the world is -- gravity, the solver's tuning, whether
+    // bodies may sleep -- is the engine's to describe. Which settings exist
+    // and what they are called changes with the engine, and nothing here
+    // knows one of them by name.
+    if (auto engine = physics::EngineRegistry::create(engineName)) {
+        const physics::PropertyList properties = engine->worldProperties();
+        if (running) {
+            for (PropertyRow &row : liveRowsFromCatalogue(properties, section))
+                result.push_back(std::move(row));
+        }
+        for (PropertyRow &row : rowsFromCatalogue(properties, &world->params, changed, section))
+            result.push_back(std::move(row));
     }
-
-    flag(QObject::tr("Allow Sleeping"), &physics::WorldDesc::enableSleep,
-         QObject::tr("Lets settled bodies stop being simulated. Turning this "
-                     "off costs speed but keeps everything responsive."));
-    flag(QObject::tr("Continuous Collision"), &physics::WorldDesc::enableContinuous,
-         QObject::tr("Stops fast bodies tunnelling through thin ones. Off is "
-                     "cheaper but things can pass through walls."));
 
     return result;
 }
@@ -210,7 +147,9 @@ std::vector<PropertyRow> FieldPropertyPane::defaultRows(EditorMode mode) const
         return result;
 
     static physics::WorldDesc pristine;
-    for (PropertyRow &row : worldRows(&pristine, [] {}))
+    pristine.params.clear();
+    for (PropertyRow &row : worldRows(false, &pristine, [] {},
+                                      m_scene ? m_scene->simulationEngineName() : QString()))
         result.push_back(std::move(row));
 
     result.push_back({QObject::tr("Solid Field Bounds"), PropertyFieldType::Boolean,

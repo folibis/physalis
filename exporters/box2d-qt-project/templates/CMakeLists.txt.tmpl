@@ -3,7 +3,6 @@ project({{PROJECT}} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD {{CXX_STANDARD}})
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_AUTOMOC ON)
 
 {{QT_PREFIX}}find_package(Qt6 COMPONENTS Widgets REQUIRED)
 
@@ -24,13 +23,5 @@ FetchContent_Declare(box2d
 )
 FetchContent_MakeAvailable(box2d)
 
-add_executable({{PROJECT}}
-    main.cpp
-    Viewport.h
-    Viewport.cpp
-    Scene.h
-    Scene.cpp
-    Rules.h
-    Rules.cpp
-)
+add_executable({{PROJECT}} main.cpp)
 target_link_libraries({{PROJECT}} PRIVATE Qt6::Widgets box2d)

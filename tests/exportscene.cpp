@@ -265,19 +265,22 @@ TEST(ExportScene, OutlinesAreNotOffsetTwice)
     ASSERT_TRUE(SceneExporter::run(found.first(), &scene, output.path(), kNoSettings, &error))
         << error.toStdString();
 
-    const QString generated = contentsOf(output.filePath(QStringLiteral("Scene.cpp")));
-    const int at = generated.indexOf(QStringLiteral("SceneShape::Polygon"));
-    ASSERT_GT(at, 0);
-    const QString drawable = generated.mid(at, 400);
-
-    EXPECT_TRUE(drawable.contains(QStringLiteral("drawn.center = QPointF(0.0, 0.0)")))
-        << "the outline is drawn where its points say, and nowhere else";
-    // The first point, as the engine has it, has to appear untouched.
-    const QPointF first = outline->geometry.points.first();
-    EXPECT_TRUE(drawable.contains(QStringLiteral("QPointF(%1, %2)")
-                                      .arg(first.x(), 0, 'f', 1)
-                                      .arg(first.y(), 0, 'f', 1)))
-        << drawable.toStdString();
+    // The points, as the engine has them, written straight into the shape: in
+    // the body's frame already, so nothing else moves them.
+    const QString generated = contentsOf(output.filePath(QStringLiteral("main.cpp")));
+    const auto typed = [](qreal v) {
+        QString text = QString::number(qRound(v * 1000.0) / 1000.0, 'f', 3);
+        while (text.endsWith(QLatin1Char('0')))
+            text.chop(1);
+        if (text.endsWith(QLatin1Char('.')))
+            text.chop(1);
+        return text;
+    };
+    for (const QPointF &point : outline->geometry.points) {
+        EXPECT_TRUE(generated.contains(QStringLiteral("m(%1, %2)").arg(typed(point.x()), typed(point.y()))))
+            << "m(" << typed(point.x()).toStdString() << ", " << typed(point.y()).toStdString()
+            << ") is missing";
+    }
 }
 
 // What a converter says through io.log() has to come back out, or the message
@@ -371,13 +374,13 @@ TEST(ExportScene, SettingsReachTheConverter)
     ASSERT_TRUE(SceneExporter::run(found.first(), &scene, output.path(), settings, &error))
         << error.toStdString();
 
-    const QString generated = contentsOf(output.filePath(QStringLiteral("Scene.cpp")));
-    EXPECT_TRUE(generated.contains(QStringLiteral("QColor(\"#ff0000ff\")")))
-        << "the cart's dynamic bodies are outlined in the colour the settings gave";
-    EXPECT_TRUE(generated.contains(QStringLiteral("QColor(\"#ff00ff00\")")))
+    const QString generated = contentsOf(output.filePath(QStringLiteral("main.cpp")));
+    EXPECT_TRUE(generated.contains(QStringLiteral("COLOR_DYNAMIC = b2HexColor(0x0000ff);")))
+        << "the cart's dynamic bodies are drawn in the colour the settings gave";
+    EXPECT_TRUE(generated.contains(QStringLiteral("COLOR_STATIC = b2HexColor(0x00ff00);")))
         << "and its ground and wall in the static one";
-    // 90 is 0x5a, and Qt writes a colour as #aarrggbb.
-    EXPECT_TRUE(generated.contains(QStringLiteral("QColor(\"#5a0000ff\")")))
+    EXPECT_TRUE(generated.contains(QStringLiteral("shapeDef.material.customColor = COLOR_DYNAMIC;")));
+    EXPECT_TRUE(generated.contains(QStringLiteral("FILL_ALPHA = 90;")))
         << "filled at the transparency the settings asked for";
 }
 
@@ -401,15 +404,15 @@ TEST(ExportScene, CarriesSolidFieldBounds)
         EXPECT_TRUE(SceneExporter::run(found.first(), &scene, output.path(),
                                        kNoSettings, &error))
             << error.toStdString();
-        return contentsOf(output.filePath(QStringLiteral("Scene.cpp")));
+        return contentsOf(output.filePath(QStringLiteral("main.cpp")));
     };
 
-    EXPECT_FALSE(exportWith(false).contains(QStringLiteral("field bounds")))
+    EXPECT_FALSE(exportWith(false).contains(QStringLiteral("The walls around the field")))
         << "a scene without them gets no walls";
 
     const QString walled = exportWith(true);
-    EXPECT_TRUE(walled.contains(QStringLiteral("field bounds")));
-    EXPECT_EQ(walled.count(QStringLiteral("field_bounds")), 4)
+    EXPECT_TRUE(walled.contains(QStringLiteral("The walls around the field")));
+    EXPECT_EQ(walled.count(QStringLiteral("b2CreatePolygonShape(walls, ")), 4)
         << "four walls, one on each side";
 }
 
@@ -440,14 +443,12 @@ TEST(ExportScene, QtProjectConverterProducesAProject)
     ASSERT_TRUE(SceneExporter::run(*qtProject, &scene, output.path(), kNoSettings, &error, &written))
         << error.toStdString();
 
-    const QStringList expected { QStringLiteral("CMakeLists.txt"), QStringLiteral("main.cpp"),
-                                 QStringLiteral("Scene.h"), QStringLiteral("Scene.cpp"),
-                                 QStringLiteral("Viewport.h"), QStringLiteral("Viewport.cpp"),
-                                 QStringLiteral("Rules.h"), QStringLiteral("Rules.cpp") };
+    const QStringList expected { QStringLiteral("CMakeLists.txt"), QStringLiteral("main.cpp") };
     for (const QString &name : expected)
         EXPECT_TRUE(written.contains(name)) << name.toStdString() << " was not written";
+    EXPECT_EQ(written.size(), expected.size()) << "one program, and what builds it";
 
-    const QString generated = contentsOf(output.filePath(QStringLiteral("Scene.cpp")));
+    const QString generated = contentsOf(output.filePath(QStringLiteral("main.cpp")));
     EXPECT_TRUE(generated.contains(QStringLiteral("b2CreateWorld")));
     // The cart has a ground, a wall, a chassis and two wheels, joined by two
     // wheel joints -- so the shapes, the joints and the rules all have to show.
@@ -455,14 +456,11 @@ TEST(ExportScene, QtProjectConverterProducesAProject)
     EXPECT_TRUE(generated.contains(QStringLiteral("b2CreatePolygonShape")));
     EXPECT_TRUE(generated.contains(QStringLiteral("b2CreateWheelJoint")));
     EXPECT_TRUE(generated.contains(QStringLiteral("chassis")));
-    // The cart's two rules are carried as data for the runtime to read, not
-    // as generated branches.
-    EXPECT_TRUE(generated.contains(QStringLiteral("SceneRule rule;")));
-    EXPECT_TRUE(generated.contains(QStringLiteral("scene.rules.push_back(rule);")));
-    EXPECT_TRUE(generated.contains(QStringLiteral("rule.event = \"contactBegin\"")))
+    EXPECT_TRUE(generated.contains(QStringLiteral("b2World_GetContactEvents")))
         << "the contact rule kept its trigger";
-    EXPECT_TRUE(generated.contains(QStringLiteral("scene.shapesByName.insert")))
-        << "shapes are reachable by name, or no rule could name one";
+    EXPECT_TRUE(generated.contains(QStringLiteral("b2Body_SetLinearVelocity")))
+        << "and still does what it did";
+    EXPECT_FALSE(generated.contains(QStringLiteral("{{"))) << "every placeholder was filled in";
 
     const QString cmake = contentsOf(output.filePath(QStringLiteral("CMakeLists.txt")));
     EXPECT_TRUE(cmake.contains(QStringLiteral("FetchContent_Declare(box2d")));

@@ -1,6 +1,7 @@
 #include "CanvasScene.h"
 #include "UndoStack.h"
 #include "RectangleItem.h"
+#include "Rule.h"
 
 #include <QApplication>
 #include <gtest/gtest.h>
@@ -73,4 +74,26 @@ TEST(Dirty, Behaves)
         small.push(QStringLiteral("Add %1").arg(i));
     }
     EXPECT_TRUE(!small.isClean()) << "saved state trimmed off the history is dirty";
+
+    // A rule is left out of the saved document until it is complete, so every
+    // step of writing one serializes to exactly what was there before. The
+    // stack has no state to record, but the work is not on disk either -- and
+    // if this read as clean, Save would be greyed out for as long as the rule
+    // took to fill in.
+    UndoStack rules(&scene);
+    rules.markClean();
+    Rule blank;                                    // no subject, no target
+    scene.setRules({blank});
+    rules.push(QStringLiteral("Add rule"));
+    EXPECT_TRUE(!rules.isClean()) << "a rule too incomplete to serialize still counts as an edit";
+
+    Rule half;
+    half.subjectName = QStringLiteral("body_1");   // still not valid: no target
+    half.eventId = QStringLiteral("limitLower");
+    scene.setRules({half});
+    rules.push(QStringLiteral("Edit rule"), QStringLiteral("rule:0"));
+    EXPECT_TRUE(!rules.isClean()) << "and so does every step of filling it in";
+
+    rules.markClean();
+    EXPECT_TRUE(rules.isClean()) << "saving settles it, half-written rule and all";
 }

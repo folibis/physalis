@@ -5,6 +5,8 @@
 
 #include "ui_MainWindow.h"
 #include "CanvasScene.h"
+#include "FullScreenView.h"
+#include "ViewLayersCombo.h"
 #include "ExplosionItem.h"
 #include "RayItem.h"
 #include "Rule.h"
@@ -29,6 +31,7 @@
 #include "Icons.h"
 
 #include <QGraphicsView>
+#include <QWindow>
 #include <QMenu>
 #include <QMenuBar>
 #include <QToolBar>
@@ -43,6 +46,7 @@
 #include <QJsonParseError>
 #include <QCloseEvent>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QDir>
 #include <QFileInfo>
 #include <QAction>
@@ -69,6 +73,14 @@
 
 namespace {
 
+// The view layers, by the names their settings are stored under.
+const QString kLayerGrid = QStringLiteral("grid");
+const QString kLayerJoints = QStringLiteral("joints");
+const QString kLayerAxes = QStringLiteral("bodyAxes");
+const QString kLayerRays = QStringLiteral("rays");
+const QString kLayerExplosions = QStringLiteral("explosions");
+const QString kLayerSleep = QStringLiteral("sleepShading");
+
 constexpr int kIconSize = 22;
 constexpr int kButtonSize = 30;
 
@@ -83,6 +95,17 @@ QToolButton *squareButton(QToolBar *toolBar, QAction *action)
 } // namespace
 
 namespace {
+
+// x2, x3 -- and the halves written as fractions, which read better on a
+// toolbar than 0.5 does.
+QString speedLabel(double factor)
+{
+    if (qFuzzyCompare(factor, 0.25))
+        return QStringLiteral("×¼");
+    if (qFuzzyCompare(factor, 0.5))
+        return QStringLiteral("×½");
+    return QStringLiteral("×%1").arg(factor, 0, 'g', 3);
+}
 
 QAction *separatorBefore(QToolBar *bar, QAction *anchor)
 {
@@ -173,30 +196,15 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_simulation = new SimulationController(m_scene, this);
 
-    if (auto engine = physics::EngineRegistry::create(m_simulation->engineName())) {
-        for (const physics::JointType &type : engine->jointTypes()) {
-            QAction *action = m_jointTypeMenu->addAction(type.label);
-            action->setToolTip(type.description);
-            const QString typeId = type.id;
-            connect(action, &QAction::triggered, this, [this, typeId] { onAddJoint(typeId); });
-        }
-    }
+    rebuildJointMenu();
 
     m_transportActions << toolBar->actions().constLast();
 
-    m_engineCombo = new QComboBox(this);
-    m_engineCombo->addItems(physics::EngineRegistry::availableEngines());
-    m_engineCombo->setCurrentText(m_simulation->engineName());
-    m_engineCombo->setToolTip(tr("Which physics engine to simulate with"));
-    connect(m_engineCombo, &QComboBox::currentTextChanged, this,
-            [this](const QString &name) {
-                m_simulation->setEngineName(name);
-                m_scene->setSimulationEngineName(name);
-            });
-    m_scene->setSimulationEngineName(m_simulation->engineName());
-    // addWidget() returns the QWidgetAction wrapping the combo -- hiding that
-    // is what removes it; hiding the combo would leave a hole.
-    m_transportActions << toolBar->addWidget(m_engineCombo);
+    // No engine chooser here: engines differ in what they offer -- their
+    // joints, and half their properties -- so a scene is built for one and
+    // keeps it. Which one a new scene gets is an Option; which one an opened
+    // scene gets is in the file.
+    useEngine(engineForNewScenes());
 
     toolBar->addAction(m_ui->actionSimulate);
     toolBar->addAction(m_ui->actionStep);
@@ -213,16 +221,58 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_ui->actionStep, &QAction::triggered, m_simulation, &SimulationController::stepFrame);
     connect(m_ui->actionStop, &QAction::triggered, m_simulation, &SimulationController::stop);
 
-    m_debugViewCheck = new QCheckBox(tr("Debug View"), toolBar);
-    m_debugViewCheck->setChecked(m_scene->debugView());
-    m_debugViewCheck->setToolTip(tr("While a simulation runs, draw the axis cross at each body's"
-                                      " centre of mass, shift its color to show whether the"
-                                      " solver still has it awake, and draw the joints. Off, a run"
-                                      " shows just the shapes in their plain body colors. Outside"
-                                      " a run nothing changes."));
-    m_transportActions << toolBar->addWidget(m_debugViewCheck);
-    connect(m_debugViewCheck, &QCheckBox::toggled, this, [this](bool on) {
-        m_scene->setDebugView(on);
+    m_speedCombo = new QComboBox(toolBar);
+    m_speedCombo->setToolTip(tr("How fast the run plays against the clock: ×2 covers two seconds"
+                                " of the world in one of ours, ×½ covers half. The step the solver"
+                                " takes is the same either way -- this changes the pace it is"
+                                " watched at, not the physics."));
+    for (double factor : { 0.25, 0.5, 1.0, 2.0, 3.0, 4.0, 8.0 })
+        m_speedCombo->addItem(speedLabel(factor), factor);
+    m_speedCombo->setCurrentIndex(m_speedCombo->findData(1.0));
+    m_transportActions << toolBar->addWidget(m_speedCombo);
+    connect(m_speedCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        const double factor = m_speedCombo->itemData(index).toDouble();
+        m_simulation->setSpeed(factor);
+        saveSettingsToFile(currentSettingsSnapshot());
+    });
+
+    // What a run shows. None of it touches the editor: joints and rays are
+    // being placed there, and a switch that hid them would make them unusable.
+    using RunLayer = CanvasScene::RunLayer;
+    m_layers = new ViewLayersCombo(toolBar);
+    m_layers->addLayer(kLayerGrid, tr("Grid"), m_scene->runLayer(RunLayer::Grid),
+                       tr("The ruled background, once a run starts. While editing it is"
+                          " always drawn -- that is what Show Grid in Options is for."));
+    m_layers->addLayer(kLayerJoints, tr("Joints"), m_scene->runLayer(RunLayer::Joints),
+                       tr("The joints and their anchors once a run starts, and the travel"
+                          " a sliding joint is limited to."));
+    m_layers->addLayer(kLayerAxes, tr("Body axes"), m_scene->runLayer(RunLayer::BodyAxes),
+                       tr("The cross at each body's centre of mass, once a run starts."));
+    m_layers->addLayer(kLayerRays, tr("Rays"), m_scene->runLayer(RunLayer::Rays),
+                       tr("The rays and what they are looking at, once a run starts."));
+    m_layers->addLayer(kLayerExplosions, tr("Explosions"),
+                       m_scene->runLayer(RunLayer::Explosions),
+                       tr("Where a blast goes off and how far it reaches, once a run"
+                          " starts."));
+    m_layers->addLayer(kLayerSleep, tr("Sleep shading"),
+                       m_scene->runLayer(RunLayer::SleepShading),
+                       tr("Tint each body by whether the solver still has it awake. There"
+                          " is nothing to tint outside a run."));
+    m_transportActions << toolBar->addWidget(m_layers);
+    connect(m_layers, &ViewLayersCombo::layerToggled, this,
+            [this](const QString &key, bool on) {
+                applyLayer(key, on);
+                saveSettingsToFile(currentSettingsSnapshot());
+            });
+
+    m_fullScreenCheck = new QCheckBox(tr("Full Screen"), toolBar);
+    m_fullScreenCheck->setToolTip(tr("Run the simulation on a screen of its own, with the"
+                                     " field as large as it will go. Space holds it and lets"
+                                     " it go again, the right arrow advances one frame, and"
+                                     " Esc ends the run and comes back here."));
+    m_transportActions << toolBar->addWidget(m_fullScreenCheck);
+    connect(m_fullScreenCheck, &QCheckBox::toggled, this, [this](bool) {
+        updateFullScreenView();
         saveSettingsToFile(currentSettingsSnapshot());
     });
 
@@ -308,6 +358,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(m_undo, &UndoStack::changed, this, &MainWindow::updateUndoActions);
     connect(m_undo, &UndoStack::changed, this, &MainWindow::updateWindowTitle);
+    m_scene->setLiveValueProvider([this](const QString &object, const QString &key) -> QVariant {
+        if (!m_simulation || !m_simulation->isActive())
+            return {};
+        return m_simulation->readValue(object, key);
+    });
+
     connect(m_scene, &CanvasScene::editorModeChanged, this, &MainWindow::onEditorModeChanged);
     connect(m_scene, &CanvasScene::physicsSelectionChanged, this, &MainWindow::onPhysicsSelectionChanged);
     // Selecting an explosion is a different signal, and Remove depends on it.
@@ -370,6 +426,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_scene, &CanvasScene::watchesChanged, this, &MainWindow::updateLogOverlay);
     connect(m_simulation, &SimulationController::stateChanged, this, &MainWindow::updateLogOverlay);
     connect(m_simulation, &SimulationController::stepped, this, &MainWindow::updateLogOverlay);
+    // The measured rows in the property table read the same values the log
+    // does, so they are refreshed on the same beat.
+    connect(m_simulation, &SimulationController::stepped,
+            m_ui->propertyPanel, &PropertyPanel::refreshValues);
     updateLogOverlay();
 
     m_statusHelpLabel = new QLabel(this);
@@ -445,9 +505,99 @@ void MainWindow::onPolygonDrawingChanged(bool drawing)
     if (drawing) {
         m_statusHelpLabel->setText(
             tr("Click to add points • Enter to finish as an open shape"
-               " • Ctrl+Enter to close it • Escape to cancel"));
+               " • Shift+Enter to close it • Escape to cancel"));
     } else {
         onActiveItemChanged(m_scene->activeItem());
+    }
+}
+
+QString MainWindow::engineForNewScenes() const
+{
+    const QStringList available = physics::EngineRegistry::availableEngines();
+    if (available.contains(m_defaultEngineName))
+        return m_defaultEngineName;
+    // Nothing chosen yet, or what was chosen is no longer installed.
+    return available.value(0);
+}
+
+void MainWindow::useEngine(const QString &name)
+{
+    m_scene->setSimulationEngineName(name);
+    m_simulation->setEngineName(name);
+    // Everything the engine has a say in, filled again from the new one: the
+    // joints it offers, the property rows it publishes, and the conditions and
+    // actions a rule can be written from.
+    rebuildJointMenu();
+    if (m_ui->propertyPanel)
+        m_ui->propertyPanel->setActiveItem(m_scene->activeItem());
+    m_scene->notifyRulesChanged();
+    updateTransportActions();
+}
+
+bool MainWindow::confirmCloseForEngine(const QString &name)
+{
+    // A test drives the window itself and has nobody to answer a dialog, the
+    // same as confirmDiscardChanges.
+    if (qEnvironmentVariableIsSet("PHYSALIS_SETTINGS"))
+        return true;
+
+    const QString current = m_scene->simulationEngineName();
+    QMessageBox box(this);
+    box.setIcon(QMessageBox::Warning);
+    box.setWindowTitle(tr("Change Engine"));
+    box.setText(tr("This scene is built for %1.").arg(current));
+    box.setInformativeText(
+        tr("Its joints, and some of its settings, belong to that engine, so switching to"
+           " %1 closes the scene and starts an empty one.").arg(name));
+
+    QPushButton *save = nullptr;
+    if (!m_undo->isClean())
+        save = box.addButton(tr("Save and Close"), QMessageBox::AcceptRole);
+    QPushButton *close = box.addButton(tr("Close Scene"), QMessageBox::DestructiveRole);
+    box.addButton(QMessageBox::Cancel);
+    box.setDefaultButton(save ? save : close);
+    box.exec();
+
+    if (save && box.clickedButton() == save)
+        return onSaveScene();   // false if the save failed, or Save As was cancelled
+    return box.clickedButton() == close;
+}
+
+bool MainWindow::adoptEngine(const QString &name)
+{
+    if (name.isEmpty() || name == m_scene->simulationEngineName())
+        return true;
+
+    // An engine change is not a change of mind about the open scene: its joint
+    // types belong to the engine it was built for and mean nothing to another
+    // one. An empty scene has nothing to lose, so it is switched in silence.
+    const bool empty = m_scene->shapes().isEmpty() && m_scene->joints().isEmpty()
+                       && m_scene->rules().isEmpty();
+    if (!empty) {
+        if (!confirmCloseForEngine(name))
+            return false;
+        m_simulation->stop();
+        m_scene->clearContents();
+        m_scene->setEditorMode(EditorMode::Edit);
+        m_scenePath.clear();
+        m_undo->reset();
+        updateWindowTitle();
+    }
+
+    useEngine(name);
+    return true;
+}
+
+void MainWindow::rebuildJointMenu()
+{
+    m_jointTypeMenu->clear();
+    if (auto engine = physics::EngineRegistry::create(m_simulation->engineName())) {
+        for (const physics::JointType &type : engine->jointTypes()) {
+            QAction *action = m_jointTypeMenu->addAction(type.label);
+            action->setToolTip(type.description);
+            const QString typeId = type.id;
+            connect(action, &QAction::triggered, this, [this, typeId] { onAddJoint(typeId); });
+        }
     }
 }
 
@@ -477,24 +627,41 @@ void MainWindow::onAddJoint(const QString &typeId)
         }
     }
 
-    if (bodies.size() != 2) {
+    // How many bodies this kind of joint joins is the engine's to say. Most
+    // hold one thing to another; one holds a body to a point in the world and
+    // has no second body to ask for.
+    const int wanted = qBound(1, type.bodyCount, 2);
+    if (bodies.size() != wanted) {
         QMessageBox::information(
             this, tr("Add Joint"),
-            tr("A joint connects two bodies, and %1 %2 selected.\n\n"
-               "Click a shape to select its body, then Ctrl+Click a shape of the other one.")
-                .arg(bodies.size()).arg(bodies.size() == 1 ? tr("is") : tr("are")));
+            wanted == 1
+                ? tr("%1 holds one body to a point in the world, and %2 %3 selected.\n\n"
+                     "Click a shape to select its body.")
+                      .arg(type.label)
+                      .arg(bodies.size())
+                      .arg(bodies.size() == 1 ? tr("is") : tr("are"))
+                : tr("A joint connects two bodies, and %1 %2 selected.\n\n"
+                     "Click a shape to select its body, then Shift+Click a shape of the"
+                     " other one.")
+                      .arg(bodies.size())
+                      .arg(bodies.size() == 1 ? tr("is") : tr("are")));
         return;
     }
 
-    Joint *joint = m_scene->createJoint(type.id, bodies.at(0), bodies.at(1),
+    PhysicsBody *second = wanted > 1 ? bodies.at(1) : nullptr;
+    Joint *joint = m_scene->createJoint(type.id, bodies.at(0), second,
                                         type.anchorCount, type.defaultValues());
     if (!joint)
         return;
 
     m_scene->selectJoint(joint);
     m_scene->notifyEdit(tr("Add %1").arg(joint->name()));
-    statusBar()->showMessage(tr("Added %1 between %2 and %3")
-                                 .arg(joint->name(), bodies.at(0)->name(), bodies.at(1)->name()), 4000);
+    statusBar()->showMessage(
+        second ? tr("Added %1 between %2 and %3")
+                     .arg(joint->name(), bodies.at(0)->name(), second->name())
+               : tr("Added %1 on %2 -- move its target with a rule")
+                     .arg(joint->name(), bodies.at(0)->name()),
+        4000);
 }
 
 void MainWindow::on_actionDeleteJoint_triggered()
@@ -613,11 +780,11 @@ void MainWindow::onPhysicsSelectionChanged()
                 .arg(joint->name()));
     } else if (m_scene->bodies().isEmpty() && picked == 0) {
         m_statusHelpLabel->setText(
-            tr("Click a shape to select it • Ctrl+Click to add more • Double-click or Create Body"
+            tr("Click a shape to select it • Shift+Click to add more • Double-click or Create Body"
                " groups them into a body, which is what Simulate runs"));
     } else if (picked == 0) {
         m_statusHelpLabel->setText(
-            tr("Click a shape to select it • Ctrl+Click to add more"
+            tr("Click a shape to select it • Shift+Click to add more"
                " • Create Body groups them into one rigid body"));
     } else if (PhysicsBody *body = m_scene->commonSelectedBody()) {
         m_statusHelpLabel->setText(
@@ -754,6 +921,12 @@ void MainWindow::updateUndoActions()
     const QString redoLabel = m_undo->redoLabel();
     m_ui->actionUndo->setText(undoLabel.isEmpty() ? tr("&Undo") : tr("&Undo %1").arg(undoLabel));
     m_ui->actionRedo->setText(redoLabel.isEmpty() ? tr("&Redo") : tr("&Redo %1").arg(redoLabel));
+
+    // Same answer as the star in the title: with nothing changed there is
+    // nothing to write. Save As stays open -- saving a copy of an untouched
+    // scene is a reasonable thing to ask for.
+    if (m_ui->actionSaveScene)
+        m_ui->actionSaveScene->setEnabled(!m_undo->isClean());
 }
 
 void MainWindow::on_actionCopy_triggered()
@@ -838,6 +1011,11 @@ void MainWindow::on_actionNewScene_triggered()
     // A run holds engine state built from the shapes about to be deleted.
     m_simulation->stop();
     m_scene->clearContents();
+    // An empty scene has nothing to group into bodies or hang joints on, so
+    // Physics mode has nothing to show and nothing to do. Drawing is where a
+    // scene starts.
+    m_scene->setEditorMode(EditorMode::Edit);
+    useEngine(engineForNewScenes());
     m_scenePath.clear();
     m_undo->reset();
     updateWindowTitle();
@@ -868,10 +1046,21 @@ bool MainWindow::openScene(const QString &path)
     }
 
     m_scenePath = path;
+    // The file said which engine it was built for, and the loader refused it
+    // if that one is missing; everything else follows from the scene.
+    useEngine(m_scene->simulationEngineName());
     m_undo->reset(); // the opened file is the new starting point
     updateWindowTitle();
     m_ui->propertyPanel->setActiveItem(nullptr);
     statusBar()->showMessage(tr("Opened %1").arg(QDir::toNativeSeparators(path)), 4000);
+
+    // Queued: a file named on the command line is opened straight after
+    // show(), before the layout has given the view its real size, and centring
+    // against the size it has then lands off to one side.
+    QMetaObject::invokeMethod(this, [this] {
+        const QRectF bounds = m_scene->contentBounds();
+        m_ui->canvasView->centerOn(bounds.isNull() ? QPointF(0, 0) : bounds.center());
+    }, Qt::QueuedConnection);
     return true;
 }
 
@@ -931,6 +1120,28 @@ void MainWindow::duplicateShape(ShapeItem *item)
     statusBar()->showMessage(tr("Duplicated %1 as %2").arg(item->name(), copy->name()), 4000);
 }
 
+void MainWindow::convertToPolygon(ShapeItem *item)
+{
+    if (!item)
+        return;
+
+    const QString name = item->name();          // read before the shape is gone
+    const bool hadRadius = item->cornerRadius() > 0.0;
+
+    ShapeItem *polygon = m_scene->convertToPolygon(item);
+    if (!polygon) {
+        statusBar()->showMessage(tr("%1 is not a rectangle").arg(name), 4000);
+        return;
+    }
+
+    m_scene->notifyEdit(tr("Convert %1 to a polygon").arg(name));
+    statusBar()->showMessage(
+        hadRadius ? tr("%1 is a polygon now — its corners are square, a polygon has no radius")
+                        .arg(polygon->name())
+                  : tr("%1 is a polygon now — drag its nodes to reshape it").arg(polygon->name()),
+        6000);
+}
+
 void MainWindow::flipShape(ShapeItem *item, bool horizontally)
 {
     if (!item)
@@ -960,6 +1171,36 @@ void MainWindow::flipShape(ShapeItem *item, bool horizontally)
 
     m_scene->notifyEdit(horizontally ? tr("Flip %1 horizontally").arg(item->name())
                                      : tr("Flip %1 vertically").arg(item->name()));
+}
+
+QString MainWindow::logLabelFor(const CanvasScene::Watch &watch) const
+{
+    // A watch carries the name it was given when it was added, and a joint has
+    // a Spring, a Limit and a Motor each with a switch called "Enabled" -- so
+    // an entry made before the name included its heading says only "Enabled",
+    // which names none of the three. The heading is asked for again here so an
+    // entry already in a file reads properly without being added a second
+    // time; the stored name stands when the catalogue has nothing to say.
+    if (watch.label.contains(QStringLiteral(" · ")))
+        return watch.label;
+
+    auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName());
+    if (!engine)
+        return watch.label;
+
+    for (Joint *joint : m_scene->joints()) {
+        if (joint->name() != watch.objectName)
+            continue;
+        for (const physics::JointType &type : engine->jointTypes()) {
+            if (type.id != joint->typeId())
+                continue;
+            for (const physics::JointParam &param : type.params) {
+                if (param.key == watch.propertyKey && !param.section.isEmpty())
+                    return tr("%1 · %2").arg(param.section, param.label);
+            }
+        }
+    }
+    return watch.label;
 }
 
 void MainWindow::updateLogOverlay()
@@ -999,7 +1240,7 @@ void MainWindow::updateLogOverlay()
         // "@world" is an internal handle, not something to show a reader.
         const QString who = watch.objectName == Rule::world() ? tr("World")
                                                               : watch.objectName;
-        lines << tr("%1 · %2   %3").arg(who, watch.label, shown);
+        lines << tr("%1 · %2   %3").arg(who, logLabelFor(watch), shown);
     }
     m_logOverlay->setText(lines.join(QChar::LineFeed));
     m_logOverlay->adjustSize();
@@ -1046,13 +1287,68 @@ void MainWindow::updateTransportActions()
     m_ui->actionStop->setEnabled(active);
 }
 
+void MainWindow::applyLayer(const QString &key, bool on)
+{
+    using RunLayer = CanvasScene::RunLayer;
+    if (key == kLayerGrid)
+        m_scene->setRunLayer(RunLayer::Grid, on);
+    else if (key == kLayerJoints)
+        m_scene->setRunLayer(RunLayer::Joints, on);
+    else if (key == kLayerAxes)
+        m_scene->setRunLayer(RunLayer::BodyAxes, on);
+    else if (key == kLayerRays)
+        m_scene->setRunLayer(RunLayer::Rays, on);
+    else if (key == kLayerExplosions)
+        m_scene->setRunLayer(RunLayer::Explosions, on);
+    else if (key == kLayerSleep)
+        m_scene->setRunLayer(RunLayer::SleepShading, on);
+}
+
+void MainWindow::updateFullScreenView()
+{
+    const bool wanted = m_simulation && m_simulation->isActive() && m_fullScreenCheck
+                        && m_fullScreenCheck->isChecked();
+    if (!wanted) {
+        if (m_fullScreen) {
+            m_fullScreen->close();
+            m_fullScreen->deleteLater();
+            m_fullScreen = nullptr;
+            // The editor was behind it the whole time; give it the keyboard.
+            activateWindow();
+        }
+        return;
+    }
+    if (m_fullScreen)
+        return;
+
+    m_fullScreen = new FullScreenView(m_scene, this);
+    // The keys stand in for the transport buttons, which are not on this
+    // screen: the same three things they do there.
+    connect(m_fullScreen, &FullScreenView::holdRequested, this, [this] {
+        if (m_simulation->isRunning())
+            m_simulation->pause();
+        else
+            m_simulation->resume();
+    });
+    connect(m_fullScreen, &FullScreenView::stepRequested,
+            m_simulation, &SimulationController::stepFrame);
+    connect(m_fullScreen, &FullScreenView::closeRequested,
+            m_simulation, &SimulationController::stop);
+    // Whichever screen the editor is on, rather than always the first.
+    if (QScreen *screen = windowHandle() ? windowHandle()->screen() : nullptr)
+        m_fullScreen->setGeometry(screen->geometry());
+    m_fullScreen->showFullScreen();
+    m_fullScreen->raise();
+    m_fullScreen->activateWindow();
+}
+
 void MainWindow::onSimulationStateChanged()
 {
     const bool active = m_simulation->isActive();
 
+    updateFullScreenView();
     updateTransportActions();
     updateUndoActions();
-    m_engineCombo->setEnabled(!active);
 
     m_ui->menuAddShape->setEnabled(!active && m_scene->editorMode() == EditorMode::Edit);
     for (EditorMode mode : EditorModes::kAll) {
@@ -1061,8 +1357,13 @@ void MainWindow::onSimulationStateChanged()
     }
 
     if (active) {
+        const QStringList problems = m_simulation->problems();
         const QStringList skipped = m_simulation->skippedBodies();
-        if (skipped.isEmpty()) {
+        if (!problems.isEmpty()) {
+            // What the solver could not do, which is worth more than the
+            // running/paused it replaces.
+            m_statusHelpLabel->setText(problems.join(QStringLiteral("  •  ")));
+        } else if (skipped.isEmpty()) {
             onPhysicsSelectionChanged();
         } else {
             m_statusHelpLabel->setText(
@@ -1179,7 +1480,7 @@ void MainWindow::onActiveItemChanged(ShapeItem *item)
                " back • Delete to remove"));
     } else if (mode == ShapeMode::Editing) {
         m_statusHelpLabel->setText(
-            tr("Drag a node to move it (Shift ignores the grid) • Ctrl+Click to select multiple"
+            tr("Drag a node to move it (Shift ignores the grid) • Shift+Click to select multiple"
                " nodes • Enter to add a node between 2 adjacent, or close an open shape"
                " from its endpoints • Delete to remove selected nodes"));
     } else {
@@ -1235,6 +1536,15 @@ void MainWindow::on_canvasView_customContextMenuRequested(const QPoint &pos)
 
         menu.addAction(tr("Flip Horizontally"), this, [this, item] { flipShape(item, true); });
         menu.addAction(tr("Flip Vertically"), this, [this, item] { flipShape(item, false); });
+
+        if (item->typeName() == QLatin1String("rectangle")) {
+            QAction *toPolygon = menu.addAction(tr("Convert to Polygon"), this,
+                                                [this, item] { convertToPolygon(item); });
+            toPolygon->setToolTip(tr("Replaces it with the polygon of its four corners, keeping"
+                                     " its name, its place in its body and its physics. The"
+                                     " corner radius goes: only a rectangle has one."));
+            toPolygon->setEnabled(!(m_simulation && m_simulation->isActive()));
+        }
 
         menu.addSeparator();
         menu.addAction(m_ui->actionDelete);
@@ -1422,7 +1732,11 @@ void MainWindow::on_actionOptions_triggered()
 {
     OptionsDialog dialog(currentSettingsSnapshot(), this);
     if (dialog.exec() == QDialog::Accepted) {
-        const OptionsDialog::Settings s = dialog.settings();
+        OptionsDialog::Settings s = dialog.settings();
+        // The engine is the one setting that reaches the open scene, because a
+        // scene is built for one. Keeping the scene keeps its engine too.
+        if (!adoptEngine(s.defaultEngineName))
+            s.defaultEngineName = m_scene->simulationEngineName();
         applySettings(s);
         saveSettingsToFile(s);
     }
@@ -1438,6 +1752,7 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
 {
     OptionsDialog::Settings current;
     current.converterPath = m_converterPath;
+    current.defaultEngineName = engineForNewScenes();
     current.converterSettings = m_converterSettings;
     current.fieldWidth = m_scene->fieldWidth();
     current.fieldHeight = m_scene->fieldHeight();
@@ -1460,12 +1775,23 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.bodyStaticColor = m_scene->bodyColor(physics::BodyType::Static);
     current.bodyKinematicColor = m_scene->bodyColor(physics::BodyType::Kinematic);
     current.unassignedShapeColor = m_scene->unassignedShapeColor();
+    current.sensorColor = m_scene->sensorColor();
+    current.sensorPattern = m_scene->sensorPattern();
+    current.sensorFillsBody = m_scene->sensorFillsBody();
     current.physicsBorderWidth = m_scene->physicsBorderWidth();
     current.physicsFillAlpha = m_scene->physicsFillAlpha();
+    current.jointFillAlpha = m_scene->jointFillAlpha();
     current.physicsSelectionLineStyle = m_scene->physicsSelectionLineStyle();
     current.physicsSelectionLineWidth = m_scene->physicsSelectionLineWidth();
     current.physicsSelectionColor = m_scene->physicsSelectionColor();
-    current.debugView = m_scene->debugView();
+    current.sleepShading = m_scene->runLayer(CanvasScene::RunLayer::SleepShading);
+    current.runShowGrid = m_scene->runLayer(CanvasScene::RunLayer::Grid);
+    current.runShowJoints = m_scene->runLayer(CanvasScene::RunLayer::Joints);
+    current.runShowBodyAxes = m_scene->runLayer(CanvasScene::RunLayer::BodyAxes);
+    current.runShowRays = m_scene->runLayer(CanvasScene::RunLayer::Rays);
+    current.runShowExplosions = m_scene->runLayer(CanvasScene::RunLayer::Explosions);
+    if (m_fullScreenCheck)
+        current.simulationFullScreen = m_fullScreenCheck->isChecked();
     current.showBodyAxes = m_scene->showBodyAxes();
     current.bodyAxisLength = m_scene->bodyAxisLength();
     current.bodyAxisWidth = m_scene->bodyAxisWidth();
@@ -1475,7 +1801,8 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.maxPolygonVertices = m_scene->maxPolygonVertices();
     current.jointColor = m_scene->jointColor();
     current.undoDepth = m_undo->capacity();
-    current.jointTypeColors = m_scene->jointTypeColors();
+    current.jointKindColors = m_scene->jointKindColors();
+    current.jointKindStyles = m_scene->jointKindStyles();
     current.jointSelectionColor = m_scene->jointSelectionColor();
     current.jointSelectionLineWidth = m_scene->jointSelectionLineWidth();
     current.jointSelectionLineStyle = m_scene->jointSelectionLineStyle();
@@ -1485,9 +1812,10 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.jointAxisLength = m_scene->jointAxisLength();
     current.jointWaistWidth = m_scene->jointWaistWidth();
     current.jointOutlineWidth = m_scene->jointOutlineWidth();
-    if (m_simulation)
+    if (m_simulation) {
         current.simulationStepsPerSecond = m_simulation->stepsPerSecond();
-    current.gravity = m_scene->gravity();
+        current.simulationSpeed = m_simulation->speed();
+    }
     current.pixelsPerMeter = m_scene->pixelsPerMeter();
     current.fieldBoundsSolid = m_scene->fieldBoundsSolid();
     current.selectionLineStyle = m_scene->selectionLineStyle();
@@ -1504,6 +1832,8 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
 void MainWindow::applySettings(const OptionsDialog::Settings &s)
 {
     m_converterPath = s.converterPath;
+    // Only new scenes: what is open was built for the engine it names.
+    m_defaultEngineName = s.defaultEngineName;
     m_converterSettings = s.converterSettings;
     m_scene->setFieldSize(s.fieldWidth, s.fieldHeight);
     m_scene->setBackgroundColor(s.backgroundColor);
@@ -1527,17 +1857,35 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_scene->setBodyColor(physics::BodyType::Static, s.bodyStaticColor);
     m_scene->setBodyColor(physics::BodyType::Kinematic, s.bodyKinematicColor);
     m_scene->setUnassignedShapeColor(s.unassignedShapeColor);
+    m_scene->setSensorColor(s.sensorColor);
+    m_scene->setSensorPattern(s.sensorPattern);
+    m_scene->setSensorFillsBody(s.sensorFillsBody);
     m_scene->setPhysicsBorderWidth(s.physicsBorderWidth);
     m_scene->setPhysicsFillAlpha(s.physicsFillAlpha);
+    m_scene->setJointFillAlpha(s.jointFillAlpha);
     m_scene->setPhysicsSelectionLineStyle(s.physicsSelectionLineStyle);
     m_scene->setPhysicsSelectionLineWidth(s.physicsSelectionLineWidth);
     m_scene->setPhysicsSelectionColor(s.physicsSelectionColor);
-    m_scene->setDebugView(s.debugView);
-    if (m_debugViewCheck) {
-        // Blocked: the box is catching up with the setting, not being toggled,
-        // and signalling would write the file back again.
-        const QSignalBlocker blocker(m_debugViewCheck);
-        m_debugViewCheck->setChecked(s.debugView);
+    m_scene->setRunLayer(CanvasScene::RunLayer::SleepShading, s.sleepShading);
+    m_scene->setRunLayer(CanvasScene::RunLayer::Grid, s.runShowGrid);
+    m_scene->setRunLayer(CanvasScene::RunLayer::Joints, s.runShowJoints);
+    m_scene->setRunLayer(CanvasScene::RunLayer::BodyAxes, s.runShowBodyAxes);
+    m_scene->setRunLayer(CanvasScene::RunLayer::Rays, s.runShowRays);
+    m_scene->setRunLayer(CanvasScene::RunLayer::Explosions, s.runShowExplosions);
+    if (m_layers) {
+        // The list is catching up with the settings, not being clicked, and
+        // setOn reports nothing back -- otherwise this would write the file
+        // again for every layer it touched.
+        m_layers->setOn(kLayerGrid, s.runShowGrid);
+        m_layers->setOn(kLayerJoints, s.runShowJoints);
+        m_layers->setOn(kLayerAxes, s.runShowBodyAxes);
+        m_layers->setOn(kLayerRays, s.runShowRays);
+        m_layers->setOn(kLayerExplosions, s.runShowExplosions);
+        m_layers->setOn(kLayerSleep, s.sleepShading);
+    }
+    if (m_fullScreenCheck) {
+        const QSignalBlocker blocker(m_fullScreenCheck);
+        m_fullScreenCheck->setChecked(s.simulationFullScreen);
     }
     m_scene->setShowBodyAxes(s.showBodyAxes);
     m_scene->setBodyAxisLength(s.bodyAxisLength);
@@ -1548,7 +1896,8 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_scene->setMaxPolygonVertices(s.maxPolygonVertices);
     m_scene->setJointColor(s.jointColor);
     m_undo->setCapacity(s.undoDepth);
-    m_scene->setJointTypeColors(s.jointTypeColors);
+    m_scene->setJointKindColors(s.jointKindColors);
+    m_scene->setJointKindStyles(s.jointKindStyles);
     m_scene->setJointSelectionColor(s.jointSelectionColor);
     m_scene->setJointSelectionLineWidth(s.jointSelectionLineWidth);
     m_scene->setJointSelectionLineStyle(s.jointSelectionLineStyle);
@@ -1557,9 +1906,17 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_scene->setJointAxisLength(s.jointAxisLength);
     m_scene->setJointWaistWidth(s.jointWaistWidth);
     m_scene->setJointOutlineWidth(s.jointOutlineWidth);
-    if (m_simulation)
+    if (m_simulation) {
         m_simulation->setStepsPerSecond(s.simulationStepsPerSecond);
-    m_scene->setGravity(s.gravity);
+        m_simulation->setSpeed(s.simulationSpeed);
+    }
+    if (m_speedCombo) {
+        const QSignalBlocker blocker(m_speedCombo);
+        const int index = m_speedCombo->findData(m_simulation ? m_simulation->speed()
+                                                              : s.simulationSpeed);
+        if (index >= 0)
+            m_speedCombo->setCurrentIndex(index);
+    }
     m_scene->setPixelsPerMeter(s.pixelsPerMeter);
     m_scene->setFieldBoundsSolid(s.fieldBoundsSolid);
     m_scene->setSelectionLineStyle(s.selectionLineStyle);
@@ -1589,6 +1946,7 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
     OptionsDialog::Settings s; // defaults
 
     QSettings settings(settingsFilePath(), QSettings::IniFormat);
+    s.defaultEngineName = settings.value("Engine/default", s.defaultEngineName).toString();
     settings.beginGroup("Field");
     s.fieldWidth = settings.value("width", s.fieldWidth).toDouble();
     s.fieldHeight = settings.value("height", s.fieldHeight).toDouble();
@@ -1610,8 +1968,6 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
     settings.endGroup();
 
     settings.beginGroup("Physics");
-    s.gravity = QPointF(settings.value("gravityX", s.gravity.x()).toDouble(),
-                        settings.value("gravityY", s.gravity.y()).toDouble());
     s.pixelsPerMeter = settings.value("pixelsPerMeter", s.pixelsPerMeter).toDouble();
     s.fieldBoundsSolid = settings.value("solidBounds", s.fieldBoundsSolid).toBool();
     s.bodyDynamicColor = QColor(settings.value("bodyDynamicColor",
@@ -1622,14 +1978,28 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
                                                  s.bodyKinematicColor.name(QColor::HexArgb)).toString());
     s.unassignedShapeColor = QColor(settings.value("unassignedShapeColor",
                                                    s.unassignedShapeColor.name(QColor::HexArgb)).toString());
+    s.sensorColor = QColor(settings.value("sensorColor",
+                                          s.sensorColor.name(QColor::HexArgb)).toString());
+    s.sensorPattern = static_cast<Qt::BrushStyle>(
+        settings.value("sensorPattern", static_cast<int>(s.sensorPattern)).toInt());
+    s.sensorFillsBody = settings.value("sensorFillsBody", s.sensorFillsBody).toBool();
     s.physicsBorderWidth = settings.value("borderWidth", s.physicsBorderWidth).toDouble();
     s.physicsFillAlpha = settings.value("fillAlpha", s.physicsFillAlpha).toInt();
+    s.jointFillAlpha = settings.value("jointFillAlpha", s.jointFillAlpha).toInt();
     s.physicsSelectionLineStyle = static_cast<Qt::PenStyle>(
         settings.value("selectionLineStyle", static_cast<int>(s.physicsSelectionLineStyle)).toInt());
     s.physicsSelectionLineWidth = settings.value("selectionLineWidth", s.physicsSelectionLineWidth).toDouble();
     s.physicsSelectionColor = QColor(settings.value("selectionColor",
                                                     s.physicsSelectionColor.name(QColor::HexArgb)).toString());
-    s.debugView = settings.value("debugView", s.debugView).toBool();
+    // "debugView" is what the one switch these grew out of was called; the
+    // key stays so a saved setting is not lost.
+    s.sleepShading = settings.value("debugView", s.sleepShading).toBool();
+    s.runShowGrid = settings.value("runShowGrid", s.runShowGrid).toBool();
+    s.runShowJoints = settings.value("runShowJoints", s.runShowJoints).toBool();
+    s.runShowBodyAxes = settings.value("runShowBodyAxes", s.runShowBodyAxes).toBool();
+    s.runShowRays = settings.value("runShowRays", s.runShowRays).toBool();
+    s.runShowExplosions =
+        settings.value("runShowExplosions", s.runShowExplosions).toBool();
     s.showBodyAxes = settings.value("showBodyAxes", s.showBodyAxes).toBool();
     s.bodyAxisLength = settings.value("bodyAxisLength", s.bodyAxisLength).toDouble();
     s.bodyAxisWidth = settings.value("bodyAxisWidth", s.bodyAxisWidth).toDouble();
@@ -1648,6 +2018,12 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
     s.jointOutlineWidth = settings.value("jointOutlineWidth", s.jointOutlineWidth).toDouble();
 
     s.undoDepth = settings.value("undoDepth", s.undoDepth).toInt();
+    // An installed copy ships the converters beside the program, so that is
+    // where a settings file with nothing to say about them points.
+    const QString besideTheProgram =
+        QCoreApplication::applicationDirPath() + QStringLiteral("/exporters");
+    if (QFileInfo::exists(besideTheProgram))
+        s.converterPath = besideTheProgram;
     s.converterPath = settings.value("converterPath", s.converterPath).toString();
 
     // One group per converter, keyed by its folder name. Read back whole
@@ -1671,15 +2047,24 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
         settings.value("jointSelectionLineStyle",
                        static_cast<int>(s.jointSelectionLineStyle)).toInt());
 
-    settings.beginGroup("jointTypeColors");
-    for (const QString &key : settings.childKeys()) {
-        const QColor color(settings.value(key).toString());
+    // One colour and one line style per kind of joint, under the kind's own
+    // name. What an older settings file had per Box2D joint type is dropped:
+    // the kinds it would map to are what the defaults already give.
+    for (const physics::JointVisual kind : CanvasScene::jointKinds()) {
+        const QString key = CanvasScene::jointKindKey(kind);
+        const QColor color(settings.value(QStringLiteral("jointKindColors/") + key).toString());
         if (color.isValid())
-            s.jointTypeColors.insert(key, color);
+            s.jointKindColors.insert(static_cast<int>(kind), color);
+        const QVariant style = settings.value(QStringLiteral("jointKindStyles/") + key);
+        if (style.isValid())
+            s.jointKindStyles.insert(static_cast<int>(kind),
+                                     static_cast<JointStyle>(style.toInt()));
     }
-    settings.endGroup();
     s.simulationStepsPerSecond =
         settings.value("stepsPerSecond", s.simulationStepsPerSecond).toInt();
+    s.simulationSpeed = settings.value("simulationSpeed", s.simulationSpeed).toDouble();
+    s.simulationFullScreen =
+        settings.value("fullScreen", s.simulationFullScreen).toBool();
     settings.endGroup();
 
     settings.beginGroup("Shapes");
@@ -1702,6 +2087,7 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
 void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
 {
     QSettings settings(settingsFilePath(), QSettings::IniFormat);
+    settings.setValue("Engine/default", s.defaultEngineName);
     settings.beginGroup("Field");
     settings.setValue("width", s.fieldWidth);
     settings.setValue("height", s.fieldHeight);
@@ -1723,20 +2109,27 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.endGroup();
 
     settings.beginGroup("Physics");
-    settings.setValue("gravityX", s.gravity.x());
-    settings.setValue("gravityY", s.gravity.y());
     settings.setValue("pixelsPerMeter", s.pixelsPerMeter);
     settings.setValue("solidBounds", s.fieldBoundsSolid);
     settings.setValue("bodyDynamicColor", s.bodyDynamicColor.name(QColor::HexArgb));
     settings.setValue("bodyStaticColor", s.bodyStaticColor.name(QColor::HexArgb));
     settings.setValue("bodyKinematicColor", s.bodyKinematicColor.name(QColor::HexArgb));
     settings.setValue("unassignedShapeColor", s.unassignedShapeColor.name(QColor::HexArgb));
+    settings.setValue("sensorColor", s.sensorColor.name(QColor::HexArgb));
+    settings.setValue("sensorPattern", static_cast<int>(s.sensorPattern));
+    settings.setValue("sensorFillsBody", s.sensorFillsBody);
     settings.setValue("borderWidth", s.physicsBorderWidth);
     settings.setValue("fillAlpha", s.physicsFillAlpha);
+    settings.setValue("jointFillAlpha", s.jointFillAlpha);
     settings.setValue("selectionLineStyle", static_cast<int>(s.physicsSelectionLineStyle));
     settings.setValue("selectionLineWidth", s.physicsSelectionLineWidth);
     settings.setValue("selectionColor", s.physicsSelectionColor.name(QColor::HexArgb));
-    settings.setValue("debugView", s.debugView);
+    settings.setValue("debugView", s.sleepShading);
+    settings.setValue("runShowGrid", s.runShowGrid);
+    settings.setValue("runShowJoints", s.runShowJoints);
+    settings.setValue("runShowBodyAxes", s.runShowBodyAxes);
+    settings.setValue("runShowRays", s.runShowRays);
+    settings.setValue("runShowExplosions", s.runShowExplosions);
     settings.setValue("showBodyAxes", s.showBodyAxes);
     settings.setValue("bodyAxisLength", s.bodyAxisLength);
     settings.setValue("bodyAxisWidth", s.bodyAxisWidth);
@@ -1768,14 +2161,20 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("jointSelectionLineWidth", s.jointSelectionLineWidth);
     settings.setValue("jointSelectionLineStyle", static_cast<int>(s.jointSelectionLineStyle));
 
-    settings.beginGroup("jointTypeColors");
-    settings.remove(QString()); // drop ids that are no longer offered
-    for (auto it = s.jointTypeColors.constBegin(); it != s.jointTypeColors.constEnd(); ++it) {
-        if (it.value().isValid())
-            settings.setValue(it.key(), it.value().name(QColor::HexArgb));
+    settings.remove(QStringLiteral("jointTypeColors")); // colours are per kind now
+    for (const physics::JointVisual kind : CanvasScene::jointKinds()) {
+        const QString key = CanvasScene::jointKindKey(kind);
+        const QColor color = s.jointKindColors.value(static_cast<int>(kind));
+        if (color.isValid())
+            settings.setValue(QStringLiteral("jointKindColors/") + key,
+                              color.name(QColor::HexArgb));
+        settings.setValue(QStringLiteral("jointKindStyles/") + key,
+                          static_cast<int>(s.jointKindStyles.value(
+                              static_cast<int>(kind), CanvasScene::defaultJointKindStyle(kind))));
     }
-    settings.endGroup();
     settings.setValue("stepsPerSecond", s.simulationStepsPerSecond);
+    settings.setValue("simulationSpeed", s.simulationSpeed);
+    settings.setValue("fullScreen", s.simulationFullScreen);
     settings.endGroup();
 
     settings.beginGroup("Shapes");

@@ -37,8 +37,7 @@ QVector<Plugin> &plugins()
 
     const QDir dir(QCoreApplication::applicationDirPath());
     QStringList filters;
-    for (const QString &suffix : { QStringLiteral("dll"), QStringLiteral("so"),
-                                   QStringLiteral("dylib") })
+    for (const QString &suffix : { QStringLiteral("dll"), QStringLiteral("so"), QStringLiteral("dylib") })
         filters << kPrefix + QStringLiteral("*.") + suffix;
 
     const QFileInfoList candidates = dir.entryInfoList(filters, QDir::Files, QDir::Name);

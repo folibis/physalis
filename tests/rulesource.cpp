@@ -166,7 +166,14 @@ TEST(RuleSource, RenamesOnDoubleClick)
     settle();
 
     EXPECT_EQ(scene->rules().first().name, QStringLiteral("reverse at the wall"));
-    EXPECT_EQ(caption->text(), QStringLiteral("reverse at the wall"));
+    // Shown in full where the card is wide enough and cut short where it is
+    // not, with the whole of it on the caption's own property either way.
+    EXPECT_EQ(caption->property("fullCaption").toString(),
+              QStringLiteral("reverse at the wall"));
+    EXPECT_TRUE(QStringLiteral("reverse at the wall").startsWith(
+                    caption->text().left(caption->text().size() - 1)))
+        << "and what is shown is the start of it"
+        << " -- " << caption->text().toStdString();
     EXPECT_TRUE(caption->isVisible());
     EXPECT_FALSE(edit->isVisible());
 

@@ -21,7 +21,8 @@ TEST(ValueSource, Behaves)
     auto *scene = window.findChild<CanvasScene *>();
     auto *sim = window.findChild<SimulationController *>();
     scene->setEditorMode(EditorMode::Physics);
-    scene->world().gravity = QPointF(0.0, 0.0);
+    scene->world().params["gravityX"] = 0.0;
+    scene->world().params["gravityY"] = 0.0;
 
     // A wall for the ray to find, and a platform to be moved under the hit.
     auto *wall = new RectangleItem;

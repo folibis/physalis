@@ -39,12 +39,26 @@ public:
     void setEngineName(const QString &name);
 
     QStringList skippedBodies() const { return m_skippedBodies; }
+    // What went wrong while it ran, in the engine's words: a body the solver
+    // could not keep a number for, a step it could not finish.
+    QStringList problems() const { return m_problems; }
     QStringList skippedJoints() const { return m_skippedJoints; }
 
 public slots:
     void start();
     int stepsPerSecond() const { return m_stepsPerSecond; }
     void setStepsPerSecond(int stepsPerSecond);
+
+    // How fast the run plays against the clock on the wall: 2.0 covers two
+    // seconds of the world in one of ours, 0.5 covers half. The step the solver
+    // is handed never changes -- a bigger one is a different simulation, not a
+    // faster one -- so this only decides how many of them a tick is worth.
+    qreal speed() const { return m_speed; }
+    void setSpeed(qreal speed);
+
+    // Feed the run this much wall-clock time. The timer hands over whatever
+    // really passed; a test hands over whatever it likes.
+    void advance(qreal wallSeconds);
 
     void pause();
     void resume();
@@ -124,12 +138,20 @@ private:
     // a rule's change outlives the run, poisons the next one, and gets saved.
     QHash<Joint *, QVariantMap> m_jointParamSnapshot;
     QStringList m_skippedBodies;
+    QStringList m_problems;
     QStringList m_skippedJoints;
 
     QElapsedTimer m_clock;
     qreal m_owedTime = 0.0;
 
+    // A rule asked for the run to end or to hold. It cannot happen where the
+    // rule fires -- that is inside the step -- so it waits until the step is
+    // over. Empty when nothing is pending.
+    QString m_pendingRunAction;
+    void applyPendingRunAction();
+
     int m_stepsPerSecond = 60;
+    qreal m_speed = 1.0;
     qreal timeStep() const { return 1.0 / m_stepsPerSecond; }
     static constexpr int kMaxStepsPerTick = 5;
 };

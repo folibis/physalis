@@ -20,6 +20,8 @@ protected:
                                      radius * 2.0, radius * 2.0));
             },
             5.0, 100000.0, {}, -1, 0.0, section});
+        result.back().tooltip = QObject::tr("How big the circle is, measured from its centre."
+                                            " It grows and shrinks about that centre.");
         return result;
     }
 

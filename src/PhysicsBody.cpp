@@ -40,6 +40,25 @@ void PhysicsBody::addShape(ShapeItem *shape)
     emit membershipChanged();
 }
 
+bool PhysicsBody::replaceShape(ShapeItem *previous, ShapeItem *now)
+{
+    if (!previous || !now || previous == now)
+        return false;
+    const int at = m_shapes.indexOf(previous);
+    if (at < 0)
+        return false;
+
+    if (PhysicsBody *other = now->body())
+        other->removeShape(now);
+
+    m_shapes[at] = now;
+    now->setBody(this);
+    if (previous->body() == this)
+        previous->setBody(nullptr);
+    emit membershipChanged();
+    return true;
+}
+
 void PhysicsBody::removeShape(ShapeItem *shape)
 {
     if (!shape)
@@ -139,7 +158,9 @@ QPointF PhysicsBody::centerOfMassScenePos() const
         if (area <= 0.0)
             continue;
 
-        const qreal mass = area * qMax(0.0, shape->part().density);
+        // What the shape is made of, under whatever name the engine gives it.
+        const auto *canvas = qobject_cast<const CanvasScene *>(shape->scene());
+        const qreal mass = area * qMax(0.0, canvas ? canvas->shapeDensity(shape) : 1.0);
         if (mass <= 0.0)
             continue;
 

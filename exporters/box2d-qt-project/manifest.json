@@ -14,7 +14,7 @@
             "label": "Add controls",
             "type": "bool",
             "default": true,
-            "tooltip": "A toolbar with Start, Pause and Stop. Without it the window opens running and there is nothing to press."
+            "tooltip": "A toolbar with Start, Pause and Reset. Without it the window opens running; Space, R and D still work."
         },
         {
             "key": "qtPath",
@@ -37,7 +37,7 @@
             "label": "Debug view",
             "type": "bool",
             "default": true,
-            "tooltip": "Adds a Debug view switch to the controls: body axes and where the rays are looking, drawn over the scene."
+            "tooltip": "Opens with joints and centres of mass drawn over the scene, and adds a toolbar switch for them."
         },
         {
             "key": "box2dRepository",

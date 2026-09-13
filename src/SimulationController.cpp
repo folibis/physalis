@@ -13,6 +13,8 @@
 #include "EngineRegistry.h"
 
 #include <QTimer>
+#include <QtMath>
+#include <cmath>
 #include <QElapsedTimer>
 #include <QTransform>
 
@@ -126,6 +128,8 @@ void SimulationController::start()
     m_skippedJoints.clear();
 
     m_ruleState.clear();
+    m_problems.clear();
+    m_pendingRunAction.clear();
     m_elapsedSeconds = 0.0;
     m_frameCount = 0;
 
@@ -142,8 +146,10 @@ void SimulationController::start()
             for (ShapeItem *shape : body->shapes()) {
                 if (!wholeBody && !contactSources.contains(shape->name()))
                     continue;
-                shape->part().enableContactEvents = true;
-                shape->part().enableHitEvents = true;
+                // Whatever an engine needs switched on to report contacts,
+                // it switches on itself: the editor only says which shapes a
+                // rule is watching.
+                shape->part().watchedByRules = true;
             }
         }
     }
@@ -202,13 +208,23 @@ void SimulationController::start()
 
     for (Joint *joint : m_scene->joints()) {
         const auto a = handles.constFind(joint->bodyA());
-        const auto b = handles.constFind(joint->bodyB());
-        if (a == handles.constEnd() || b == handles.constEnd()) {
+        if (a == handles.constEnd()) {
             m_skippedJoints << joint->name();
             continue;
         }
+        // No second body means the joint holds this one to a point in the
+        // world; the engine fills Box2D's other slot itself.
+        int handleB = -1;
+        if (joint->bodyB()) {
+            const auto b = handles.constFind(joint->bodyB());
+            if (b == handles.constEnd()) {
+                m_skippedJoints << joint->name();
+                continue;
+            }
+            handleB = *b;
+        }
 
-        const JointHandle handle = m_engine->addJoint(joint->toJointDesc(*a, *b));
+        const JointHandle handle = m_engine->addJoint(joint->toJointDesc(*a, handleB));
         if (handle == kInvalidJoint) {
             m_skippedJoints << joint->name();
             continue;
@@ -241,6 +257,20 @@ void SimulationController::setStepsPerSecond(int stepsPerSecond)
     m_stepsPerSecond = stepsPerSecond;
 
     m_timer->setInterval(qMax(1, int(timeStep() * 1000.0) / 2));
+    emit stateChanged();
+}
+
+void SimulationController::setSpeed(qreal speed)
+{
+    speed = qBound(0.1, speed, 8.0);
+    if (qFuzzyCompare(m_speed, speed))
+        return;
+    m_speed = speed;
+    // Whatever was owed was owed at the old pace; starting the new one clean
+    // keeps a change of speed from spending a backlog all at once.
+    m_owedTime = 0.0;
+    if (m_clock.isValid())
+        m_clock.restart();
     emit stateChanged();
 }
 
@@ -281,6 +311,7 @@ void SimulationController::stepFrame()
     m_owedTime = 0.0;
     m_clock.restart();
     emit stateChanged();
+    applyPendingRunAction();
 }
 
 void SimulationController::stop()
@@ -317,31 +348,62 @@ void SimulationController::stop()
 
 void SimulationController::stepOnce()
 {
+    advance(m_clock.restart() / 1000.0);
+}
+
+void SimulationController::advance(qreal wallSeconds)
+{
     if (!m_engine)
         return;
 
-    const qreal elapsed = m_clock.restart() / 1000.0;
-    m_owedTime += elapsed;
+    // Played at twice the speed, a second of ours is two of the world's, so it
+    // is the time that is multiplied and never the step: the solver is handed
+    // the same slice it always was, just more often.
+    m_owedTime += wallSeconds * m_speed;
+
+    // The ceiling on catching up rises with the speed for the same reason --
+    // at x4 a tick is worth four times the steps, and a fixed five would cap
+    // the run at a quarter of what was asked for.
+    const int maxSteps = qMax(1, qCeil(kMaxStepsPerTick * m_speed));
 
     int stepsTaken = 0;
-    while (m_owedTime >= timeStep() && stepsTaken < kMaxStepsPerTick) {
+    while (m_owedTime >= timeStep() && stepsTaken < maxSteps) {
         stepWorld(timeStep());
         m_owedTime -= timeStep();
         ++stepsTaken;
     }
     if (stepsTaken == 0)
         return; // nothing moved; no point rewriting every transform
-    if (m_owedTime > timeStep() * kMaxStepsPerTick)
+    if (m_owedTime > timeStep() * maxSteps)
         m_owedTime = 0.0; // too far behind to catch up; drop the backlog
 
     syncTransforms();
     emit stepped();
+    applyPendingRunAction();
+}
+
+void SimulationController::applyPendingRunAction()
+{
+    const QString action = m_pendingRunAction;
+    m_pendingRunAction.clear();
+    if (action == Rule::stopRunAction())
+        stop();
+    else if (action == Rule::holdRunAction())
+        pause();
 }
 
 
 void SimulationController::stepWorld(qreal dt)
 {
     m_engine->step(dt);
+    // Anything the engine could not do; kept for the window to show. A scene
+    // can ask a solver for the impossible, and being told is better than
+    // watching a body vanish without a word.
+    const QStringList problems = m_engine->takeProblems();
+    if (!problems.isEmpty()) {
+        m_problems += problems;
+        emit stateChanged();
+    }
     syncRays();
     m_elapsedSeconds += dt;
     ++m_frameCount;
@@ -541,6 +603,14 @@ void SimulationController::takeOutOfView(PhysicsBody *body)
 
 void SimulationController::applyAction(const Rule &rule)
 {
+    // Ending or holding the run is not something the engine can do -- and it
+    // cannot be done here either, in the middle of a step, with the solver on
+    // the stack. It is remembered and carried out once the step is finished.
+    if (rule.isRunAction()) {
+        m_pendingRunAction = rule.actionId;
+        return;
+    }
+
     // An action is performed on the named body rather than written to it.
     if (rule.isAction()) {
         if (!m_engine)
@@ -691,6 +761,14 @@ void SimulationController::syncTransforms()
             takeOutOfView(bound.body);
             continue;
         }
+        // A body the solver lost the arithmetic for comes back as a position
+        // that is not a number. Writing that onto a QGraphicsItem paints
+        // nothing and fills the log with NaN warnings from every path built
+        // out of it, so the wreck is left where it was last seen -- the engine
+        // has already taken it out of the world and said so.
+        if (!std::isfinite(state.position.x()) || !std::isfinite(state.position.y())
+            || !std::isfinite(state.rotationDegrees))
+            continue;
         bound.body->setAsleep(!state.awake);
 
         QTransform bodyToScene;

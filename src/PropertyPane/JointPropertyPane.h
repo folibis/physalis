@@ -18,6 +18,8 @@ public:
 private:
     std::vector<PropertyRow> identityRows(Joint *joint, const physics::JointType &type) const;
     std::vector<PropertyRow> parameterRows(Joint *joint, const physics::JointType &type) const;
+    // What the joint reports about itself while running, read-only.
+    std::vector<PropertyRow> measuredRows(Joint *joint, const physics::JointType &type) const;
 
     physics::JointType typeOf(Joint *joint) const;
 

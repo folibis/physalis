@@ -21,13 +21,30 @@ asks the loaded plugin for:
 - joint types and their parameters (`jointTypes()`), and what a joint measures
   once it exists (`jointReadables()`)
 - events a rule can watch (`bodyEvents()`, `shapeEvents()`, and each joint
-  type's own `events`)
+  type's own `events`) -- including whether each one happens *with* something
+  (`EventType::namesOther`), which is what decides if the rule card asks which
+  other object it was
 - actions a rule can perform (`bodyActions()`, `jointActions()`)
 
 and builds its property panes, rule menus and combo boxes from the answers.
 Adding a joint type to the Box2D plugin makes it appear in the UI with no
 application change. **If you find yourself adding a physics term to `src/`,
 stop — it belongs in a plugin catalogue.**
+
+**The document is the same bargain.** A body, a shape and the world carry a
+`QVariantMap params` keyed by the engine's own property names, and nothing else
+of physics: `BodyDesc` has a transform, a type and its parts; `ShapePart` has a
+name and geometry; `WorldDesc` has `pixelsPerMeter`, the scene's own scale.
+Every stored value comes from a catalogue entry marked `stored`, which carries
+its default -- and the editor keeps only what differs from that, so an engine
+that drops or renames a property leaves nothing stale behind. `*.phys` files
+write those maps out under the engine's names, in a `physics` block per body,
+per shape and on the world.
+
+Two properties the *editor* also has to recognise, because it draws with them:
+whatever the engine tags `PropertyRole::Sensor` (hatched rather than filled) and
+`PropertyRole::Density` (where a body balances). It asks for the key by role --
+`CanvasScene::isSensorShape`, `shapeDensity` -- and still names neither.
 
 ## Layout
 
@@ -41,6 +58,7 @@ include/          the plugin contract, shared by app and engines
 src/              the application (Qt widgets, canvas, panels, serialization)
     CanvasScene       the scene: shapes, bodies, joints, rays, explosions,
                       selection, drag modes, painting
+    FullScreenView    a second view onto the scene, for a run on its own screen
     ShapeItem + RectangleItem/CircleItem/PolygonItem   the drawable shapes
     PhysicsBody, Joint, RayItem, ExplosionItem
     Rule.h            one rule: condition, action, value source
@@ -53,10 +71,13 @@ src/              the application (Qt widgets, canvas, panels, serialization)
 ui/               .ui forms (AUTOUIC searches here, not beside the sources)
 resources/        icons (physalis.svg), the .rc that gives the exe its icon
 engines/box2d/    one plugin: its own CMakeLists, include/ and src/
+engines/chipmunk/ another, on Chipmunk2D -- Box2D's keys and units wherever
+                  Chipmunk can honour them, its own constraints as joint types
 tests/            one .cpp per scenario, all built into a single binary
 exporters/        export converters -- one folder each, all JavaScript
-    box2d-qt-project/  manifest.json, export.js, templates/ (a whole runnable
-                       Qt + Box2D project, rules included)
+    box2d-qt-project/  manifest.json, export.js, templates/ -> one plain Box2D
+                       program, main.cpp; rules become ifs after b2World_Step
+    planck-js/         the same, as one index.html of plain Planck.js
 deploy/           the *.phys file association template
 cmake/            Version.h.in
 ```
@@ -107,9 +128,48 @@ the executable**. `EngineRegistry` scans that directory at startup, checks the
 `PHYSALIS_DECLARE_ENGINE(NAME, VERSION, TYPE)` in `PluginApi.h` writes the
 entry points.
 
+**A scene is built for one engine and keeps it.** Engines differ in what they
+offer -- their joint types, and part of their body and shape properties -- so
+there is no chooser on the toolbar: switching one under an existing scene would
+silently drop half of it. Which engine a *new* scene gets is an Option
+(Common -> Physics engine, stored as `Engine/default`); the name is written into the
+`*.phys`, and a file naming an engine that is not installed is refused with a
+message rather than half loaded. Changing the engine in Options is the one
+setting that reaches the open scene: `MainWindow::adoptEngine` offers to save
+it, closes it, and starts an empty one on the new engine -- keeping the scene
+keeps its engine. The body and shape property tables show only the rows the
+scene's engine publishes -- see `dropRowsTheEngineIgnores` in
+`PhysicsPropertyPane.cpp`.
+
+**Joints are coloured and drawn by kind, not by type.** A type id belongs to one
+engine (`revolute` is Box2D's, `pin` is Chipmunk's); the five `JointVisual`
+kinds every engine tags its types with -- pivot, segment, axis, rigid, link --
+belong to all of them. Options carries one colour and one line style per kind
+(`jointKindColors` / `jointKindStyles` in the INI), so the list does not grow a
+row per engine and a scene keeps its look whichever engine draws it. `Rod` is
+the waisted shaft joints have always been drawn with; the other styles stroke
+the line between the anchors instead.
+
 Inside `engines/box2d/`, the catalogue files (`Box2DCatalogue.cpp`,
 `Box2DJointTypes.cpp`) are pure description — what the app is allowed to show
 and which keys are settable while running. The rest does the work.
+
+**What a run shows is a list of layers**, not one debug switch:
+`CanvasScene::RunLayer` -- grid, joints, body axes, rays, explosions, and the
+sleep shading that tints bodies by whether the solver still has them awake --
+set from the toolbar's view list (`ViewLayersCombo`). They apply to a *run* and
+nothing else: while editing the canvas draws all of it, because that is when
+joints and rays are being placed and a switch that hid them would make them
+unusable. Ask `layerVisible()` at a paint site, never the switch itself. The
+INI key for the shading is still `debugView`, which is what the single switch
+these grew out of was called.
+
+**Two rule actions are the application's own**, and the only ones that are:
+`Rule::stopRunAction()` and `holdRunAction()`, offered on the world because
+that is what a rule names when it means the simulation itself. No engine knows
+a run is being watched, let alone how to end one. They cannot be carried out
+where a rule fires -- that is inside the step, with the solver on the stack --
+so `SimulationController` remembers one and acts on it once the step is over.
 
 ## Things that have bitten before
 
@@ -118,14 +178,23 @@ and which keys are settable while running. The rest does the work.
 - **Scale.** `pixelsPerMeter` is a world setting; forces and gravity are scaled
   by `50 / pixelsPerMeter`. At the common `ppm: 1000` that is a factor of 0.05,
   so sensible-looking force values do nothing and tiny ones are huge.
-- **Speculative contacts.** Box2D reports a touch about `4 × linearSlop` early —
-  ~20 scene px at `ppm: 1000`. Things react before they visually touch, and a
-  body starting exactly that far from a wall raises a contact on frame 0.
+- **Box2D's length unit.** Box2D's tolerances are lengths fixed for metre-sized
+  objects: 5 mm of slop, and a contact is made (and "begins contact" reported)
+  once shapes are within `4 × linearSlop` = 2 cm. At `ppm: 1000` that is 20 scene
+  px, so rules fired visibly before shapes touched. `createWorld` calls
+  `b2SetLengthUnitsPerMeter(50 / ppm)` -- the same reference the pace is quoted
+  at -- so the tolerances are what they would be at 50 px per metre. It is a
+  global, set before each world is made; the C++ export does the same.
 - **`collideConnected`.** A joint disables collision between the two bodies it
   connects. If one of them is scenery, the other passes straight through it.
-- **Contact events are auto-enabled** for any shape named as a rule subject
-  (`SimulationController.cpp`), so turning the flag off in the file changes
-  nothing for that shape.
+- **Contact events are auto-enabled** for any shape named as a rule subject:
+  `SimulationController` sets `ShapePart::watchedByRules`, and each engine
+  switches on whatever it needs to report contacts -- so turning the flag off
+  in the file changes nothing for that shape.
+- **A property the editor shows is one the engine published.** Panes are built
+  by `rowsFromCatalogue` (stored values, editable) and `liveRowsFromCatalogue`
+  (what a run answers, read-only). A row the editor owns -- a name, the body
+  type, Enabled -- carries no engine key, and nothing else in `src/` may.
 - **Rebuilding widgets from their own signal handler crashes.** The rules panel
   and the property panes both rebuild controls in response to a combo box
   changing — that deletes the sender mid-signal. Queue it:
@@ -149,7 +218,39 @@ and which keys are settable while running. The rest does the work.
 - **Joint limits lose to an overpowered motor.** They are constraints, not
   walls; a `maxMotorForce` far beyond what the bodies weigh drives straight
   through one. At `ppm: 1000` a 40×40 box weighs about two grams, so tenths of
-  a newton are already generous.
+  a newton are already generous. Pushed far enough it stops being a bad-looking
+  run and becomes a broken one -- see the two entries below, which came out of
+  exactly that.
+- **A sliding joint's travel is measured from where it starts.** Box2D measures
+  a prismatic (and wheel) joint between its two anchors, so a joint whose
+  anchors sit 400 apart *starts* at 400 -- and limits written in the editor as
+  "0 to 400 units of travel" would then sit entirely behind it, with the motor
+  grinding against a limit it began the wrong side of. The editor means travel
+  from where the joint starts, so `Box2DEngine::m_travelOrigins` keeps that
+  offset per joint: added to the limits (and `targetTranslation`) going in,
+  taken back off `translation` coming out. It is zero for the usual case of two
+  anchors dropped on the same point, and for every other kind of joint.
+  The picture follows the same coordinate: `CanvasScene` hangs the travel band
+  off **anchor B**, since zero is where that anchor stands, and drawing it from
+  anchor A put the whole range somewhere the joint could never reach as soon as
+  the two anchors were apart.
+- **An engine may not end the process.** Box2D checks its own arithmetic and,
+  left alone, calls `abort()` when a check fails -- which used to take the
+  editor down mid-run, unsaved work and all. `createWorld` installs
+  `b2SetAssertFcn(rememberAssertion)`, which keeps the message and returns zero
+  (Box2D's "do not break"), and `collectWreckage()` after every step disables
+  any body the solver left holding a value that is no longer a number, naming
+  it once. Both come back through `IPhysicsEngine::takeProblems()` -- cleared by
+  the asking -- which `SimulationController` collects and the window shows in
+  place of running/paused. A scene is *allowed* to ask for the impossible; what
+  it gets is a sentence, not a crash.
+- **Playing faster never means stepping bigger.** The toolbar's speed chooser
+  (×¼ to ×8) multiplies the *wall-clock time* handed to
+  `SimulationController::advance`, and the solver keeps the same `timeStep()` --
+  a longer step is a different simulation, not a faster one. The catch-up
+  ceiling scales with it (`kMaxStepsPerTick × speed`), or ×4 would run
+  at ×1 and drop the rest. `advance()` exists so a test can hand over the
+  time a tick would have carried instead of waiting for it.
 - **`stop()` restores the snapshot**, so reading positions after it gives you
   the pre-run state.
 
@@ -194,6 +295,39 @@ one -- the same bargain it has with the engine catalogues.
 Discovery parses manifests and never evaluates a script: opening the File menu,
 or the Options dialog, is not consent to run somebody's code -- which is why
 the settings are declared in the manifest and not in `export.js`.
+
+## Packaging
+
+`cpack` builds from whatever is installed by `cmake --install`, so both start
+from the same tree: the program, the engine plugins beside it, and the export
+converters under `exporters/`. Build Release first -- a Debug executable is
+some forty megabytes of symbols.
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+cd build && cpack
+```
+
+- **Windows** carries the Qt runtime. `windeployqt` runs against the *installed*
+  executable at install time and lands everything beside it, which is the
+  layout Qt finds without a `qt.conf`. Qt Quick, the on-screen keyboard and the
+  translations are skipped: QJSEngine is the only part of Qml the program uses,
+  and there is no QML in it. The generators are `NSIS;ZIP` where `makensis` is
+  on the path and `ZIP` alone where it is not -- the archive is the same tree,
+  unpacked.
+- **Linux** carries none of Qt. `CPACK_DEBIAN_PACKAGE_SHLIBDEPS` reads what the
+  program and the plugins actually link and writes the dependencies from the
+  packages providing them, so the list cannot drift from the build. The program
+  goes in `<libdir>/physalis` with its plugins, a link from `bin/physalis`
+  points at it (Qt resolves that before it looks for plugins), and the desktop
+  entry, icon and `*.phys` MIME description go where a desktop expects them.
+- **The `*.phys` association on Windows** is still the two `.reg` files in
+  `deploy/`, not something the installer writes: NSIS would have to carry the
+  same registry keys as escaped script, and a mis-escaped one writes a broken
+  association rather than none.
+- Box2D is fetched with `EXCLUDE_FROM_ALL` so its own install rules -- its
+  static library and headers -- stay out of a Physalis package.
 
 ## Versioning
 

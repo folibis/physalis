@@ -63,7 +63,8 @@ TEST(Explosion, Behaves)
     EXPECT_TRUE(scene->selectedExplosion() == explosion) << "and is selected";
 
     explosion->setPos(QPointF(0, 0));
-    scene->world().gravity = QPointF(0.0, 0.0);
+    scene->world().params["gravityX"] = 0.0;
+    scene->world().params["gravityY"] = 0.0;
     QVector<ShapeItem *> debris;
     for (int i = 0; i < 4; ++i) {
         const qreal angle = i * M_PI / 2.0;

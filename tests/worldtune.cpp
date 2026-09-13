@@ -14,7 +14,7 @@ static qreal bounceHeight(qreal restitutionThreshold, bool *ok)
 {
     CanvasScene scene;
     scene.setSimulationEngineName(QStringLiteral("Box2D"));
-    scene.world().restitutionThreshold = restitutionThreshold;
+    scene.world().params["restitutionThreshold"] = restitutionThreshold;
 
     auto *ground = new RectangleItem;
     ground->setRect(QRectF(0, 0, 800, 40));
@@ -24,7 +24,7 @@ static qreal bounceHeight(qreal restitutionThreshold, bool *ok)
     ball->setRect(QRectF(0, 0, 40, 40));
     ball->setPos(-20, 0);
     ball->setName(QStringLiteral("ball"));
-    ball->part().material.restitution = 0.9;
+    ball->part().params["restitution"] = 0.9;
     scene.addItem(ground);
     scene.addItem(ball);
     scene.notifyShapesChanged();
@@ -83,14 +83,14 @@ TEST(WorldTune, Behaves)
     EXPECT_TRUE(without < withBounce / 4.0) << "a high one suppresses the bounce";
 
     CanvasScene scene;
-    scene.world().restitutionThreshold = 0.25;
-    scene.world().hitEventThreshold = 2.5;
-    scene.world().contactHertz = 45.0;
-    scene.world().contactDampingRatio = 4.0;
-    scene.world().maxContactPushSpeed = 7.0;
-    scene.world().maximumLinearSpeed = 123.0;
-    scene.world().enableSleep = false;
-    scene.world().enableContinuous = false;
+    scene.world().params["restitutionThreshold"] = 0.25;
+    scene.world().params["hitEventThreshold"] = 2.5;
+    scene.world().params["contactHertz"] = 45.0;
+    scene.world().params["contactDampingRatio"] = 4.0;
+    scene.world().params["maxContactPushSpeed"] = 7.0;
+    scene.world().params["maximumLinearSpeed"] = 123.0;
+    scene.world().params["enableSleep"] = false;
+    scene.world().params["enableContinuous"] = false;
 
     const QString path = QStringLiteral("worldtune.phys");
     QString error;
@@ -98,18 +98,19 @@ TEST(WorldTune, Behaves)
     CanvasScene back;
     SceneSerializer::loadFromFile(&back, path, &error);
 
-    EXPECT_TRUE(qFuzzyCompare(back.world().restitutionThreshold, 0.25)) << "restitution threshold";
-    EXPECT_TRUE(qFuzzyCompare(back.world().hitEventThreshold, 2.5)) << "hit event threshold";
-    EXPECT_TRUE(qFuzzyCompare(back.world().contactHertz, 45.0)) << "contact stiffness";
-    EXPECT_TRUE(qFuzzyCompare(back.world().contactDampingRatio, 4.0)) << "contact damping";
-    EXPECT_TRUE(qFuzzyCompare(back.world().maxContactPushSpeed, 7.0)) << "max push speed";
-    EXPECT_TRUE(qFuzzyCompare(back.world().maximumLinearSpeed, 123.0)) << "max speed";
-    EXPECT_TRUE(back.world().enableSleep == false) << "allow sleeping";
-    EXPECT_TRUE(back.world().enableContinuous == false) << "continuous collision";
+    EXPECT_TRUE(qFuzzyCompare(back.world().params["restitutionThreshold"].toDouble(), 0.25)) << "restitution threshold";
+    EXPECT_TRUE(qFuzzyCompare(back.world().params["hitEventThreshold"].toDouble(), 2.5)) << "hit event threshold";
+    EXPECT_TRUE(qFuzzyCompare(back.world().params["contactHertz"].toDouble(), 45.0)) << "contact stiffness";
+    EXPECT_TRUE(qFuzzyCompare(back.world().params["contactDampingRatio"].toDouble(), 4.0)) << "contact damping";
+    EXPECT_TRUE(qFuzzyCompare(back.world().params["maxContactPushSpeed"].toDouble(), 7.0)) << "max push speed";
+    EXPECT_TRUE(qFuzzyCompare(back.world().params["maximumLinearSpeed"].toDouble(), 123.0)) << "max speed";
+    EXPECT_TRUE(back.world().params["enableSleep"].toBool() == false) << "allow sleeping";
+    EXPECT_TRUE(back.world().params["enableContinuous"].toBool() == false) << "continuous collision";
 
+    // What an untouched scene carries: nothing at all, so every one of these
+    // falls through to what the engine says it starts as.
     CanvasScene old;
-    const physics::WorldDesc factory;
-    EXPECT_TRUE(qFuzzyCompare(old.world().contactHertz, factory.contactHertz)
-              && qFuzzyCompare(old.world().restitutionThreshold, factory.restitutionThreshold)) << "missing keys fall back to Box2D's defaults" << " -- " << (QStringLiteral("hertz %1, threshold %2")
-              .arg(old.world().contactHertz).arg(old.world().restitutionThreshold)).toStdString();
+    EXPECT_TRUE(old.world().params.isEmpty())
+        << "an untouched scene holds no settings of its own -- " << old.world().params.size()
+        << " kept";
 }

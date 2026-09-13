@@ -19,16 +19,12 @@ public:
     void attach(QObject *target) override;
 
 private:
+    // The editor's own rows. Everything else a body or a shape has comes from
+    // the engine's catalogue, and this pane names none of it.
     static PropertyRow bodyTypeRow(physics::BodyDesc *props,
                                    const std::function<void()> &changed);
-    static std::vector<PropertyRow> bodyPropRows(physics::BodyDesc *props,
-                                                 const std::function<void()> &changed);
-    // `relayout` is for a setting that changes which rows exist -- the sensor
-    // flag takes the contact settings away with it.
-    static std::vector<PropertyRow> shapePropRows(physics::ShapePart *part,
-                                                  const std::function<void()> &changed,
-                                                  const std::function<void()> &relayout = {});
-
+    static PropertyRow enabledRow(physics::BodyDesc *props,
+                                  const std::function<void()> &changed);
     static std::vector<PropertyRow> bodyIdentityRows(PhysicsBody *body);
     static std::vector<PropertyRow> shapeIdentityRows(ShapeItem *shape);
 

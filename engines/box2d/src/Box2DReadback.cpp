@@ -4,6 +4,7 @@
 
 #include <QObject>
 #include <QtMath>
+#include <QHash>
 
 // What a running world can be asked about.
 //
@@ -75,6 +76,27 @@ QVariant Box2DEngine::bodyValue(BodyHandle handle, const QString &key) const
         return b2Body_GetMass(body);
     if (key == QLatin1String("rotationalInertia"))
         return b2Body_GetRotationalInertia(body);
+    if (key == QLatin1String("localCenterOfMassX"))
+        return toScene(b2Body_GetLocalCenterOfMass(body).x);
+    if (key == QLatin1String("localCenterOfMassY"))
+        return toScene(b2Body_GetLocalCenterOfMass(body).y);
+    if (key == QLatin1String("jointCount"))
+        return b2Body_GetJointCount(body);
+    if (key == QLatin1String("contactCount")) {
+        // The capacity is what it might have; the call fills in what it has.
+        const int capacity = b2Body_GetContactCapacity(body);
+        if (capacity <= 0)
+            return 0;
+        QVarLengthArray<b2ContactData, 16> contacts(capacity);
+        return b2Body_GetContactData(body, contacts.data(), capacity);
+    }
+    if (key.startsWith(QLatin1String("bounds"))) {
+        const b2AABB box = b2Body_ComputeAABB(body);
+        if (key == QLatin1String("boundsMinX")) return toScene(box.lowerBound.x);
+        if (key == QLatin1String("boundsMinY")) return toScene(box.lowerBound.y);
+        if (key == QLatin1String("boundsMaxX")) return toScene(box.upperBound.x);
+        if (key == QLatin1String("boundsMaxY")) return toScene(box.upperBound.y);
+    }
     if (key == QLatin1String("centerOfMassX"))
         return toScene(b2Body_GetWorldCenterOfMass(body).x);
     if (key == QLatin1String("centerOfMassY"))
@@ -142,6 +164,16 @@ QVariant Box2DEngine::jointValue(JointHandle handle, const QString &key) const
     if (key == QLatin1String("collideConnected"))
         return b2Joint_GetCollideConnected(joint);
 
+    // Where the limit events come from, read as a state. The engine works this
+    // out after every step to decide whether the joint has just *arrived*
+    // somewhere; a rule that wants to know where it is standing asks here.
+    if (key == QLatin1String("atLowerLimit") || key == QLatin1String("atUpperLimit")) {
+        if (static_cast<size_t>(handle) >= m_jointLimits.size())
+            return false;
+        const LimitState &state = m_jointLimits[handle];
+        return key == QLatin1String("atLowerLimit") ? state.atLower : state.atUpper;
+    }
+
     // Box2D holds the anchors in each body's own frame; the editor speaks
     // scene coordinates, and b2Body_GetWorldPoint is the whole conversion.
     if (key == QLatin1String("anchorAX") || key == QLatin1String("anchorAY")) {
@@ -169,6 +201,21 @@ QVariant Box2DEngine::jointValue(JointHandle handle, const QString &key) const
                                             static_cast<double>(axis.x)));
     }
 
+    // The names a joint is *set* by, answered with what it actually is now.
+    // Without these the log falls back to the stored setting and reports the
+    // value the run started with for as long as the run lasts -- so a motor a
+    // rule had switched on still read as off, and one it had not still read as
+    // whatever the file said.
+    static const QHash<QString, QString> kSettingReaders {
+        {QStringLiteral("enableSpring"), QStringLiteral("springEnabled")},
+        {QStringLiteral("enableLimit"),  QStringLiteral("limitEnabled")},
+        {QStringLiteral("enableMotor"),  QStringLiteral("motorEnabled")},
+    };
+    // Asked again under the name that reads it, so every joint type's own
+    // branch below answers without needing to know both spellings.
+    if (const QString live = kSettingReaders.value(key); !live.isEmpty())
+        return jointValue(handle, live);
+
     switch (b2Joint_GetType(joint)) {
     case b2_revoluteJoint:
         if (key == QLatin1String("angle"))
@@ -186,8 +233,10 @@ QVariant Box2DEngine::jointValue(JointHandle handle, const QString &key) const
         break;
 
     case b2_prismaticJoint:
+        // Travel from where the joint started, which is what its limits are
+        // measured from and what the editor drew.
         if (key == QLatin1String("translation"))
-            return toScene(b2PrismaticJoint_GetTranslation(joint));
+            return toScene(b2PrismaticJoint_GetTranslation(joint) - m_travelOrigins.value(handle));
         if (key == QLatin1String("speed"))
             return toScene(b2PrismaticJoint_GetSpeed(joint));
         if (key == QLatin1String("motorSpeed"))
@@ -288,13 +337,23 @@ QVariant Box2DEngine::worldValue(const QString &key) const
 
     if (key == QLatin1String("awakeBodyCount"))
         return b2World_GetAwakeBodyCount(m_worldId);
+
+    // b2World_GetProfile: where the last step went, in milliseconds.
+    if (key.endsWith(QLatin1String("Milliseconds"))) {
+        const b2Profile profile = b2World_GetProfile(m_worldId);
+        if (key == QLatin1String("stepMilliseconds"))    return profile.step;
+        if (key == QLatin1String("collideMilliseconds")) return profile.collide;
+        if (key == QLatin1String("solveMilliseconds"))   return profile.solve;
+    }
     if (key == QLatin1String("bodyCount") || key == QLatin1String("contactCount")
-        || key == QLatin1String("jointCount")) {
+        || key == QLatin1String("jointCount") || key == QLatin1String("shapeCount")
+        || key == QLatin1String("islandCount") || key == QLatin1String("treeHeight")) {
         const b2Counters counters = b2World_GetCounters(m_worldId);
-        if (key == QLatin1String("bodyCount"))
-            return counters.bodyCount;
-        if (key == QLatin1String("contactCount"))
-            return counters.contactCount;
+        if (key == QLatin1String("bodyCount"))    return counters.bodyCount;
+        if (key == QLatin1String("contactCount")) return counters.contactCount;
+        if (key == QLatin1String("shapeCount"))   return counters.shapeCount;
+        if (key == QLatin1String("islandCount"))  return counters.islandCount;
+        if (key == QLatin1String("treeHeight"))   return counters.treeHeight;
         return counters.jointCount;
     }
 

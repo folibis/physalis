@@ -17,8 +17,9 @@ public:
     void attach(QObject *target) override;
 
 private:
-    static std::vector<PropertyRow> worldRows(physics::WorldDesc *world,
-                                              const std::function<void()> &changed);
+    static std::vector<PropertyRow> worldRows(bool running, physics::WorldDesc *world,
+                                              const std::function<void()> &changed,
+                                              const QString &engineName);
 
     CanvasScene *m_scene = nullptr;
 };

@@ -149,12 +149,14 @@ JointParam forceParam(const QString &key, const QString &label, const QString &s
 QVector<EventType> limitEvents()
 {
     return {
+        // None of them names a second object: a joint arrives at a limit on
+        // its own, and there is nothing for a rule to single out.
         {QStringLiteral("limitLower"), QObject::tr("Lower limit reached"),
-         QObject::tr("Raised when the joint arrives at its lower limit.")},
+         QObject::tr("Raised when the joint arrives at its lower limit."), false},
         {QStringLiteral("limitUpper"), QObject::tr("Upper limit reached"),
-         QObject::tr("Raised when the joint arrives at its upper limit.")},
+         QObject::tr("Raised when the joint arrives at its upper limit."), false},
         {QStringLiteral("limitEither"), QObject::tr("Either limit reached"),
-         QObject::tr("Raised at whichever limit the joint arrives at.")},
+         QObject::tr("Raised at whichever limit the joint arrives at."), false},
     };
 }
 
@@ -188,7 +190,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
         JointType t;
         t.id = QStringLiteral("revolute");
         t.color = QColor(0xE8, 0xC4, 0x6A); // amber -- the hinge, and the one you meet first
-        t.label = QObject::tr("Revolute (hinge)");
+        t.label = QObject::tr("Revolute");
         t.description = QObject::tr("Pins two bodies together at a point and lets them rotate"
                                     " about it.");
         t.anchorCount = 1;
@@ -251,7 +253,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
         JointType t;
         t.id = QStringLiteral("distance");
         t.color = QColor(0x6A, 0xB0, 0xE8); // blue -- a rod or rope holding a length
-        t.label = QObject::tr("Distance (rod)");
+        t.label = QObject::tr("Distance");
         t.description = QObject::tr("Holds two points a fixed distance apart. With a spring it"
                                     " behaves like a shock absorber, with a limit like a rope.");
         t.anchorCount = 2;
@@ -340,7 +342,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
         JointType t;
         t.id = QStringLiteral("prismatic");
         t.color = QColor(0x6A, 0xD1, 0xA8); // green -- travel along a line
-        t.label = QObject::tr("Prismatic (slider)");
+        t.label = QObject::tr("Prismatic");
         t.description = QObject::tr("Lets two bodies slide along one direction and nothing else.");
         // b2PrismaticJointDef carries localAnchorA and localAnchorB, and they
         // are independent points -- one on each body.
@@ -402,7 +404,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
         JointType t;
         t.id = QStringLiteral("wheel");
         t.color = QColor(0xE8, 0x8A, 0x6A); // orange -- suspension
-        t.label = QObject::tr("Wheel (suspension)");
+        t.label = QObject::tr("Wheel");
         t.description = QObject::tr("Lets one body spin freely while sliding along an axis of"
                                     " another -- a wheel on a suspension arm.");
         t.anchorCount = 1;
@@ -458,7 +460,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
         JointType t;
         t.id = QStringLiteral("motor");
         t.color = QColor(0xE0, 0x6A, 0xA8); // pink -- driven, not constrained
-        t.label = QObject::tr("Motor (offset drive)");
+        t.label = QObject::tr("Motor");
         t.description = QObject::tr("Drives body B to hold a set position and angle relative to"
                                     " body A, within a force and torque budget.");
         t.anchorCount = 0;
@@ -505,12 +507,20 @@ QVector<JointType> Box2DEngine::jointTypes() const
     {
         JointType t;
         t.id = QStringLiteral("mouse");
+        // One body and a point. Box2D's def has a second slot and asserts if
+        // what is in it can move, so the world keeps a static body of its own
+        // to fill it -- that is the backend's business, not the scene's.
+        t.bodyCount = 1;
         t.color = QColor(0x8A, 0xC8, 0x5A); // lime -- a soft pull towards a target
-        t.label = QObject::tr("Mouse (soft target)");
-        t.description = QObject::tr("Pulls a point on body B softly towards a target point."
-                                    " Body A must be static -- Box2D refuses this joint"
-                                    " otherwise.");
-        t.anchorCount = 1;
+        t.label = QObject::tr("Mouse");
+        t.description = QObject::tr("Pulls a point on the body softly towards a point in the"
+                                    " world. Drag the first anchor to choose what is held,"
+                                    " and the second to choose where it is pulled.");
+        // Two ends, like any other joint: the first is the point on the body
+        // that is held, the second is the place in the world it is pulled to.
+        // They start on top of each other, so nothing moves until the target
+        // is dragged off the body.
+        t.anchorCount = 2;
         t.visual = JointVisual::Pivot;
 
         // b2MouseJoint_SetTarget is the only way this joint does anything
@@ -520,12 +530,14 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                     jointSection(), 0.0,
                                     QObject::tr("Where the body is pulled towards, in scene"
                                                 " coordinates. Leave both at zero to use the"
-                                                " anchor the joint was placed at.")));
+                                                " second anchor, which is the same point"
+                                                " shown on the canvas.")));
         t.params.append(lengthParam(QStringLiteral("targetY"), QObject::tr("Target Y"),
                                     jointSection(), 0.0,
                                     QObject::tr("Where the body is pulled towards, in scene"
                                                 " coordinates. Leave both at zero to use the"
-                                                " anchor the joint was placed at.")));
+                                                " second anchor, which is the same point"
+                                                " shown on the canvas.")));
 
         t.params.append(hertzParam(QStringLiteral("hertz"), QObject::tr("Frequency (Hz)"),
                                    springSection(), 4.0,
@@ -548,7 +560,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
         JointType t;
         t.id = QStringLiteral("filter");
         t.color = QColor(0x9E, 0x9E, 0x9E); // grey -- holds nothing, only stops collision
-        t.label = QObject::tr("Filter (no collision)");
+        t.label = QObject::tr("Filter");
         t.description = QObject::tr("Holds nothing together -- it only stops these two bodies"
                                     " colliding with each other.");
         t.anchorCount = 0;

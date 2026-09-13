@@ -9,7 +9,10 @@
 #include "RayItem.h"
 #include "PolygonItem.h"
 #include "PropertyPane/FieldPropertyPane.h"
+#include "SceneSerializer.h"
 
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsSceneWheelEvent>
 #include <QGraphicsView>
@@ -110,6 +113,76 @@ RectangleItem *CanvasScene::addRectangle(const QPointF &scenePos)
     item->setName(uniqueName(item->name(), item));
     emit shapesChanged();
     return item;
+}
+
+ShapeItem *CanvasScene::convertToPolygon(ShapeItem *shape)
+{
+    if (!shape || shape->scene() != this)
+        return nullptr;
+    // Only a rectangle has four corners to become. A circle would need an
+    // arbitrary number of them, which is a different question with a
+    // different answer for every scene.
+    if (!dynamic_cast<RectangleItem *>(shape))
+        return nullptr;
+
+    // Through the same JSON a duplicate goes through, so the two cannot drift
+    // apart in what they carry across.
+    QJsonObject json = SceneSerializer::shapeToJson(shape);
+    const QRectF r = shape->rect();
+    QJsonArray corners;
+    for (const QPointF &p : { r.topLeft(), r.topRight(), r.bottomRight(), r.bottomLeft() })
+        corners.append(QJsonObject {{"x", p.x()}, {"y", p.y()}});
+    json.insert(QStringLiteral("type"), QStringLiteral("polygon"));
+    json.insert(QStringLiteral("closed"), true);
+    json.insert(QStringLiteral("points"), corners);
+    // Rectangles alone carry one: Box2D rounds a box without growing it, and
+    // there is no such rounding for an arbitrary polygon. The corners come
+    // out square, so the number goes rather than lingering with no effect.
+    json.insert(QStringLiteral("cornerRadius"), 0.0);
+
+    ShapeItem *polygon = SceneSerializer::shapeFromJson(json);
+    if (!polygon)
+        return nullptr;
+
+    polygon->setZValue(shape->zValue());
+    addItem(polygon);
+
+    PhysicsBody *body = shape->body();
+    if (body)
+        body->replaceShape(shape, polygon);
+
+    // Wherever the old shape was being held, the new one takes its place.
+    const bool wasActive = (m_active == shape);
+    const bool wasPicked = m_physicsSelection.contains(shape);
+    if (wasActive) {
+        m_active = nullptr;
+        m_selectedNodes.clear();
+    }
+    const int inEditSelection = m_editSelection.indexOf(shape);
+    if (inEditSelection >= 0)
+        m_editSelection[inEditSelection] = polygon;
+    const int inPhysicsSelection = m_physicsSelection.indexOf(shape);
+    if (inPhysicsSelection >= 0)
+        m_physicsSelection[inPhysicsSelection] = polygon;
+    m_bodyDragShapes.removeAll(shape);
+    if (m_groupClickCandidate == shape)
+        m_groupClickCandidate = nullptr;
+    m_dragMode = DragMode::None;
+
+    removeItem(shape);
+    delete shape;
+
+    emit shapesChanged();
+    if (body)
+        emit bodiesChanged();
+    if (wasActive)
+        activate(polygon);
+    if (wasPicked)
+        emit physicsSelectionChanged();
+    if (inEditSelection >= 0)
+        emit editSelectionChanged();
+
+    return polygon;
 }
 
 ExplosionItem *CanvasScene::addExplosion(const QPointF &scenePos)
@@ -395,6 +468,19 @@ PhysicsBody *CanvasScene::createBodyFromSelection()
             destroyBody(previous);
     }
 
+    // Only a filled shape has area, and only area gives mass. A body made of
+    // outlines cannot be dynamic: it would be dropped at the start of every
+    // run as having none. Kinematic is the closest thing that still works --
+    // it can be driven by a velocity, it just is not pushed around -- so that
+    // is what such a body starts as rather than a dynamic one that is thrown
+    // away. Whether a run then accepts it is the engine's answer, and a body
+    // it refuses is already reported as skipped.
+    bool anyInterior = false;
+    for (ShapeItem *shape : body->shapes())
+        anyInterior = anyInterior || shape->hasInterior();
+    if (!anyInterior && !body->shapes().isEmpty())
+        body->props().type = physics::BodyType::Kinematic;
+
     update();
     emit bodiesChanged();
     emit physicsSelectionChanged();
@@ -404,7 +490,9 @@ PhysicsBody *CanvasScene::createBodyFromSelection()
 Joint *CanvasScene::createJoint(const QString &typeId, PhysicsBody *bodyA, PhysicsBody *bodyB,
                                 int anchorCount, const QVariantMap &defaultParams)
 {
-    if (!bodyA || !bodyB || bodyA == bodyB)
+    // bodyB may be absent: a joint that holds a body to a point in the world
+    // has no second body to name.
+    if (!bodyA || bodyA == bodyB)
         return nullptr;
 
     auto *joint = new Joint(this);
@@ -416,7 +504,10 @@ Joint *CanvasScene::createJoint(const QString &typeId, PhysicsBody *bodyA, Physi
     joint->setAnchorCount(anchorCount);
 
     const QPointF centreA = bodyA->centerOfMassScenePos();
-    const QPointF centreB = bodyB->centerOfMassScenePos();
+    // With no second body the anchor starts on the body itself, so a target
+    // left where it was put pulls towards where the body already is rather
+    // than dragging it somewhere the moment the run begins.
+    const QPointF centreB = bodyB ? bodyB->centerOfMassScenePos() : centreA;
 
     if (anchorCount > 1) {
         joint->setAnchorScenePos(Joint::End::A, centreA);
@@ -438,8 +529,14 @@ Joint *CanvasScene::createJoint(const QString &typeId, PhysicsBody *bodyA, Physi
                 continue;
             QTransform intoBodyA;
             intoBodyA.rotate(-bodyA->rotationDegrees());
-            const QPointF offset = intoBodyA.map(bodyB->originScenePos() - bodyA->originScenePos());
-            const qreal angle = bodyB->rotationDegrees() - bodyA->rotationDegrees();
+            // Measured between the two bodies. With only one there is nothing
+            // to measure against, and every such default is zero -- which is
+            // what "no offset from where it is" means anyway.
+            const QPointF offset =
+                bodyB ? intoBodyA.map(bodyB->originScenePos() - bodyA->originScenePos())
+                      : QPointF();
+            const qreal angle =
+                bodyB ? bodyB->rotationDegrees() - bodyA->rotationDegrees() : 0.0;
             for (const physics::JointParam &param : type.params) {
                 switch (param.defaultSource) {
                 case physics::DefaultSource::Fixed:
@@ -506,37 +603,191 @@ void CanvasScene::setJointSelectionLineStyle(Qt::PenStyle style)
     update();
 }
 
-void CanvasScene::setJointTypeColor(const QString &typeId, const QColor &color)
+QVector<physics::JointVisual> CanvasScene::jointKinds()
 {
-    if (typeId.isEmpty())
+    using physics::JointVisual;
+    return { JointVisual::Pivot, JointVisual::Segment, JointVisual::Axis,
+             JointVisual::Rigid, JointVisual::Link };
+}
+
+QString CanvasScene::jointKindKey(physics::JointVisual kind)
+{
+    switch (kind) {
+    case physics::JointVisual::Pivot:   return QStringLiteral("pivot");
+    case physics::JointVisual::Segment: return QStringLiteral("segment");
+    case physics::JointVisual::Axis:    return QStringLiteral("axis");
+    case physics::JointVisual::Rigid:   return QStringLiteral("rigid");
+    case physics::JointVisual::Link:    return QStringLiteral("link");
+    }
+    return QStringLiteral("pivot");
+}
+
+QString CanvasScene::jointKindLabel(physics::JointVisual kind)
+{
+    switch (kind) {
+    case physics::JointVisual::Pivot:   return tr("Turning");
+    case physics::JointVisual::Segment: return tr("Holding a length");
+    case physics::JointVisual::Axis:    return tr("Sliding");
+    case physics::JointVisual::Rigid:   return tr("Fixed");
+    case physics::JointVisual::Link:    return tr("Anchorless");
+    }
+    return QString();
+}
+
+QString CanvasScene::jointKindDescription(physics::JointVisual kind)
+{
+    switch (kind) {
+    case physics::JointVisual::Pivot:
+        return tr("Joints that turn about a point -- a hinge.");
+    case physics::JointVisual::Segment:
+        return tr("Joints between two points that hold a distance -- rods, ropes"
+                  " and springs.");
+    case physics::JointVisual::Axis:
+        return tr("Joints that travel along a line -- sliders and suspensions.");
+    case physics::JointVisual::Rigid:
+        return tr("Joints that hold two bodies fixed to each other -- welds.");
+    case physics::JointVisual::Link:
+        return tr("Joints with no anchor at all, drawn as a connector between the"
+                  " two bodies -- motors, gears, filters.");
+    }
+    return QString();
+}
+
+QString CanvasScene::jointStyleLabel(JointStyle style)
+{
+    switch (style) {
+    case JointStyle::Rod:     return tr("Rod");
+    case JointStyle::Solid:   return tr("Solid line");
+    case JointStyle::Dashed:  return tr("Dashed line");
+    case JointStyle::Dotted:  return tr("Dotted line");
+    case JointStyle::DashDot: return tr("Dash-dot line");
+    }
+    return QString();
+}
+
+QVector<JointStyle> CanvasScene::jointStyles()
+{
+    return { JointStyle::Rod, JointStyle::Solid, JointStyle::Dashed, JointStyle::Dotted,
+             JointStyle::DashDot };
+}
+
+// What each kind is drawn in until someone chooses otherwise.
+QColor CanvasScene::defaultJointKindColor(physics::JointVisual kind)
+{
+    switch (kind) {
+    case physics::JointVisual::Pivot:   return QColor(0xE8, 0xC4, 0x6A); // amber
+    case physics::JointVisual::Segment: return QColor(0x6A, 0xB0, 0xE8); // blue
+    case physics::JointVisual::Axis:    return QColor(0x6A, 0xD1, 0xA8); // green
+    case physics::JointVisual::Rigid:   return QColor(0xB4, 0x8A, 0xE8); // violet
+    case physics::JointVisual::Link:    return QColor(0x9E, 0x9E, 0x9E); // grey
+    }
+    return QColor(0xE8, 0xC4, 0x6A);
+}
+
+JointStyle CanvasScene::defaultJointKindStyle(physics::JointVisual kind)
+{
+    // A joint with two ends is a rod; one with no anchors has nothing to be a
+    // rod between, and has always been drawn as a dashed connector.
+    return kind == physics::JointVisual::Link ? JointStyle::Dashed : JointStyle::Rod;
+}
+
+QColor CanvasScene::jointKindColor(physics::JointVisual kind) const
+{
+    const auto it = m_jointKindColors.constFind(static_cast<int>(kind));
+    if (it != m_jointKindColors.constEnd() && it->isValid())
+        return *it;
+    return defaultJointKindColor(kind);
+}
+
+void CanvasScene::setJointKindColor(physics::JointVisual kind, const QColor &color)
+{
+    if (m_jointKindColors.value(static_cast<int>(kind)) == color)
         return;
-    if (m_jointTypeColors.value(typeId) == color)
-        return;
-    m_jointTypeColors.insert(typeId, color);
+    m_jointKindColors.insert(static_cast<int>(kind), color);
     update();
 }
 
-void CanvasScene::setJointTypeColors(const QHash<QString, QColor> &colors)
+JointStyle CanvasScene::jointKindStyle(physics::JointVisual kind) const
 {
-    if (m_jointTypeColors == colors)
+    return m_jointKindStyles.value(static_cast<int>(kind), defaultJointKindStyle(kind));
+}
+
+void CanvasScene::setJointKindStyle(physics::JointVisual kind, JointStyle style)
+{
+    if (jointKindStyle(kind) == style)
         return;
-    m_jointTypeColors = colors;
+    m_jointKindStyles.insert(static_cast<int>(kind), style);
+    update();
+}
+
+void CanvasScene::setJointKindColors(const QHash<int, QColor> &colors)
+{
+    if (m_jointKindColors == colors)
+        return;
+    m_jointKindColors = colors;
+    update();
+}
+
+void CanvasScene::setJointKindStyles(const QHash<int, JointStyle> &styles)
+{
+    if (m_jointKindStyles == styles)
+        return;
+    m_jointKindStyles = styles;
     update();
 }
 
 QColor CanvasScene::jointTypeColor(const QString &typeId) const
 {
-    const auto it = m_jointTypeColors.constFind(typeId);
-    if (it != m_jointTypeColors.constEnd() && it->isValid())
-        return *it;
+    return jointKindColor(jointVisual(typeId));
+}
 
-    if (auto engine = physics::EngineRegistry::create(describingEngineName())) {
-        for (const physics::JointType &type : engine->jointTypes()) {
-            if (type.id == typeId)
-                return type.color;
-        }
+void CanvasScene::loadRoleKeys() const
+{
+    const QString engineName = describingEngineName();
+    if (m_roleKeysEngine == engineName)
+        return;
+    m_roleKeysEngine = engineName;
+    m_sensorKey.clear();
+    m_densityKey.clear();
+    if (auto engine = physics::EngineRegistry::create(engineName)) {
+        const physics::PropertyList shapes = engine->shapeProperties();
+        m_sensorKey = physics::keyForRole(shapes, physics::PropertyRole::Sensor);
+        m_densityKey = physics::keyForRole(shapes, physics::PropertyRole::Density);
     }
-    return m_jointColor;
+}
+
+bool CanvasScene::hasSensorProperty() const
+{
+    loadRoleKeys();
+    return !m_sensorKey.isEmpty();
+}
+
+QString CanvasScene::sensorPropertyKey() const
+{
+    loadRoleKeys();
+    return m_sensorKey;
+}
+
+bool CanvasScene::isSensorShape(const ShapeItem *shape) const
+{
+    loadRoleKeys();
+    return shape && !m_sensorKey.isEmpty() && shape->part().params.value(m_sensorKey).toBool();
+}
+
+void CanvasScene::setSensorShape(ShapeItem *shape, bool sensor)
+{
+    loadRoleKeys();
+    if (!shape || m_sensorKey.isEmpty())
+        return;
+    shape->part().params.insert(m_sensorKey, sensor);
+}
+
+qreal CanvasScene::shapeDensity(const ShapeItem *shape) const
+{
+    loadRoleKeys();
+    if (!shape || m_densityKey.isEmpty())
+        return 1.0;
+    return shape->part().params.value(m_densityKey, 1.0).toDouble();
 }
 
 QString CanvasScene::describingEngineName() const
@@ -640,7 +891,10 @@ Joint *CanvasScene::jointAt(const QPointF &scenePos, int *end) const
     const qreal shaftRadius = (m_jointWaistWidth / 2.0 + 4.0) * zoom;
 
     for (Joint *joint : m_joints) {
-        for (int which = 0; which < joint->anchorCount(); ++which) {
+        // Last first: a joint whose two anchors start on top of each other
+        // hands you the second, which is the one that is moved. The first is
+        // where it grips, and is left alone far more often.
+        for (int which = joint->anchorCount() - 1; which >= 0; --which) {
             const auto whichEnd = which == 0 ? Joint::End::A : Joint::End::B;
             const QPointF anchor = joint->anchorScenePos(whichEnd);
             if (QLineF(anchor, scenePos).length() <= anchorRadius) {
@@ -653,12 +907,29 @@ Joint *CanvasScene::jointAt(const QPointF &scenePos, int *end) const
 
     for (Joint *joint : m_joints) {
         const int anchors = joint->anchorCount();
+
+        // A joint that holds one body to a point draws a leader from the point
+        // back to the body, and what is drawn is what can be picked -- a line
+        // you can see and cannot click on is the odd one out.
+        if (!joint->bodyB() && joint->bodyA()) {
+            const QPointF target = joint->anchorScenePos(Joint::End::A);
+            const QPointF centre = anchors > 1 ? joint->anchorScenePos(Joint::End::B)
+                                               : joint->bodyA()->centerOfMassScenePos();
+            if (distanceToSegment(scenePos, target, centre) <= shaftRadius) {
+                if (end)
+                    *end = kJointShaft;
+                return joint;
+            }
+            continue;
+        }
+
         if (anchors == 1)
             continue; // a single pin is all anchor and no shaft
         const QPointF a = anchors > 0 ? joint->anchorScenePos(Joint::End::A)
                                       : joint->bodyA()->centerOfMassScenePos();
-        const QPointF b = anchors > 0 ? joint->anchorScenePos(Joint::End::B)
-                                      : joint->bodyB()->centerOfMassScenePos();
+        const QPointF b = anchors > 0 || !joint->bodyB()
+                              ? joint->anchorScenePos(Joint::End::B)
+                              : joint->bodyB()->centerOfMassScenePos();
         if (distanceToSegment(scenePos, a, b) <= shaftRadius) {
             if (end)
                 *end = kJointShaft;
@@ -892,11 +1163,10 @@ QVariant CanvasScene::readSceneValue(const QString &objectName, const QString &k
             if (what == QLatin1String("originY"))   return shape->origin().y();
             if (what == QLatin1String("borderWidth")) return shape->borderWidth();
             const physics::ShapePart &part = shape->part();
-            if (what == QLatin1String("density"))     return part.density;
-            if (what == QLatin1String("friction"))    return part.material.friction;
-            if (what == QLatin1String("restitution")) return part.material.restitution;
-            if (what == QLatin1String("groupIndex"))  return part.filter.groupIndex;
-            if (what == QLatin1String("isSensor"))    return part.isSensor;
+            // Whatever the engine said a shape has, under the name it gave
+            // it. Nothing here knows what any of them mean.
+            if (part.params.contains(what))
+                return part.params.value(what);
             if (!anyKind)
                 return {};
             break;
@@ -912,13 +1182,9 @@ QVariant CanvasScene::readSceneValue(const QString &objectName, const QString &k
             if (what == QLatin1String("positionX"))  return body->originScenePos().x();
             if (what == QLatin1String("positionY"))  return body->originScenePos().y();
             if (what == QLatin1String("isEnabled"))  return props.isEnabled;
-            if (what == QLatin1String("gravityScale")) return props.gravityScale;
-            if (what == QLatin1String("linearDamping")) return props.linearDamping;
-            if (what == QLatin1String("angularDamping")) return props.angularDamping;
-            if (what == QLatin1String("fixedRotation")) return props.fixedRotation;
-            if (what == QLatin1String("velocityX"))  return props.linearVelocity.x();
-            if (what == QLatin1String("velocityY"))  return props.linearVelocity.y();
-            if (what == QLatin1String("angularVelocity")) return props.angularVelocityDegrees;
+            // Whatever the engine said a body has, under its own name.
+            if (props.params.contains(what))
+                return props.params.value(what);
             if (!anyKind)
                 return {};
             break;
@@ -936,13 +1202,25 @@ QVariant CanvasScene::readSceneValue(const QString &objectName, const QString &k
     return {};
 }
 
-void CanvasScene::setDebugView(bool on)
+void CanvasScene::setRunLayer(RunLayer layer, bool on)
 {
-    if (m_debugView == on)
+    bool &stored = m_runLayers[static_cast<int>(layer)];
+    if (stored == on)
         return;
-    m_debugView = on;
-    for (ShapeItem *shape : shapes())
-        shape->update();
+    stored = on;
+
+    // Only a run is affected, so only a run needs repainting -- but the items
+    // paint themselves and have to be told.
+    if (layer == RunLayer::Rays) {
+        for (RayItem *ray : std::as_const(m_rays))
+            ray->update();
+    } else if (layer == RunLayer::Explosions) {
+        for (ExplosionItem *explosion : std::as_const(m_explosions))
+            explosion->update();
+    } else if (layer == RunLayer::SleepShading) {
+        for (ShapeItem *shape : shapes())
+            shape->update();
+    }
     update();
 }
 
@@ -1038,14 +1316,6 @@ bool CanvasScene::selectionIsWholeBody() const
 {
     PhysicsBody *body = commonSelectedBody();
     return body && body->shapes().size() == m_physicsSelection.size();
-}
-
-void CanvasScene::setGravity(const QPointF &gravity)
-{
-    if (m_world.gravity == gravity)
-        return;
-    m_world.gravity = gravity;
-    emit fieldPropertyChanged();
 }
 
 void CanvasScene::setPixelsPerMeter(qreal pixelsPerMeter)
@@ -1227,7 +1497,7 @@ void CanvasScene::drawBackground(QPainter *painter, const QRectF &rect)
     }
     painter->fillRect(rect, background);
 
-    if (!m_showGrid)
+    if (!m_showGrid || !layerVisible(RunLayer::Grid))
         return;
 
     const QRectF gridRect = rect.intersected(sceneRect());
@@ -1260,6 +1530,25 @@ void CanvasScene::drawBackground(QPainter *painter, const QRectF &rect)
         painter->drawLine(QPointF(x, gridRect.top()), QPointF(x, gridRect.bottom()));
     for (qreal y = std::floor(gridRect.top() / majorStep) * majorStep; y < gridRect.bottom(); y += majorStep)
         painter->drawLine(QPointF(gridRect.left(), y), QPointF(gridRect.right(), y));
+
+    // The field's own edges, dark on all four sides. The loops above stop short
+    // of the far edges -- and a field whose size is not a multiple of the major
+    // step has no major line there at all -- so the grid used to end in a pale
+    // line on the right and at the bottom. A line on the very edge would fall
+    // on the pixel just outside, so the far ones are drawn a pixel in.
+    const QRectF field = sceneRect();
+    const qreal pixel = 1.0 / qMax(painter->transform().m11(), 1e-6);
+    const auto edge = [&](const QPointF &from, const QPointF &to) {
+        painter->drawLine(from, to);
+    };
+    if (rect.left() <= field.left() && field.left() <= rect.right())
+        edge(QPointF(field.left(), gridRect.top()), QPointF(field.left(), gridRect.bottom()));
+    if (rect.left() <= field.right() - pixel && field.right() - pixel <= rect.right())
+        edge(QPointF(field.right() - pixel, gridRect.top()), QPointF(field.right() - pixel, gridRect.bottom()));
+    if (rect.top() <= field.top() && field.top() <= rect.bottom())
+        edge(QPointF(gridRect.left(), field.top()), QPointF(gridRect.right(), field.top()));
+    if (rect.top() <= field.bottom() - pixel && field.bottom() - pixel <= rect.bottom())
+        edge(QPointF(gridRect.left(), field.bottom() - pixel), QPointF(gridRect.right(), field.bottom() - pixel));
 
     QPen axisPen(m_gridColor.darker(180));
     axisPen.setWidth(0);
@@ -1366,6 +1655,19 @@ QRectF CanvasScene::editSelectionBounds() const
     QRectF bounds = m_active->mapToScene(m_active->rect()).boundingRect();
     for (ShapeItem *shape : std::as_const(m_editSelection))
         bounds = bounds.united(shape->mapToScene(shape->rect()).boundingRect());
+    return bounds;
+}
+
+QRectF CanvasScene::contentBounds() const
+{
+    // Joints are left out: their anchors sit on the shapes they hold.
+    QRectF bounds;
+    for (ShapeItem *shape : shapes())
+        bounds = bounds.united(shape->mapToScene(shape->rect()).boundingRect());
+    for (RayItem *ray : m_rays)
+        bounds = bounds.united(ray->sceneBoundingRect());
+    for (ExplosionItem *explosion : m_explosions)
+        bounds = bounds.united(explosion->sceneBoundingRect());
     return bounds;
 }
 
@@ -1685,8 +1987,8 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
         painter->setBrush(Qt::NoBrush);
         painter->drawRect(editSelectionBox());
 
-        painter->setPen(QPen(m_handleBorderColor, m_handleBorderWidth));
-        painter->setBrush(m_handleColor);
+        painter->setPen(QPen(throughHandle(m_handleBorderColor), m_handleBorderWidth));
+        painter->setBrush(throughHandle(m_handleColor));
         const qreal size = m_handleSize;
         for (const QPointF &corner : groupHandlePoints()) {
             const QRectF r(corner.x() - size / 2, corner.y() - size / 2, size, size);
@@ -1699,7 +2001,7 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
     }
 
     if (m_editorMode != EditorMode::Edit && !m_joints.isEmpty()
-        && (!simulationRunning() || m_debugView)) {
+        && layerVisible(RunLayer::Joints)) {
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, true);
 
@@ -1710,12 +2012,29 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
                 continue;
             const bool selected = joint == m_selectedJoint && !simulationRunning();
 
+            // Colour and line style belong to the joint's kind, which every
+            // engine tags its types with.
+            const physics::JointVisual kind = jointVisual(joint->typeId());
+            const QColor kindColor = jointKindColor(kind);
+            const JointStyle kindStyle = jointKindStyle(kind);
+            const auto penStyle = [](JointStyle style) {
+                switch (style) {
+                case JointStyle::Dashed:  return Qt::DashLine;
+                case JointStyle::Dotted:  return Qt::DotLine;
+                case JointStyle::DashDot: return Qt::DashDotLine;
+                case JointStyle::Rod:
+                case JointStyle::Solid:   break;
+                }
+                return Qt::SolidLine;
+            };
+
             const int anchors = joint->anchorCount();
             const QPointF a = anchors > 0 ? joint->anchorScenePos(Joint::End::A)
                                           : joint->bodyA()->centerOfMassScenePos();
             const QPointF b = anchors > 1 ? joint->anchorScenePos(Joint::End::B)
-                              : anchors > 0 ? a
-                                            : joint->bodyB()->centerOfMassScenePos();
+                              : anchors > 0 || !joint->bodyB()
+                                  ? a
+                                  : joint->bodyB()->centerOfMassScenePos();
 
             // A bone: a ring at each anchor, joined by a waisted shaft.
             const qreal ring = m_jointAnchorRadius;
@@ -1742,11 +2061,27 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
                 painter->drawPath(halo);
             };
 
+            // A joint with one body pulls it towards a point, and that point
+            // is nowhere near the body it acts on -- that is the whole use of
+            // it. Drawn on its own it is a ring floating in empty space with
+            // nothing saying what it belongs to, so a dotted leader runs back
+            // to the body: dotted because it is a reach, not a linkage, and
+            // nothing is attached along it.
+            if (!joint->bodyB() && joint->bodyA()) {
+                QPen leader(kindColor.darker(180));
+                leader.setWidthF(1.4);
+                leader.setCosmetic(true);
+                leader.setStyle(Qt::DotLine);
+                painter->setPen(leader);
+                painter->setBrush(Qt::NoBrush);
+                painter->drawLine(a, b);
+            }
+
             // A sliding joint is the same bone every other joint draws --
             // two anchors joined by a shaft -- with the axis it slides along
             // drawn behind it. Only the axis is special; the anchors and the
             // connection between them are not.
-            if (jointVisual(joint->typeId()) == physics::JointVisual::Axis) {
+            if (kind == physics::JointVisual::Axis) {
                 const QPointF along = joint->axisScene();
                 const QPointF across(-along.y(), along.x());
 
@@ -1766,13 +2101,21 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
                     lower = -upper;
                 }
 
-                const QPointF from = a + along * lower;
-                const QPointF to = a + along * upper;
+                // Measured from the second anchor, not the first. A sliding
+                // joint's travel is where end B stands relative to end A, and
+                // it reads zero where the joint was made -- so zero is at
+                // anchor B, wherever that was dropped. Hanging the band off
+                // anchor A instead drew the whole range in the wrong place the
+                // moment the two anchors were not on the same point: a lift
+                // whose rail runs up and away had its limits drawn running
+                // down and away, off the picture entirely.
+                const QPointF from = b + along * lower;
+                const QPointF to = b + along * upper;
 
                 // Darker than the joint's own colour and as thick as its shaft:
                 // the pale type colour at outline width disappears against a
                 // body fill, which is exactly what it is drawn on top of.
-                const QColor axisColor = jointTypeColor(joint->typeId()).darker(160);
+                const QColor axisColor = kindColor.darker(160);
                 QPen axisPen(axisColor);
                 axisPen.setWidthF(qMax(waist * 2.0, 1.5));
                 axisPen.setCapStyle(Qt::FlatCap);
@@ -1813,9 +2156,9 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
                 link.moveTo(a);
                 link.lineTo(b);
 
-                QPen linkPen(jointTypeColor(joint->typeId()));
+                QPen linkPen(kindColor);
                 linkPen.setWidthF(m_jointOutlineWidth);
-                linkPen.setStyle(Qt::DashLine);
+                linkPen.setStyle(penStyle(kindStyle));
                 painter->setPen(linkPen);
                 painter->setBrush(Qt::NoBrush);
                 painter->drawPath(link);
@@ -1829,28 +2172,49 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
             }
 
             const QLineF span(a, b);
+            QPainterPath shaft;
             if (span.length() > 0.01) {
-                const QPointF along = (b - a) / span.length();
-                const QPointF across(-along.y() * waist, along.x() * waist);
+                if (kindStyle == JointStyle::Rod) {
+                    const QPointF along = (b - a) / span.length();
+                    const QPointF across(-along.y() * waist, along.x() * waist);
 
-                QPainterPath neck;
-                neck.moveTo(a + across);
-                neck.lineTo(b + across);
-                neck.lineTo(b - across);
-                neck.lineTo(a - across);
-                neck.closeSubpath();
-                bone = bone.united(neck);
+                    QPainterPath neck;
+                    neck.moveTo(a + across);
+                    neck.lineTo(b + across);
+                    neck.lineTo(b - across);
+                    neck.lineTo(a - across);
+                    neck.closeSubpath();
+                    bone = bone.united(neck);
+                } else {
+                    // Drawn as a line rather than cut out of the shape, so a
+                    // dashed or dotted joint reads as one line and not as a
+                    // row of filled slivers.
+                    shaft.moveTo(a);
+                    shaft.lineTo(b);
+                }
 
                 QPainterPath ringB;
                 ringB.addEllipse(b, ring, ring);
                 bone = bone.united(ringB);
             }
 
+            if (!shaft.isEmpty()) {
+                QPen shaftPen(kindColor);
+                shaftPen.setWidthF(qMax(m_jointWaistWidth, 1.0));
+                shaftPen.setStyle(penStyle(kindStyle));
+                shaftPen.setCapStyle(Qt::FlatCap);
+                painter->setPen(shaftPen);
+                painter->setBrush(Qt::NoBrush);
+                painter->drawPath(shaft);
+            }
+
             QPen outlinePen(m_jointOutlineColor);
             outlinePen.setWidthF(m_jointOutlineWidth);
             outlinePen.setJoinStyle(Qt::RoundJoin);
             painter->setPen(outlinePen);
-            painter->setBrush(jointTypeColor(joint->typeId()));
+            QColor fill = kindColor;
+            fill.setAlpha(qMin(fill.alpha(), m_jointFillAlpha));
+            painter->setBrush(fill);
             painter->drawPath(bone);
 
             painter->setBrush(Qt::NoBrush);
@@ -1859,14 +2223,22 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
             if (span.length() > 0.01)
                 painter->drawEllipse(b, ring * 0.55, ring * 0.55);
 
-            if (selected)
-                markSelected(bone);
+            if (selected) {
+                // The halo follows what was actually drawn, line included.
+                QPainterPath marked = bone;
+                if (!shaft.isEmpty()) {
+                    QPainterPathStroker line;
+                    line.setWidth(qMax(m_jointWaistWidth, 1.0));
+                    marked = marked.united(line.createStroke(shaft));
+                }
+                markSelected(marked);
+            }
         }
         painter->restore();
     }
 
     if (m_editorMode == EditorMode::Physics && m_showBodyAxes
-        && (!simulationRunning() || m_debugView)) {
+        && layerVisible(RunLayer::BodyAxes)) {
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, true);
 
@@ -1936,7 +2308,7 @@ void CanvasScene::keyPressEvent(QKeyEvent *event)
             return;
         }
         if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
-            finishPolygonDrawing(event->modifiers() & Qt::ControlModifier);
+            finishPolygonDrawing(event->modifiers() & Qt::ShiftModifier);
             event->accept();
             return;
         }
@@ -1951,7 +2323,98 @@ void CanvasScene::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    // One scene unit an arrow press, deliberately under the grid: nudging is
+    // for the placement a drag cannot land on, so it never snaps.
+    QPointF step;
+    switch (event->key()) {
+    case Qt::Key_Left:  step = QPointF(-1.0, 0.0); break;
+    case Qt::Key_Right: step = QPointF(1.0, 0.0); break;
+    case Qt::Key_Up:    step = QPointF(0.0, -1.0); break;
+    case Qt::Key_Down:  step = QPointF(0.0, 1.0); break;
+    default: break;
+    }
+    if (!step.isNull() && nudgeSelection(step)) {
+        event->accept();
+        return;
+    }
+
     QGraphicsScene::keyPressEvent(event);
+}
+
+bool CanvasScene::nudgeSelection(const QPointF &delta)
+{
+    // A run owns the positions. Setting one there does not move a body, it
+    // teleports it: past the solver, through whatever was in the way.
+    if (!selectionAllowed())
+        return false;
+
+    if (m_editorMode == EditorMode::Edit) {
+        // With nodes picked the arrows belong to them rather than to the
+        // shape holding them -- the same as Delete.
+        if (m_active && m_active->mode() == ShapeMode::Editing && !m_selectedNodes.isEmpty()) {
+            // A local vector, not a scene one: the shape may be turned, and a
+            // node moves in the shape's own frame.
+            const QPointF local =
+                m_active->mapFromScene(m_active->mapToScene(QPointF()) + delta);
+            for (int index : std::as_const(m_selectedNodes))
+                m_active->moveNode(index, m_active->nodePosition(index) + local);
+            update();
+            notifyEdit(tr("Move %n node(s) in %1", nullptr, int(m_selectedNodes.size()))
+                           .arg(m_active->name()),
+                       QStringLiteral("nudge"));
+            return true;
+        }
+
+        if (!m_active)
+            return false;
+
+        QVector<ShapeItem *> moving = m_editSelection;
+        moving.prepend(m_active);
+        for (ShapeItem *shape : std::as_const(moving))
+            shape->setPos(shape->pos() + delta);
+        update();
+        notifyEdit(moving.size() > 1
+                       ? tr("Move %n shapes", nullptr, int(moving.size()))
+                       : tr("Move %1").arg(m_active->name()),
+                   QStringLiteral("nudge"));
+        return true;
+    }
+
+    // Physics mode. A body moves whole, or the joints anchored to it are left
+    // behind by the shapes they were holding.
+    QVector<ShapeItem *> moving;
+    for (ShapeItem *shape : std::as_const(m_physicsSelection)) {
+        if (PhysicsBody *body = shape->body()) {
+            for (ShapeItem *member : body->shapes()) {
+                if (!moving.contains(member))
+                    moving.append(member);
+            }
+        } else if (!moving.contains(shape)) {
+            moving.append(shape);
+        }
+    }
+
+    QString what;
+    if (!moving.isEmpty()) {
+        for (ShapeItem *shape : std::as_const(moving))
+            shape->setPos(shape->pos() + delta);
+        PhysicsBody *body = commonSelectedBody();
+        what = body ? body->name() : moving.first()->name();
+    }
+    if (m_selectedRay) {
+        m_selectedRay->setPos(m_selectedRay->pos() + delta);
+        what = m_selectedRay->name();
+    }
+    if (m_selectedExplosion) {
+        m_selectedExplosion->setPos(m_selectedExplosion->pos() + delta);
+        what = m_selectedExplosion->name();
+    }
+    if (what.isEmpty())
+        return false;
+
+    update();
+    notifyEdit(tr("Move %1").arg(what), QStringLiteral("nudge"));
+    return true;
 }
 
 void CanvasScene::handleEditModeEnter()
@@ -2073,7 +2536,7 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
                 break;
             }
         }
-        selectForPhysics(hit, event->modifiers().testFlag(Qt::ControlModifier));
+        selectForPhysics(hit, event->modifiers().testFlag(Qt::ShiftModifier));
         // Dragging empty field pans it, the same as in Edit mode. Without this
         // a click outside every shape only cleared the selection, so the field
         // could not be moved at all once out of Edit mode.
@@ -2107,11 +2570,9 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
     if (m_active) {
         const QPointF local = m_active->mapFromScene(scenePos);
 
-        // Shift or Ctrl adds a shape to the selection instead of replacing it.
-        // Node editing already spends Ctrl on picking vertices, so it is left
-        // alone there.
-        if ((event->modifiers().testFlag(Qt::ShiftModifier)
-             || event->modifiers().testFlag(Qt::ControlModifier))
+        // Shift adds a shape to the selection instead of replacing it. Node
+        // editing spends Shift on picking vertices, so it is left alone there.
+        if (event->modifiers().testFlag(Qt::ShiftModifier)
             && m_active->mode() != ShapeMode::Editing) {
             ShapeItem *picked = nullptr;
             for (QGraphicsItem *candidate : items(scenePos)) {
@@ -2184,7 +2645,7 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
         } else if (m_active->mode() == ShapeMode::Editing) {
             const int node = m_active->nodeAt(local);
             if (node >= 0) {
-                if (event->modifiers() & Qt::ControlModifier) {
+                if (event->modifiers() & Qt::ShiftModifier) {
                     QSet<int> selection = m_selectedNodes;
                     if (selection.contains(node))
                         selection.remove(node);
@@ -2279,13 +2740,19 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         m_moveDragVirtualPos += delta;
 
         QPointF shift = m_moveDragVirtualPos;
-        if (m_snapToGrid && !m_bodyDragShapes.isEmpty()) {
-            ShapeItem *lead = m_bodyDragShapes.first();
-            const QPointF localReference = (m_snapPoint == SnapPoint::Position)
-                                               ? lead->rect().topLeft()
-                                               : lead->origin();
-            const QPointF referenceScene = shift + localReference;
-            shift += snapScenePoint(referenceScene) - referenceScene;
+        if (m_snapToGrid) {
+            if (!m_bodyDragShapes.isEmpty()) {
+                ShapeItem *lead = m_bodyDragShapes.first();
+                const QPointF localReference = (m_snapPoint == SnapPoint::Position)
+                                                   ? lead->rect().topLeft()
+                                                   : lead->origin();
+                const QPointF referenceScene = shift + localReference;
+                shift += snapScenePoint(referenceScene) - referenceScene;
+            } else if (m_draggedExplosion || m_draggedRay) {
+                // A blast and a rangefinder are points: there is no corner or
+                // pivot to snap by, because the thing itself is the point.
+                shift = snapScenePoint(shift);
+            }
         }
 
         // Every piece moves by what the leading one moved, so their relative

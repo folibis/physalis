@@ -19,6 +19,17 @@ enum class ParamType {
     Choice,   // one of `choices`, stored as the index
 };
 
+// A property is the engine's to name, but two of them the editor also has to
+// recognise: it hatches a shape things pass through rather than filling it, and
+// it works out where a body balances from what its shapes are made of. Each
+// engine tags whichever of its own keys plays those parts; an engine with no
+// such property tags nothing, and the editor draws and measures without it.
+enum class PropertyRole {
+    None,
+    Sensor,   // things pass through this shape
+    Density,  // mass per unit of area
+};
+
 // Where a parameter's starting value comes from. Most are a fixed number the
 // engine names; a few only make sense measured from the two bodies as they
 // stand, and a fixed 0 would mean "snap them together" the moment a run starts.
@@ -55,16 +66,58 @@ struct JointParam {
     QString tooltip;
 
     DefaultSource defaultSource = DefaultSource::Fixed;
+    // True when the value belongs to the object rather than to the run: the
+    // editor keeps it in the scene, shows it in the property table, saves it,
+    // and hands it back when the world is built. False for readouts and
+    // one-shot pushes -- where a body has got to, how fast it is going, a kick.
+    bool stored = false;
+    PropertyRole role = PropertyRole::None;
     bool liveSettable = false;
     bool liveReadable = false;
+    // True when reading this only gives back a setting the object already
+    // carries -- "is the motor on", where the motor's own switch is a
+    // parameter. A rule still wants it, so it can ask; a property table does
+    // not, because the setting is already a row three lines further up.
+    bool mirrorsSetting = false;
 };
 
 using PropertyList = QVector<JointParam>;
+
+// What an object of this kind starts out as, straight from the engine that
+// described it. The editor holds only what differs from this, so a property an
+// engine drops or renames leaves nothing stale behind.
+// The engine's own name for a property the editor has to recognise, or an
+// empty string if this engine has none.
+inline QString keyForRole(const PropertyList &properties, PropertyRole role)
+{
+    for (const JointParam &property : properties) {
+        if (property.role == role)
+            return property.key;
+    }
+    return QString();
+}
+
+inline QVariantMap storedDefaults(const PropertyList &properties)
+{
+    QVariantMap values;
+    for (const JointParam &property : properties) {
+        if (property.stored)
+            values.insert(property.key, property.defaultValue);
+    }
+    return values;
+}
 
 struct EventType {
     QString id;           // stable, e.g. "limitLower"; what scene files store
     QString label;        // what the rule editor shows
     QString description;  // one line, for the tooltip
+
+    // Does this event happen *with* something -- a shape touched, a body that
+    // entered a sensor -- or does it just happen? A touch names the other
+    // party and a rule can single one out; a joint arriving at its limit names
+    // nobody, and asking which object it arrived at is not a question. The
+    // editor shows the "or anything" chooser only for the first kind.
+    bool namesOther = true;
 };
 
 enum class JointVisual {
@@ -81,6 +134,12 @@ struct JointType {
     QString description;      // one line, for the tooltip
 
     int anchorCount = 1;
+
+    // How many bodies the joint connects. Two for everything that holds one
+    // thing to another; one for a joint that holds a body to a point in the
+    // world, which has no second body to name. The application asks for this
+    // many and does not otherwise know the difference.
+    int bodyCount = 2;
 
     bool needsAxis = false;
 

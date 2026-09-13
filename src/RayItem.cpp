@@ -110,10 +110,10 @@ void RayItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
     Q_UNUSED(option);
     Q_UNUSED(widget);
 
-    // A ray is a measuring tool, not part of the scene: during a run it shows
-    // only under Debug View, the same as the joints.
+    // A ray is a measuring tool, not part of the scene, and the view's own
+    // switch says whether it is drawn at all.
     const auto *canvas = qobject_cast<const CanvasScene *>(scene());
-    if (canvas && canvas->simulationRunning() && !canvas->debugView())
+    if (canvas && !canvas->layerVisible(CanvasScene::RunLayer::Rays))
         return;
 
     painter->save();

@@ -1,4 +1,5 @@
 #include "PolygonItem.h"
+#include "CanvasScene.h"
 #include "Naming.h"
 #include "PropertyPane/PolygonPropertyPane.h"
 
@@ -14,14 +15,17 @@ PolygonItem::PolygonItem(const QPolygonF &localPoints, bool closed)
     setRect(bounds);
     setOrigin(bounds.center());
 
-    setName(Naming::nextName(typeName()));
+    setName(Naming::nextName(PolygonItem::typeName()));
 
 }
 
 physics::Geometry PolygonItem::physicsGeometry() const
 {
     physics::Geometry geometry;
-    geometry.kind = m_closed ? physics::GeometryKind::Polygon : physics::GeometryKind::Chain;
+    // Closed and asked to stay solid: a filled shape. Anything else is an
+    // outline, which the engine builds as a chain or as separate segments.
+    geometry.kind = (m_closed && !preferOutline()) ? physics::GeometryKind::Polygon
+                                                   : physics::GeometryKind::Chain;
     geometry.closed = m_closed;
     geometry.smoothChain = smoothChain();
 
@@ -30,6 +34,24 @@ physics::Geometry PolygonItem::physicsGeometry() const
     for (const QPointF &point : m_points)
         geometry.points.append(point - pivot);
     return geometry;
+}
+
+bool PolygonItem::isSolid() const
+{
+    if (!m_closed || preferOutline())
+        return false;
+
+    int cap = 8;
+    if (auto *canvas = qobject_cast<CanvasScene *>(scene()))
+        cap = canvas->maxPolygonVertices();
+    if (m_points.size() > cap)
+        return false;
+
+    QVector<QPointF> outline;
+    outline.reserve(m_points.size());
+    for (const QPointF &point : m_points)
+        outline.append(point);
+    return physics::isConvex(outline);
 }
 
 PropertyPane *PolygonItem::makePropertyPane() const
@@ -61,7 +83,11 @@ QPainterPath PolygonItem::localShapePath() const
 {
     QPainterPath path;
     path.addPolygon(m_points);
-    path.closeSubpath();
+    // Only a closed shape is closed. Joining the last point back to the first
+    // on an open one drew a selection outline round a shape that is not there,
+    // and made the empty space it spans clickable as though it were solid.
+    if (m_closed)
+        path.closeSubpath();
     return path;
 }
 

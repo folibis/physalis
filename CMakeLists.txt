@@ -13,6 +13,12 @@ if(WIN32 AND MINGW)
     endif()
 endif()
 
+# install() destinations are normalised, so "." means the install root rather
+# than a directory called "." beside it.
+if(POLICY CMP0177)
+    cmake_policy(SET CMP0177 NEW)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -23,6 +29,20 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOUIC_SEARCH_PATHS ${CMAKE_CURRENT_SOURCE_DIR}/ui)
 
 find_package(Qt6 COMPONENTS Widgets Svg Qml Test REQUIRED)
+
+include(GNUInstallDirs)
+
+# Engine plugins are found beside the executable and nowhere else, so an
+# installed Physalis keeps them together with it. On Windows that is the
+# install root; on Linux the executable itself lives in a library directory,
+# with a link from the path -- Qt resolves that link before it looks for
+# plugins, so they are still "beside" it.
+if(WIN32)
+    set(PHYSALIS_INSTALL_DIR "." CACHE STRING "Where the program and its plugins are installed")
+else()
+    set(PHYSALIS_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/physalis"
+        CACHE STRING "Where the program and its plugins are installed")
+endif()
 
 qt_standard_project_setup()
 
@@ -83,6 +103,10 @@ add_library(PhysalisCore OBJECT
     src/PolygonItem.cpp
     src/RulerWidget.h
     src/RulerWidget.cpp
+    src/FullScreenView.h
+    src/FullScreenView.cpp
+    src/ViewLayersCombo.h
+    src/ViewLayersCombo.cpp
     src/PropertyPanel.h
     src/PropertyPanel.cpp
     src/SceneTree.h
@@ -93,6 +117,8 @@ add_library(PhysalisCore OBJECT
     src/UndoStack.h
     src/UndoStack.cpp
     src/PropertyPane/PropertyPane.h
+    src/PropertyPane/CatalogueRows.h
+    src/PropertyPane/CatalogueRows.cpp
     src/PropertyPane/ExplosionPropertyPane.h
     src/PropertyPane/ExplosionPropertyPane.cpp
     src/PropertyPane/RayPropertyPane.h
@@ -195,6 +221,128 @@ if(WIN32)
 endif()
 
 add_subdirectory(engines/box2d)
+add_subdirectory(engines/chipmunk)
+
+# --- what an installed copy is made of --------------------------------------
+
+install(TARGETS Physalis RUNTIME DESTINATION ${PHYSALIS_INSTALL_DIR}
+                         BUNDLE DESTINATION ${PHYSALIS_INSTALL_DIR})
+
+# The export converters are read at run time from the folder named in Options,
+# which defaults to this one.
+install(DIRECTORY exporters/ DESTINATION ${PHYSALIS_INSTALL_DIR}/exporters)
+
+if(WIN32)
+    # The Qt runtime travels with the program on Windows: windeployqt copies
+    # the libraries it actually uses, the platform and image plugins it cannot
+    # start without, and the compiler's own runtime. Run against the installed
+    # executable, so everything lands beside it -- the layout Qt finds by
+    # itself, with no qt.conf to keep in step.
+    #
+    # Nothing of Qt is shipped on Linux: the package asks the distribution for
+    # it instead.
+    get_target_property(PHYSALIS_QMAKE Qt6::qmake IMPORTED_LOCATION)
+    get_filename_component(PHYSALIS_QT_TOOLS "${PHYSALIS_QMAKE}" DIRECTORY)
+    find_program(PHYSALIS_WINDEPLOYQT windeployqt HINTS "${PHYSALIS_QT_TOOLS}")
+
+    if(PHYSALIS_WINDEPLOYQT)
+        install(CODE "
+            message(STATUS \"Collecting the Qt runtime with windeployqt\")
+            execute_process(
+                COMMAND \"${PHYSALIS_WINDEPLOYQT}\"
+                        --dir \"\${CMAKE_INSTALL_PREFIX}/${PHYSALIS_INSTALL_DIR}\"
+                        --no-translations
+                        --no-system-d3d-compiler
+                        --no-opengl-sw
+                        # QJSEngine is the only part of Qml this uses: there is
+                        # no QML in the program, and nothing to scan for.
+                        --no-quick-import
+                        # The on-screen keyboard drags Qt Quick in behind it, and a
+                        # desktop editor has no use for either.
+                        --skip-plugin-types qmltooling,designer,qmllint,platforminputcontexts
+                        --compiler-runtime
+                        \"\${CMAKE_INSTALL_PREFIX}/${PHYSALIS_INSTALL_DIR}/Physalis.exe\"
+                COMMAND_ERROR_IS_FATAL ANY)
+        ")
+    else()
+        message(WARNING "windeployqt was not found: a Windows package built from this "
+                        "tree will not carry the Qt runtime.")
+    endif()
+else()
+    # On the path, pointing at the copy in the library directory.
+    install(CODE "
+        file(MAKE_DIRECTORY \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\")
+        file(CREATE_LINK ../${PHYSALIS_INSTALL_DIR}/Physalis
+             \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/physalis\" SYMBOLIC)
+    ")
+    configure_file(deploy/physalis.desktop.in
+                   ${CMAKE_BINARY_DIR}/physalis.desktop @ONLY)
+    install(FILES ${CMAKE_BINARY_DIR}/physalis.desktop
+            DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications)
+    install(FILES resources/physalis.svg
+            DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps)
+    # So a *.phys file opens in Physalis from the file manager.
+    install(FILES deploy/physalis-scene.xml
+            DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/mime/packages)
+endif()
+
+# --- packaging ---------------------------------------------------------------
+# Windows: an installer carrying Qt. Linux: a .deb that depends on the
+# distribution's Qt rather than carrying one.
+
+set(CPACK_PACKAGE_NAME "Physalis")
+set(CPACK_PACKAGE_VENDOR "Physalis")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}.${PHYSALIS_BUILD_NUMBER}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A 2D physics scene editor")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "Physalis")
+set(CPACK_PACKAGE_EXECUTABLES "Physalis" "Physalis")
+set(CPACK_STRIP_FILES ON)
+
+if(WIN32)
+    # NSIS builds the installer, and is not part of this toolchain -- without
+    # it a plain archive is still produced, which is the same tree unpacked.
+    find_program(PHYSALIS_MAKENSIS makensis)
+    set(CPACK_GENERATOR "ZIP")
+    if(PHYSALIS_MAKENSIS)
+        list(PREPEND CPACK_GENERATOR "NSIS")
+    endif()
+
+    set(CPACK_NSIS_PACKAGE_NAME "Physalis")
+    set(CPACK_NSIS_DISPLAY_NAME "Physalis")
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    set(CPACK_NSIS_MODIFY_PATH OFF)
+    set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
+    set(CPACK_NSIS_MUI_ICON "${CMAKE_SOURCE_DIR}/resources/physalis.ico")
+    set(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/resources/physalis.ico")
+    set(CPACK_NSIS_INSTALLED_ICON_NAME "Physalis.exe")
+    # The *.phys file association is left to the two .reg files in deploy/,
+    # which the build writes with the path they are meant to register. NSIS
+    # would have to carry the same registry keys as escaped script, and a
+    # mis-escaped one writes a broken association rather than none.
+
+else()
+    set(CPACK_GENERATOR "DEB;TGZ")
+    set(CPACK_DEBIAN_PACKAGE_NAME "physalis")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Physalis")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "graphics")
+    set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+    # Qt comes from the distribution: shlibdeps reads what the binaries
+    # actually link and writes the dependencies from the packages providing
+    # them, so the list cannot drift from the build.
+    # Every binary in the package is scanned, the engine plugins included, so
+    # the Qt packages they need are named whether or not the program itself
+    # links the same ones.
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    set(CPACK_PACKAGE_CONTACT "Physalis <physalis@example.invalid>")
+    set(CPACK_PACKAGE_DESCRIPTION
+        "Physalis builds 2D physics scenes and runs them: shapes grouped into bodies,
+"
+        " joints between them, rules that fire on what happens. The simulation itself
+"
+        " comes from an engine plugin -- Box2D and Chipmunk2D are included.")
+endif()
+
+include(CPack)
 
 # Windows file association for *.phys. The template carries the keys; the path
 # to the executable is filled in here, so a moved or renamed build cannot leave

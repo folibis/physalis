@@ -1,0 +1,17 @@
+
+// A ray, drawn as far as it reached, with a dot on whatever it found.
+void drawRay(QPainter &painter, b2Vec2 origin, b2Vec2 translation, b2RayResult result)
+{
+    const b2Vec2 end = result.hit ? result.point : b2Add(origin, translation);
+    QPen pen(result.hit ? QColor(232, 106, 106) : QColor(154, 154, 154));
+    pen.setWidthF(1.5);
+    pen.setCosmetic(true);
+    painter.setPen(pen);
+    painter.drawLine(QPointF(origin.x, origin.y), QPointF(end.x, end.y));
+    if (result.hit) {
+        const qreal dot = 4.0 / painter.transform().m11();
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(232, 106, 106));
+        painter.drawEllipse(QPointF(end.x, end.y), dot, dot);
+    }
+}

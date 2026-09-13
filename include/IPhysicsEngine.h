@@ -79,6 +79,14 @@ public:
 
     virtual QVector<EngineEvent> pollEvents() { return {}; }
 
+    // Anything that went wrong in the run itself, in the engine's own words,
+    // and cleared by the asking. A scene can ask a solver for the impossible
+    // -- a motor a thousand times heavier than what it drives, a joint holding
+    // two bodies where they cannot both be -- and what comes back is a number
+    // that is no longer a number. An engine that notices says so here rather
+    // than taking the editor down with it.
+    virtual QStringList takeProblems() { return {}; }
+
     // The nearest thing along a line, or a miss. Both points are in scene
     // units; maskBits filters what the ray can see, the same bits a shape
     // filters with.

@@ -99,8 +99,8 @@ TEST(MultiSelect, MovesAndRotatesTogether)
     EXPECT_EQ(scene->editSelection().first(), b) << "Shift adds rather than replaces";
     EXPECT_TRUE(b->isCoSelected()) << "and it is drawn as selected";
 
-    click(scene, insideC, Qt::ControlModifier);
-    EXPECT_EQ(scene->editSelection().size(), 2) << "Ctrl adds too";
+    click(scene, insideC, Qt::ShiftModifier);
+    EXPECT_EQ(scene->editSelection().size(), 2) << "Shift adds another";
 
     // Dragging the lead carries the others by exactly the same amount.
     const QPointF startA = a->pos(), startB = b->pos(), startC = c->pos();

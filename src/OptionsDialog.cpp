@@ -9,6 +9,9 @@
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QFileDialog>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QLineEdit>
 #include <QTabWidget>
@@ -45,9 +48,85 @@ void selectData(QComboBox *combo, int value)
 
 } // namespace
 
+namespace {
+
+// A colour setting is a caption and a small square, and a form layout gives
+// each one a whole line of the dialog -- five body colours and eight joint
+// types come to thirteen rows of mostly empty space. The pairs are laid out
+// across instead, several to a line, which is the same information in a third
+// of the height. The form is read and replaced rather than the .ui being
+// written this way, so a group whose rows are added in code -- the joint
+// types, one per type the engine offers -- is folded the same way.
+void compactColorGroup(QGroupBox *group, int perRow = 3)
+{
+    auto *form = qobject_cast<QFormLayout *>(group->layout());
+    if (!form || form->rowCount() < 2)
+        return;
+
+    // Only the swatches are folded across. A combo box or a check box beside
+    // them wants the width of the group to itself, and squeezing one into a
+    // third of it turns its text into "Diagor".
+    const auto isSwatch = [](QWidget *w) {
+        auto *button = qobject_cast<QToolButton *>(w);
+        return button && button->maximumWidth() <= kSwatchWidth;
+    };
+
+    QVector<QPair<QWidget *, QWidget *>> swatches;
+    QVector<QPair<QWidget *, QWidget *>> rest;
+    for (int i = 0; i < form->rowCount(); ++i) {
+        QLayoutItem *label = form->itemAt(i, QFormLayout::LabelRole);
+        QLayoutItem *field = form->itemAt(i, QFormLayout::FieldRole);
+        if (!field || !field->widget())
+            return;   // something that is not a plain caption-and-control pair
+        QWidget *caption = label ? label->widget() : nullptr;
+        (isSwatch(field->widget()) ? swatches : rest).append(qMakePair(caption, field->widget()));
+    }
+    if (swatches.size() < 2)
+        return;
+
+    for (const auto &pair : swatches + rest) {
+        if (pair.first)
+            pair.first->setParent(nullptr);
+        pair.second->setParent(nullptr);
+    }
+    delete form;
+
+    auto *grid = new QGridLayout(group);
+    grid->setHorizontalSpacing(12);
+    grid->setVerticalSpacing(4);
+    const int columns = perRow * 2;
+    for (int i = 0; i < swatches.size(); ++i) {
+        const int row = i / perRow;
+        const int column = (i % perRow) * 2;
+        if (swatches[i].first) {
+            swatches[i].first->setParent(group);
+            grid->addWidget(swatches[i].first, row, column);
+        }
+        swatches[i].second->setParent(group);
+        grid->addWidget(swatches[i].second, row, column + 1);
+    }
+    // Whatever was not a swatch keeps a line of its own, under them.
+    int row = (swatches.size() + perRow - 1) / perRow;
+    for (const auto &pair : rest) {
+        if (pair.first) {
+            pair.first->setParent(group);
+            grid->addWidget(pair.first, row, 0);
+        }
+        pair.second->setParent(group);
+        grid->addWidget(pair.second, row, 1, 1, columns - 1);
+        ++row;
+    }
+    // The last column takes the slack, so the pairs sit together on the left
+    // rather than spreading across the whole width.
+    grid->setColumnStretch(columns, 1);
+}
+
+} // namespace
+
 OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     : QDialog(parent)
     , m_ui(new Ui::OptionsDialog)
+    , m_incoming(current)
     , m_currentScale(current.currentScale)
     , m_gridColor(current.gridColor)
     , m_backgroundColor(current.backgroundColor)
@@ -60,12 +139,14 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     , m_bodyStaticColor(current.bodyStaticColor)
     , m_bodyKinematicColor(current.bodyKinematicColor)
     , m_unassignedShapeColor(current.unassignedShapeColor)
+    , m_sensorColor(current.sensorColor)
     , m_physicsSelectionColor(current.physicsSelectionColor)
     , m_bodyAxisXColor(current.bodyAxisXColor)
     , m_bodyAxisYColor(current.bodyAxisYColor)
     , m_jointColor(current.jointColor)
     , m_jointOutlineColor(current.jointOutlineColor)
-    , m_jointTypeColors(current.jointTypeColors)
+    , m_jointKindColors(current.jointKindColors)
+    , m_jointKindStyles(current.jointKindStyles)
     , m_jointSelectionColor(current.jointSelectionColor)
 {
     m_ui->setupUi(this);
@@ -79,6 +160,8 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
         setComboData(combo, penStyles);
     setComboData(m_ui->snapPoint, { int(SnapPoint::Position), int(SnapPoint::Origin) });
     setComboData(m_ui->handleShape, { int(HandleShape::Square), int(HandleShape::Circle) });
+    setComboData(m_ui->sensorPattern, { int(Qt::DiagCrossPattern), int(Qt::BDiagPattern),
+                                        int(Qt::HorPattern), int(Qt::SolidPattern) });
 
     m_ui->fieldWidth->setValue(current.fieldWidth);
     m_ui->fieldHeight->setValue(current.fieldHeight);
@@ -91,6 +174,12 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     selectData(m_ui->snapPoint, int(current.snapPoint));
     m_ui->snapStep->setValue(current.snapStep);
     m_ui->undoDepth->setValue(current.undoDepth);
+    // The engines found beside the executable. A scene is built for one of
+    // them and keeps it, so this only says which a new scene starts with.
+    m_ui->defaultEngine->addItems(physics::EngineRegistry::availableEngines());
+    m_ui->defaultEngine->setCurrentIndex(
+        qMax(0, m_ui->defaultEngine->findText(current.defaultEngineName)));
+
     m_ui->converterPath->setText(current.converterPath);
     m_converterSettings = current.converterSettings;
     connect(m_ui->converterPathBrowse, &QToolButton::clicked, this, [this] {
@@ -111,6 +200,8 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     selectData(m_ui->selectionLineStyle, current.selectionLineStyle);
     m_ui->selectionLineWidth->setValue(current.selectionLineWidth);
     selectData(m_ui->handleShape, int(current.handleShape));
+    selectData(m_ui->sensorPattern, int(current.sensorPattern));
+    m_ui->sensorFillsBody->setChecked(current.sensorFillsBody);
     m_ui->handleSize->setValue(current.handleSize);
     m_ui->handleBorderWidth->setValue(current.handleBorderWidth);
 
@@ -118,6 +209,7 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     m_ui->simulationStepsPerSecond->setValue(current.simulationStepsPerSecond);
     m_ui->physicsBorderWidth->setValue(current.physicsBorderWidth);
     m_ui->physicsFillAlpha->setValue(current.physicsFillAlpha);
+    m_ui->jointFillAlpha->setValue(current.jointFillAlpha);
     m_ui->sleepShiftPercent->setValue(current.sleepShiftPercent);
     m_ui->showBodyAxes->setChecked(current.showBodyAxes);
     m_ui->bodyAxisLength->setValue(current.bodyAxisLength);
@@ -143,6 +235,7 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     bindSwatch(m_ui->bodyStaticColorButton, m_bodyStaticColor, tr("Choose Static Body Color"));
     bindSwatch(m_ui->bodyKinematicColorButton, m_bodyKinematicColor, tr("Choose Kinematic Body Color"));
     bindSwatch(m_ui->unassignedShapeColorButton, m_unassignedShapeColor, tr("Choose Unassigned Shape Color"));
+    bindSwatch(m_ui->sensorColorButton, m_sensorColor, tr("Choose Sensor Hatching Color"));
     bindSwatch(m_ui->physicsSelectionColorButton, m_physicsSelectionColor, tr("Choose Physics Selection Color"));
     bindSwatch(m_ui->bodyAxisXColorButton, m_bodyAxisXColor, tr("Choose X Axis Color"));
     bindSwatch(m_ui->bodyAxisYColorButton, m_bodyAxisYColor, tr("Choose Y Axis Color"));
@@ -152,6 +245,7 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
 
     bindSliderValue(m_ui->defaultTransparency, m_ui->defaultTransparencyLabel, tr("%"));
     bindSliderValue(m_ui->physicsFillAlpha, m_ui->physicsFillAlphaLabel, QString());
+    bindSliderValue(m_ui->jointFillAlpha, m_ui->jointFillAlphaLabel, QString());
     bindSliderValue(m_ui->sleepShiftPercent, m_ui->sleepShiftPercentLabel, tr("%"));
 
     connect(m_ui->defaultTransparency, &QSlider::valueChanged, this, [this](int percent) {
@@ -159,31 +253,61 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
         m_ui->defaultBodyColorButton->setStyleSheet(colorSwatchStyle(m_defaultBodyColor));
     });
 
-    // One row per joint type the engine offers, so a new backend joint gets a
-    // colour setting without this dialog knowing the type exists.
+    // One row per kind of joint, not per engine's joint type: every engine
+    // tags each of its types with one of these five, so the same short list
+    // covers whichever engine a scene is built for.
     auto *jointTypeForm = qobject_cast<QFormLayout *>(m_ui->jointTypeColorsGroup->layout());
-    if (auto engine = physics::EngineRegistry::create(current.simulationEngineName)) {
-        for (const physics::JointType &type : engine->jointTypes()) {
-            const QString id = type.id;
-            if (!m_jointTypeColors.value(id).isValid())
-                m_jointTypeColors.insert(id, type.color);
+    {
+        for (const physics::JointVisual kind : CanvasScene::jointKinds()) {
+            const int id = static_cast<int>(kind);
+            if (!m_jointKindColors.value(id).isValid())
+                m_jointKindColors.insert(id, CanvasScene::defaultJointKindColor(kind));
+            if (!m_jointKindStyles.contains(id))
+                m_jointKindStyles.insert(id, CanvasScene::defaultJointKindStyle(kind));
 
+            const QString label = CanvasScene::jointKindLabel(kind);
             auto *button = new QToolButton(m_ui->jointTypeColorsGroup);
             button->setFixedSize(kSwatchWidth, kSwatchHeight);
-            button->setStyleSheet(colorSwatchStyle(m_jointTypeColors.value(id)));
-            button->setToolTip(type.description);
-            connect(button, &QToolButton::clicked, this, [this, button, id, label = type.label] {
+            button->setStyleSheet(colorSwatchStyle(m_jointKindColors.value(id)));
+            button->setToolTip(CanvasScene::jointKindDescription(kind));
+            connect(button, &QToolButton::clicked, this, [this, button, id, label] {
                 const QColor chosen = QColorDialog::getColor(
-                    m_jointTypeColors.value(id), this, tr("Choose %1 Color").arg(label),
+                    m_jointKindColors.value(id), this, tr("Choose %1 Color").arg(label),
                     QColorDialog::ShowAlphaChannel);
                 if (chosen.isValid()) {
-                    m_jointTypeColors.insert(id, chosen);
+                    m_jointKindColors.insert(id, chosen);
                     button->setStyleSheet(colorSwatchStyle(chosen));
                 }
             });
-            jointTypeForm->addRow(tr("%1:").arg(type.label), button);
+
+            // How the line between the joint's ends is drawn: the rod it has
+            // always been, or a plain stroke.
+            auto *style = new QComboBox(m_ui->jointTypeColorsGroup);
+            style->setToolTip(CanvasScene::jointKindDescription(kind));
+            for (const JointStyle option : CanvasScene::jointStyles())
+                style->addItem(CanvasScene::jointStyleLabel(option), static_cast<int>(option));
+            style->setCurrentIndex(
+                qMax(0, style->findData(static_cast<int>(m_jointKindStyles.value(id)))));
+            connect(style, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+                    [this, style, id](int) {
+                        m_jointKindStyles.insert(
+                            id, static_cast<JointStyle>(style->currentData().toInt()));
+                    });
+            auto *field = new QWidget(m_ui->jointTypeColorsGroup);
+            auto *fieldLayout = new QHBoxLayout(field);
+            fieldLayout->setContentsMargins(0, 0, 0, 0);
+            fieldLayout->setSpacing(6);
+            fieldLayout->addWidget(button);
+            fieldLayout->addWidget(style, 1);
+            jointTypeForm->addRow(tr("%1:").arg(label), field);
         }
     }
+
+    // Now that every row exists, including the ones added just above.
+    for (QGroupBox *group : { m_ui->bodyColorsGroup, m_ui->jointTypeColorsGroup,
+                              m_ui->defaultStyleGroup, m_ui->handleStyleGroup,
+                              m_ui->bodyAxesGroup, m_ui->jointDrawingGroup })
+        compactColorGroup(group);
 
     // Capped at half the snap step, the largest value that still leaves a free
     // zone between snap points.
@@ -197,12 +321,25 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     capSensitivity(m_ui->snapStep->value());
     m_ui->snapSensitivity->setValue(qMin(current.snapSensitivity, m_ui->snapSensitivity->maximum()));
 
-    if (parent) {
-        resize(parent->width() * 0.44, parent->height() * 0.935);
-    } else {
-        adjustSize();
-        resize(width() * 1.1, height() * 1.1);
+    // Sized to what it holds, not to the window it was opened from. Taking a
+    // share of the main window made the dialog grow with it -- on a maximised
+    // window it opened nearly full height whatever was on the page, and every
+    // tab is a scroll area, so it never needed to be that tall.
+    //
+    // The extra 20px is room the tallest pages were short of: without it the
+    // last row of the longest tab sits against the button box.
+    // A third taller than it strictly needs: the pages sit better with room
+    // under the last group than with it pressed against the button box, and
+    // the tallest tabs still scroll.
+    constexpr double kHeadroom = 1.32;
+    adjustSize();
+    QSize wanted(width(), int(height() * kHeadroom));
+    if (QScreen *screen = QGuiApplication::primaryScreen()) {
+        // Never taller or wider than the screen can show, however long the
+        // Export tab grows with the converters that are installed.
+        wanted = wanted.boundedTo(screen->availableGeometry().size() * 0.85);
     }
+    resize(wanted);
 }
 
 OptionsDialog::~OptionsDialog() = default;
@@ -409,7 +546,11 @@ void OptionsDialog::rebuildExportTab(const QString &path)
 
 OptionsDialog::Settings OptionsDialog::settings() const
 {
-    Settings s;
+    // Starts from what it was given, not from the built-in defaults: the dialog
+    // does not show everything the application keeps -- the toolbar's own debug
+    // view and playback speed among them -- and pressing OK must not quietly
+    // reset what it never asked about.
+    Settings s = m_incoming;
     s.converterSettings = m_converterSettings;
     for (const ConverterField &field : m_converterFields)
         s.converterSettings[field.converter].insert(field.key, fieldValue(field));
@@ -417,8 +558,11 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.bodyStaticColor = m_bodyStaticColor;
     s.bodyKinematicColor = m_bodyKinematicColor;
     s.unassignedShapeColor = m_unassignedShapeColor;
+    s.sensorColor = m_sensorColor;
+    s.sensorFillsBody = m_ui->sensorFillsBody->isChecked();
     s.physicsBorderWidth = m_ui->physicsBorderWidth->value();
     s.physicsFillAlpha = m_ui->physicsFillAlpha->value();
+    s.jointFillAlpha = m_ui->jointFillAlpha->value();
     s.physicsSelectionLineStyle =
         static_cast<Qt::PenStyle>(m_ui->physicsSelectionLineStyle->currentData().toInt());
     s.physicsSelectionLineWidth = m_ui->physicsSelectionLineWidth->value();
@@ -439,7 +583,9 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.jointOutlineWidth = m_ui->jointOutlineWidth->value();
     s.undoDepth = m_ui->undoDepth->value();
     s.converterPath = m_ui->converterPath->text().trimmed();
-    s.jointTypeColors = m_jointTypeColors;
+    s.defaultEngineName = m_ui->defaultEngine->currentText();
+    s.jointKindColors = m_jointKindColors;
+    s.jointKindStyles = m_jointKindStyles;
     s.jointSelectionLineStyle =
         static_cast<Qt::PenStyle>(m_ui->jointSelectionLineStyle->currentData().toInt());
     s.jointSelectionLineWidth = m_ui->jointSelectionLineWidth->value();
@@ -466,6 +612,7 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.selectionLineWidth = m_ui->selectionLineWidth->value();
     s.selectionColor = m_selectionColor;
     s.handleShape = static_cast<HandleShape>(m_ui->handleShape->currentData().toInt());
+    s.sensorPattern = static_cast<Qt::BrushStyle>(m_ui->sensorPattern->currentData().toInt());
     s.handleSize = m_ui->handleSize->value();
     s.handleColor = m_handleColor;
     s.handleBorderWidth = m_ui->handleBorderWidth->value();

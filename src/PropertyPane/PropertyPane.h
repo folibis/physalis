@@ -58,4 +58,10 @@ public:
 signals:
     void valueChanged();
     void rowsChanged();
+    // This is no longer the right pane for what is selected -- a shape that
+    // has just become a sensor is a different kind of thing, with a pane of
+    // its own. Distinct from rowsChanged because attaching a pane emits that
+    // one, and re-picking the pane attaches: the two together would never
+    // stop. Emit it queued; acting on it deletes the control that asked.
+    void paneKindChanged();
 };

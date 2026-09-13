@@ -50,6 +50,13 @@ private:
     static QString actionKey(const QString &id);
     static QString actionIdOf(const QString &key);
     static void setCollapseLook(QToolButton *button, bool collapsed);
+    // A caption can be any name the user types. Shown in full where it fits
+    // and cut short where it does not, so the card's width is never decided
+    // by how long somebody named a rule.
+    static void setHeadingText(QLabel *label, const QString &caption);
+    // A rule that is switched off is kept and saved; it just does not run.
+    // The card says so by going pale rather than by being taken away.
+    static void setCardEnabledLook(QWidget *card, QLabel *heading, bool enabled);
 
     // Which cards are folded, by rule index. Rebuilds recreate every card, so
     // this has to live outside them.
@@ -78,7 +85,6 @@ private:
         QWidget *sourceOffset = nullptr;
         QWidget *sourceHolder = nullptr;
         QFormLayout *form = nullptr;
-        int valueRow = -1;
         int sourceRow = -1;
         QWidget *valueHolder = nullptr;
     };
@@ -88,7 +94,9 @@ private:
     void rebuild();
     void addRule();
     void removeRule(int index);
-
+    // Rules are applied in the order they are listed, so the order is part of
+    // what a scene means, not a display preference.
+    void moveRule(int from, int to);
     QWidget *buildCard(int index);
     void refreshEvents(int index);
     void refreshProperties(int index);
@@ -114,6 +122,10 @@ private:
 
     QVector<RuleChoice> sourceChoices() const;
     QVector<RuleChoice> watchChoices(const QString &name) const;
+    // What the engine says this object can raise, and whether the one it is
+    // watching happens *with* something -- see physics::EventType::namesOther.
+    QVector<physics::EventType> eventsFor(const QString &name) const;
+    bool eventNamesOther(const QString &name, const QString &eventId) const;
     QVector<RuleChoice> targetChoices() const;
     // Objects a value can be read from, and what each of them can be read for.
     QVector<RuleChoice> sourceObjectChoices() const;

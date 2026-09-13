@@ -23,7 +23,7 @@ public:
 
     // Marks the state on screen as the one on disk. reset() does it too.
     void markClean();
-    bool isClean() const { return m_index >= 0 && m_index == m_cleanIndex; }
+    bool isClean() const { return m_index >= 0 && m_index == m_cleanIndex && !m_touched; }
 
     bool canUndo() const { return m_index > 0; }
     bool canRedo() const { return m_index >= 0 && m_index + 1 < m_states.size(); }
@@ -51,6 +51,11 @@ private:
 
     CanvasScene *m_scene = nullptr;
     QVector<State> m_states;
+    // An edit the document does not show. A rule is left out of the saved
+    // file until it is complete, so filling one in serializes to exactly what
+    // was there before and records no state -- but the editor has changed and
+    // the work is not on disk.
+    bool m_touched = false;
     int m_index = -1;
     int m_cleanIndex = -1;
     int m_capacity = 50;

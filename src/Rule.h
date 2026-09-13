@@ -53,6 +53,19 @@ struct Rule {
     // going and how many steps it has taken.
     static QString world() { return QStringLiteral("@world"); }
 
+    // Two actions the *application* performs, not the engine: no physics
+    // engine knows a run is being watched, let alone how to end one. They are
+    // offered on the world because that is what a rule names when it means the
+    // simulation itself. Ending it puts the scene back where it started, the
+    // way the Stop button does; holding it leaves everything where it stands,
+    // and Step still goes on from there.
+    static QString stopRunAction() { return QStringLiteral("@stopRun"); }
+    static QString holdRunAction() { return QStringLiteral("@holdRun"); }
+    bool isRunAction() const
+    {
+        return actionId == stopRunAction() || actionId == holdRunAction();
+    }
+
     bool isEvent() const { return !eventId.isEmpty(); }
 
     static bool usesValue(Op op) { return op == Op::Set || op == Op::Add; }

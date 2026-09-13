@@ -43,7 +43,8 @@ static qreal distanceTravelled(qreal cornerRadius)
         if (s->name() != QLatin1String("block"))
             body->props().type = physics::BodyType::Static;
         else
-            body->props().linearVelocity = QPointF(3.0, 0.0);   // m/s, not pixels
+            body->props().params["velocityX"] = 3.0;
+    body->props().params["velocityY"] = 0.0;   // m/s, not pixels
         scene.clearPhysicsSelection();
     }
 

@@ -22,6 +22,11 @@ public:
     const QVector<ShapeItem *> &shapes() const { return m_shapes; }
     void addShape(ShapeItem *shape);
     void removeShape(ShapeItem *shape);
+    // Puts `now` where `previous` sat, rather than dropping one and appending
+    // the other. The first shape is the body's reference transform -- see
+    // originScenePos() -- so a convert-in-place that appended would move the
+    // whole body's origin onto a different shape.
+    bool replaceShape(ShapeItem *previous, ShapeItem *now);
     bool isEmpty() const { return m_shapes.isEmpty(); }
 
     const physics::BodyDesc &props() const { return m_props; }

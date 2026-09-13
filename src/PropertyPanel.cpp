@@ -319,14 +319,20 @@ void PropertyPanel::addRow(QTableWidget *table, const PropertyRow &row)
     }
 
     if (!row.tooltip.isEmpty()) {
+        // On the label as well as the cell, for the same reason the context
+        // menu is: the label is the widget actually under the pointer over its
+        // own text, and a child does not inherit its parent's tooltip. Set on
+        // the cell alone, hovering the name -- the one place a reader hovers --
+        // shows nothing at all.
         nameCell->setToolTip(row.tooltip);
+        nameLabel->setToolTip(row.tooltip);
         if (editor)
             editor->setToolTip(row.tooltip);
     }
 
     table->setCellWidget(tableRow, 1, cellWidget ? cellWidget : editor);
     m_rows.push_back({row.type, editor, row.getter, nameLabel, resetButton, row.defaultValue,
-                      row.key, row.section, row.label});
+                      row.key, row.section, row.label, row.group});
 }
 
 void PropertyPanel::rebuildRows()
@@ -382,6 +388,12 @@ void PropertyPanel::setActivePane(PropertyPane *pane)
         if (m_activePane) {
             connect(m_activePane, &PropertyPane::valueChanged, this, &PropertyPanel::refreshValues);
             connect(m_activePane, &PropertyPane::rowsChanged, this, &PropertyPanel::rebuildRows);
+            // Ticking Sensor turns the shape into a different kind of thing,
+            // and the sensor has a pane of its own: refilling the old one
+            // would leave the wrong controls up until the selection next
+            // changed.
+            connect(m_activePane, &PropertyPane::paneKindChanged, this,
+                    &PropertyPanel::updateActivePane);
         }
     }
     rebuildRows();
@@ -450,7 +462,13 @@ void PropertyPanel::showRowMenu(const Row &row, const QPoint &globalPos)
             CanvasScene::Watch watch;
             watch.objectName = object;
             watch.propertyKey = row.key;
-            watch.label = row.label;
+            // With the group. A joint has a Spring, a Limit and a Motor, and
+            // the switch on each of them is called "Enabled" -- on its own
+            // that names none of them, and the log had three rows saying the
+            // same word about different things.
+            watch.label = row.group.isEmpty()
+                              ? row.label
+                              : tr("%1 · %2").arg(row.group, row.label);
             m_scene->addWatch(watch);
         });
     }
@@ -503,7 +521,12 @@ void PropertyPanel::setScene(CanvasScene *scene)
         return;
 
     connect(m_scene, &CanvasScene::simulationRunningChanged, this,
-            [this] { updateEditable(); });
+            [this] {
+                updateEditable();
+                // The measured rows come and go with the run, so the table is
+                // built again rather than left showing rows nothing answers.
+                rebuildRows();
+            });
     updateEditable();
 
     connect(m_scene, &CanvasScene::watchesChanged, this, &PropertyPanel::updateWatchMarks);
@@ -555,7 +578,7 @@ void PropertyPanel::updateActivePane()
             // nearly nothing in the physics vocabulary applies to one.
             const auto &picked = m_scene->physicsSelection();
             const bool sensor = !picked.isEmpty() && picked.first()->body()
-                                && picked.first()->part().isSensor;
+                                && m_scene->isSensorShape(picked.first());
             if (sensor)
                 setTitle(tr("Sensor"));
             setActivePane(picked.isEmpty()
@@ -615,7 +638,14 @@ void PropertyPanel::refreshValues()
 
     m_updating = true;
     for (const Row &row : m_rows) {
-        const QVariant value = row.getter();
+        QVariant value = row.getter();
+        // A row the document cannot answer is the run's to fill. These are
+        // only built while one is going, so there is always something to ask.
+        if (!value.isValid() && !row.key.isEmpty() && m_scene) {
+            const QString object = objectNameFor(row.section);
+            if (!object.isEmpty())
+                value = m_scene->liveValue(object, row.key);
+        }
 
         switch (row.type) {
         case PropertyFieldType::Numeric:

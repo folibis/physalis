@@ -36,6 +36,7 @@ TEST(NewSave, Behaves)
                       QStringLiteral("Velocity Y") });
     settle();
 
+    scene->setEditorMode(EditorMode::Physics);   // so the switch has something to undo
     window.findChild<QAction *>(QStringLiteral("actionNewScene"))->trigger();
     settle();
 
@@ -45,10 +46,16 @@ TEST(NewSave, Behaves)
     EXPECT_TRUE(scene->rules().isEmpty()) << "no rules" << " -- " << (QStringLiteral("%1 left").arg(scene->rules().size())).toStdString();
     EXPECT_TRUE(scene->watches().isEmpty()) << "no logged properties" << " -- " << (QStringLiteral("%1 left").arg(scene->watches().size())).toStdString();
 
+    // An empty scene has nothing to group into bodies or hang joints on, so
+    // there is nothing for Physics mode to show. Drawing is where it starts.
+    EXPECT_EQ(scene->editorMode(), EditorMode::Edit) << "a new scene opens in Edit mode";
+
     auto *save = window.findChild<QAction *>(QStringLiteral("actionSaveScene"));
     EXPECT_TRUE(save != nullptr) << "the Save action exists";
     EXPECT_TRUE(save && save->shortcut() == QKeySequence(QStringLiteral("Ctrl+S"))) << "and is on Ctrl+S" << " -- " << (save ? save->shortcut().toString() : QString()).toStdString();
-    EXPECT_TRUE(save && save->isEnabled()) << "and is enabled";
+    // A scene nobody has touched has nothing to write, so Save is off until
+    // an edit turns it on -- the same answer as the star in the title.
+    EXPECT_TRUE(save && !save->isEnabled()) << "and is off on an untouched scene";
 
     const QString path = QString::fromLatin1(kScratch) + QStringLiteral("titletest.phys");
     QFile::remove(path);
@@ -64,6 +71,7 @@ TEST(NewSave, Behaves)
     settle();
     const QString dirty = window.windowTitle();
     EXPECT_TRUE(dirty.contains(QLatin1Char('*'))) << "gains a star once edited" << " -- " << (dirty).toStdString();
+    EXPECT_TRUE(save && save->isEnabled()) << "and Save comes on with it";
 
     // A window shortcut only fires while its window is the active one, and a
     // test launched by CTest does not get the foreground for free.
@@ -80,6 +88,7 @@ TEST(NewSave, Behaves)
     settle();
     EXPECT_TRUE(QFileInfo(path).lastModified() > beforeKey) << "Ctrl+S actually reaches the action" << " -- " << (QFileInfo(path).lastModified().toString(QStringLiteral("HH:mm:ss"))).toStdString();
     EXPECT_TRUE(!window.windowTitle().contains(QLatin1Char('*'))) << "and clears the star" << " -- " << (window.windowTitle()).toStdString();
+    EXPECT_TRUE(save && !save->isEnabled()) << "and switches Save back off";
 
     scene->addRectangle(QPointF(40, 40));
     scene->notifyEdit(QStringLiteral("Add another"));

@@ -15,6 +15,8 @@
 #include <QPainterPath>
 #include <QPainterPathStroker>
 #include <QPixmap>
+#include <QMenu>
+#include <functional>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 #include <QtMath>
@@ -23,6 +25,9 @@ namespace {
 
 constexpr int kKindRole = Qt::UserRole;
 constexpr int kObjectRole = Qt::UserRole + 1;
+// Steady across rebuilds, where a row's own text is not: a group's caption
+// carries a count, and that count moves whenever the scene does.
+constexpr int kKeyRole = Qt::UserRole + 2;
 
 QString bodyTypeName(const PhysicsBody *body)
 {
@@ -72,6 +77,18 @@ void SceneTree::buildUi()
     m_tree->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_tree->setExpandsOnDoubleClick(false);
     layout->addWidget(m_tree);
+
+    m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_tree, &QTreeWidget::customContextMenuRequested,
+            this, &SceneTree::showContextMenu);
+    // Folding a row by its own arrow has to be remembered too, or the next
+    // change to the scene rebuilds the tree and opens it again.
+    connect(m_tree, &QTreeWidget::itemCollapsed, this, [this](QTreeWidgetItem *) {
+        rememberExpansion();
+    });
+    connect(m_tree, &QTreeWidget::itemExpanded, this, [this](QTreeWidgetItem *) {
+        rememberExpansion();
+    });
 
     connect(m_tree, &QTreeWidget::itemClicked, this,
             [this](QTreeWidgetItem *item, int) { onItemActivated(item); });
@@ -148,7 +165,7 @@ void SceneTree::rebuild()
     QTreeWidgetItem *bodiesGroup = bodies.isEmpty()
         ? nullptr
         : makeItem(nullptr, NodeKind::Group, nullptr, QIcon(),
-                   tr("Bodies (%1)").arg(bodies.size()), QString());
+                   tr("Bodies (%1)").arg(bodies.size()), QString(), QStringLiteral("group:bodies"));
     for (PhysicsBody *body : bodies) {
         auto *bodyItem = makeItem(bodiesGroup, NodeKind::Body, body,
                                   ObjectIcons::forBody(m_scene->bodyColor(body->props().type)),
@@ -164,7 +181,7 @@ void SceneTree::rebuild()
     QTreeWidgetItem *jointsGroup = joints.isEmpty()
         ? nullptr
         : makeItem(nullptr, NodeKind::Group, nullptr, QIcon(),
-                   tr("Joints (%1)").arg(joints.size()), QString());
+                   tr("Joints (%1)").arg(joints.size()), QString(), QStringLiteral("group:joints"));
     for (Joint *joint : joints) {
         auto *jointItem = makeItem(jointsGroup, NodeKind::Joint, joint,
                                    ObjectIcons::forJoint(m_scene->jointTypeColor(joint->typeId())),
@@ -186,7 +203,8 @@ void SceneTree::rebuild()
     QTreeWidgetItem *explosionsGroup = explosions.isEmpty()
         ? nullptr
         : makeItem(nullptr, NodeKind::Group, nullptr, QIcon(),
-                   tr("Explosions (%1)").arg(explosions.size()), QString());
+                   tr("Explosions (%1)").arg(explosions.size()), QString(),
+                   QStringLiteral("group:explosions"));
     for (ExplosionItem *explosion : explosions) {
         makeItem(explosionsGroup, NodeKind::Explosion, explosion, Icons::explosion(), explosion->name(),
                  tr("A point at %1, %2")
@@ -198,7 +216,7 @@ void SceneTree::rebuild()
     QTreeWidgetItem *raysGroup = rays.isEmpty()
         ? nullptr
         : makeItem(nullptr, NodeKind::Group, nullptr, QIcon(),
-                   tr("Rays (%1)").arg(rays.size()), QString());
+                   tr("Rays (%1)").arg(rays.size()), QString(), QStringLiteral("group:rays"));
     for (RayItem *ray : rays) {
         makeItem(raysGroup, NodeKind::Ray, ray, Icons::ray(), ray->name(),
                  tr("Looks %1 degrees, up to %2")
@@ -215,13 +233,13 @@ void SceneTree::rebuild()
     QTreeWidgetItem *shapesGroup = loose.isEmpty()
         ? nullptr
         : makeItem(nullptr, NodeKind::Group, nullptr, QIcon(),
-                   tr("Shapes with no body (%1)").arg(loose.size()), QString());
+                   tr("Shapes with no body (%1)").arg(loose.size()), QString(), QStringLiteral("group:looseShapes"));
     for (ShapeItem *shape : loose) {
         makeItem(shapesGroup, NodeKind::Shape, shape, ObjectIcons::forShape(shape), shape->name(),
                  tr("%1 — not in a body").arg(shape->typeName()));
     }
 
-    m_tree->expandAll();
+    applyExpansion();
 
     if (current) {
         if (QTreeWidgetItem *item = itemFor(current))
@@ -232,9 +250,77 @@ void SceneTree::rebuild()
     }
 }
 
+void SceneTree::rememberExpansion()
+{
+    m_collapsedKeys.clear();
+    std::function<void(QTreeWidgetItem *)> walk = [&](QTreeWidgetItem *parent) {
+        for (int i = 0; i < parent->childCount(); ++i) {
+            QTreeWidgetItem *child = parent->child(i);
+            if (child->childCount() > 0 && !child->isExpanded())
+                m_collapsedKeys.insert(keyOf(child));
+            walk(child);
+        }
+    };
+    walk(m_tree->invisibleRootItem());
+}
+
+void SceneTree::applyExpansion()
+{
+    // Open by default -- a tree that hides what is in it is no use as a list
+    // of the scene -- and then folded back wherever it was left folded.
+    m_tree->expandAll();
+    if (m_collapsedKeys.isEmpty())
+        return;
+
+    std::function<void(QTreeWidgetItem *)> walk = [&](QTreeWidgetItem *parent) {
+        for (int i = 0; i < parent->childCount(); ++i) {
+            QTreeWidgetItem *child = parent->child(i);
+            walk(child);   // innermost first, or folding the parent hides it
+            if (child->childCount() > 0 && m_collapsedKeys.contains(keyOf(child)))
+                child->setExpanded(false);
+        }
+    };
+    walk(m_tree->invisibleRootItem());
+}
+
+void SceneTree::showContextMenu(const QPoint &pos)
+{
+    QTreeWidgetItem *item = m_tree->itemAt(pos);
+    QMenu menu(this);
+
+    // What was clicked, when it holds anything: a group, a body with shapes, a
+    // joint with the bodies it holds.
+    if (item && item->childCount() > 0) {
+        const bool open = item->isExpanded();
+        const QString name = item->text(0);
+        menu.addAction(open ? tr("Collapse %1").arg(name) : tr("Expand %1").arg(name),
+                       this, [this, item, open] {
+                           item->setExpanded(!open);
+                           rememberExpansion();
+                       });
+        menu.addSeparator();
+    }
+
+    menu.addAction(tr("Expand All"), this, [this] {
+        m_collapsedKeys.clear();
+        m_tree->expandAll();
+    });
+    menu.addAction(tr("Collapse All"), this, [this] {
+        m_tree->collapseAll();
+        rememberExpansion();
+    });
+
+    menu.exec(m_tree->viewport()->mapToGlobal(pos));
+}
+
+QString SceneTree::keyOf(const QTreeWidgetItem *item)
+{
+    return item ? item->data(0, kKeyRole).toString() : QString();
+}
+
 QTreeWidgetItem *SceneTree::makeItem(QTreeWidgetItem *parent, NodeKind kind, void *object,
                                      const QIcon &icon, const QString &label,
-                                     const QString &tooltip)
+                                     const QString &tooltip, const QString &key)
 {
     auto *item = parent ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(m_tree);
     item->setText(0, label);
@@ -244,6 +330,11 @@ QTreeWidgetItem *SceneTree::makeItem(QTreeWidgetItem *parent, NodeKind kind, voi
         item->setToolTip(0, tooltip);
     item->setData(0, kKindRole, static_cast<int>(kind));
     item->setData(0, kObjectRole, QVariant::fromValue(reinterpret_cast<quintptr>(object)));
+    // A group is told what to call itself; everything else is named after the
+    // object it stands for, with its kind alongside -- a joint lists the
+    // bodies it holds, and those rows carry the same names as the bodies' own.
+    item->setData(0, kKeyRole,
+                  key.isEmpty() ? QStringLiteral("%1:%2").arg(int(kind)).arg(label) : key);
 
     if (kind == NodeKind::BodyRef) {
         // Dimmed, so a reference never reads as the body's own row.
@@ -311,26 +402,41 @@ void SceneTree::onItemActivated(QTreeWidgetItem *item)
 {
     if (!item || !m_scene || m_selecting)
         return;
-    if (!m_scene->selectionAllowed())
-        return; // a run owns the scene; picking would fight it
-
     void *object = objectOf(item);
     if (!object)
         return;
 
     m_selecting = true;
 
+    // A run owns the canvas, but picking a row is not editing it -- it points
+    // the panels at an object so its live values can be read while the scene
+    // moves. What a run does hold back is the mode switch: the mode buttons
+    // are disabled for the length of one, and the tree has no business going
+    // round them. Selecting a shape then means selecting it where the run can
+    // show it, which is as part of its body.
+    const bool running = !m_scene->selectionAllowed();
+    const auto enterMode = [this, running](EditorMode mode) {
+        if (!running)
+            m_scene->setEditorMode(mode);
+    };
+
     switch (kindOf(item)) {
     case NodeKind::Shape: {
         auto *shape = static_cast<ShapeItem *>(object);
-        m_scene->setEditorMode(EditorMode::Edit);
+        if (running) {
+            m_scene->selectJoint(nullptr);
+            m_scene->clearPhysicsSelection();
+            m_scene->selectForPhysics(shape);
+            break;
+        }
+        enterMode(EditorMode::Edit);
         m_scene->selectShape(shape);
         break;
     }
     case NodeKind::BodyRef:
     case NodeKind::Body: {
         auto *body = static_cast<PhysicsBody *>(object);
-        m_scene->setEditorMode(EditorMode::Physics);
+        enterMode(EditorMode::Physics);
         m_scene->selectJoint(nullptr);
         m_scene->clearPhysicsSelection();
         if (!body->shapes().isEmpty())
@@ -338,21 +444,21 @@ void SceneTree::onItemActivated(QTreeWidgetItem *item)
         break;
     }
     case NodeKind::Joint: {
-        m_scene->setEditorMode(EditorMode::Physics);
+        enterMode(EditorMode::Physics);
         m_scene->clearPhysicsSelection();
         m_scene->selectExplosion(nullptr);
         m_scene->selectJoint(static_cast<Joint *>(object));
         break;
     }
     case NodeKind::Ray: {
-        m_scene->setEditorMode(EditorMode::Physics);
+        enterMode(EditorMode::Physics);
         m_scene->clearPhysicsSelection();
         m_scene->selectJoint(nullptr);
         m_scene->selectRay(static_cast<RayItem *>(object));
         break;
     }
     case NodeKind::Explosion: {
-        m_scene->setEditorMode(EditorMode::Physics);
+        enterMode(EditorMode::Physics);
         m_scene->clearPhysicsSelection();
         m_scene->selectJoint(nullptr);
         m_scene->selectExplosion(static_cast<ExplosionItem *>(object));

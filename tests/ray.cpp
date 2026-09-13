@@ -23,7 +23,8 @@ TEST(Ray, Behaves)
     auto *scene = window.findChild<CanvasScene *>();
     auto *sim = window.findChild<SimulationController *>();
     scene->setEditorMode(EditorMode::Physics);
-    scene->world().gravity = QPointF(0.0, 0.0);
+    scene->world().params["gravityX"] = 0.0;
+    scene->world().params["gravityY"] = 0.0;
 
     // A wall 250 px to the right of where the ray will start.
     auto *wall = new RectangleItem;

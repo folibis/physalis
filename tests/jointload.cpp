@@ -28,6 +28,10 @@ TEST(JointLoad, Behaves)
     // A heavy block hung from a static anchor by a distance joint. The joint
     // has to hold up its whole weight, so the force is predictable.
     CanvasScene scene;
+    // Gravity is the engine's, and a scene holds only what was changed from
+    // what the engine starts with -- so this one says it outright.
+    const qreal gravityY = 9.81;
+    scene.world().params["gravityY"] = gravityY;
     scene.setSimulationEngineName(QStringLiteral("Box2D"));
 
     auto *anchor = new RectangleItem;
@@ -70,7 +74,7 @@ TEST(JointLoad, Behaves)
     // The solver runs at kReferencePixelsPerMeter, so gravity -- and therefore
     // every force it reports -- is scaled by that ratio.
     const qreal motionScale = physics::kReferencePixelsPerMeter / ppm;
-    const qreal expected = areaM2 * 1.0 * scene.world().gravity.y() * motionScale;
+    const qreal expected = areaM2 * 1.0 * gravityY * motionScale;
     sim.stop();
 
     EXPECT_TRUE(force.isValid()) << "the force is readable" << " -- " << (force.isValid() ? QString::number(force.toDouble(), 'g', 4)

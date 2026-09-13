@@ -40,13 +40,13 @@ TEST(SensorEvents, Behaves)
     scene.selectForPhysics(pad, true);
     PhysicsBody *padBody = scene.createBodyFromSelection();
     padBody->props().type = physics::BodyType::Static;
-    pad->part().isSensor = true;              // it should not block
-    pad->part().enableSensorEvents = true;
+    pad->part().params["isSensor"] = true;              // it should not block
+    pad->part().params["enableSensorEvents"] = true;
     scene.clearPhysicsSelection();
 
     scene.selectForPhysics(faller, true);
     PhysicsBody *fallBody = scene.createBodyFromSelection();
-    faller->part().enableSensorEvents = true;   // the visitor must opt in
+    faller->part().params["enableSensorEvents"] = true;   // the visitor must opt in
     scene.clearPhysicsSelection();
 
     // A rule that fires on the sensor being entered.

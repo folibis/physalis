@@ -105,7 +105,7 @@ TEST(SensorPaint, KeepsBodyColour)
     EXPECT_LT(countNear(plain, sensorColour), bodyPixelsPlain / 4)
         << "and carries no sensor hatching";
 
-    item->part().isSensor = true;
+    item->part().params["isSensor"] = true;
     item->update();
     settle();
 
@@ -161,11 +161,11 @@ TEST(SensorPaint, ChecksBoxAndRepaintsAtOnce)
     box->setChecked(true);
     settle();
 
-    EXPECT_TRUE(item->part().isSensor);
+    EXPECT_TRUE(item->part().params["isSensor"].toBool());
     EXPECT_GT(countNear(render(scene, item), scene->sensorColor()), hatchBefore + 40)
         << "and what the canvas draws is hatched";
-    EXPECT_EQ(editorFor(panel, QStringLiteral("Friction")), nullptr)
-        << "and the settings that no longer apply are gone";
+    EXPECT_NE(editorFor(panel, QStringLiteral("Friction")), nullptr)
+        << "and a sensor still carries what the engine says a shape has";
 
     window.close();
 }

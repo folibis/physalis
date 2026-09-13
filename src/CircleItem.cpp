@@ -15,7 +15,7 @@ CircleItem::CircleItem()
     const QRectF r = createdRect();
     setRect(r);
     setOrigin(r.center());
-    setName(Naming::nextName(typeName()));
+    setName(Naming::nextName(CircleItem::typeName()));
 }
 
 physics::Geometry CircleItem::physicsGeometry() const

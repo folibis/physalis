@@ -18,7 +18,8 @@ TEST(RayShot, Renders)
     auto *scene = window.findChild<CanvasScene *>();
     auto *sim = window.findChild<SimulationController *>();
     scene->setEditorMode(EditorMode::Physics);
-    scene->world().gravity = QPointF(0.0, 0.0);
+    scene->world().params["gravityX"] = 0.0;
+    scene->world().params["gravityY"] = 0.0;
 
     auto *wall = new RectangleItem;
     wall->setRect(QRectF(0, 0, 50, 300));

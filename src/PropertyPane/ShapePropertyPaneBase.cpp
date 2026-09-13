@@ -74,6 +74,7 @@ std::vector<PropertyRow> ShapePropertyPaneBase::sizeRows(ShapeItem *item,
             item->setRect(r);
         },
         10.0, 100000.0, {}, -1, 0.0, section});
+    result.back().tooltip = QObject::tr("How wide the shape is drawn, before any rotation.");
 
     result.push_back({QObject::tr("Height"), PropertyFieldType::Numeric,
         [item] { return item->rect().height(); },
@@ -83,6 +84,7 @@ std::vector<PropertyRow> ShapePropertyPaneBase::sizeRows(ShapeItem *item,
             item->setRect(r);
         },
         10.0, 100000.0, {}, -1, 0.0, section});
+    result.back().tooltip = QObject::tr("How tall the shape is drawn, before any rotation.");
 
     return result;
 }
@@ -105,6 +107,8 @@ std::vector<PropertyRow> ShapePropertyPaneBase::geometryRows(ShapeItem *item) co
         [item] { return item->name(); },
         [item](const QVariant &v) { item->setName(v.toString()); },
         -100000.0, 100000.0, {}, -1, 0.0, geometry});
+    result.back().tooltip = QObject::tr("What rules call this shape. Names have to be unique:"
+                                        " a rule finds its subject by this and nothing else.");
 
     for (PropertyRow &row : sizeRows(item, geometry))
         result.push_back(std::move(row));
@@ -116,6 +120,8 @@ std::vector<PropertyRow> ShapePropertyPaneBase::geometryRows(ShapeItem *item) co
             item->setPos(item->pos() + QPointF(delta, 0));
         },
         -100000.0, 100000.0, {}, -1, 0.0, geometry});
+    result.back().tooltip = QObject::tr("The left edge, in scene coordinates. X grows to the"
+                                        " right.");
 
     result.push_back({QObject::tr("Top"), PropertyFieldType::Numeric,
         [item] { return item->pos().y() + item->rect().top(); },
@@ -124,28 +130,37 @@ std::vector<PropertyRow> ShapePropertyPaneBase::geometryRows(ShapeItem *item) co
             item->setPos(item->pos() + QPointF(0, delta));
         },
         -100000.0, 100000.0, {}, -1, 0.0, geometry});
+    result.back().tooltip = QObject::tr("The top edge, in scene coordinates. Y grows"
+                                        " downwards.");
 
     if (item->mode() == ShapeMode::Rotating) {
         result.push_back({QObject::tr("Origin X"), PropertyFieldType::Numeric,
             [item] { return item->origin().x(); },
             [item](const QVariant &v) { item->setOrigin(QPointF(v.toDouble(), item->origin().y())); },
             -100000.0, 100000.0, {}, -1, 0.0, geometry});
+        result.back().tooltip = QObject::tr("The point the shape turns about, relative to its"
+                                            " own top-left corner.");
 
         result.push_back({QObject::tr("Origin Y"), PropertyFieldType::Numeric,
             [item] { return item->origin().y(); },
             [item](const QVariant &v) { item->setOrigin(QPointF(item->origin().x(), v.toDouble())); },
             -100000.0, 100000.0, {}, -1, 0.0, geometry});
+        result.back().tooltip = QObject::tr("The point the shape turns about, relative to its"
+                                            " own top-left corner.");
     }
 
     result.push_back({QObject::tr("Rotation"), PropertyFieldType::Numeric,
         [item] { return item->rotation(); },
         [item](const QVariant &v) { item->setRotation(v.toDouble()); },
         -3600.0, 3600.0, {}, -1, 0.0, geometry});
+    result.back().tooltip = QObject::tr("Degrees clockwise about the origin above.");
 
     result.push_back({QObject::tr("Body Color"), PropertyFieldType::Color,
         [item] { return item->bodyColor(); },
         [item](const QVariant &v) { item->setBodyColor(v.value<QColor>()); },
         -100000.0, 100000.0, {}, -1, 0.0, appearance});
+    result.back().tooltip = QObject::tr("The fill. Appearance only -- nothing about the"
+                                        " simulation reads it.");
 
     result.push_back({QObject::tr("Transparency"), PropertyFieldType::Slider,
         [item] { return 100 - qRound(item->bodyColor().alpha() / 255.0 * 100.0); },
@@ -156,6 +171,8 @@ std::vector<PropertyRow> ShapePropertyPaneBase::geometryRows(ShapeItem *item) co
             item->setBodyColor(c);
         },
         0, 100, {}, -1, 0.0, appearance});
+    result.back().tooltip = QObject::tr("How much of what is behind shows through the fill."
+                                        " At 100 the shape is drawn as an outline only.");
 
     for (PropertyRow &row : extraRows(item))
         result.push_back(std::move(row));
@@ -164,11 +181,14 @@ std::vector<PropertyRow> ShapePropertyPaneBase::geometryRows(ShapeItem *item) co
         [item] { return item->borderWidth(); },
         [item](const QVariant &v) { item->setBorderWidth(qMax(0.0, v.toDouble())); },
         0.0, 100.0, {}, -1, 0.0, appearance});
+    result.back().tooltip = QObject::tr("How thick the outline is drawn. It is drawn on the"
+                                        " edge, and does not change what collides.");
 
     result.push_back({QObject::tr("Border Color"), PropertyFieldType::Color,
         [item] { return item->borderColor(); },
         [item](const QVariant &v) { item->setBorderColor(v.value<QColor>()); },
         -100000.0, 100000.0, {}, -1, 0.0, appearance});
+    result.back().tooltip = QObject::tr("The outline colour. Appearance only.");
 
     result.push_back({QObject::tr("Line Cap"), PropertyFieldType::Choice,
         [item] {
@@ -182,6 +202,7 @@ std::vector<PropertyRow> ShapePropertyPaneBase::geometryRows(ShapeItem *item) co
         [item](const QVariant &v) { item->setCapStyle(kCapStyles[qBound(0, v.toInt(), 2)]); },
         -100000.0, 100000.0,
         {QObject::tr("Flat"), QObject::tr("Square"), QObject::tr("Round")}, -1, 0.0, appearance});
+    result.back().tooltip = QObject::tr("How the ends of an open line are drawn.");
 
     result.push_back({QObject::tr("Line Join"), PropertyFieldType::Choice,
         [item] {
@@ -195,6 +216,7 @@ std::vector<PropertyRow> ShapePropertyPaneBase::geometryRows(ShapeItem *item) co
         [item](const QVariant &v) { item->setJoinStyle(kJoinStyles[qBound(0, v.toInt(), 2)]); },
         -100000.0, 100000.0,
         {QObject::tr("Miter"), QObject::tr("Bevel"), QObject::tr("Round")}, -1, 0.0, appearance});
+    result.back().tooltip = QObject::tr("How corners are drawn where two segments meet.");
 
     return result;
 }

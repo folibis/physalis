@@ -21,7 +21,8 @@ TEST(SensorUi, Behaves)
     settle();
     auto *scene = window.findChild<CanvasScene *>();
     scene->setEditorMode(EditorMode::Physics);
-    scene->world().gravity = QPointF(0.0, 9.81);   // not whatever a settings file holds
+    scene->world().params["gravityX"] = 0.0;
+    scene->world().params["gravityY"] = 9.81;   // not whatever a settings file holds
 
     // A trigger zone, and a block that will fall through it.
     auto *zone = new RectangleItem;
@@ -39,15 +40,15 @@ TEST(SensorUi, Behaves)
     window.findChild<QAction *>(QStringLiteral("actionCreateBody"))->trigger();
     settle();
     // A sensor is a shape with the flag set; there is no separate kind.
-    zone->part().isSensor = true;
-    zone->part().enableSensorEvents = true;
+    zone->part().params["isSensor"] = true;
+    zone->part().params["enableSensorEvents"] = true;
     zone->body()->props().type = physics::BodyType::Static;
     zone->body()->notifyPropertyChanged();
     scene->clearPhysicsSelection();
 
     EXPECT_TRUE(zone->body() != nullptr) << "a body was made";
-    EXPECT_TRUE(zone->part().isSensor) << "its shape is a sensor";
-    EXPECT_TRUE(zone->part().enableSensorEvents) << "and can be seen by things entering";
+    EXPECT_TRUE(zone->part().params["isSensor"].toBool()) << "its shape is a sensor";
+    EXPECT_TRUE(zone->part().params["enableSensorEvents"].toBool()) << "and can be seen by things entering";
     EXPECT_TRUE(zone->body() && zone->body()->props().type == physics::BodyType::Static) << "it defaults to Static";
 
     EXPECT_TRUE(scene->sensorColor() != scene->bodyColor(physics::BodyType::Static)) << "sensors have their own colour" << " -- " << (QStringLiteral("%1 vs %2").arg(scene->sensorColor().name())
@@ -55,7 +56,7 @@ TEST(SensorUi, Behaves)
 
     scene->selectForPhysics(faller, true);
     PhysicsBody *fallBody = scene->createBodyFromSelection();
-    faller->part().enableSensorEvents = true;   // the visitor opts in
+    faller->part().params["enableSensorEvents"] = true;   // the visitor opts in
     scene->clearPhysicsSelection();
 
     Rule entered;

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What a *.phys file is, so a file manager opens one in Physalis. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-physalis-scene">
+    <comment>Physalis scene</comment>
+    <icon name="physalis"/>
+    <glob pattern="*.phys"/>
+    <magic priority="60">
+      <match type="string" value="&quot;format&quot;: &quot;shape-editor-scene&quot;" offset="0:64"/>
+    </magic>
+  </mime-type>
+</mime-info>

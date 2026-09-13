@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Physalis
+GenericName=2D Physics Scene Editor
+Comment=Build 2D physics scenes and run them
+Exec=physalis %f
+Icon=physalis
+Terminal=false
+Categories=Graphics;Development;Physics;
+MimeType=application/x-physalis-scene;
+StartupWMClass=Physalis

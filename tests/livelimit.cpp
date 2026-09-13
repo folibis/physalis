@@ -100,8 +100,9 @@ TEST(LiveLimit, TightenedWhileRunning)
 
     Slider restricted;
     // Ahead of where the slider has got to when the rule fires, so the limit
-    // is what stops it rather than having to drag it back.
-    const qreal cap = 400.0;
+    // is what stops it rather than having to drag it back -- and measured, as
+    // every travel is, from where the joint started.
+    const qreal cap = 200.0;
 
     Rule tighten;
     tighten.subjectName = Rule::world();

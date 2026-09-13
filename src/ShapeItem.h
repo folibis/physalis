@@ -76,8 +76,25 @@ public:
     bool smoothChain() const { return m_smoothChain; }
     void setSmoothChain(bool smooth);
 
+    // A closed, convex outline within the point limit can be a solid shape or
+    // a hollow one, and only the person drawing it knows which they meant.
+    // Everything else is hollow whatever this says.
+    bool preferOutline() const { return m_preferOutline; }
+    void setPreferOutline(bool outline);
+
     bool filled() const { return m_filled; }
     void setFilled(bool filled);
+
+    // Whether the shape encloses anything. A chain and a run of segments do
+    // not: they are lines, and colouring the space between them says solid
+    // when it is not -- in the physics view as much as in the drawing.
+    virtual bool hasInterior() const { return true; }
+
+    // Whether the outline this shape draws comes back to where it started.
+    // Not isClosed(), which answers a different question -- whether there are
+    // two loose ends that could be joined -- and is false for a rectangle.
+    virtual bool outlineIsClosed() const { return true; }
+    bool drawsFilled() const { return m_filled && hasInterior(); }
 
     Qt::PenCapStyle capStyle() const { return m_capStyle; }
     void setCapStyle(Qt::PenCapStyle style);
@@ -185,6 +202,7 @@ private:
     QColor m_borderColor { 100, 170, 220, 204 };
     qreal m_cornerRadius = 0.0;
     bool m_smoothChain = false;
+    bool m_preferOutline = false;
     qreal m_borderWidth = 2.0;
     bool m_filled = kDefaultFilled;
     Qt::PenCapStyle m_capStyle = kDefaultCapStyle;

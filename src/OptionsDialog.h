@@ -28,8 +28,8 @@ class OptionsDialog : public QDialog
 
 public:
     struct Settings {
-        qreal fieldWidth = 2000.0;
-        qreal fieldHeight = 2000.0;
+        qreal fieldWidth = 1000.0;
+        qreal fieldHeight = 1000.0;
         QColor backgroundColor { Qt::white };
         bool showGrid = true;
         qreal gridCellSize = 20.0;
@@ -63,13 +63,27 @@ public:
         QColor bodyStaticColor { 0x27, 0x9E, 0x6A };
         QColor bodyKinematicColor { 0x88, 0x4E, 0xA0 };
         QColor unassignedShapeColor { 0x8C, 0x8C, 0x8C };
+        QColor sensorColor { 0x05, 0xC9, 0x36 };
+        // A sensor is an area things pass through, not a solid shape, so it is
+        // marked out rather than filled in.
+        Qt::BrushStyle sensorPattern = Qt::DiagCrossPattern;
+        bool sensorFillsBody = false;
         qreal physicsBorderWidth = 2.0;
         int physicsFillAlpha = 90;
+        int jointFillAlpha = 170;
         Qt::PenStyle physicsSelectionLineStyle = Qt::DotLine;
         qreal physicsSelectionLineWidth = 2.0;
         QColor physicsSelectionColor { 230, 140, 40 };
 
-        bool debugView = true;
+        // What a *run* shows, set from the toolbar's view list rather than in
+        // this dialog, and kept here so it is saved with everything else. The
+        // editor draws all of it whatever these say -- see CanvasScene::RunLayer.
+        bool sleepShading = true;
+        bool runShowGrid = true;
+        bool runShowJoints = true;
+        bool runShowBodyAxes = true;
+        bool runShowRays = true;
+        bool runShowExplosions = true;
         bool showBodyAxes = true;
         qreal bodyAxisLength = 40.0;
         qreal bodyAxisWidth = 2.0;
@@ -79,14 +93,24 @@ public:
         // Vertex cap for a solid polygon; Box2D's own limit is 8.
         int maxPolygonVertices = 8;
         int simulationStepsPerSecond = 60;
+        // Playback pace, set from the toolbar rather than in here.
+        qreal simulationSpeed = 1.0;
+        // Whether a run opens on a screen of its own; also the toolbar's.
+        bool simulationFullScreen = false;
 
         QColor jointColor { 0xE8, 0xC4, 0x6A };
-        // Per-joint-type overrides, keyed by the engine's type id.
-        QHash<QString, QColor> jointTypeColors;
+        // Per joint kind -- physics::JointVisual cast to int -- rather than
+        // per engine's joint type: the five kinds are the same whichever
+        // engine is loaded, so one short list covers all of them.
+        QHash<int, QColor> jointKindColors;
+        QHash<int, JointStyle> jointKindStyles;
         Qt::PenStyle jointSelectionLineStyle = Qt::DotLine;
         qreal jointSelectionLineWidth = 2.0;
         QColor jointSelectionColor { 230, 140, 40 };
         QString simulationEngineName;
+        // Which engine a *new* scene is built for. An existing scene keeps the
+        // one it was saved with, whatever this says.
+        QString defaultEngineName;
         QColor jointOutlineColor { 0x5A, 0x4A, 0x21 };
         qreal jointAnchorRadius = 7.0;
         // How long a sliding joint's axis explosion is drawn when its travel is
@@ -103,7 +127,6 @@ public:
         // them mean -- the same bargain it has with the engine plugins.
         QHash<QString, QVariantMap> converterSettings;
 
-        QPointF gravity { 0.0, 9.81 };
         qreal pixelsPerMeter = 1000.0;
         bool fieldBoundsSolid = false;
     };
@@ -115,6 +138,9 @@ public:
 
 private:
 
+    // What the application had when the dialog opened, so the settings it
+    // hands back carry the fields it never shows.
+    Settings m_incoming;
     qreal m_currentScale;
 
     // Every widget in ui/OptionsDialog.ui. Only the colours are kept here:
@@ -158,11 +184,13 @@ private:
     QColor m_bodyStaticColor;
     QColor m_bodyKinematicColor;
     QColor m_unassignedShapeColor;
+    QColor m_sensorColor;
     QColor m_physicsSelectionColor;
     QColor m_bodyAxisXColor;
     QColor m_bodyAxisYColor;
     QColor m_jointColor;
     QColor m_jointOutlineColor;
-    QHash<QString, QColor> m_jointTypeColors;
+    QHash<int, QColor> m_jointKindColors;
+    QHash<int, JointStyle> m_jointKindStyles;
     QColor m_jointSelectionColor;
 };

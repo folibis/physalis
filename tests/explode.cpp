@@ -17,7 +17,8 @@ static qreal scatter(qreal impulse, qreal radius, bool *ok)
 {
     CanvasScene scene;
     scene.setSimulationEngineName(QStringLiteral("Box2D"));
-    scene.world().gravity = QPointF(0.0, 0.0);   // so only the blast moves them
+    scene.world().params["gravityX"] = 0.0;
+    scene.world().params["gravityY"] = 0.0;   // so only the blast moves them
 
     auto *bomb = new RectangleItem;
     bomb->setRect(QRectF(0, 0, 20, 20));

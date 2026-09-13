@@ -20,7 +20,7 @@ TEST(RuleUndo, Behaves)
 
     // Both ends of a contact must report events, or the rule never fires.
     for (ShapeItem *sh : scene.shapes())
-        sh->part().enableContactEvents = true;
+        sh->part().params["enableContactEvents"] = true;
 
     Joint *driven = nullptr;
     for (Joint *j : scene.joints())

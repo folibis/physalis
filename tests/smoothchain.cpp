@@ -38,7 +38,8 @@ static qreal slideAlong(bool smooth, int pointCount, bool *built)
     scene.clearPhysicsSelection();
     scene.selectForPhysics(block, true);
     PhysicsBody *moving = scene.createBodyFromSelection();
-    moving->props().linearVelocity = QPointF(3.0, 0.0);
+    moving->props().params["velocityX"] = 3.0;
+    moving->props().params["velocityY"] = 0.0;
     scene.clearPhysicsSelection();
 
     SimulationController sim(&scene, nullptr);
