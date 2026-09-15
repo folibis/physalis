@@ -74,14 +74,16 @@ TEST(ViewLayers, EachSwitchIsOneOfTheRunsLayers)
     for (const Layer &entry : layerList) {
         const QString label = QString::fromLatin1(entry.label);
         ASSERT_GE(layers->findText(label), 0) << "the list offers " << entry.label;
-        EXPECT_TRUE(scene->runLayer(entry.layer)) << "everything starts on -- " << entry.label;
 
+        // Measured against where it stands, not against the built-in default:
+        // these are saved settings and the suite shares one settings file.
+        const bool before = scene->runLayer(entry.layer);
         clickLayer(layers, label);
-        EXPECT_FALSE(scene->runLayer(entry.layer))
-            << "clicking it turns the layer off -- " << entry.label;
+        EXPECT_EQ(scene->runLayer(entry.layer), !before)
+            << "clicking it turns the layer over -- " << entry.label;
         clickLayer(layers, label);
-        EXPECT_TRUE(scene->runLayer(entry.layer))
-            << "and clicking again turns it back on -- " << entry.label;
+        EXPECT_EQ(scene->runLayer(entry.layer), before)
+            << "and clicking again turns it back -- " << entry.label;
     }
 
     window.close();

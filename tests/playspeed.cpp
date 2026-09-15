@@ -65,6 +65,10 @@ TEST(PlaySpeed, WallTimeIsMultipliedAndTheStepIsNot)
     auto *sim = window.findChild<SimulationController *>();
     ASSERT_TRUE(lonelyBlock(scene));
 
+    // Said outright: the speed is remembered between sessions, and the suite
+    // shares one settings file, so whatever ran before may have left it set.
+    sim->setSpeed(1.0);
+
     // A tenth of a second at sixty steps a second is six of them.
     EXPECT_EQ(framesAfter(sim, 0.1), 6) << "at the normal pace, real time is simulated time";
 
@@ -91,6 +95,7 @@ TEST(PlaySpeed, TheToolbarPicksIt)
     window.show();
     settle();
     auto *sim = window.findChild<SimulationController *>();
+    sim->setSpeed(1.0);
 
     QComboBox *speed = nullptr;
     for (QComboBox *combo : window.findChildren<QComboBox *>()) {
@@ -98,7 +103,8 @@ TEST(PlaySpeed, TheToolbarPicksIt)
             speed = combo;
     }
     ASSERT_TRUE(speed) << "the transport controls carry a speed chooser";
-    EXPECT_EQ(speed->currentData().toDouble(), 1.0) << "a run plays at normal speed until asked";
+    speed->setCurrentIndex(speed->findText(QStringLiteral("×1")));
+    EXPECT_DOUBLE_EQ(sim->speed(), 1.0) << "normal speed, to start from something known";
 
     speed->setCurrentIndex(speed->findText(QStringLiteral("×4")));
     EXPECT_DOUBLE_EQ(sim->speed(), 4.0) << "picking one sets the pace of the run";

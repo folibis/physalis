@@ -78,9 +78,10 @@ TEST(JointsVisible, Behaves)
         const QRectF area(60, 60, 320, 140);
         // The outline, not the fill: a joint is filled at whatever opacity the
         // settings ask for, so the fill that reaches the picture is blended
-        // with everything under it. The outline is always drawn at full
-        // strength -- that is what makes a joint plain on top of a body -- so
-        // it is the part worth looking for.
+        // with everything under it. Anchors are drawn see-through as well, so
+        // they are asked for solid here -- what this measures is whether the
+        // joint is drawn at all, not how strongly.
+        scene.setJointAnchorOpacity(100);
         const QColor colour = scene.jointOutlineColor();
 
         // The Joints layer is about the run: a joint being placed is always
