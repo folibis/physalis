@@ -1,0 +1,45 @@
+# Naming, which clang-format cannot check:
+#   - classes, structs, enums and unions: ClassName
+#   - members a class keeps to itself (private and protected): m_someVariable
+#   - enum values: SOME_VALUE
+#   - functions, methods, parameters and local variables: someName, as Qt has it
+#
+# Public fields of a plain struct -- BodyDesc::parts, Geometry::radius -- are not
+# a class's internals and keep their plain names.
+Checks: '-*,readability-identifier-naming'
+WarningsAsErrors: ''
+# Only this project's own headers, never Qt's, Box2D's or Chipmunk's.
+HeaderFilterRegex: '.*[/\\](src|include|engines[/\\][^/\\]+[/\\](include|src)|tests)[/\\].*'
+FormatStyle: file
+CheckOptions:
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.UnionCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+
+  - key: readability-identifier-naming.EnumConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.ScopedEnumConstantCase
+    value: UPPER_CASE
+
+  - key: readability-identifier-naming.PrivateMemberCase
+    value: camelBack
+  - key: readability-identifier-naming.PrivateMemberPrefix
+    value: m_
+  - key: readability-identifier-naming.ProtectedMemberCase
+    value: camelBack
+  - key: readability-identifier-naming.ProtectedMemberPrefix
+    value: m_
+
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.MethodCase
+    value: camelBack
+  - key: readability-identifier-naming.ParameterCase
+    value: camelBack
+  - key: readability-identifier-naming.LocalVariableCase
+    value: camelBack
