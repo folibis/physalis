@@ -60,6 +60,20 @@ struct Rule {
     // way the Stop button does; holding it leaves everything where it stands,
     // and Step still goes on from there.
     static QString stopRunAction() { return QStringLiteral("@stopRun"); }
+
+    // Raised on a body, by the application, when a rule is about to remove it.
+    // A rule answering it is carried out instead of the removal, and the body
+    // stays in the run; with no answer, it is removed. The other object is the
+    // one whose rule did the removing.
+    static QString aboutToBeRemovedEvent() { return QStringLiteral("@aboutToBeRemoved"); }
+
+    // Raised on the world, by the application, once as a run starts and before
+    // its first step: where a rule sets things up.
+    static QString runStartedEvent() { return QStringLiteral("@runStarted"); }
+
+    // An action on a body, the application's own: put it back where it stood
+    // when the run started, facing the same way, and stop it moving.
+    static QString initStateAction() { return QStringLiteral("@initState"); }
     static QString holdRunAction() { return QStringLiteral("@holdRun"); }
     bool isRunAction() const
     {

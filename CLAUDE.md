@@ -164,7 +164,45 @@ unusable. Ask `layerVisible()` at a paint site, never the switch itself. The
 INI key for the shading is still `debugView`, which is what the single switch
 these grew out of was called.
 
-**Two rule actions are the application's own**, and the only ones that are:
+**The slingshot** flings a body with the mouse during a run: press on it, pull
+back, let go, and it is pushed the other way through its centre of mass. Whether
+a body can be shot, its max power and how far full pull is belong to the body
+(`ShotSettings` on `PhysicsBody`, the "Can Be Shot" rows, a `shot` block in the
+`*.phys` only when set); how the pull line is drawn -- its colours, width and
+style -- is an application setting (Options -> Physics -> Slingshot). The push is the engine's: each tags its
+impulse properties `PropertyRole::ImpulseX`/`ImpulseY`, and
+`SimulationController::shoot` finds them by role. The gesture lives on
+`CanvasScene` (`beginShot`/`aimShot`/`releaseShot`/`cancelShot`) because the
+full-screen view is not interactive and never lets the scene see its mouse --
+it calls the same four itself.
+
+**Shapes lying over one another** are reached with Ctrl+click, in Edit and
+Physics mode alike: it steps down through `CanvasScene::shapesAt` -- everything
+under the pointer, top first -- from the current selection to the shape beneath,
+and round to the top again. A plain press on the shape already selected keeps
+it even where another lies on top, so a shape reached that way can still be
+dragged or double-clicked into a body. The slingshot looks through shapes that
+cannot be shot to the topmost one that can.
+
+**A removal can be answered.** Before a rule's action takes a body away -- an
+engine marks such actions `ActionType::removesBody` -- `SimulationController`
+looks for rules on that body (or its shapes) watching the application's own
+event `Rule::aboutToBeRemovedEvent()`. If there are any, they are carried out
+instead and the body stays; if not, it is removed. "The other object" in an
+answer is the subject of the rule that did the removing. An answer that itself
+removes the body really removes it: `m_handlingRemoval` stops it asking again.
+
+**The world raises one event, the application's own:** `Rule::runStartedEvent()`,
+"starting simulation", carried out once in `start()` with the world built and
+the snapshot taken, before the first step -- so a rule can set things up, and
+Stop still puts back what it changed.
+
+**"Init state" is the application's own action on a body:** back where it stood
+when the run started (taken in `start()`, before the start rules), facing the
+same way, and not moving. The engine's position, angle and velocity properties
+are found by role -- `PropertyRole::PositionX` and the rest.
+
+**Two world actions are the application's own**:
 `Rule::stopRunAction()` and `holdRunAction()`, offered on the world because
 that is what a rule names when it means the simulation itself. No engine knows
 a run is being watched, let alone how to end one. They cannot be carried out
@@ -191,6 +229,13 @@ so `SimulationController` remembers one and acts on it once the step is over.
   `SimulationController` sets `ShapePart::watchedByRules`, and each engine
   switches on whatever it needs to report contacts -- so turning the flag off
   in the file changes nothing for that shape.
+- **A sensor needs both sides to opt in.** Box2D 3.1 reports an overlap only
+  when the sensor *and* the shape entering it have `enableSensorEvents`, and it
+  is off by default even for sensors -- so a pocket's rule never fired unless
+  every ball had been ticked by hand. Once a rule watches a sensor, the engine
+  gives every shape in the world sensor events, the ones already made and the
+  ones still to come. And a sensor never raises *contact* events at all: a rule
+  on one wants "is entered", not "begins contact".
 - **A property the editor shows is one the engine published.** Panes are built
   by `rowsFromCatalogue` (stored values, editable) and `liveRowsFromCatalogue`
   (what a run answers, read-only). A row the editor owns -- a name, the body

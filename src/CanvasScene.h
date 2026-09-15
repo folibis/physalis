@@ -248,6 +248,10 @@ public:
     // strength, so the joint is still plain against whatever is underneath.
     int jointFillAlpha() const { return m_jointFillAlpha; }
     void setJointFillAlpha(int alpha) { m_jointFillAlpha = qBound(0, alpha, 255); update(); }
+    // How see-through a joint's anchors are, as a percentage -- so whatever
+    // lies under an anchor, a shape to click or a ball, can still be seen.
+    int jointAnchorOpacity() const { return m_jointAnchorOpacity; }
+    void setJointAnchorOpacity(int percent) { m_jointAnchorOpacity = qBound(10, percent, 100); update(); }
 
     void setJointOutlineColor(const QColor &color);
     QColor jointOutlineColor() const { return m_jointOutlineColor; }
@@ -390,6 +394,28 @@ public:
 
     bool selectionAllowed() const { return !m_simulationRunning; }
 
+    // The slingshot: during a run, press on a body that can be shot, pull back
+    // and let go. The canvas's own mouse handling calls these, and so does the
+    // full-screen view, which shows this scene but keeps its mouse to itself.
+    bool beginShot(const QPointF &scenePos);   // true when a shot started
+    void aimShot(const QPointF &scenePos);
+    void releaseShot();
+    void cancelShot();
+    bool isAimingShot() const { return m_shotBody && m_simulationRunning; }
+    // The push the aim would give if let go now, in the body's impulse units.
+    QPointF shotImpulse() const;
+
+    // How the slingshot's pull line is drawn, the same for every body: its
+    // colour from a light pull to a full one, its width in screen pixels, and
+    // its style.
+    void setShotLineColors(const QColor &light, const QColor &full);
+    QColor shotLightColor() const { return m_shotLightColor; }
+    QColor shotFullColor() const { return m_shotFullColor; }
+    void setShotLineWidth(qreal width);
+    qreal shotLineWidth() const { return m_shotLineWidth; }
+    void setShotLineStyle(Qt::PenStyle style);
+    Qt::PenStyle shotLineStyle() const { return m_shotLineStyle; }
+
     // What the running engine says a property is worth. The rows for these --
     // where a body got to, how fast it is going -- have no answer in the
     // document, and are only shown while there is a run to answer them.
@@ -517,6 +543,8 @@ signals:
     void polygonDrawingChanged(bool drawing);
     void scaleChanged(qreal scale);
     void fieldPropertyChanged();
+    // A shot was let go: this push, through the body's centre of mass.
+    void shotReleased(PhysicsBody *body, const QPointF &impulse);
 
 protected:
     void drawBackground(QPainter *painter, const QRectF &rect) override;
@@ -625,6 +653,7 @@ private:
     qreal m_jointWaistWidth = 3.5;
     qreal m_jointOutlineWidth = 1.6;
     int m_jointFillAlpha = 170;
+    int m_jointAnchorOpacity = 60;
 
     ShapeItem *m_active = nullptr;
 
@@ -633,6 +662,20 @@ private:
     QPointF m_lastScenePos;
 
     QPoint m_panLastScreenPos;
+
+    // The body being aimed with the slingshot, and where the pull has got to.
+    // Left set if a run ends mid-aim; isAimingShot() is what is asked.
+    PhysicsBody *m_shotBody = nullptr;
+    QPointF m_shotCursor;
+
+    // Every shape under a point, the one on top first. Ctrl+click steps down
+    // through these: how a shape lying under another is reached at all.
+    QVector<ShapeItem *> shapesAt(const QPointF &scenePos) const;
+    QColor m_shotLightColor { 255, 204, 0 };
+    QColor m_shotFullColor { 220, 30, 30 };
+    qreal m_shotLineWidth = 3.0;
+    Qt::PenStyle m_shotLineStyle = Qt::DotLine;
+    void drawShot(QPainter *painter) const;
 
     QSet<int> m_selectedNodes;
     int m_editNodeIndex = -1;

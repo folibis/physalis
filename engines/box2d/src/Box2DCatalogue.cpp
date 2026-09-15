@@ -369,6 +369,17 @@ PropertyList Box2DEngine::bodyProperties() const
         {QStringLiteral("isAwake"), true},
         {QStringLiteral("sleepThreshold"), 0.05},
     }, QObject::tr("Body"));
+    // b2Body_ApplyLinearImpulseToCenter, one direction each: what the editor's
+    // slingshot pushes a body with.
+    markRole(&properties, QStringLiteral("impulseX"), PropertyRole::ImpulseX);
+    markRole(&properties, QStringLiteral("impulseY"), PropertyRole::ImpulseY);
+    // What "Init state" puts back and stops a body with.
+    markRole(&properties, QStringLiteral("positionX"), PropertyRole::PositionX);
+    markRole(&properties, QStringLiteral("positionY"), PropertyRole::PositionY);
+    markRole(&properties, QStringLiteral("angle"), PropertyRole::Angle);
+    markRole(&properties, QStringLiteral("velocityX"), PropertyRole::VelocityX);
+    markRole(&properties, QStringLiteral("velocityY"), PropertyRole::VelocityY);
+    markRole(&properties, QStringLiteral("angularVelocity"), PropertyRole::AngularVelocity);
     return properties;
 }
 
@@ -499,6 +510,7 @@ QVector<ActionType> Box2DEngine::bodyActions() const
     // left afterwards to hold one -- and no way back within the same run.
     ActionType remove;
     remove.id = QStringLiteral("removeBody");
+    remove.removesBody = true;
     remove.label = QObject::tr("Remove");
     remove.description = QObject::tr(
         "Takes the object out of the world for the rest of the run, along with "

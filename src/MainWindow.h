@@ -140,6 +140,10 @@ private:
     // What the canvas draws -- see the kLayer* keys in MainWindow.cpp.
     ViewLayersCombo *m_layers = nullptr;
     void applyLayer(const QString &key, bool on);
+    // Puts saved settings onto the transport controls. They are built with the
+    // toolbar, after the settings are first applied, so this runs twice at
+    // startup -- once with nothing there, once with everything.
+    void syncTransportWidgets(const OptionsDialog::Settings &s);
     // Show the run full screen, with the keys standing in for the transport.
     QCheckBox *m_fullScreenCheck = nullptr;
     QPointer<FullScreenView> m_fullScreen;

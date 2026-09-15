@@ -19,6 +19,7 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QDoubleSpinBox>
 #include <QLabel>
 #include <QSlider>
 #include <QSpinBox>
@@ -246,6 +247,28 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     bindSliderValue(m_ui->defaultTransparency, m_ui->defaultTransparencyLabel, tr("%"));
     bindSliderValue(m_ui->physicsFillAlpha, m_ui->physicsFillAlphaLabel, QString());
     bindSliderValue(m_ui->jointFillAlpha, m_ui->jointFillAlphaLabel, QString());
+
+    // Below Fill opacity: how see-through the anchors are, outline and all.
+    {
+        auto *container = new QWidget(m_ui->jointDrawingGroup);
+        auto *row = new QHBoxLayout(container);
+        row->setContentsMargins(0, 0, 0, 0);
+        m_jointAnchorOpacity = new QSlider(Qt::Horizontal, container);
+        m_jointAnchorOpacity->setRange(10, 100);
+        m_jointAnchorOpacity->setValue(current.jointAnchorOpacity);
+        m_jointAnchorOpacity->setToolTip(tr("How see-through joint anchors are drawn, so the shapes under"
+                                            " them stay visible."));
+        auto *value = new QLabel(container);
+        value->setMinimumWidth(36);
+        row->addWidget(m_jointAnchorOpacity, 1);
+        row->addWidget(value);
+        bindSliderValue(m_jointAnchorOpacity, value, tr("%"));
+
+        int fillRow = -1;
+        QFormLayout::ItemRole role;
+        m_ui->jointDrawingGroupForm->getWidgetPosition(m_ui->jointFillAlphaContainer, &fillRow, &role);
+        m_ui->jointDrawingGroupForm->insertRow(fillRow + 1, tr("Anchor opacity:"), container);
+    }
     bindSliderValue(m_ui->sleepShiftPercent, m_ui->sleepShiftPercentLabel, tr("%"));
 
     connect(m_ui->defaultTransparency, &QSlider::valueChanged, this, [this](int percent) {
@@ -301,6 +324,49 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
             fieldLayout->addWidget(style, 1);
             jointTypeForm->addRow(tr("%1:").arg(label), field);
         }
+    }
+
+    // How the slingshot's pull line looks while aiming. The same for every
+    // body -- whether one can be shot, and how hard, stay on the body.
+    {
+        m_shotLightColor = current.shotLightColor;
+        m_shotFullColor = current.shotFullColor;
+        auto *group = new QGroupBox(tr("Slingshot"), m_ui->physicsTab);
+        auto *form = new QFormLayout(group);
+
+        auto *light = new QToolButton(group);
+        light->setFixedSize(kSwatchWidth, kSwatchHeight);
+        light->setStyleSheet(colorSwatchStyle(m_shotLightColor));
+        bindSwatch(light, m_shotLightColor, tr("Choose Light Pull Color"));
+        light->setToolTip(tr("The line's colour with little force in the pull."));
+        form->addRow(tr("Light pull color:"), light);
+
+        auto *full = new QToolButton(group);
+        full->setFixedSize(kSwatchWidth, kSwatchHeight);
+        full->setStyleSheet(colorSwatchStyle(m_shotFullColor));
+        bindSwatch(full, m_shotFullColor, tr("Choose Full Pull Color"));
+        full->setToolTip(tr("The line's colour at full power. In between, the two are mixed."));
+        form->addRow(tr("Full pull color:"), full);
+
+        m_shotLineWidth = new QDoubleSpinBox(group);
+        m_shotLineWidth->setRange(0.5, 12.0);
+        m_shotLineWidth->setDecimals(1);
+        m_shotLineWidth->setSingleStep(0.5);
+        m_shotLineWidth->setSuffix(tr(" px"));
+        m_shotLineWidth->setValue(current.shotLineWidth);
+        form->addRow(tr("Line width:"), m_shotLineWidth);
+
+        m_shotLineStyle = new QComboBox(group);
+        m_shotLineStyle->addItem(tr("Dotted"), int(Qt::DotLine));
+        m_shotLineStyle->addItem(tr("Dashed"), int(Qt::DashLine));
+        m_shotLineStyle->addItem(tr("Solid"), int(Qt::SolidLine));
+        m_shotLineStyle->addItem(tr("Dash-dot"), int(Qt::DashDotLine));
+        selectData(m_shotLineStyle, int(current.shotLineStyle));
+        form->addRow(tr("Line style:"), m_shotLineStyle);
+
+        // Above the spacer that closes the tab.
+        m_ui->physicsLayout->insertWidget(m_ui->physicsLayout->count() - 1, group);
+        compactColorGroup(group);
     }
 
     // Now that every row exists, including the ones added just above.
@@ -563,6 +629,7 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.physicsBorderWidth = m_ui->physicsBorderWidth->value();
     s.physicsFillAlpha = m_ui->physicsFillAlpha->value();
     s.jointFillAlpha = m_ui->jointFillAlpha->value();
+    s.jointAnchorOpacity = m_jointAnchorOpacity->value();
     s.physicsSelectionLineStyle =
         static_cast<Qt::PenStyle>(m_ui->physicsSelectionLineStyle->currentData().toInt());
     s.physicsSelectionLineWidth = m_ui->physicsSelectionLineWidth->value();
@@ -586,6 +653,10 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.defaultEngineName = m_ui->defaultEngine->currentText();
     s.jointKindColors = m_jointKindColors;
     s.jointKindStyles = m_jointKindStyles;
+    s.shotLightColor = m_shotLightColor;
+    s.shotFullColor = m_shotFullColor;
+    s.shotLineWidth = m_shotLineWidth->value();
+    s.shotLineStyle = static_cast<Qt::PenStyle>(m_shotLineStyle->currentData().toInt());
     s.jointSelectionLineStyle =
         static_cast<Qt::PenStyle>(m_ui->jointSelectionLineStyle->currentData().toInt());
     s.jointSelectionLineWidth = m_ui->jointSelectionLineWidth->value();

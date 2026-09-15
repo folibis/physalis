@@ -146,7 +146,11 @@ MainWindow::MainWindow(QWidget *parent)
     m_ui->sceneTree->setScene(m_scene);
     m_ui->rulesPanel->setScene(m_scene);
 
-    applySettings(loadSettingsFromFile());
+    // Kept, because the transport controls do not exist yet: they are built
+    // with the toolbar further down, and what was saved for them is put on
+    // them there.
+    const OptionsDialog::Settings startup = loadSettingsFromFile();
+    applySettings(startup);
 
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this,
             &MainWindow::updatePasteAction);
@@ -283,6 +287,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_simulation, &SimulationController::stateChanged,
             this, &MainWindow::onSimulationStateChanged);
 
+    // Now that they exist, the transport controls catch up with what was saved.
+    syncTransportWidgets(startup);
+
     toolBar->addSeparator();
 
     m_scaleCombo = new QComboBox(this);
@@ -363,6 +370,9 @@ MainWindow::MainWindow(QWidget *parent)
             return {};
         return m_simulation->readValue(object, key);
     });
+    // A body flung with the mouse. The canvas knows the gesture; only the run
+    // can push anything.
+    connect(m_scene, &CanvasScene::shotReleased, m_simulation, &SimulationController::shoot);
 
     connect(m_scene, &CanvasScene::editorModeChanged, this, &MainWindow::onEditorModeChanged);
     connect(m_scene, &CanvasScene::physicsSelectionChanged, this, &MainWindow::onPhysicsSelectionChanged);
@@ -1287,6 +1297,39 @@ void MainWindow::updateTransportActions()
     m_ui->actionStop->setEnabled(active);
 }
 
+void MainWindow::syncTransportWidgets(const OptionsDialog::Settings &s)
+{
+    // The controls catching up with the settings, not being used: none of this
+    // reports a change back, or startup would write the file again for every
+    // switch it touched. Called once the toolbar exists as well as from
+    // applySettings, because at startup it does not exist yet.
+    if (m_layers) {
+        m_layers->setOn(kLayerGrid, s.runShowGrid);
+        m_layers->setOn(kLayerJoints, s.runShowJoints);
+        m_layers->setOn(kLayerAxes, s.runShowBodyAxes);
+        m_layers->setOn(kLayerRays, s.runShowRays);
+        m_layers->setOn(kLayerExplosions, s.runShowExplosions);
+        m_layers->setOn(kLayerSleep, s.sleepShading);
+    }
+    if (m_fullScreenCheck) {
+        const QSignalBlocker blocker(m_fullScreenCheck);
+        m_fullScreenCheck->setChecked(s.simulationFullScreen);
+    }
+    if (m_speedCombo) {
+        const QSignalBlocker blocker(m_speedCombo);
+        const int index = m_speedCombo->findData(s.simulationSpeed);
+        if (index >= 0)
+            m_speedCombo->setCurrentIndex(index);
+    }
+    if (m_simulation) {
+        // Blocked: at startup this runs while the window is still being built,
+        // and the controller's stateChanged reaches handlers whose widgets do
+        // not exist yet. The speed alone changes nothing anyone is showing.
+        const QSignalBlocker blocker(m_simulation);
+        m_simulation->setSpeed(s.simulationSpeed);
+    }
+}
+
 void MainWindow::applyLayer(const QString &key, bool on)
 {
     using RunLayer = CanvasScene::RunLayer;
@@ -1781,6 +1824,7 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.physicsBorderWidth = m_scene->physicsBorderWidth();
     current.physicsFillAlpha = m_scene->physicsFillAlpha();
     current.jointFillAlpha = m_scene->jointFillAlpha();
+    current.jointAnchorOpacity = m_scene->jointAnchorOpacity();
     current.physicsSelectionLineStyle = m_scene->physicsSelectionLineStyle();
     current.physicsSelectionLineWidth = m_scene->physicsSelectionLineWidth();
     current.physicsSelectionColor = m_scene->physicsSelectionColor();
@@ -1808,6 +1852,10 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.jointSelectionLineStyle = m_scene->jointSelectionLineStyle();
     current.simulationEngineName = m_scene->simulationEngineName();
     current.jointOutlineColor = m_scene->jointOutlineColor();
+    current.shotLightColor = m_scene->shotLightColor();
+    current.shotFullColor = m_scene->shotFullColor();
+    current.shotLineWidth = m_scene->shotLineWidth();
+    current.shotLineStyle = m_scene->shotLineStyle();
     current.jointAnchorRadius = m_scene->jointAnchorRadius();
     current.jointAxisLength = m_scene->jointAxisLength();
     current.jointWaistWidth = m_scene->jointWaistWidth();
@@ -1863,6 +1911,7 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_scene->setPhysicsBorderWidth(s.physicsBorderWidth);
     m_scene->setPhysicsFillAlpha(s.physicsFillAlpha);
     m_scene->setJointFillAlpha(s.jointFillAlpha);
+    m_scene->setJointAnchorOpacity(s.jointAnchorOpacity);
     m_scene->setPhysicsSelectionLineStyle(s.physicsSelectionLineStyle);
     m_scene->setPhysicsSelectionLineWidth(s.physicsSelectionLineWidth);
     m_scene->setPhysicsSelectionColor(s.physicsSelectionColor);
@@ -1872,21 +1921,7 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_scene->setRunLayer(CanvasScene::RunLayer::BodyAxes, s.runShowBodyAxes);
     m_scene->setRunLayer(CanvasScene::RunLayer::Rays, s.runShowRays);
     m_scene->setRunLayer(CanvasScene::RunLayer::Explosions, s.runShowExplosions);
-    if (m_layers) {
-        // The list is catching up with the settings, not being clicked, and
-        // setOn reports nothing back -- otherwise this would write the file
-        // again for every layer it touched.
-        m_layers->setOn(kLayerGrid, s.runShowGrid);
-        m_layers->setOn(kLayerJoints, s.runShowJoints);
-        m_layers->setOn(kLayerAxes, s.runShowBodyAxes);
-        m_layers->setOn(kLayerRays, s.runShowRays);
-        m_layers->setOn(kLayerExplosions, s.runShowExplosions);
-        m_layers->setOn(kLayerSleep, s.sleepShading);
-    }
-    if (m_fullScreenCheck) {
-        const QSignalBlocker blocker(m_fullScreenCheck);
-        m_fullScreenCheck->setChecked(s.simulationFullScreen);
-    }
+    syncTransportWidgets(s);
     m_scene->setShowBodyAxes(s.showBodyAxes);
     m_scene->setBodyAxisLength(s.bodyAxisLength);
     m_scene->setBodyAxisWidth(s.bodyAxisWidth);
@@ -1902,6 +1937,9 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_scene->setJointSelectionLineWidth(s.jointSelectionLineWidth);
     m_scene->setJointSelectionLineStyle(s.jointSelectionLineStyle);
     m_scene->setJointOutlineColor(s.jointOutlineColor);
+    m_scene->setShotLineColors(s.shotLightColor, s.shotFullColor);
+    m_scene->setShotLineWidth(s.shotLineWidth);
+    m_scene->setShotLineStyle(s.shotLineStyle);
     m_scene->setJointAnchorRadius(s.jointAnchorRadius);
     m_scene->setJointAxisLength(s.jointAxisLength);
     m_scene->setJointWaistWidth(s.jointWaistWidth);
@@ -1909,13 +1947,6 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     if (m_simulation) {
         m_simulation->setStepsPerSecond(s.simulationStepsPerSecond);
         m_simulation->setSpeed(s.simulationSpeed);
-    }
-    if (m_speedCombo) {
-        const QSignalBlocker blocker(m_speedCombo);
-        const int index = m_speedCombo->findData(m_simulation ? m_simulation->speed()
-                                                              : s.simulationSpeed);
-        if (index >= 0)
-            m_speedCombo->setCurrentIndex(index);
     }
     m_scene->setPixelsPerMeter(s.pixelsPerMeter);
     m_scene->setFieldBoundsSolid(s.fieldBoundsSolid);
@@ -1986,6 +2017,7 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
     s.physicsBorderWidth = settings.value("borderWidth", s.physicsBorderWidth).toDouble();
     s.physicsFillAlpha = settings.value("fillAlpha", s.physicsFillAlpha).toInt();
     s.jointFillAlpha = settings.value("jointFillAlpha", s.jointFillAlpha).toInt();
+    s.jointAnchorOpacity = settings.value("jointAnchorOpacity", s.jointAnchorOpacity).toInt();
     s.physicsSelectionLineStyle = static_cast<Qt::PenStyle>(
         settings.value("selectionLineStyle", static_cast<int>(s.physicsSelectionLineStyle)).toInt());
     s.physicsSelectionLineWidth = settings.value("selectionLineWidth", s.physicsSelectionLineWidth).toDouble();
@@ -2065,6 +2097,15 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
     s.simulationSpeed = settings.value("simulationSpeed", s.simulationSpeed).toDouble();
     s.simulationFullScreen =
         settings.value("fullScreen", s.simulationFullScreen).toBool();
+    const QColor shotLight(settings.value("shotLightColor").toString());
+    if (shotLight.isValid())
+        s.shotLightColor = shotLight;
+    const QColor shotFull(settings.value("shotFullColor").toString());
+    if (shotFull.isValid())
+        s.shotFullColor = shotFull;
+    s.shotLineWidth = settings.value("shotLineWidth", s.shotLineWidth).toDouble();
+    s.shotLineStyle = static_cast<Qt::PenStyle>(
+        settings.value("shotLineStyle", static_cast<int>(s.shotLineStyle)).toInt());
     settings.endGroup();
 
     settings.beginGroup("Shapes");
@@ -2121,6 +2162,7 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("borderWidth", s.physicsBorderWidth);
     settings.setValue("fillAlpha", s.physicsFillAlpha);
     settings.setValue("jointFillAlpha", s.jointFillAlpha);
+    settings.setValue("jointAnchorOpacity", s.jointAnchorOpacity);
     settings.setValue("selectionLineStyle", static_cast<int>(s.physicsSelectionLineStyle));
     settings.setValue("selectionLineWidth", s.physicsSelectionLineWidth);
     settings.setValue("selectionColor", s.physicsSelectionColor.name(QColor::HexArgb));
@@ -2175,6 +2217,10 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("stepsPerSecond", s.simulationStepsPerSecond);
     settings.setValue("simulationSpeed", s.simulationSpeed);
     settings.setValue("fullScreen", s.simulationFullScreen);
+    settings.setValue("shotLightColor", s.shotLightColor.name(QColor::HexArgb));
+    settings.setValue("shotFullColor", s.shotFullColor.name(QColor::HexArgb));
+    settings.setValue("shotLineWidth", s.shotLineWidth);
+    settings.setValue("shotLineStyle", static_cast<int>(s.shotLineStyle));
     settings.endGroup();
 
     settings.beginGroup("Shapes");

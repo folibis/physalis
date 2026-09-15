@@ -246,7 +246,61 @@ void SimulationController::start()
     m_owedTime = 0.0;
     m_clock.start();
     m_timer->start();
+    // Where every body stands as the run begins, for "Init state" -- taken
+    // before the start rules move anything.
+    m_startPoses.clear();
+    for (const BoundBody &bound : std::as_const(m_bound)) {
+        const physics::BodyDesc desc = bound.body->toBodyDesc();
+        m_startPoses.insert(bound.body, qMakePair(desc.position, desc.rotationDegrees));
+    }
+    applyStartRules();
     emit stateChanged();
+}
+
+void SimulationController::initState(PhysicsBody *body)
+{
+    if (!m_engine || !body || body->isRemoved())
+        return;
+    const auto handle = m_bodyByName.constFind(body->name());
+    const auto pose = m_startPoses.constFind(body);
+    if (handle == m_bodyByName.constEnd() || pose == m_startPoses.constEnd())
+        return;
+
+    // Which properties place and move a body is the engine's to say.
+    const physics::PropertyList properties = m_engine->bodyProperties();
+    const auto set = [&](physics::PropertyRole role, const QVariant &value) {
+        const QString key = physics::keyForRole(properties, role);
+        if (!key.isEmpty())
+            m_engine->setBodyParam(*handle, key, value);
+    };
+    set(physics::PropertyRole::PositionX, pose->first.x());
+    set(physics::PropertyRole::PositionY, pose->first.y());
+    set(physics::PropertyRole::Angle, pose->second);
+    set(physics::PropertyRole::VelocityX, 0.0);
+    set(physics::PropertyRole::VelocityY, 0.0);
+    set(physics::PropertyRole::AngularVelocity, 0.0);
+}
+
+void SimulationController::applyStartRules()
+{
+    const QVector<Rule> &rules = m_scene->rules();
+    m_ruleState.resize(rules.size());
+    bool carried = false;
+    for (int i = 0; i < rules.size(); ++i) {
+        const Rule &rule = rules.at(i);
+        if (!rule.enabled || !rule.isValid() || rule.subjectName != Rule::world()
+            || rule.eventId != Rule::runStartedEvent())
+            continue;
+        applyAction(rule);
+        m_ruleState[i].fired = true;
+        carried = true;
+    }
+    // Whatever the rules moved is drawn where they put it before anything
+    // steps; the snapshot Stop restores was taken before they ran.
+    if (carried && m_engine)
+        syncTransforms();
+    // A start rule may stop the run or hold it.
+    applyPendingRunAction();
 }
 
 void SimulationController::setStepsPerSecond(int stepsPerSecond)
@@ -390,6 +444,25 @@ void SimulationController::applyPendingRunAction()
         stop();
     else if (action == Rule::holdRunAction())
         pause();
+}
+
+void SimulationController::shoot(PhysicsBody *body, const QPointF &impulse)
+{
+    if (!m_engine || !body || body->isRemoved())
+        return;
+    const auto handle = m_bodyByName.constFind(body->name());
+    if (handle == m_bodyByName.constEnd())
+        return; // not in this run: disabled, or skipped for having no mass
+
+    // Which properties push is the engine's to say. One that offers no way to
+    // push a body has nothing for the slingshot, and the shot is not taken.
+    const physics::PropertyList properties = m_engine->bodyProperties();
+    const QString keyX = physics::keyForRole(properties, physics::PropertyRole::ImpulseX);
+    const QString keyY = physics::keyForRole(properties, physics::PropertyRole::ImpulseY);
+    if (!keyX.isEmpty() && !qFuzzyIsNull(impulse.x()))
+        m_engine->setBodyParam(*handle, keyX, impulse.x());
+    if (!keyY.isEmpty() && !qFuzzyIsNull(impulse.y()))
+        m_engine->setBodyParam(*handle, keyY, impulse.y());
 }
 
 
@@ -601,6 +674,53 @@ void SimulationController::takeOutOfView(PhysicsBody *body)
     m_scene->update();
 }
 
+bool SimulationController::removalHandled(PhysicsBody *body, const QString &remover)
+{
+    if (m_handlingRemoval || !body)
+        return false;
+
+    const QVector<Rule> &rules = m_scene->rules();
+    m_ruleState.resize(rules.size());
+
+    // A rule can watch the body or any of its shapes.
+    QStringList names { body->name() };
+    for (ShapeItem *shape : body->shapes())
+        names << shape->name();
+    // "The body that touched it", for an answer aimed at the remover's body.
+    QString removerBody = remover;
+    for (ShapeItem *shape : m_scene->shapes()) {
+        if (shape->name() == remover && shape->body()) {
+            removerBody = shape->body()->name();
+            break;
+        }
+    }
+
+    QVector<int> answers;
+    for (int i = 0; i < rules.size(); ++i) {
+        const Rule &rule = rules.at(i);
+        if (!rule.enabled || !rule.isValid() || rule.eventId != Rule::aboutToBeRemovedEvent())
+            continue;
+        if (!names.contains(rule.subjectName) || (rule.once && m_ruleState[i].fired))
+            continue;
+        answers.append(i);
+    }
+    if (answers.isEmpty())
+        return false;
+
+    m_handlingRemoval = true;
+    for (int i : answers) {
+        Rule resolved = rules.at(i);
+        if (resolved.targetName == Rule::otherObject())
+            resolved.targetName = remover;
+        else if (resolved.targetName == Rule::otherObjectBody())
+            resolved.targetName = removerBody;
+        applyAction(resolved);
+        m_ruleState[i].fired = true;
+    }
+    m_handlingRemoval = false;
+    return true;
+}
+
 void SimulationController::applyAction(const Rule &rule)
 {
     // Ending or holding the run is not something the engine can do -- and it
@@ -608,6 +728,21 @@ void SimulationController::applyAction(const Rule &rule)
     // the stack. It is remembered and carried out once the step is finished.
     if (rule.isRunAction()) {
         m_pendingRunAction = rule.actionId;
+        return;
+    }
+
+    // "Init state" is the application's: it knows where the run started.
+    if (rule.actionId == Rule::initStateAction()) {
+        PhysicsBody *target = nullptr;
+        for (PhysicsBody *body : m_scene->bodies()) {
+            if (body->name() == rule.targetName)
+                target = body;
+        }
+        for (ShapeItem *shape : m_scene->shapes()) {
+            if (!target && shape->name() == rule.targetName)
+                target = shape->body();
+        }
+        initState(target);
         return;
     }
 
@@ -649,6 +784,26 @@ void SimulationController::applyAction(const Rule &rule)
             }
             return;
         }
+        // About to take a body away: a rule answering "is about to be removed"
+        // is carried out instead, and the body stays. Which actions remove a
+        // body is the engine's to say.
+        bool removes = false;
+        for (const physics::ActionType &action : m_engine->bodyActions())
+            removes = removes || (action.id == rule.actionId && action.removesBody);
+        if (removes) {
+            PhysicsBody *victim = nullptr;
+            for (PhysicsBody *body : m_scene->bodies()) {
+                if (body->name() == rule.targetName)
+                    victim = body;
+            }
+            for (ShapeItem *shape : m_scene->shapes()) {
+                if (!victim && shape->name() == rule.targetName)
+                    victim = shape->body();
+            }
+            if (victim && removalHandled(victim, rule.subjectName))
+                return;
+        }
+
         for (int i = 0; i < m_bodyNames.size(); ++i) {
             if (m_bodyNames[i] != rule.targetName)
                 continue;

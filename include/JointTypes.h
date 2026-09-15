@@ -28,6 +28,20 @@ enum class PropertyRole {
     None,
     Sensor,   // things pass through this shape
     Density,  // mass per unit of area
+    // A body property that pushes through the centre of mass rather than
+    // storing anything, one per direction, in scene units. The editor's
+    // slingshot finds them this way and names neither.
+    ImpulseX,
+    ImpulseY,
+    // Where a body is, which way it faces, and how it is moving, in scene units
+    // and degrees -- settable while running. "Init state" puts a body back and
+    // stops it through these, and names none of them.
+    PositionX,
+    PositionY,
+    Angle,
+    VelocityX,
+    VelocityY,
+    AngularVelocity,
 };
 
 // Where a parameter's starting value comes from. Most are a fixed number the
@@ -48,6 +62,10 @@ struct ActionType {
     QString label;              // what the rule editor shows
     QString description;
     QVector<struct JointParam> params;
+    // Performing this takes the body out of the world. Before it does, the
+    // application asks whether a rule answers "is about to be removed" -- and
+    // if one does, that rule is carried out instead and the body stays.
+    bool removesBody = false;
 };
 
 struct JointParam {

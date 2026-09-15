@@ -3,6 +3,7 @@
 #include "CanvasScene.h"
 
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QWheelEvent>
 #include <cmath>
 #include <QLabel>
@@ -106,10 +107,58 @@ void FullScreenView::showEvent(QShowEvent *event)
     }, Qt::QueuedConnection);
 }
 
+// This view is not interactive -- a click must not pick a shape up -- so the
+// scene never sees its mouse, and the slingshot is passed on by hand. A press
+// on a body that can be shot is a shot; anywhere else it is the drag that pans.
+void FullScreenView::mousePressEvent(QMouseEvent *event)
+{
+    auto *canvas = qobject_cast<CanvasScene *>(scene());
+    if (canvas && canvas->isAimingShot()) {
+        if (event->button() != Qt::LeftButton)
+            canvas->cancelShot();
+        event->accept();
+        return;
+    }
+    if (canvas && event->button() == Qt::LeftButton
+        && canvas->beginShot(mapToScene(event->position().toPoint()))) {
+        event->accept();
+        return;
+    }
+    QGraphicsView::mousePressEvent(event);
+}
+
+void FullScreenView::mouseMoveEvent(QMouseEvent *event)
+{
+    auto *canvas = qobject_cast<CanvasScene *>(scene());
+    if (canvas && canvas->isAimingShot()) {
+        canvas->aimShot(mapToScene(event->position().toPoint()));
+        event->accept();
+        return;
+    }
+    QGraphicsView::mouseMoveEvent(event);
+}
+
+void FullScreenView::mouseReleaseEvent(QMouseEvent *event)
+{
+    auto *canvas = qobject_cast<CanvasScene *>(scene());
+    if (canvas && canvas->isAimingShot()) {
+        if (event->button() == Qt::LeftButton)
+            canvas->releaseShot();
+        event->accept();
+        return;
+    }
+    QGraphicsView::mouseReleaseEvent(event);
+}
+
 void FullScreenView::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_Escape:
+        // Mid-aim, escape calls the shot off rather than ending the run.
+        if (auto *canvas = qobject_cast<CanvasScene *>(scene()); canvas && canvas->isAimingShot()) {
+            canvas->cancelShot();
+            return;
+        }
         emit closeRequested();
         return;
     case Qt::Key_Space:

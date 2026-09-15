@@ -963,9 +963,9 @@ void Box2DEngine::explodeAt(const b2Vec2 &position, const QVariantMap &params) c
                            / m_pixelsPerMeter);
     // Zero means everything, so an older scene with no such setting is
     // unchanged by it.
-    const double mask = params.value(QStringLiteral("maskBits"), 0.0).toDouble();
-    if (mask > 0.0)
-        blast.maskBits = static_cast<uint64_t>(mask);
+    const uint64_t mask = filterBits(params.value(QStringLiteral("maskBits")), 0);
+    if (mask > 0)
+        blast.maskBits = mask;
     if (blast.radius > 0.0f)
         b2World_Explode(m_worldId, &blast);
 }
@@ -1099,9 +1099,9 @@ void Box2DEngine::setShapeParam(const QString &name, const QString &key, const Q
                || key == QLatin1String("groupIndex")) {
         b2Filter filter = b2Shape_GetFilter(*it);
         if (key == QLatin1String("categoryBits"))
-            filter.categoryBits = static_cast<uint64_t>(qMax(0.0, value.toDouble()));
+            filter.categoryBits = filterBits(value, filter.categoryBits);
         else if (key == QLatin1String("maskBits"))
-            filter.maskBits = static_cast<uint64_t>(qMax(0.0, value.toDouble()));
+            filter.maskBits = filterBits(value, filter.maskBits);
         else
             filter.groupIndex = value.toInt();
         b2Shape_SetFilter(*it, filter);

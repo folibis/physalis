@@ -2,6 +2,7 @@
 #include "CanvasScene.h"
 #include "PhysicsBody.h"
 
+#include <cmath>
 #include <QPainter>
 #include <QPainterPathStroker>
 #include <QStyleOptionGraphicsItem>
@@ -254,6 +255,37 @@ void ShapeItem::paintPhysicsView(QPainter *painter, const CanvasScene *canvas) c
         painter->setBrush(QBrush(canvas->sensorColor(), canvas->sensorPattern()));
         paintShape(painter, m_rect);
         painter->restore();
+    }
+
+    // A body that can be shot wears a second, dotted outline just inside its
+    // own -- on a table of balls, that is how the cue ball is told apart. Two
+    // screen pixels inside the border whatever the zoom, done by shrinking the
+    // outline about its middle: exact for boxes and circles, close enough for
+    // anything else.
+    if (assigned && m_body->shot().enabled && m_body->props().type == physics::BodyType::Dynamic
+        && hasInterior()) {
+        const QTransform &toDevice = painter->worldTransform();
+        const qreal pixel = 1.0 / qMax(1e-6, std::hypot(toDevice.m11(), toDevice.m12()));
+        const qreal inset = (canvas->physicsBorderWidth() / 2.0 + 2.0 + 0.75) * pixel;
+        const QPainterPath path = localShapePath();
+        const QRectF bounds = path.boundingRect();
+        if (bounds.width() > 2.0 * inset && bounds.height() > 2.0 * inset) {
+            QTransform shrink;
+            shrink.translate(bounds.center().x(), bounds.center().y());
+            shrink.scale((bounds.width() - 2.0 * inset) / bounds.width(),
+                         (bounds.height() - 2.0 * inset) / bounds.height());
+            shrink.translate(-bounds.center().x(), -bounds.center().y());
+
+            QPen dotted(outline);
+            dotted.setWidthF(1.5);
+            dotted.setCosmetic(true);
+            dotted.setStyle(Qt::DotLine);
+            painter->save();
+            painter->setPen(dotted);
+            painter->setBrush(Qt::NoBrush);
+            painter->drawPath(shrink.map(path));
+            painter->restore();
+        }
     }
 
     // Nothing is selectable during a run, so nothing shows as selected.

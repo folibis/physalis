@@ -60,6 +60,10 @@ public slots:
     // really passed; a test hands over whatever it likes.
     void advance(qreal wallSeconds);
 
+    // A push through a body's centre of mass, in the units the engine's
+    // impulse properties take -- what the slingshot hands over on release.
+    void shoot(PhysicsBody *body, const QPointF &impulse);
+
     void pause();
     void resume();
     void stepFrame();
@@ -120,6 +124,21 @@ private:
                   QString *other) const;
 
     void applyAction(const Rule &rule);
+    // A rule is about to remove this body. Carries out every rule answering
+    // "is about to be removed" and says whether there were any -- if so, the
+    // removal does not happen. `remover` is the subject of the removing rule.
+    bool removalHandled(PhysicsBody *body, const QString &remover);
+    // Carries out the rules on the world's "starting simulation", once, with
+    // the world built and before its first step.
+    void applyStartRules();
+    // "Init state": the body back where it stood when the run started, facing
+    // the same way, and not moving.
+    void initState(PhysicsBody *body);
+    // Where each body stood, and which way it faced, as the run started.
+    QHash<PhysicsBody *, QPair<QPointF, qreal>> m_startPoses;
+    // Set while the answers are carried out, so an answer that removes the
+    // body really removes it instead of asking again for ever.
+    bool m_handlingRemoval = false;
     // Takes a body the engine no longer has off the canvas -- its shapes, its
     // axes, and the joints the engine destroyed along with it. Run state only;
     // stop() puts every bit of it back.

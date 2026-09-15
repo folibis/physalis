@@ -297,7 +297,7 @@ QJsonObject save(const CanvasScene *scene)
             if (ids.contains(shape))
                 members.append(ids.value(shape));
         }
-        bodies.append(QJsonObject {
+        QJsonObject entry {
             {"name", body->name()},
             {"type", bodyTypeName(p.type)},
             {"isEnabled", p.isEnabled},
@@ -305,7 +305,18 @@ QJsonObject save(const CanvasScene *scene)
             // the names it published.
             {"physics", QJsonObject::fromVariantMap(p.params)},
             {"shapes", members},
-        });
+        };
+        const ShotSettings &shot = body->shot();
+        const ShotSettings untouched;
+        if (shot.enabled != untouched.enabled || shot.fullImpulse != untouched.fullImpulse
+            || shot.maxPull != untouched.maxPull) {
+            entry.insert("shot", QJsonObject {
+                {"enabled", shot.enabled},
+                {"fullImpulse", shot.fullImpulse},
+                {"maxPull", shot.maxPull},
+            });
+        }
+        bodies.append(entry);
     }
     document.insert("bodies", bodies);
 
@@ -518,6 +529,12 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
         p.type = bodyTypeFromName(o.value("type").toString());
         p.isEnabled = o.value("isEnabled").toBool(d.isEnabled);
         p.params = o.value("physics").toObject().toVariantMap();
+
+        const QJsonObject shot = o.value("shot").toObject();
+        const ShotSettings untouched;
+        body->shot().enabled = shot.value("enabled").toBool(untouched.enabled);
+        body->shot().fullImpulse = shot.value("fullImpulse").toDouble(untouched.fullImpulse);
+        body->shot().maxPull = shot.value("maxPull").toDouble(untouched.maxPull);
 
         // Older scenes kept the engine's settings loose in the body object,
         // under Box2D's names -- which are the names its catalogue publishes.

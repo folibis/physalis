@@ -11,6 +11,25 @@
 
 namespace physics {
 
+// A collision filter's bits, read from whatever a scene carried. A JSON file
+// keeps numbers as doubles, and a file written when the default mask was "every
+// bit set" holds 18446744073709552000 -- 2^64 rounded up, past what a quint64
+// can hold. Casting that over is undefined, and what it produced was a mask of
+// zero: a shape that collides with nothing. At or beyond the top of the range
+// means all of them.
+inline quint64 filterBits(const QVariant &value, quint64 fallback)
+{
+    if (!value.isValid())
+        return fallback;
+    const double asNumber = value.toDouble();
+    if (!(asNumber > 0.0))
+        return 0;
+    if (asNumber >= 18446744073709551615.0)
+        return ~quint64(0);
+    return static_cast<quint64>(asNumber);
+}
+
+
 // Chipmunk2D backend. The only translation units in the project that include a
 // Chipmunk header -- everything above it speaks the structs in PhysicsTypes.h.
 //
@@ -192,6 +211,9 @@ private:
     std::vector<std::unique_ptr<BodyRecord>> m_bodies;   // indexed by handle
     std::vector<std::unique_ptr<ShapeRecord>> m_shapes;
     QHash<QString, QVector<ShapeRecord *>> m_shapesByName;
+    // A rule watches a sensor somewhere in this space, so every shape has to be
+    // able to set one off -- see addShape.
+    bool m_sensorWatched = false;
     std::vector<std::unique_ptr<JointRecord>> m_joints;  // indexed by handle
     QVector<EngineEvent> m_pendingEvents;
     QHash<QString, HitRecord> m_lastHit;

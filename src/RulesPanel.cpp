@@ -320,6 +320,12 @@ QWidget *RulesPanel::buildCard(int index)
     auto *heading = new QLabel(card);
     heading->setStyleSheet(QStringLiteral("font-weight: bold; color: #6f6f6f;"));
     heading->setAlignment(Qt::AlignCenter);
+    // The caption gives up width before the buttons either side of it do, so
+    // a narrow dock does not grow a scrollbar -- but never all of it. Ignored,
+    // the layout squeezed it to nothing: the name vanished, and with it the
+    // only place to double-click to rename the rule.
+    heading->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    heading->setMinimumWidth(40);
     setHeadingText(heading, captionFor(index));
     heading->installEventFilter(this);
     heading->setProperty("ruleIndex", index);
@@ -545,7 +551,11 @@ QWidget *RulesPanel::buildCard(int index)
 
     row.op = new QComboBox(card);
     row.op->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    row.op->setMinimumContentsLength(6);
+    row.op->setMinimumContentsLength(4);
+    // Never Ignored: that lets the layout squeeze it to nothing, and then the
+    // choice between Set, Toggle, Negate and Add is simply gone from the card.
+    // It keeps the width its shortest entry needs; the number beside it is the
+    // part that gives way.
     row.op->addItem(tr("Set to"), static_cast<int>(Rule::Op::Set));
     row.op->addItem(tr("Toggle"), static_cast<int>(Rule::Op::Toggle));
     row.op->addItem(tr("Negate"), static_cast<int>(Rule::Op::Negate));
@@ -566,7 +576,7 @@ QWidget *RulesPanel::buildCard(int index)
     // rule fires. Which of the two editors is shown follows from this.
     row.valueMode = new QComboBox(card);
     row.valueMode->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    row.valueMode->setMinimumContentsLength(6);
+    row.valueMode->setMinimumContentsLength(4);
     row.valueMode->addItem(tr("Value"), false);
     row.valueMode->addItem(tr("Property"), true);
     row.valueMode->setToolTip(tr("A number you type, or one taken from another "
@@ -749,8 +759,19 @@ QVector<physics::EventType> RulesPanel::eventsFor(const QString &name) const
     }
 
     auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName());
-    if (!engine || name == Rule::world())
+    if (!engine)
         return {};
+    // The run starting is the application's to report, and it happens with
+    // nothing: there is no other object to pick.
+    if (name == Rule::world()) {
+        physics::EventType started;
+        started.id = Rule::runStartedEvent();
+        started.label = tr("starting simulation");
+        started.description = tr("Raised once as the simulation starts, before its first step -- where a rule"
+                                 " sets things up.");
+        started.namesOther = false;
+        return { started };
+    }
 
     for (Joint *joint : m_scene->joints()) {
         if (joint->name() != name)
@@ -761,13 +782,22 @@ QVector<physics::EventType> RulesPanel::eventsFor(const QString &name) const
         }
         return {};
     }
+    // Anything that can be removed can be about to be removed: the
+    // application's own event, not one an engine reports.
+    physics::EventType aboutToBeRemoved;
+    aboutToBeRemoved.id = Rule::aboutToBeRemovedEvent();
+    aboutToBeRemoved.label = tr("to be removed");
+    aboutToBeRemoved.description = tr("Raised when a rule is about to remove this object. A rule that answers it is"
+                                      " carried out instead, and the object stays in the run; with no answer, it"
+                                      " is removed.");
+    aboutToBeRemoved.namesOther = false;
     for (PhysicsBody *body : m_scene->bodies()) {
         if (body->name() == name)
-            return engine->bodyEvents();
+            return engine->bodyEvents() << aboutToBeRemoved;
     }
     for (ShapeItem *shape : m_scene->shapes()) {
         if (shape->name() == name)
-            return engine->shapeEvents();
+            return engine->shapeEvents() << aboutToBeRemoved;
     }
     return {};
 }
@@ -816,6 +846,7 @@ QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
     // The run has no events: two numbers that climb as it goes, and whatever
     // the engine says its world can still be asked about.
     if (name == Rule::world()) {
+        addEvents(eventsFor(name));
         choices.append({QStringLiteral("time"), tr("Elapsed Time (s)")});
         choices.append({QStringLiteral("frame"), tr("Frame")});
         addReadable(engine->worldProperties());
@@ -1029,6 +1060,11 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
         for (const physics::ActionType &action : engine->bodyActions())
             result.append({actionKey(action.id), action.label});
     };
+    // Putting a body back as the run found it is the application's to do: no
+    // engine knows where a run started.
+    const auto addInitState = [&result] {
+        result.append({actionKey(Rule::initStateAction()), tr("Init state")});
+    };
 
     if (m_scene->explosionNamed(name)) {
         addActions();   // its only property is the blast, and that is the action
@@ -1043,6 +1079,7 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
         if (body->name() == name) {
             addSettable(engine->bodyProperties(), false);
             addActions();
+            addInitState();
             return result;
         }
     }
@@ -1050,6 +1087,7 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
         if (shape->name() == name) {
             addSettable(engine->shapeProperties(), false);
             addActions();
+            addInitState();
             return result;
         }
     }
@@ -1057,9 +1095,11 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
     if (name == Rule::otherObject()) {
         addSettable(engine->shapeProperties(), false);
         addActions();
+        addInitState();
     } else if (name == Rule::otherObjectBody()) {
         addSettable(engine->bodyProperties(), false);
         addActions();
+        addInitState();
     }
     return result;
 }
@@ -1423,7 +1463,7 @@ void RulesPanel::refreshValueEditor(int index)
     } else {
         auto *spin = new QDoubleSpinBox(row.valueHolder);
         spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-        spin->setMinimumWidth(70);
+        spin->setMinimumWidth(48);
         // Range, precision and step as the engine declared them.
         if (const physics::JointParam *p = describe(rule.targetName, rule.propertyKey)) {
             spin->setRange(p->minValue, p->maxValue);

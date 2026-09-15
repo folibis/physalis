@@ -8,6 +8,19 @@
 
 class ShapeItem;
 
+// A body the mouse can fling during a run: pull back from it, let go, and it is
+// pushed the other way through its centre of mass -- harder the further it was
+// pulled. These belong to the body; how the pull line is drawn is an application
+// setting. The push itself is the engine's, found by role.
+struct ShotSettings {
+    bool enabled = false;
+    // The impulse at full pull, in the units the engine's impulse properties
+    // take -- so the number means what the same number does in a rule.
+    qreal fullImpulse = 1.0;
+    // Scene units of pull that count as full power. Pulling further adds nothing.
+    qreal maxPull = 300.0;
+};
+
 class PhysicsBody : public QObject
 {
     Q_OBJECT
@@ -34,6 +47,9 @@ public:
     void notifyPropertyChanged() { emit propertyChanged(); }
 
     physics::BodyDesc toBodyDesc() const;
+
+    const ShotSettings &shot() const { return m_shot; }
+    ShotSettings &shot() { return m_shot; }
 
     QPointF originScenePos() const;
 
@@ -65,6 +81,7 @@ private:
     physics::BodyDesc m_props;
 
     QVector<ShapeItem *> m_shapes;
+    ShotSettings m_shot;
     bool m_asleep = false;
     bool m_removed = false;
 };

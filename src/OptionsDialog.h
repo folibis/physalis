@@ -20,6 +20,7 @@ class QCheckBox;
 class QToolButton;
 class QComboBox;
 class QSlider;
+class QDoubleSpinBox;
 class QLabel;
 
 class OptionsDialog : public QDialog
@@ -71,6 +72,8 @@ public:
         qreal physicsBorderWidth = 2.0;
         int physicsFillAlpha = 90;
         int jointFillAlpha = 170;
+        // Percent: how see-through joint anchors are drawn.
+        int jointAnchorOpacity = 60;
         Qt::PenStyle physicsSelectionLineStyle = Qt::DotLine;
         qreal physicsSelectionLineWidth = 2.0;
         QColor physicsSelectionColor { 230, 140, 40 };
@@ -97,6 +100,13 @@ public:
         qreal simulationSpeed = 1.0;
         // Whether a run opens on a screen of its own; also the toolbar's.
         bool simulationFullScreen = false;
+
+        // How the slingshot's pull line is drawn, for every body: a colour for
+        // a light pull and one for a full one, with the shades between.
+        QColor shotLightColor { 255, 204, 0 };
+        QColor shotFullColor { 220, 30, 30 };
+        qreal shotLineWidth = 3.0;
+        Qt::PenStyle shotLineStyle = Qt::DotLine;
 
         QColor jointColor { 0xE8, 0xC4, 0x6A };
         // Per joint kind -- physics::JointVisual cast to int -- rather than
@@ -148,6 +158,14 @@ private:
     std::unique_ptr<Ui::OptionsDialog> m_ui;
 
     void bindSwatch(QToolButton *button, QColor &color, const QString &title);
+
+    // The Slingshot group, built here rather than in the form.
+    QDoubleSpinBox *m_shotLineWidth = nullptr;
+    QComboBox *m_shotLineStyle = nullptr;
+    QColor m_shotLightColor;
+    QColor m_shotFullColor;
+    // Joint anchors' opacity, a row added to the form's joint drawing group.
+    QSlider *m_jointAnchorOpacity = nullptr;
     // Builds the Export tab from whatever converters are under `path`, and
     // removes it again when there are none. Called when the dialog opens and
     // whenever the folder is changed while it is open.

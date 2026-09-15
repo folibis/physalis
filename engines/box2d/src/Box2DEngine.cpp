@@ -24,6 +24,11 @@ bool flag(const QVariantMap &params, const char *key, bool fallback)
     return params.value(QLatin1String(key), fallback).toBool();
 }
 
+uint64_t bits(const QVariantMap &params, const char *key, uint64_t fallback)
+{
+    return filterBits(params.value(QLatin1String(key)), fallback);
+}
+
 // Box2D checks its own arithmetic and, left alone, ends the process when a
 // check fails -- which takes the editor with it. A scene is allowed to ask for
 // the impossible, so the check is caught instead: the message is kept, the
@@ -161,6 +166,7 @@ void Box2DEngine::destroyWorld()
     m_pendingEvents.clear();
     m_shapeNames.clear();
     m_shapesByName.clear();
+    m_sensorWatched = false;
     m_lastHit.clear();
     m_problems.clear();
     m_ruined.clear();
@@ -349,6 +355,7 @@ BodyHandle Box2DEngine::addBody(const BodyDesc &desc)
     // Every part becomes its own Box2D shape on the one body. All of them
     // have to be representable -- a body that silently dropped one of its
     // pieces would collide differently from what's drawn.
+    bool watchesSensor = false;
     for (const ShapePart &part : desc.parts) {
         const QVariantMap &shape = part.params;
         b2ShapeDef shapeDef = b2DefaultShapeDef();
@@ -360,10 +367,8 @@ BodyHandle Box2DEngine::addBody(const BodyDesc &desc)
         shapeDef.material.rollingResistance =
             static_cast<float>(std::max(0.0, number(shape, "rollingResistance", 0.0)));
         shapeDef.material.tangentSpeed = static_cast<float>(number(shape, "tangentSpeed", 0.0));
-        shapeDef.filter.categoryBits =
-            static_cast<uint64_t>(std::max(0.0, number(shape, "categoryBits", 1.0)));
-        shapeDef.filter.maskBits = static_cast<uint64_t>(
-            std::max(0.0, number(shape, "maskBits", 9007199254740991.0)));
+        shapeDef.filter.categoryBits = bits(shape, "categoryBits", 1);
+        shapeDef.filter.maskBits = bits(shape, "maskBits", ~uint64_t(0));
         shapeDef.filter.groupIndex = static_cast<int>(number(shape, "groupIndex", 0.0));
         shapeDef.isSensor = flag(shape, "isSensor", false);
         shapeDef.enableSensorEvents = flag(shape, "enableSensorEvents", false);
@@ -376,7 +381,16 @@ BodyHandle Box2DEngine::addBody(const BodyDesc &desc)
         if (part.watchedByRules) {
             shapeDef.enableContactEvents = true;
             shapeDef.enableHitEvents = true;
+            if (shapeDef.isSensor) {
+                shapeDef.enableSensorEvents = true;
+                watchesSensor = true;
+            }
         }
+        // Box2D reports a sensor overlap only when the sensor and the shape
+        // entering it both have sensor events on, and neither does by default.
+        // Once a rule watches a sensor, every shape gets them.
+        if (m_sensorWatched)
+            shapeDef.enableSensorEvents = true;
         // The name travels in the shape's user data, so a contact event can
         // report which shape it was rather than only which body.
         m_shapeNames.append(part.name);
@@ -405,6 +419,17 @@ BodyHandle Box2DEngine::addBody(const BodyDesc &desc)
                 && !m_shapeNames[index].isEmpty()) {
                 m_shapesByName.insert(m_shapeNames[index], shapes[i]);
             }
+        }
+    }
+
+    // The first watched sensor in the world: the shapes made before it cannot
+    // set it off yet, so they are given sensor events now. The ones still to
+    // come get them as they are made.
+    if (watchesSensor && !m_sensorWatched) {
+        m_sensorWatched = true;
+        for (const b2ShapeId &existing : std::as_const(m_shapesByName)) {
+            if (b2Shape_IsValid(existing))
+                b2Shape_EnableSensorEvents(existing, true);
         }
     }
 

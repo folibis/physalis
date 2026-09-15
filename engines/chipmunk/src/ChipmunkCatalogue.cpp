@@ -288,6 +288,17 @@ PropertyList ChipmunkEngine::bodyProperties() const
         {QStringLiteral("enableSleep"), true},
         {QStringLiteral("isAwake"), true},
     }, QObject::tr("Body"));
+    // cpBodyApplyImpulseAtWorldPoint at the centre of gravity, one direction
+    // each: what the editor's slingshot pushes a body with.
+    markRole(&properties, QStringLiteral("impulseX"), PropertyRole::ImpulseX);
+    markRole(&properties, QStringLiteral("impulseY"), PropertyRole::ImpulseY);
+    // What "Init state" puts back and stops a body with.
+    markRole(&properties, QStringLiteral("positionX"), PropertyRole::PositionX);
+    markRole(&properties, QStringLiteral("positionY"), PropertyRole::PositionY);
+    markRole(&properties, QStringLiteral("angle"), PropertyRole::Angle);
+    markRole(&properties, QStringLiteral("velocityX"), PropertyRole::VelocityX);
+    markRole(&properties, QStringLiteral("velocityY"), PropertyRole::VelocityY);
+    markRole(&properties, QStringLiteral("angularVelocity"), PropertyRole::AngularVelocity);
     return properties;
 }
 
@@ -360,6 +371,7 @@ QVector<ActionType> ChipmunkEngine::bodyActions() const
     // cpSpaceRemoveBody, with its shapes and constraints.
     ActionType remove;
     remove.id = QStringLiteral("removeBody");
+    remove.removesBody = true;
     remove.label = QObject::tr("Remove");
     remove.description = QObject::tr(
         "Takes the object out of the world for the rest of the run, along with any joints "

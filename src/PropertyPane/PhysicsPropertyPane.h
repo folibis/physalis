@@ -8,6 +8,7 @@
 class CanvasScene;
 class ShapeItem;
 class PhysicsBody;
+struct ShotSettings;
 
 class PhysicsPropertyPane : public PropertyPane
 {
@@ -26,6 +27,7 @@ private:
     static PropertyRow enabledRow(physics::BodyDesc *props,
                                   const std::function<void()> &changed);
     static std::vector<PropertyRow> bodyIdentityRows(PhysicsBody *body);
+    static std::vector<PropertyRow> shotRows(ShotSettings *shot, const std::function<void()> &changed);
     static std::vector<PropertyRow> shapeIdentityRows(ShapeItem *shape);
 
     CanvasScene *m_scene = nullptr;

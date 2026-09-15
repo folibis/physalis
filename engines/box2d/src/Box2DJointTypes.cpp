@@ -405,8 +405,13 @@ QVector<JointType> Box2DEngine::jointTypes() const
         t.id = QStringLiteral("wheel");
         t.color = QColor(0xE8, 0x8A, 0x6A); // orange -- suspension
         t.label = QObject::tr("Wheel");
+        // Which body is which matters more here than anywhere: the axis is
+        // fixed in body A, so with the wheel as body A it turns with the wheel
+        // and the suspension points wherever the wheel has rolled to.
         t.description = QObject::tr("Lets one body spin freely while sliding along an axis of"
-                                    " another -- a wheel on a suspension arm.");
+                                    " another -- a wheel on a suspension arm. Body A is the"
+                                    " chassis the axis belongs to, body B the wheel: the other"
+                                    " way round, the axis turns with the wheel.");
         t.anchorCount = 1;
         t.needsAxis = true;
         t.visual = JointVisual::Axis;

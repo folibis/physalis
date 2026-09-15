@@ -51,9 +51,23 @@ std::vector<PropertyRow> PhysicsPropertyPane::rows(EditorMode mode) const
 
     if (PhysicsBody *body = m_scene->commonSelectedBody()) {
         const auto notify = [body] { body->notifyPropertyChanged(); };
-        result.push_back(bodyTypeRow(&body->props(), notify));
+        // Only a dynamic body can be shot, so changing the type changes which
+        // rows there are. Queued: the rebuild deletes the very combo box whose
+        // change is still being delivered.
+        auto *pane = const_cast<PhysicsPropertyPane *>(this);
+        const physics::BodyType typeBefore = body->props().type;
+        const auto typeChanged = [pane, body, typeBefore] {
+            body->notifyPropertyChanged();
+            if (body->props().type != typeBefore) {
+                QMetaObject::invokeMethod(pane, [pane] { emit pane->rowsChanged(); },
+                                          Qt::QueuedConnection);
+            }
+        };
+        result.push_back(bodyTypeRow(&body->props(), typeChanged));
         append(bodyIdentityRows(body));
         result.push_back(enabledRow(&body->props(), notify));
+        if (body->props().type == physics::BodyType::Dynamic)
+            append(shotRows(&body->shot(), notify));
         if (engine) {
             const physics::PropertyList properties = engine->bodyProperties();
             if (running)
@@ -101,6 +115,10 @@ std::vector<PropertyRow> PhysicsPropertyPane::defaultRows(EditorMode mode) const
 
     result.push_back(bodyTypeRow(&pristineBody, [] {}));
     result.push_back(enabledRow(&pristineBody, [] {}));
+    static ShotSettings pristineShot;
+    pristineShot = ShotSettings();
+    for (PropertyRow &row : shotRows(&pristineShot, [] {}))
+        result.push_back(std::move(row));
     if (auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName())) {
         for (PropertyRow &row : rowsFromCatalogue(engine->bodyProperties(),
                                                   &pristineBody.params, [] {}, bodySection()))
@@ -151,6 +169,42 @@ PropertyRow PhysicsPropertyPane::enabledRow(physics::BodyDesc *props,
     row.tooltip = QObject::tr("A disabled body is not handed to the engine at all: it stays on"
                               " the canvas and takes no part in the run.");
     return row;
+}
+
+std::vector<PropertyRow> PhysicsPropertyPane::shotRows(ShotSettings *shot, const std::function<void()> &changed)
+{
+    std::vector<PropertyRow> result;
+    const ShotSettings untouched;
+
+    PropertyRow enabled {QObject::tr("Can Be Shot"), PropertyFieldType::Boolean,
+        [shot] { return shot->enabled; },
+        [shot, changed](const QVariant &v) { shot->enabled = v.toBool(); changed(); },
+        -100000.0, 100000.0, {}, -1, 0.0, bodySection()};
+    enabled.defaultValue = untouched.enabled;
+    enabled.tooltip = QObject::tr("During a run, press on this body, pull back and let go: it is"
+                                  " pushed the other way, harder the further you pulled. Only a"
+                                  " dynamic body can be shot.");
+    result.push_back(std::move(enabled));
+
+    PropertyRow impulse {QObject::tr("Max Power"), PropertyFieldType::Numeric,
+        [shot] { return shot->fullImpulse; },
+        [shot, changed](const QVariant &v) { shot->fullImpulse = v.toDouble(); changed(); },
+        0.0, 100000.0, {}, 3, 0.1, bodySection()};
+    impulse.defaultValue = untouched.fullImpulse;
+    impulse.tooltip = QObject::tr("The push at full pull, in the same units as the body's impulse"
+                                  " properties. A shorter pull gives a share of it.");
+    result.push_back(std::move(impulse));
+
+    PropertyRow pull {QObject::tr("Max Pull"), PropertyFieldType::Numeric,
+        [shot] { return shot->maxPull; },
+        [shot, changed](const QVariant &v) { shot->maxPull = v.toDouble(); changed(); },
+        10.0, 5000.0, {}, 0, 10.0, bodySection()};
+    pull.defaultValue = untouched.maxPull;
+    pull.tooltip = QObject::tr("How far, in scene units, you pull back for full power. Pulling"
+                               " further adds nothing.");
+    result.push_back(std::move(pull));
+
+    return result;
 }
 
 std::vector<PropertyRow> PhysicsPropertyPane::bodyIdentityRows(PhysicsBody *body)

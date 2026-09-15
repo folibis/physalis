@@ -164,6 +164,7 @@ void ChipmunkEngine::destroyWorld()
     if (m_space)
         cpSpaceFree(m_space);
     m_space = nullptr;
+    m_sensorWatched = false;
 
     for (const auto &joint : m_joints) {
         cpConstraintFree(joint->constraint);
@@ -196,10 +197,8 @@ ChipmunkEngine::ShapeRecord *ChipmunkEngine::addShape(BodyRecord *record, cpShap
     made->name = part.name;
     made->shape = shape;
     made->owner = record;
-    made->filter.categoryBits =
-        static_cast<quint64>(std::max(0.0, number(values, "categoryBits", 1.0)));
-    made->filter.maskBits =
-        static_cast<quint64>(std::max(0.0, number(values, "maskBits", 9007199254740991.0)));
+    made->filter.categoryBits = filterBits(values.value(QStringLiteral("categoryBits")), 1);
+    made->filter.maskBits = filterBits(values.value(QStringLiteral("maskBits")), ~quint64(0));
     made->filter.groupIndex = static_cast<int>(number(values, "groupIndex", 0.0));
     made->contactEvents = flag(values, "enableContactEvents", false);
     made->hitEvents = flag(values, "enableHitEvents", false);
@@ -210,7 +209,17 @@ ChipmunkEngine::ShapeRecord *ChipmunkEngine::addShape(BodyRecord *record, cpShap
     if (part.watchedByRules) {
         made->contactEvents = true;
         made->hitEvents = true;
+        // As in Box2D, a sensor notices only a shape that asked to be noticed,
+        // and none has by default. Once a rule watches a sensor, every shape
+        // asks: the ones already made now, the ones to come as they are made.
+        if (flag(values, "isSensor", false) && !m_sensorWatched) {
+            m_sensorWatched = true;
+            for (const auto &existing : m_shapes)
+                existing->sensorEvents = true;
+        }
     }
+    if (m_sensorWatched)
+        made->sensorEvents = true;
     made->tangentSpeed = number(values, "tangentSpeed", 0.0);
     cpShapeSetUserData(shape, made);
 

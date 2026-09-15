@@ -6,6 +6,26 @@
 
 namespace physics {
 
+// A collision filter's bits, read from whatever a scene carried. This is the
+// one place a scene holds a number too big for the double a JSON file stores it
+// in: a file written when the default mask was "every bit set" holds
+// 18446744073709552000 -- 2^64 rounded up, past what a uint64 can hold. Casting
+// that straight over is undefined, and what it produced was a mask of zero: a
+// shape that collides with nothing, and a scene whose bodies fall through the
+// floor. At or beyond the top of the range means all of them.
+inline uint64_t filterBits(const QVariant &value, uint64_t fallback)
+{
+    if (!value.isValid())
+        return fallback;
+    const double asNumber = value.toDouble();
+    if (!(asNumber > 0.0))
+        return 0;
+    if (asNumber >= 18446744073709551615.0)
+        return ~uint64_t(0);
+    return static_cast<uint64_t>(asNumber);
+}
+
+
 // Box2D v3 backend. The only translation unit in the project that includes a
 // Box2D header -- everything above it speaks the structs in PhysicsTypes.h.
 //
@@ -152,6 +172,9 @@ private:
     QVector<QString> m_shapeNames;
     // Where a named shape ended up, so a rule can change one while running.
     QHash<QString, b2ShapeId> m_shapesByName;
+    // A rule watches a sensor somewhere in this world, so every shape has to be
+    // able to set one off -- see addBody.
+    bool m_sensorWatched = false;
 
     // What b2ContactHitEvent said the last time this shape was hit. The event
     // itself only says that it happened; the numbers that came with it are
