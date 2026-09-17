@@ -145,14 +145,12 @@ TEST(PropertyTooltips, JointMeasuredValuesAreReadOnlyAndLoggable)
     PropertyPane *pane = factory.paneForJoints(&scene);
     pane->attach(&scene);
 
-    // These are what the solver produces, so they are offered while it is
-    // producing them and not before: outside a run nothing can answer one, and
-    // a row that reads zero whatever the joint is doing looks like a
-    // measurement without being one.
+    // Offered before a run too, reading what the joint starts at, so one can
+    // be added to the log before anything runs.
     const std::vector<PropertyRow> idle = pane->rows(EditorMode::Physics);
-    EXPECT_TRUE(std::none_of(idle.begin(), idle.end(), [](const PropertyRow &row) {
-        return row.group == QStringLiteral("Measured");
-    })) << "nothing measured is offered while nothing is running";
+    EXPECT_TRUE(std::any_of(idle.begin(), idle.end(), [](const PropertyRow &row) {
+        return row.group == QStringLiteral("Measured") && row.readOnly && !row.key.isEmpty();
+    })) << "nothing measured is offered before the run";
 
     SimulationController sim(&scene, nullptr);
     sim.setEngineName(QStringLiteral("Box2D"));

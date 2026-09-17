@@ -125,6 +125,14 @@ void markRole(PropertyList *list, const QString &key, PropertyRole role)
     }
 }
 
+void markRulesOnly(PropertyList *list, const QStringList &keys)
+{
+    for (JointParam &property : *list) {
+        if (keys.contains(property.key))
+            property.rulesOnly = true;
+    }
+}
+
 void markStored(PropertyList *list, const QHash<QString, QVariant> &defaults,
                 const QString &section)
 {
@@ -277,6 +285,13 @@ PropertyList Box2DEngine::bodyProperties() const
         number(QStringLiteral("rotationalInertia"), QObject::tr("Rotational Inertia (kg·m²)"),
                true, true, 0.0, 1e9, 4, 0.1,
                QObject::tr("How hard it is to start or stop the body spinning.")),
+        // Worked out from b2Body_GetMass, GetRotationalInertia and the two
+        // velocities; Box2D has no call of its own for it.
+        number(QStringLiteral("kineticEnergy"), QObject::tr("Kinetic Energy (mJ)"),
+               true, false, 0.0, 1e15, 3, 0.1,
+               QObject::tr("How much motion it carries, travelling and turning together, in millijoules --"
+                           " a body at the usual scale weighs grams, and joules read as zero."
+                           " Reaches zero when it has come to rest.")),
         // b2Body_GetContactData: how many of this body's shapes are touching
         // something right now, counted across all of them.
         number(QStringLiteral("contactCount"), QObject::tr("Contacts"), true, false,
@@ -380,6 +395,13 @@ PropertyList Box2DEngine::bodyProperties() const
     markRole(&properties, QStringLiteral("velocityX"), PropertyRole::VelocityX);
     markRole(&properties, QStringLiteral("velocityY"), PropertyRole::VelocityY);
     markRole(&properties, QStringLiteral("angularVelocity"), PropertyRole::AngularVelocity);
+    markRulesOnly(&properties, {QStringLiteral("boundsMinX"), QStringLiteral("boundsMinY"),
+                                QStringLiteral("boundsMaxX"), QStringLiteral("boundsMaxY"),
+                                QStringLiteral("localCenterOfMassX"), QStringLiteral("localCenterOfMassY"),
+                                QStringLiteral("centerOfMassX"), QStringLiteral("centerOfMassY"),
+                                // Where it stands is edited on the canvas.
+                                QStringLiteral("positionX"), QStringLiteral("positionY"),
+                                QStringLiteral("angle")});
     return properties;
 }
 
@@ -630,13 +652,6 @@ PropertyList Box2DEngine::shapeProperties() const
                0.0, 1e6, 0, 1.0,
                QObject::tr("How many other shapes this one is touching right now.")),
 
-        // b2Shape_GetMaterial / SetMaterial: a number of your own, which the
-        // world's friction and restitution callbacks can sort shapes by.
-        number(QStringLiteral("materialId"), QObject::tr("Material Id"), true, true,
-               0.0, 1e9, 0, 1.0,
-               QObject::tr("A number of your own for grouping surfaces -- ice, rubber, mud."
-                           " Box2D does nothing with it unless a callback reads it.")),
-
         // b2Shape_IsSensor. There is no setter: what a shape is was decided
         // when it was made.
         flag(QStringLiteral("isSensor"), QObject::tr("Sensor"), true, false,
@@ -682,7 +697,6 @@ PropertyList Box2DEngine::shapeProperties() const
     };
 
     markStored(&properties, {
-        {QStringLiteral("materialId"), 0.0},
         {QStringLiteral("density"), 1.0},
         {QStringLiteral("friction"), 0.6},
         {QStringLiteral("restitution"), 0.0},
@@ -702,6 +716,15 @@ PropertyList Box2DEngine::shapeProperties() const
     }, QObject::tr("Collision"));
     markRole(&properties, QStringLiteral("isSensor"), PropertyRole::Sensor);
     markRole(&properties, QStringLiteral("density"), PropertyRole::Density);
+    markRulesOnly(&properties, {QStringLiteral("boundsMinX"), QStringLiteral("boundsMinY"),
+                                QStringLiteral("boundsMaxX"), QStringLiteral("boundsMaxY"),
+                                QStringLiteral("centerOfMassX"), QStringLiteral("centerOfMassY"),
+                                QStringLiteral("lastHitSpeed"), QStringLiteral("lastHitX"),
+                                QStringLiteral("lastHitY"), QStringLiteral("lastHitNormalX"),
+                                QStringLiteral("lastHitNormalY"),
+                                // The size is drawn; and a sensor's count belongs
+                                // with the rules that watch it.
+                                QStringLiteral("radius"), QStringLiteral("sensorOverlapCount")});
     return properties;
 }
 

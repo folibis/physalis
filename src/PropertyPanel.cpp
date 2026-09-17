@@ -188,6 +188,9 @@ void PropertyPanel::addRow(QTableWidget *table, const PropertyRow &row)
         [this, rawSetter, editLabel](const QVariant &value) {
             rawSetter(value);
             reportEdit(editLabel);
+            // A setting moves what a reading starts at -- density moves mass.
+            // Queued, after the edit has reached the scene.
+            QMetaObject::invokeMethod(this, &PropertyPanel::refreshReadings, Qt::QueuedConnection);
         };
 
     QWidget *editor = nullptr;
@@ -332,7 +335,7 @@ void PropertyPanel::addRow(QTableWidget *table, const PropertyRow &row)
 
     table->setCellWidget(tableRow, 1, cellWidget ? cellWidget : editor);
     m_rows.push_back({row.type, editor, row.getter, nameLabel, resetButton, row.defaultValue,
-                      row.key, row.section, row.label, row.group});
+                      row.key, row.section, row.label, row.group, row.readOnly});
 }
 
 void PropertyPanel::rebuildRows()
@@ -377,6 +380,7 @@ void PropertyPanel::rebuildRows()
 
     refreshValues();
     updateWatchMarks();
+    updateEditable();
 }
 
 void PropertyPanel::setActivePane(PropertyPane *pane)
@@ -511,7 +515,15 @@ void *PropertyPanel::subject() const
 
 void PropertyPanel::updateEditable()
 {
-    setEnabled(!m_scene || m_scene->selectionAllowed());
+    // The editors, not the panel: a disabled widget gets no right-click, and
+    // a run is exactly when a row is added to the log.
+    const bool editable = !m_scene || m_scene->selectionAllowed();
+    for (const Row &row : m_rows) {
+        if (row.editor && !row.readOnly)
+            row.editor->setEnabled(editable);
+        if (row.resetButton)
+            row.resetButton->setEnabled(editable);
+    }
 }
 
 void PropertyPanel::setScene(CanvasScene *scene)
@@ -632,19 +644,37 @@ void PropertyPanel::updateModifiedMarks()
     }
 }
 
+void PropertyPanel::refreshReadings()
+{
+    refreshRows(true);
+}
+
 void PropertyPanel::refreshValues()
 {
     updateModifiedMarks();
+    refreshRows(false);
+}
 
+void PropertyPanel::refreshRows(bool readingsOnly)
+{
     m_updating = true;
     for (const Row &row : m_rows) {
+        // Settings are left alone: one may be mid-edit.
+        if (readingsOnly && !row.readOnly)
+            continue;
         QVariant value = row.getter();
-        // A row the document cannot answer is the run's to fill. These are
-        // only built while one is going, so there is always something to ask.
+        // A row the document cannot answer is the run's to fill.
         if (!value.isValid() && !row.key.isEmpty() && m_scene) {
             const QString object = objectNameFor(row.section);
             if (!object.isEmpty())
                 value = m_scene->liveValue(object, row.key);
+        }
+        // Nothing to answer with -- no engine, no body built: an empty box,
+        // not a zero that reads like a measurement.
+        if (!value.isValid() && row.readOnly) {
+            if (auto *spin = qobject_cast<QAbstractSpinBox *>(row.editor))
+                spin->clear();
+            continue;
         }
 
         switch (row.type) {

@@ -11,6 +11,8 @@
 
 #include <QHash>
 #include "EngineRegistry.h"
+#include "Naming.h"
+#include "SceneSerializer.h"
 
 #include <QTimer>
 #include <QtMath>
@@ -84,7 +86,7 @@ void SimulationController::restoreSnapshot()
     m_snapshot.clear();
 }
 
-void SimulationController::addFieldBounds()
+void SimulationController::addFieldBounds(IPhysicsEngine *engine) const
 {
     const QRectF field = m_scene->sceneRect();
     if (field.isEmpty())
@@ -110,7 +112,7 @@ void SimulationController::addFieldBounds()
         part.geometry.halfExtents = QPointF(wall.width() / 2.0, wall.height() / 2.0);
         desc.parts.append(part);
 
-        m_engine->addBody(desc);
+        engine->addBody(desc);
     }
 }
 
@@ -118,6 +120,7 @@ void SimulationController::start()
 {
     if (isActive())
         return;
+    dropPreview();
 
     m_engine = EngineRegistry::create(m_engineName);
     if (!m_engine)
@@ -132,8 +135,6 @@ void SimulationController::start()
     m_pendingRunAction.clear();
     m_elapsedSeconds = 0.0;
     m_frameCount = 0;
-
-    m_engine->createWorld(m_scene->toWorldDesc());
 
     QSet<QString> contactSources;
     for (const Rule &rule : m_scene->rules()) {
@@ -154,14 +155,62 @@ void SimulationController::start()
         }
     }
 
+    Built built;
+    const bool anything = buildWorld(m_engine.get(), &built);
+    m_skippedBodies = built.skippedBodies;
+    m_skippedJoints = built.skippedJoints;
+    if (!anything) {
+        m_engine.reset();
+        m_skippedBodies.clear();
+        return;
+    }
+    m_bound = built.bound;
+    m_bodyByName = built.bodyByName;
+    m_jointByName = built.jointByName;
+    m_bodyNames.clear();
+    for (const BoundBody &bound : std::as_const(m_bound)) {
+        if (m_bodyNames.size() <= bound.handle)
+            m_bodyNames.resize(bound.handle + 1);
+        m_bodyNames[bound.handle] = bound.body->name();
+    }
+    m_jointNames.clear();
+    for (auto it = m_jointByName.cbegin(); it != m_jointByName.cend(); ++it) {
+        if (m_jointNames.size() <= it.value())
+            m_jointNames.resize(it.value() + 1);
+        m_jointNames[it.value()] = it.key();
+    }
+
+    captureSnapshot();
+    captureJointParams();
+
+    m_state = State::Running;
+    m_scene->setSimulationRunning(true);
+    m_owedTime = 0.0;
+    m_clock.start();
+    m_timer->start();
+    // Where every body stands as the run begins, for "Init state" -- taken
+    // before the start rules move anything.
+    m_startPoses.clear();
+    for (const BoundBody &bound : std::as_const(m_bound)) {
+        const physics::BodyDesc desc = bound.body->toBodyDesc();
+        m_startPoses.insert(bound.body, qMakePair(desc.position, desc.rotationDegrees));
+    }
+    applyStartRules();
+    emit stateChanged();
+}
+
+bool SimulationController::buildWorld(IPhysicsEngine *engine, Built *built) const
+{
+    engine->createWorld(m_scene->toWorldDesc());
+
     for (PhysicsBody *body : m_scene->bodies()) {
         if (body->isEmpty() || !body->props().isEnabled)
             continue;
 
         const BodyDesc desc = body->toBodyDesc();
-        const BodyHandle handle = m_engine->addBody(desc);
+        const BodyHandle handle = engine->addBody(desc);
         if (handle == kInvalidBody) {
-            m_skippedBodies << body->name();
+            built->skippedBodies << body->name();
             continue;
         }
 
@@ -182,34 +231,23 @@ void SimulationController::start()
             bound.shapes.append(boundShape);
         }
 
-        m_bound.append(bound);
+        built->bound.append(bound);
+        built->bodyByName.insert(body->name(), handle);
     }
 
-    if (m_bound.isEmpty()) {
-        m_engine->destroyWorld();
-        m_engine.reset();
-        m_skippedBodies.clear();
-        return;
+    if (built->bound.isEmpty()) {
+        engine->destroyWorld();
+        return false;
     }
 
     QHash<const PhysicsBody *, BodyHandle> handles;
-    m_bodyByName.clear();
-    m_bodyNames.clear();
-    for (const BoundBody &bound : m_bound) {
+    for (const BoundBody &bound : std::as_const(built->bound))
         handles.insert(bound.body, bound.handle);
-        m_bodyByName.insert(bound.body->name(), bound.handle);
-        if (m_bodyNames.size() <= bound.handle)
-            m_bodyNames.resize(bound.handle + 1);
-        m_bodyNames[bound.handle] = bound.body->name();
-    }
-
-    m_jointByName.clear();
-    m_jointNames.clear();
 
     for (Joint *joint : m_scene->joints()) {
         const auto a = handles.constFind(joint->bodyA());
         if (a == handles.constEnd()) {
-            m_skippedJoints << joint->name();
+            built->skippedJoints << joint->name();
             continue;
         }
         // No second body means the joint holds this one to a point in the
@@ -218,43 +256,77 @@ void SimulationController::start()
         if (joint->bodyB()) {
             const auto b = handles.constFind(joint->bodyB());
             if (b == handles.constEnd()) {
-                m_skippedJoints << joint->name();
+                built->skippedJoints << joint->name();
                 continue;
             }
             handleB = *b;
         }
 
-        const JointHandle handle = m_engine->addJoint(joint->toJointDesc(*a, handleB));
+        const JointHandle handle = engine->addJoint(joint->toJointDesc(*a, handleB));
         if (handle == kInvalidJoint) {
-            m_skippedJoints << joint->name();
+            built->skippedJoints << joint->name();
             continue;
         }
-        m_jointByName.insert(joint->name(), handle);
-        if (m_jointNames.size() <= handle)
-            m_jointNames.resize(handle + 1);
-        m_jointNames[handle] = joint->name();
+        built->jointByName.insert(joint->name(), handle);
     }
 
     if (m_scene->fieldBoundsSolid())
-        addFieldBounds();
+        addFieldBounds(engine);
+    return true;
+}
 
-    captureSnapshot();
-    captureJointParams();
+QVariant SimulationController::initialValue(const QString &name, const QString &key)
+{
+    if (isActive())
+        return readValue(name, key);
 
-    m_state = State::Running;
-    m_scene->setSimulationRunning(true);
-    m_owedTime = 0.0;
-    m_clock.start();
-    m_timer->start();
-    // Where every body stands as the run begins, for "Init state" -- taken
-    // before the start rules move anything.
-    m_startPoses.clear();
-    for (const BoundBody &bound : std::as_const(m_bound)) {
-        const physics::BodyDesc desc = bound.body->toBodyDesc();
-        m_startPoses.insert(bound.body, qMakePair(desc.position, desc.rotationDegrees));
+    if (name == Rule::world()) {
+        if (key == QLatin1String("time") || key == QLatin1String("frame"))
+            return 0.0;
     }
-    applyStartRules();
-    emit stateChanged();
+    if (m_scene->rayNamed(name))
+        return {};
+
+    if (!m_preview) {
+        m_preview = EngineRegistry::create(m_engineName);
+        if (!m_preview)
+            return {};
+        m_previewBuilt = Built();
+        if (!buildWorld(m_preview.get(), &m_previewBuilt)) {
+            m_preview.reset();
+            return {};
+        }
+        QTimer::singleShot(0, this, &SimulationController::dropPreview);
+    }
+    return readFrom(m_preview.get(), m_previewBuilt.bodyByName, m_previewBuilt.jointByName, name, key);
+}
+
+void SimulationController::dropPreview()
+{
+    if (!m_preview)
+        return;
+    m_preview->destroyWorld();
+    m_preview.reset();
+    m_previewBuilt = Built();
+}
+
+QVariant SimulationController::readFrom(const IPhysicsEngine *engine,
+                                        const QHash<QString, BodyHandle> &bodies,
+                                        const QHash<QString, JointHandle> &joints,
+                                        const QString &name, const QString &key)
+{
+    if (name == Rule::world())
+        return engine->worldValue(key);
+
+    const auto joint = joints.constFind(name);
+    if (joint != joints.constEnd())
+        return engine->jointValue(*joint, key);
+
+    const auto body = bodies.constFind(name);
+    if (body != bodies.constEnd())
+        return engine->bodyValue(*body, key);
+
+    return engine->shapeValue(name, key);
 }
 
 void SimulationController::initState(PhysicsBody *body)
@@ -279,6 +351,108 @@ void SimulationController::initState(PhysicsBody *body)
     set(physics::PropertyRole::VelocityX, 0.0);
     set(physics::PropertyRole::VelocityY, 0.0);
     set(physics::PropertyRole::AngularVelocity, 0.0);
+}
+
+void SimulationController::cloneBody(PhysicsBody *parent, const QPointF &at)
+{
+    if (!m_engine || !parent || parent->isEmpty())
+        return;
+
+    // Where each shape stood as the run started. A body the run has moved, or
+    // taken away, is cloned as it was drawn; a clone of a clone, which was
+    // never in the snapshot, as it stands.
+    QHash<ShapeItem *, const Snapshot *> startOf;
+    for (const Snapshot &entry : std::as_const(m_snapshot))
+        startOf.insert(entry.shape, &entry);
+
+    PhysicsBody *body = m_scene->createEmptyBody(false);
+    body->setRunOnly(true);
+    // Straight into the props, not through setName: a name change is passed on
+    // to every rule naming the old one, and the old one here is the parent's.
+    const QString name = Naming::makeUnique(parent->name(), m_scene->takenNames(body));
+    body->props() = parent->props();
+    body->props().name = name;
+    body->shot() = parent->shot();
+
+    for (ShapeItem *original : parent->shapes()) {
+        ShapeItem *copy = SceneSerializer::shapeFromJson(SceneSerializer::shapeToJson(original));
+        if (!copy)
+            continue;
+        if (const Snapshot *start = startOf.value(original)) {
+            copy->setPos(start->pos);
+            copy->setRotation(start->rotation);
+        } else {
+            copy->setPos(original->pos());
+            copy->setRotation(original->rotation());
+        }
+        copy->setVisible(true);
+        copy->part().watchedByRules = original->part().watchedByRules;
+        m_scene->addItem(copy);
+        copy->setName(Naming::makeUnique(original->name(), m_scene->takenNames(copy)));
+        body->addShape(copy);
+    }
+    if (body->isEmpty()) {
+        m_scene->destroyBody(body, false);
+        return;
+    }
+
+    // The body's origin onto the point asked for, every shape moved with it.
+    const QPointF shift = at - body->originScenePos();
+    for (ShapeItem *shape : body->shapes())
+        shape->setPos(shape->pos() + shift);
+
+    const physics::BodyDesc desc = body->toBodyDesc();
+    const physics::BodyHandle handle = m_engine->addBody(desc);
+    if (handle == physics::kInvalidBody) {
+        m_problems << tr("%1 could not be cloned").arg(parent->name());
+        const QVector<ShapeItem *> shapes = body->shapes();
+        for (ShapeItem *shape : shapes) {
+            body->removeShape(shape);
+            delete shape;
+        }
+        m_scene->destroyBody(body, false);
+        emit stateChanged();
+        return;
+    }
+
+    BoundBody bound;
+    bound.body = body;
+    bound.handle = handle;
+    QTransform bodyToScene;
+    bodyToScene.translate(desc.position.x(), desc.position.y());
+    bodyToScene.rotate(desc.rotationDegrees);
+    const QTransform sceneToBody = bodyToScene.inverted();
+    for (ShapeItem *shape : body->shapes()) {
+        BoundShape boundShape;
+        boundShape.shape = shape;
+        boundShape.localPivot = sceneToBody.map(shape->pos() + shape->origin());
+        boundShape.localRotation = shape->rotation() - desc.rotationDegrees;
+        bound.shapes.append(boundShape);
+    }
+    m_bound.append(bound);
+    m_bodyByName.insert(name, handle);
+    if (m_bodyNames.size() <= handle)
+        m_bodyNames.resize(handle + 1);
+    m_bodyNames[handle] = name;
+    // "Init state" on a clone puts it back where it was made.
+    m_startPoses.insert(body, qMakePair(desc.position, desc.rotationDegrees));
+    m_clones.append(body);
+    m_scene->update();
+}
+
+void SimulationController::deleteClones()
+{
+    for (PhysicsBody *body : std::as_const(m_clones)) {
+        m_startPoses.remove(body);
+        m_bodyByName.remove(body->name());
+        const QVector<ShapeItem *> shapes = body->shapes();
+        for (ShapeItem *shape : shapes) {
+            body->removeShape(shape);
+            delete shape;
+        }
+        m_scene->destroyBody(body, false);
+    }
+    m_clones.clear();
 }
 
 void SimulationController::applyStartRules()
@@ -395,6 +569,7 @@ void SimulationController::stop()
         joint->setBroken(false);
 
     m_bound.clear();
+    deleteClones();
     m_state = State::Stopped;
     m_scene->setSimulationRunning(false);
     emit stateChanged();
@@ -596,6 +771,11 @@ bool SimulationController::evaluate(
     case Rule::Compare::Less:         return a < b;
     case Rule::Compare::GreaterEqual: return a >= b;
     case Rule::Compare::LessEqual:    return a <= b;
+    case Rule::Compare::Multiple: {
+        const qint64 step = qRound64(b);
+        const qint64 whole = qRound64(a);
+        return step != 0 && whole != 0 && whole % step == 0;
+    }
     }
     return false;
 }
@@ -624,18 +804,8 @@ QVariant SimulationController::readValue(const QString &name, const QString &key
         if (key == QLatin1String("frame"))
             return double(m_frameCount);
         // Everything else the world can be asked is the engine's to answer.
-        return m_engine->worldValue(key);
     }
-
-    const auto joint = m_jointByName.constFind(name);
-    if (joint != m_jointByName.constEnd())
-        return m_engine->jointValue(*joint, key);
-
-    const auto body = m_bodyByName.constFind(name);
-    if (body != m_bodyByName.constEnd())
-        return m_engine->bodyValue(*body, key);
-
-    return m_engine->shapeValue(name, key);
+    return readFrom(m_engine.get(), m_bodyByName, m_jointByName, name, key);
 }
 
 QVariantMap SimulationController::defaultsFor(const QString &actionId) const
@@ -728,6 +898,22 @@ void SimulationController::applyAction(const Rule &rule)
     // the stack. It is remembered and carried out once the step is finished.
     if (rule.isRunAction()) {
         m_pendingRunAction = rule.actionId;
+        return;
+    }
+
+    // So is "Clone": no engine knows the canvas the copy has to appear on.
+    if (rule.actionId == Rule::cloneAction()) {
+        PhysicsBody *parent = nullptr;
+        for (PhysicsBody *body : m_scene->bodies()) {
+            if (body->name() == rule.targetName)
+                parent = body;
+        }
+        for (ShapeItem *shape : m_scene->shapes()) {
+            if (!parent && shape->name() == rule.targetName)
+                parent = shape->body();
+        }
+        cloneBody(parent, QPointF(rule.actionParams.value(Rule::cloneXParam()).toDouble(),
+                                  rule.actionParams.value(Rule::cloneYParam()).toDouble()));
         return;
     }
 

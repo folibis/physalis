@@ -130,7 +130,8 @@ QVariant ChipmunkEngine::bodyValue(BodyHandle handle, const QString &key) const
         const cpVect centre = cpBodyLocalToWorld(body, cpBodyGetCenterOfGravity(body));
         return (key == QLatin1String("centerOfMassX") ? centre.x : centre.y) * ppm;
     }
-    if (key == QLatin1String("kineticEnergy"))     return finiteOrZero(cpBodyKineticEnergy(body));
+    // cpBodyKineticEnergy is m·v² + I·ω², without the half; and in millijoules.
+    if (key == QLatin1String("kineticEnergy"))     return finiteOrZero(500.0 * cpBodyKineticEnergy(body));
     return {};
 }
 

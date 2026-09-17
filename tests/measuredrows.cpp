@@ -39,11 +39,9 @@ QWidget *editorFor(PropertyPanel *panel, const char *label)
 
 } // namespace
 
-// Position, angle and speed are what the solver produces. Nothing outside a
-// run can answer them, and the row's own getter returns nothing on purpose --
-// so for as long as they were offered outside one they read a flat zero, which
-// looks like a measurement and is not one. They are offered while a run is
-// going, and they carry what it says.
+// Speed and mass are what the solver produces. Before a run they
+// read what the body starts with -- asked of a world built and not stepped --
+// and during one what the run says; never a flat zero standing in for either.
 TEST(MeasuredRows, Behaves)
 {
     MainWindow window;
@@ -64,28 +62,31 @@ TEST(MeasuredRows, Behaves)
     scene->notifyShapesChanged();
     scene->setEditorMode(EditorMode::Physics);
     scene->selectForPhysics(shape, true);
-    ASSERT_TRUE(scene->createBodyFromSelection() != nullptr);
+    PhysicsBody *crate = scene->createBodyFromSelection();
+    ASSERT_TRUE(crate != nullptr);
+    // Moving from the start, whatever the world's gravity happens to be.
+    crate->props().params["velocityX"] = 10.0;
     scene->clearPhysicsSelection();
     scene->selectForPhysics(shape);
     settle();
 
+    auto *mass = qobject_cast<QDoubleSpinBox *>(editorFor(panel, "Mass (kg)"));
+    ASSERT_TRUE(mass) << "offered before the run";
+    EXPECT_GT(mass->value(), 0.0) << "reading what the body starts with, not zero";
     EXPECT_TRUE(editorFor(panel, "Position X") == nullptr)
-        << "nothing running, so nothing measured is offered";
+        << "where a body stands is edited on the canvas, not read here";
 
     sim->setEngineName(QStringLiteral("Box2D"));
     sim->start();
-    sim->stepFrame();
+    for (int i = 0; i < 10; ++i)
+        sim->stepFrame();
     settle();
 
-    auto *x = qobject_cast<QDoubleSpinBox *>(editorFor(panel, "Position X"));
-    auto *y = qobject_cast<QDoubleSpinBox *>(editorFor(panel, "Position Y (down is positive)"));
-    ASSERT_TRUE(x && y) << "a run offers them";
-    EXPECT_NEAR(x->value(), 300.0, 5.0)
-        << "and they say where the body is, not zero" << " -- read " << x->value();
-    EXPECT_LT(y->value(), -100.0) << "read " << y->value();
+    auto *speed = qobject_cast<QDoubleSpinBox *>(editorFor(panel, "Speed"));
+    ASSERT_TRUE(speed) << "a run offers it";
+    EXPECT_GT(speed->value(), 0.0) << "a moving crate reads as moving -- read " << speed->value();
 
     sim->stop();
     settle();
-    EXPECT_TRUE(editorFor(panel, "Position X") == nullptr)
-        << "and they go again when it ends";
+    EXPECT_TRUE(editorFor(panel, "Speed") != nullptr) << "and it stays when the run ends";
 }

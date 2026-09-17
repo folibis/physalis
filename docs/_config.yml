@@ -1,0 +1,13 @@
+title: Physalis
+description: Build 2D physics scenes, write rules for them, and run them.
+remote_theme: just-the-docs/just-the-docs
+plugins:
+  - jekyll-remote-theme
+
+# Diagrams in ```mermaid blocks are drawn on the page.
+mermaid:
+  version: "10.9.0"
+
+search_enabled: true
+aux_links:
+  "Physalis on GitHub": "https://github.com/folibis/physalis"

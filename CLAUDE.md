@@ -202,6 +202,22 @@ when the run started (taken in `start()`, before the start rules), facing the
 same way, and not moving. The engine's position, angle and velocity properties
 are found by role -- `PropertyRole::PositionX` and the rest.
 
+**"Clone" is the application's own action on a body** (`Rule::cloneAction()`,
+X and Y in `actionParams`): a copy of every shape, through the same JSON as
+Duplicate, posed as the run's snapshot found the parent -- so a removed body
+can still be cloned -- and moved so its origin lands on X, Y, then added to the
+world. Clones are run state: `PhysicsBody::isRunOnly()`, left out of a save,
+made and destroyed without `bodiesChanged` (every panel listing bodies would
+rebuild per clone), and deleted by `stop()`. Rules name no clone.
+
+**Read-only rows are there before a run too.** They read what the object
+starts with: `SimulationController::initialValue` builds the scene into a
+world it never steps (`buildWorld`, the same code `start()` uses), reads it, and
+drops it at the end of that pass of the event loop so it never answers for a
+scene that has since changed. A reading an engine marks `rulesOnly` -- bounds,
+centre of mass, last hit, position and angle (edited on the canvas), a circle's
+radius, a sensor's count -- stays out of the table and in the rule menus.
+
 **Two world actions are the application's own**:
 `Rule::stopRunAction()` and `holdRunAction()`, offered on the world because
 that is what a rule names when it means the simulation itself. No engine knows

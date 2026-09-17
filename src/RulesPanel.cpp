@@ -470,6 +470,7 @@ QWidget *RulesPanel::buildCard(int index)
     row.compare->addItem(tr("is at most"), Rule::compareName(Rule::Compare::LessEqual));
     row.compare->addItem(tr("equals"), Rule::compareName(Rule::Compare::Equal));
     row.compare->addItem(tr("differs from"), Rule::compareName(Rule::Compare::NotEqual));
+    row.compare->addItem(tr("is a multiple of"), Rule::compareName(Rule::Compare::Multiple));
     row.compare->setCurrentIndex(row.compare->findData(Rule::compareName(rule.compare)));
     row.compare->setToolTip(tr("The action runs when this becomes true, not for as long"
                                  " as it stays true."));
@@ -907,6 +908,8 @@ void RulesPanel::refreshConditionEditor(int index)
             row.compare->addItem(tr("equals"), Rule::compareName(Rule::Compare::Equal));
             row.compare->addItem(tr("differs from"),
                                  Rule::compareName(Rule::Compare::NotEqual));
+            row.compare->addItem(tr("is a multiple of"),
+                                 Rule::compareName(Rule::Compare::Multiple));
         } else {
             row.compare->addItem(tr("is"), Rule::compareName(Rule::Compare::Equal));
             row.compare->addItem(tr("is not"), Rule::compareName(Rule::Compare::NotEqual));
@@ -1064,6 +1067,7 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
     // engine knows where a run started.
     const auto addInitState = [&result] {
         result.append({actionKey(Rule::initStateAction()), tr("Init state")});
+        result.append({actionKey(Rule::cloneAction()), tr("Clone")});
     };
 
     if (m_scene->explosionNamed(name)) {
@@ -1104,9 +1108,38 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
     return result;
 }
 
+// The settings of the actions the application performs itself.
+static physics::ActionType applicationAction(const QString &id)
+{
+    physics::ActionType action;
+    if (id != Rule::cloneAction())
+        return action;
+    action.id = id;
+    action.description = QObject::tr("Makes a new body just like this one, as the run found it,"
+                                     " with its origin at X and Y. It works on a body already"
+                                     " removed, and lasts until the run ends.");
+    for (const auto &[key, label] : {std::pair { Rule::cloneXParam(), QObject::tr("X") },
+                                     std::pair { Rule::cloneYParam(), QObject::tr("Y") }}) {
+        physics::JointParam param;
+        param.key = key;
+        param.label = label;
+        param.defaultValue = 0.0;
+        param.minValue = -1e7;
+        param.maxValue = 1e7;
+        param.decimals = 1;
+        param.step = 10.0;
+        action.params.append(param);
+    }
+    return action;
+}
+
 QVariantMap RulesPanel::defaultActionParams(const QString &id) const
 {
     QVariantMap params;
+    for (const physics::JointParam &param : applicationAction(id).params)
+        params.insert(param.key, param.defaultValue);
+    if (!params.isEmpty())
+        return params;
     auto engine = physics::EngineRegistry::create(
         m_scene ? m_scene->simulationEngineName() : QString());
     if (!engine)
@@ -1126,9 +1159,10 @@ QWidget *RulesPanel::buildActionParamEditor(int index, const Rule &rule,
     auto engine = physics::EngineRegistry::create(
         m_scene ? m_scene->simulationEngineName() : QString());
 
-    QVector<physics::JointParam> params;
-    QString description;
-    if (engine) {
+    const physics::ActionType ownAction = applicationAction(rule.actionId);
+    QVector<physics::JointParam> params = ownAction.params;
+    QString description = ownAction.description;
+    if (engine && params.isEmpty()) {
         for (const physics::ActionType &action :
              engine->bodyActions() + engine->jointActions()) {
             if (action.id != rule.actionId)

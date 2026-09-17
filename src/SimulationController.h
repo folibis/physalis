@@ -36,6 +36,10 @@ public:
     // One readable property of one named object, in scene units -- the same
     // reading the rules do. The log uses it to show live values.
     QVariant readValue(const QString &name, const QString &key) const;
+    // The same reading before a run: what the object starts with -- its mass,
+    // its speed from the velocity it is given -- asked of a world built from
+    // the scene and never stepped. During a run it is readValue.
+    QVariant initialValue(const QString &name, const QString &key);
     void setEngineName(const QString &name);
 
     QStringList skippedBodies() const { return m_skippedBodies; }
@@ -82,7 +86,7 @@ private:
     void captureJointParams();
     void restoreJointParams();
     void restoreSnapshot();
-    void addFieldBounds();
+    void addFieldBounds(physics::IPhysicsEngine *engine) const;
 
     struct BoundShape {
         ShapeItem *shape = nullptr;
@@ -101,6 +105,29 @@ private:
         QPointF pos;
         qreal rotation = 0.0;
     };
+
+    // Builds the scene into an engine's fresh world: every enabled body, the
+    // joints between them and the field's walls. False, with the world taken
+    // down again, when there was no body to build.
+    struct Built {
+        QVector<BoundBody> bound;
+        QHash<QString, physics::BodyHandle> bodyByName;
+        QHash<QString, physics::JointHandle> jointByName;
+        QStringList skippedBodies;
+        QStringList skippedJoints;
+    };
+    bool buildWorld(physics::IPhysicsEngine *engine, Built *built) const;
+    static QVariant readFrom(const physics::IPhysicsEngine *engine,
+                             const QHash<QString, physics::BodyHandle> &bodies,
+                             const QHash<QString, physics::JointHandle> &joints,
+                             const QString &name, const QString &key);
+
+    // The unstepped world initialValue reads. Kept for the rest of this pass of
+    // the event loop, so a property table asking a dozen rows builds it once,
+    // and dropped after, so it never answers for a scene that has changed.
+    std::unique_ptr<physics::IPhysicsEngine> m_preview;
+    Built m_previewBuilt;
+    void dropPreview();
 
     CanvasScene *m_scene = nullptr;
     std::unique_ptr<physics::IPhysicsEngine> m_engine;
@@ -134,6 +161,12 @@ private:
     // "Init state": the body back where it stood when the run started, facing
     // the same way, and not moving.
     void initState(PhysicsBody *body);
+    // "Clone": a copy of the body as the run found it, placed with its origin
+    // at `at`, added to the canvas and to the world.
+    void cloneBody(PhysicsBody *parent, const QPointF &at);
+    // What cloneBody made, deleted when the run ends.
+    QVector<PhysicsBody *> m_clones;
+    void deleteClones();
     // Where each body stood, and which way it faced, as the run started.
     QHash<PhysicsBody *, QPair<QPointF, qreal>> m_startPoses;
     // Set while the answers are carried out, so an answer that removes the

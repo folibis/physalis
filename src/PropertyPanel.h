@@ -33,6 +33,8 @@ public slots:
     void setEditorMode(EditorMode mode);
     void showSection(const QString &section);
     void refreshValues();
+    // Only the read-only rows, which follow the settings rather than hold one.
+    void refreshReadings();
 
 signals:
     void fieldSettingsChanged();
@@ -53,11 +55,13 @@ private:
         // them carry a switch called "Enabled", so the group is what tells
         // them apart once the row is out of the table.
         QString group;
+        bool readOnly = false;
     };
 
     void setActivePane(PropertyPane *pane);
     void updateActivePane();
     void updateEditable();
+    void refreshRows(bool readingsOnly);
     // Turns a row's setter call into an undo step; see the wrapper in addRow().
     void reportEdit(const QString &label);
     void *subject() const;

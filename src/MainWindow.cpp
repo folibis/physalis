@@ -366,9 +366,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_undo, &UndoStack::changed, this, &MainWindow::updateUndoActions);
     connect(m_undo, &UndoStack::changed, this, &MainWindow::updateWindowTitle);
     m_scene->setLiveValueProvider([this](const QString &object, const QString &key) -> QVariant {
-        if (!m_simulation || !m_simulation->isActive())
+        if (!m_simulation)
             return {};
-        return m_simulation->readValue(object, key);
+        return m_simulation->initialValue(object, key);
     });
     // A body flung with the mouse. The canvas knows the gesture; only the run
     // can push anything.
@@ -1213,6 +1213,15 @@ QString MainWindow::logLabelFor(const CanvasScene::Watch &watch) const
     return watch.label;
 }
 
+// Two decimals for most things, but a light body's energy or mass is a few
+// thousandths, and two decimals made it read as zero.
+static QString formatLogNumber(double v)
+{
+    if (v == 0.0 || qAbs(v) >= 1.0)
+        return QString::number(v, 'f', 2);
+    return QString::number(v, 'g', 3);
+}
+
 void MainWindow::updateLogOverlay()
 {
     if (!m_logOverlay)
@@ -1245,7 +1254,7 @@ void MainWindow::updateLogOverlay()
         if (value.isValid()) {
             shown = value.typeId() == QMetaType::Bool
                         ? (value.toBool() ? tr("true") : tr("false"))
-                        : QString::number(value.toDouble(), 'f', 2);
+                        : formatLogNumber(value.toDouble());
         }
         // "@world" is an internal handle, not something to show a reader.
         const QString who = watch.objectName == Rule::world() ? tr("World")

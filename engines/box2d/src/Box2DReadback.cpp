@@ -76,6 +76,12 @@ QVariant Box2DEngine::bodyValue(BodyHandle handle, const QString &key) const
         return b2Body_GetMass(body);
     if (key == QLatin1String("rotationalInertia"))
         return b2Body_GetRotationalInertia(body);
+    if (key == QLatin1String("kineticEnergy")) {
+        const float v = b2Length(b2Body_GetLinearVelocity(body));
+        const float w = b2Body_GetAngularVelocity(body);
+        // In millijoules, as the catalogue quotes it.
+        return 500.0 * (b2Body_GetMass(body) * v * v + b2Body_GetRotationalInertia(body) * w * w);
+    }
     if (key == QLatin1String("localCenterOfMassX"))
         return toScene(b2Body_GetLocalCenterOfMass(body).x);
     if (key == QLatin1String("localCenterOfMassY"))

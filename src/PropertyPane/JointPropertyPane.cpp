@@ -80,39 +80,35 @@ std::vector<PropertyRow> JointPropertyPane::measuredRows(Joint *joint,
     if (!engine)
         return result;
 
+    // Blank until a run fills them, but always there: a row that only exists
+    // while running cannot be added to the log before the run starts.
+    const QString group = QObject::tr("Measured");
+    for (const physics::JointParam &param : engine->jointReadables(type.id)) {
+        // Anything the joint already offers as a setting is shown there; this
+        // is only for what can be read and not written. A readable that merely
+        // reports such a setting is the same row twice, and the engine says so.
+        if (param.liveSettable || param.mirrorsSetting || param.rulesOnly)
+            continue;
 
-    // Only while a run is going: nothing else can answer these, and a row
-    // showing a flat zero whatever is happening looks like a measurement
-    // without being one.
-    if (m_scene && m_scene->simulationRunning()) {
-        const QString group = QObject::tr("Measured");
-        for (const physics::JointParam &param : engine->jointReadables(type.id)) {
-            // Anything the joint already offers as a setting is shown there; this
-            // is only for what can be read and not written. A readable that merely
-            // reports such a setting is the same row twice, and the engine says so.
-            if (param.liveSettable || param.mirrorsSetting)
-                continue;
+        PropertyRow row;
+        row.label = param.label;
+        row.key = param.key;
+        row.type = fieldTypeFor(param.type);
+        row.section = jointSection();
+        row.group = group;
+        row.minValue = param.minValue;
+        row.maxValue = param.maxValue;
+        row.choices = param.choices;
+        row.decimals = param.decimals;
+        row.step = param.step;
+        row.tooltip = param.tooltip;
+        row.readOnly = true;
+        // Filled by the engine while a run is going, and blank outside one --
+        // the same bargain the body's position and speed rows make.
+        row.getter = [] { return QVariant(); };
+        row.setter = [](const QVariant &) {};
 
-            PropertyRow row;
-            row.label = param.label;
-            row.key = param.key;
-            row.type = fieldTypeFor(param.type);
-            row.section = jointSection();
-            row.group = group;
-            row.minValue = param.minValue;
-            row.maxValue = param.maxValue;
-            row.choices = param.choices;
-            row.decimals = param.decimals;
-            row.step = param.step;
-            row.tooltip = param.tooltip;
-            row.readOnly = true;
-            // Filled by the engine while a run is going, and blank outside one --
-            // the same bargain the body's position and speed rows make.
-            row.getter = [] { return QVariant(); };
-            row.setter = [](const QVariant &) {};
-
-            result.push_back(std::move(row));
-        }
+        result.push_back(std::move(row));
     }
 
     return result;

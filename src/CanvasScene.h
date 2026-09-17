@@ -138,7 +138,9 @@ public:
 
     PhysicsBody *createBodyFromSelection();
 
-    PhysicsBody *createEmptyBody();
+    // `announce` false for a body a run makes and takes away again: the panels
+    // listing bodies would otherwise rebuild for every clone a rule makes.
+    PhysicsBody *createEmptyBody(bool announce = true);
 
     void pruneEmptyBodies();
 
@@ -151,7 +153,7 @@ public:
     void notifyRulesChanged() { emit rulesChanged(); }
 
     void clearContents();
-    void destroyBody(PhysicsBody *body);
+    void destroyBody(PhysicsBody *body, bool announce = true);
 
     // --- Joints -------------------------------------------------------
     // Joints are constraints between two bodies. The scene owns them, but

@@ -17,7 +17,7 @@ public:
     void attach(QObject *target) override;
 
 private:
-    static std::vector<PropertyRow> worldRows(bool running, physics::WorldDesc *world,
+    static std::vector<PropertyRow> worldRows(physics::WorldDesc *world,
                                               const std::function<void()> &changed,
                                               const QString &engineName);
 

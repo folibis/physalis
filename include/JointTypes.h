@@ -97,6 +97,10 @@ struct JointParam {
     // parameter. A rule still wants it, so it can ask; a property table does
     // not, because the setting is already a row three lines further up.
     bool mirrorsSetting = false;
+    // A reading a rule can ask for that the property table leaves out, so the
+    // table carries the few worth watching rather than every number the
+    // engine can produce.
+    bool rulesOnly = false;
 };
 
 using PropertyList = QVector<JointParam>;

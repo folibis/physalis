@@ -89,6 +89,14 @@ void markRole(PropertyList *list, const QString &key, PropertyRole role)
     }
 }
 
+void markRulesOnly(PropertyList *list, const QStringList &keys)
+{
+    for (JointParam &property : *list) {
+        if (keys.contains(property.key))
+            property.rulesOnly = true;
+    }
+}
+
 void markStored(PropertyList *list, const QHash<QString, QVariant> &defaults,
                 const QString &section)
 {
@@ -258,9 +266,10 @@ PropertyList ChipmunkEngine::bodyProperties() const
                true, false, -1e7, 1e7, 1, 10.0,
                QObject::tr("A body turns about this point, not about its origin.")),
         // cpBodyKineticEnergy.
-        number(QStringLiteral("kineticEnergy"), QObject::tr("Kinetic Energy (J)"),
-               true, false, 0.0, 1e12, 6, 0.1,
-               QObject::tr("How much motion it carries, travelling and turning together."
+        number(QStringLiteral("kineticEnergy"), QObject::tr("Kinetic Energy (mJ)"),
+               true, false, 0.0, 1e15, 3, 0.1,
+               QObject::tr("How much motion it carries, travelling and turning together, in millijoules --"
+                           " a body at the usual scale weighs grams, and joules read as zero."
                            " Reaches zero when it has come to rest.")),
 
         // cpBodyApplyForceAtWorldPoint and SetTorque, which Chipmunk clears
@@ -299,6 +308,13 @@ PropertyList ChipmunkEngine::bodyProperties() const
     markRole(&properties, QStringLiteral("velocityX"), PropertyRole::VelocityX);
     markRole(&properties, QStringLiteral("velocityY"), PropertyRole::VelocityY);
     markRole(&properties, QStringLiteral("angularVelocity"), PropertyRole::AngularVelocity);
+    markRulesOnly(&properties, {QStringLiteral("boundsMinX"), QStringLiteral("boundsMinY"),
+                                QStringLiteral("boundsMaxX"), QStringLiteral("boundsMaxY"),
+                                QStringLiteral("localCenterOfMassX"), QStringLiteral("localCenterOfMassY"),
+                                QStringLiteral("centerOfMassX"), QStringLiteral("centerOfMassY"),
+                                // Where it stands is edited on the canvas.
+                                QStringLiteral("positionX"), QStringLiteral("positionY"),
+                                QStringLiteral("angle")});
     return properties;
 }
 
@@ -529,6 +545,15 @@ PropertyList ChipmunkEngine::shapeProperties() const
     }, QObject::tr("Collision"));
     markRole(&properties, QStringLiteral("isSensor"), PropertyRole::Sensor);
     markRole(&properties, QStringLiteral("density"), PropertyRole::Density);
+    markRulesOnly(&properties, {QStringLiteral("boundsMinX"), QStringLiteral("boundsMinY"),
+                                QStringLiteral("boundsMaxX"), QStringLiteral("boundsMaxY"),
+                                QStringLiteral("centerOfMassX"), QStringLiteral("centerOfMassY"),
+                                QStringLiteral("lastHitSpeed"), QStringLiteral("lastHitX"),
+                                QStringLiteral("lastHitY"), QStringLiteral("lastHitNormalX"),
+                                QStringLiteral("lastHitNormalY"), QStringLiteral("area"),
+                                // The size is drawn; and a sensor's count belongs
+                                // with the rules that watch it.
+                                QStringLiteral("radius"), QStringLiteral("sensorOverlapCount")});
     return properties;
 }
 

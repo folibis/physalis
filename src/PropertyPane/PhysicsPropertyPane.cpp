@@ -47,7 +47,6 @@ std::vector<PropertyRow> PhysicsPropertyPane::rows(EditorMode mode) const
     };
 
     auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName());
-    const bool running = m_scene->simulationRunning();
 
     if (PhysicsBody *body = m_scene->commonSelectedBody()) {
         const auto notify = [body] { body->notifyPropertyChanged(); };
@@ -70,8 +69,7 @@ std::vector<PropertyRow> PhysicsPropertyPane::rows(EditorMode mode) const
             append(shotRows(&body->shot(), notify));
         if (engine) {
             const physics::PropertyList properties = engine->bodyProperties();
-            if (running)
-                append(liveRowsFromCatalogue(properties, bodySection()));
+            append(liveRowsFromCatalogue(properties, bodySection()));
             append(rowsFromCatalogue(properties, &body->props().params, notify, bodySection()));
         }
     }
@@ -92,8 +90,7 @@ std::vector<PropertyRow> PhysicsPropertyPane::rows(EditorMode mode) const
             }
         };
         const physics::PropertyList properties = engine->shapeProperties();
-        if (running)
-            append(liveRowsFromCatalogue(properties, shapeSection()));
+        append(liveRowsFromCatalogue(properties, shapeSection()));
         append(rowsFromCatalogue(properties, &shape->part().params, notify, shapeSection()));
     }
     return result;

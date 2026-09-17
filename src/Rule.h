@@ -14,6 +14,9 @@ struct Rule {
 
     enum class Compare {
         Equal, NotEqual, Greater, Less, GreaterEqual, LessEqual,
+        // Rounded to a whole number, a non-zero multiple of the value: with 5,
+        // true at 5, 10, 15... -- so a rule on the frame fires every fifth one.
+        Multiple,
     };
     Compare compare = Compare::Greater;
     QVariant conditionValue;
@@ -75,6 +78,14 @@ struct Rule {
     // when the run started, facing the same way, and stop it moving.
     static QString initStateAction() { return QStringLiteral("@initState"); }
     static QString holdRunAction() { return QStringLiteral("@holdRun"); }
+
+    // An action on a body, the application's own: a new body just like it --
+    // every body and shape property -- placed at the X and Y in actionParams.
+    // It is cloned as the run found it, so a body already removed can still be
+    // cloned. The clone lasts as long as the run does.
+    static QString cloneAction() { return QStringLiteral("@clone"); }
+    static QString cloneXParam() { return QStringLiteral("x"); }
+    static QString cloneYParam() { return QStringLiteral("y"); }
     bool isRunAction() const
     {
         return actionId == stopRunAction() || actionId == holdRunAction();
@@ -93,6 +104,7 @@ struct Rule {
         case Compare::Less:            return QStringLiteral("<");
         case Compare::GreaterEqual:    return QStringLiteral(">=");
         case Compare::LessEqual:       return QStringLiteral("<=");
+        case Compare::Multiple:        return QStringLiteral("%");
         }
         return QStringLiteral(">");
     }
@@ -104,6 +116,7 @@ struct Rule {
         if (name == QLatin1String("<"))                return Compare::Less;
         if (name == QLatin1String(">="))               return Compare::GreaterEqual;
         if (name == QLatin1String("<="))               return Compare::LessEqual;
+        if (name == QLatin1String("%"))                return Compare::Multiple;
         return Compare::Greater;
     }
 

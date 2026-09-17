@@ -5,7 +5,7 @@ std::vector<PropertyRow> liveRowsFromCatalogue(const physics::PropertyList &prop
 {
     std::vector<PropertyRow> rows;
     for (const physics::JointParam &property : properties) {
-        if (property.stored || !property.liveReadable)
+        if (property.stored || !property.liveReadable || property.rulesOnly)
             continue;
         PropertyRow row;
         row.label = property.label;

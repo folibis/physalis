@@ -13,7 +13,7 @@ std::vector<PropertyRow> FieldPropertyPane::rows(EditorMode mode) const
 
     if (mode == EditorMode::Physics) {
         std::vector<PropertyRow> world =
-            worldRows(scene->simulationRunning(), &scene->world(),
+            worldRows(&scene->world(),
                       [scene] { scene->notifyFieldPropertyChanged(); },
                       scene->simulationEngineName());
 
@@ -83,33 +83,30 @@ std::vector<PropertyRow> FieldPropertyPane::rows(EditorMode mode) const
     return result;
 }
 
-std::vector<PropertyRow> FieldPropertyPane::worldRows(bool running, physics::WorldDesc *world,
+std::vector<PropertyRow> FieldPropertyPane::worldRows(physics::WorldDesc *world,
                                                       const std::function<void()> &changed,
                                                       const QString &engineName)
 {
     std::vector<PropertyRow> result;
     const QString section = QObject::tr("World");
 
-    // Only while a run is going: nothing else can answer these, and a row
-    // showing a flat zero whatever is happening looks like a measurement
-    // without being one.
-    if (running) {
-        for (const auto &live : { qMakePair(QObject::tr("Elapsed Time (s)"), QStringLiteral("time")),
-                                  qMakePair(QObject::tr("Frame"), QStringLiteral("frame")) }) {
-            PropertyRow row;
-            row.label = live.first;
-            row.key = live.second;
-            row.type = PropertyFieldType::Numeric;
-            row.section = section;
-            row.decimals = live.second == QLatin1String("frame") ? 0 : 2;
-            row.minValue = 0.0;
-            row.maxValue = 1e12;
-            row.getter = [] { return QVariant(); };   // the engine answers while running
-            row.setter = [](const QVariant &) {};
-            row.readOnly = true;
-            row.tooltip = QObject::tr("Counted from the moment the run starts.");
-            result.push_back(std::move(row));
-        }
+    // Blank until a run fills them, but always there: a row that only exists
+    // while running cannot be added to the log before the run starts.
+    for (const auto &live : { qMakePair(QObject::tr("Elapsed Time (s)"), QStringLiteral("time")),
+                              qMakePair(QObject::tr("Frame"), QStringLiteral("frame")) }) {
+        PropertyRow row;
+        row.label = live.first;
+        row.key = live.second;
+        row.type = PropertyFieldType::Numeric;
+        row.section = section;
+        row.decimals = live.second == QLatin1String("frame") ? 0 : 2;
+        row.minValue = 0.0;
+        row.maxValue = 1e12;
+        row.getter = [] { return QVariant(); };   // the engine answers while running
+        row.setter = [](const QVariant &) {};
+        row.readOnly = true;
+        row.tooltip = QObject::tr("Counted from the moment the run starts.");
+        result.push_back(std::move(row));
     }
 
     // The scene's own scale, not a physics setting: the editor draws, measures
@@ -129,10 +126,8 @@ std::vector<PropertyRow> FieldPropertyPane::worldRows(bool running, physics::Wor
     // knows one of them by name.
     if (auto engine = physics::EngineRegistry::create(engineName)) {
         const physics::PropertyList properties = engine->worldProperties();
-        if (running) {
-            for (PropertyRow &row : liveRowsFromCatalogue(properties, section))
-                result.push_back(std::move(row));
-        }
+        for (PropertyRow &row : liveRowsFromCatalogue(properties, section))
+            result.push_back(std::move(row));
         for (PropertyRow &row : rowsFromCatalogue(properties, &world->params, changed, section))
             result.push_back(std::move(row));
     }
@@ -148,7 +143,7 @@ std::vector<PropertyRow> FieldPropertyPane::defaultRows(EditorMode mode) const
 
     static physics::WorldDesc pristine;
     pristine.params.clear();
-    for (PropertyRow &row : worldRows(false, &pristine, [] {},
+    for (PropertyRow &row : worldRows(&pristine, [] {},
                                       m_scene ? m_scene->simulationEngineName() : QString()))
         result.push_back(std::move(row));
 

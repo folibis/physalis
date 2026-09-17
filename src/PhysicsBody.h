@@ -69,6 +69,10 @@ public:
     bool isRemoved() const { return m_removed; }
     void setRemoved(bool removed);
 
+    // Made by a rule during a run, and gone when it ends: never saved.
+    bool isRunOnly() const { return m_runOnly; }
+    void setRunOnly(bool runOnly) { m_runOnly = runOnly; }
+
 signals:
     void propertyChanged();
     // Old name first. See setName().
@@ -84,4 +88,5 @@ private:
     ShotSettings m_shot;
     bool m_asleep = false;
     bool m_removed = false;
+    bool m_runOnly = false;
 };

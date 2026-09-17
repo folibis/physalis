@@ -1502,7 +1502,15 @@ function valueCondition(scene, rule) {
     } else {
         var against = p.unit === "seconds" ? short(Number(rule.when) || 0) : literal(p.unit, rule.when);
         var ops = { "=": "===", "!=": "!==" };
-        if (compare === "=")
+        if (compare === "%") {
+            // In the editor's units, as the rule was written: whole numbers,
+            // a non-zero multiple.
+            var step = Math.round(Number(rule.when) || 0);
+            if (step === 0)
+                return "false";
+            var whole = "Math.round(" + outOfPlanck(p.unit, p.read) + ")";
+            result = "(" + whole + " !== 0 && " + whole + " % " + step + " === 0)";
+        } else if (compare === "=")
             result = "Math.abs(" + p.read + " - " + against + ") < 1e-4";
         else if (compare === "!=")
             result = "Math.abs(" + p.read + " - " + against + ") >= 1e-4";

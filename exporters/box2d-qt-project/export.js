@@ -1610,7 +1610,15 @@ function valueCondition(scene, rule) {
             return null;
     } else {
         var against = p.unit === "seconds" ? fnum(Number(rule.when) || 0) : literal(p.unit, rule.when);
-        if (compare === "=")
+        if (compare === "%") {
+            // In the editor's units, as the rule was written: whole numbers,
+            // a non-zero multiple.
+            var step = Math.round(Number(rule.when) || 0);
+            if (step === 0)
+                return "false";
+            var whole = "std::llround(" + outOfBox2D(p.unit, read) + ")";
+            result = "(" + whole + " != 0 && " + whole + " % " + step + " == 0)";
+        } else if (compare === "=")
             result = "std::fabs(" + read + " - " + against + ") < 0.0001f";
         else if (compare === "!=")
             result = "std::fabs(" + read + " - " + against + ") >= 0.0001f";

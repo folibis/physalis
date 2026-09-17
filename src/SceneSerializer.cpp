@@ -279,7 +279,7 @@ QJsonObject save(const CanvasScene *scene)
     const QList<QGraphicsItem *> all = scene->items(Qt::AscendingOrder);
     for (QGraphicsItem *item : all) {
         auto *shape = qgraphicsitem_cast<ShapeItem *>(item);
-        if (!shape)
+        if (!shape || (shape->body() && shape->body()->isRunOnly()))
             continue;
         const int id = nextId++;
         ids.insert(shape, id);
@@ -291,6 +291,8 @@ QJsonObject save(const CanvasScene *scene)
 
     QJsonArray bodies;
     for (const PhysicsBody *body : scene->bodies()) {
+        if (body->isRunOnly())
+            continue;
         const physics::BodyDesc &p = body->props();
         QJsonArray members;
         for (const ShapeItem *shape : body->shapes()) {

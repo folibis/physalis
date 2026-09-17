@@ -1113,8 +1113,6 @@ void Box2DEngine::setShapeParam(const QString &name, const QString &key, const Q
         b2Shape_EnableSensorEvents(*it, value.toBool());
     } else if (key == QLatin1String("enablePreSolveEvents")) {
         b2Shape_EnablePreSolveEvents(*it, value.toBool());
-    } else if (key == QLatin1String("materialId")) {
-        b2Shape_SetMaterial(*it, value.toInt());
     } else if (key == QLatin1String("radius")) {
         // Box2D can swap a shape's outline in place, but only for the kind it
         // already is -- so this is a circle's radius and nothing else's.
@@ -1170,7 +1168,6 @@ QVariant Box2DEngine::shapeValue(const QString &name, const QString &key) const
         return toScene(b2Shape_GetMassData(*it).center).x();
     if (key == QLatin1String("centerOfMassY"))
         return toScene(b2Shape_GetMassData(*it).center).y();
-    if (key == QLatin1String("materialId")) return b2Shape_GetMaterial(*it);
     if (key.startsWith(QLatin1String("bounds"))) {
         const b2AABB box = b2Shape_GetAABB(*it);
         if (key == QLatin1String("boundsMinX")) return box.lowerBound.x * m_pixelsPerMeter;

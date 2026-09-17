@@ -469,7 +469,7 @@ void CanvasScene::clearPhysicsSelection()
     emit physicsSelectionChanged();
 }
 
-PhysicsBody *CanvasScene::createEmptyBody()
+PhysicsBody *CanvasScene::createEmptyBody(bool announce)
 {
     auto *body = new PhysicsBody(this);
     body->setName(Naming::nextName(QStringLiteral("body"), takenNames()));
@@ -500,7 +500,10 @@ PhysicsBody *CanvasScene::createEmptyBody()
     });
 
     m_bodies.append(body);
-    emit bodiesChanged();
+    if (announce)
+    {
+        emit bodiesChanged();
+    }
     return body;
 }
 
@@ -1202,7 +1205,7 @@ void CanvasScene::pruneEmptyBodies()
     }
 }
 
-void CanvasScene::destroyBody(PhysicsBody *body)
+void CanvasScene::destroyBody(PhysicsBody *body, bool announce)
 {
     if (!body || !m_bodies.removeOne(body))
     {
@@ -1220,8 +1223,11 @@ void CanvasScene::destroyBody(PhysicsBody *body)
     }
     delete body;
     update();
-    emit bodiesChanged();
-    emit physicsSelectionChanged();
+    if (announce)
+    {
+        emit bodiesChanged();
+        emit physicsSelectionChanged();
+    }
 }
 
 PhysicsBody *CanvasScene::commonSelectedBody() const

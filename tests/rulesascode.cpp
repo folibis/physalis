@@ -197,6 +197,32 @@ TEST(RulesAsCode, AValueRuleIsAnIfAfterTheStep)
         << "createWorld starts it over";
 }
 
+// "Is a multiple of" is asked in the editor's units, as whole numbers.
+TEST(RulesAsCode, AMultipleIsAskedInTheEditorsUnits)
+{
+    CanvasScene scene;
+    Rig rig = buildRig(&scene);
+    ASSERT_NE(rig.arm, nullptr);
+    const QString arm = rig.arm->name();
+
+    Rule every;
+    every.name = QStringLiteral("every ten degrees");
+    every.subjectName = arm;
+    every.conditionKey = QStringLiteral("angle");
+    every.compare = Rule::Compare::Multiple;
+    every.conditionValue = 10.0;
+    every.targetName = arm;
+    every.propertyKey = QStringLiteral("motorSpeed");
+    every.value = 0.0;
+    scene.setRules({ every });
+
+    const QString code = mainFor(&scene);
+    ASSERT_FALSE(code.isEmpty());
+    const QString whole = QStringLiteral("std::llround((b2RevoluteJoint_GetAngle(%1)) * 180.0f / B2_PI)").arg(arm);
+    EXPECT_TRUE(code.contains(QStringLiteral("(%1 != 0 && %1 % 10 == 0)").arg(whole)))
+        << code.toStdString();
+}
+
 // An event is read straight from Box2D's contact events.
 TEST(RulesAsCode, AnEventRuleReadsBox2DsContactEvents)
 {
