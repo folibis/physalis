@@ -3875,7 +3875,7 @@ void CanvasScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
                 {
                     selectForPhysics(hit);
                 }
-                emit createBodyRequested();
+                emit createBodyRequested(event->modifiers().testFlag(Qt::ControlModifier));
             }
         }
         event->accept();

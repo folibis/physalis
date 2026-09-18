@@ -181,7 +181,8 @@ Physics mode alike: it steps down through `CanvasScene::shapesAt` -- everything
 under the pointer, top first -- from the current selection to the shape beneath,
 and round to the top again. A plain press on the shape already selected keeps
 it even where another lies on top, so a shape reached that way can still be
-dragged or double-clicked into a body. The slingshot looks through shapes that
+dragged or double-clicked into a body (Ctrl+double-click makes that body
+static). The slingshot looks through shapes that
 cannot be shot to the topmost one that can.
 
 **A removal can be answered.** Before a rule's action takes a body away -- an

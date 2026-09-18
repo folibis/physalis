@@ -117,7 +117,7 @@ private slots:
     void onAddJoint(const QString &typeId);
     void on_actionDeleteJoint_triggered();
     void onJointSelectionChanged();
-    void onCreateBody();
+    void onCreateBody(bool asStatic = false);
     void on_actionDissolveBody_triggered();
     void onPhysicsSelectionChanged();
     void onSimulationStateChanged();

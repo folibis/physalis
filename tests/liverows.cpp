@@ -89,6 +89,20 @@ TEST(LiveRows, ReadingsCanBeLoggedBeforeAndDuringARun)
                                "Radius", "Things Inside", "Material Id"})
         EXPECT_EQ(rowLabel(panel, QObject::tr(hidden)), nullptr) << "row " << hidden << " is still shown";
 
+    EXPECT_EQ(rowLabel(panel, QObject::tr("Body Type")), nullptr) << "the engine's copy of the Type row";
+    int enabledRows = 0;
+    for (QLabel *label : panel->findChildren<QLabel *>())
+        enabledRows += label->text() == QObject::tr("Enabled") ? 1 : 0;
+    EXPECT_EQ(enabledRows, 1) << "the engine's read-only copy of Enabled is shown beside the editor's";
+
+    // Max Power and Max Pull mean nothing until the body can be shot.
+    for (const char *shot : {"Max Power", "Max Pull"}) {
+        QLabel *label = rowLabel(panel, QObject::tr(shot));
+        ASSERT_NE(label, nullptr) << shot;
+        ASSERT_NE(rowEditor(label), nullptr) << shot;
+        EXPECT_FALSE(rowEditor(label)->isEnabled()) << shot << " is editable while Can Be Shot is off";
+    }
+
     QAction *step = nullptr;
     for (QAction *action : window.findChildren<QAction *>()) {
         if (action->objectName() == QStringLiteral("actionStep"))

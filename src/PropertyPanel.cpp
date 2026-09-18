@@ -335,7 +335,7 @@ void PropertyPanel::addRow(QTableWidget *table, const PropertyRow &row)
 
     table->setCellWidget(tableRow, 1, cellWidget ? cellWidget : editor);
     m_rows.push_back({row.type, editor, row.getter, nameLabel, resetButton, row.defaultValue,
-                      row.key, row.section, row.label, row.group, row.readOnly});
+                      row.key, row.section, row.label, row.group, row.readOnly, row.enabledWhen});
 }
 
 void PropertyPanel::rebuildRows()
@@ -520,7 +520,7 @@ void PropertyPanel::updateEditable()
     const bool editable = !m_scene || m_scene->selectionAllowed();
     for (const Row &row : m_rows) {
         if (row.editor && !row.readOnly)
-            row.editor->setEnabled(editable);
+            row.editor->setEnabled(editable && (!row.enabledWhen || row.enabledWhen()));
         if (row.resetButton)
             row.resetButton->setEnabled(editable);
     }
@@ -647,12 +647,15 @@ void PropertyPanel::updateModifiedMarks()
 void PropertyPanel::refreshReadings()
 {
     refreshRows(true);
+    // A setting can switch another on or off -- Can Be Shot and Max Power.
+    updateEditable();
 }
 
 void PropertyPanel::refreshValues()
 {
     updateModifiedMarks();
     refreshRows(false);
+    updateEditable();
 }
 
 void PropertyPanel::refreshRows(bool readingsOnly)

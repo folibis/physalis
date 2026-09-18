@@ -156,7 +156,7 @@ PropertyList Box2DEngine::bodyProperties() const
     PropertyList properties = {
         // Applied, not assigned: b2Body_ApplyLinearImpulseToCenter. Nothing to
         // read back, which is why these are write-only.
-        number(QStringLiteral("impulseY"), QObject::tr("Impulse Up/Down (up is negative)"),
+        number(QStringLiteral("impulseY"), QObject::tr("Impulse Up/Down"),
                false, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("A kick. Adds to whatever the body was already doing,"
                            " so something arriving fast leaves faster.")),
@@ -172,7 +172,7 @@ PropertyList Box2DEngine::bodyProperties() const
                            " it already had.")),
 
         // b2Body_GetLinearVelocity / SetLinearVelocity.
-        number(QStringLiteral("velocityY"), QObject::tr("Velocity Y (up is negative)"),
+        number(QStringLiteral("velocityY"), QObject::tr("Velocity Y"),
                true, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("How fast it is travelling. Setting it replaces the motion"
                            " outright, where an impulse adds to it.")),
@@ -200,7 +200,7 @@ PropertyList Box2DEngine::bodyProperties() const
                QObject::tr("Moving a body while it runs places it there outright,"
                            " without travelling -- so it can land inside something."
                            " Glide To X arrives the long way instead.")),
-        number(QStringLiteral("positionY"), QObject::tr("Position Y (down is positive)"),
+        number(QStringLiteral("positionY"), QObject::tr("Position Y"),
                true, true, -1e7, 1e7, 1, 10.0,
                QObject::tr("Moving a body while it runs places it there outright,"
                            " without travelling -- so it can land inside something."
@@ -401,7 +401,11 @@ PropertyList Box2DEngine::bodyProperties() const
                                 QStringLiteral("centerOfMassX"), QStringLiteral("centerOfMassY"),
                                 // Where it stands is edited on the canvas.
                                 QStringLiteral("positionX"), QStringLiteral("positionY"),
-                                QStringLiteral("angle")});
+                                QStringLiteral("angle"),
+                                // The editor's own Enabled and Body Type rows set these.
+                                QStringLiteral("isEnabled"), QStringLiteral("bodyType"),
+                                // Switched on by the application for whatever a rule watches.
+                                QStringLiteral("enableContactEvents"), QStringLiteral("enableHitEvents")});
     return properties;
 }
 
@@ -486,7 +490,7 @@ QVector<ActionType> Box2DEngine::bodyActions() const
 
     JointParam pushY = pushX;
     pushY.key = QStringLiteral("impulseY");
-    pushY.label = QObject::tr("Impulse Y (up is negative)");
+    pushY.label = QObject::tr("Impulse Y");
 
     JointParam offsetX;
     offsetX.key = QStringLiteral("offsetX");

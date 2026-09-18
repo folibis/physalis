@@ -56,6 +56,7 @@ private:
         // them apart once the row is out of the table.
         QString group;
         bool readOnly = false;
+        std::function<bool()> enabledWhen;
     };
 
     void setActivePane(PropertyPane *pane);

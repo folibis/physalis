@@ -526,7 +526,9 @@ signals:
     void editSelectionChanged();
     void jointsChanged();
     void selectedJointChanged(Joint *joint);
-    void createBodyRequested();
+    // A double-click on a loose shape: a dynamic body, or a static one with
+    // Ctrl held -- floors and walls are made as often as things that move.
+    void createBodyRequested(bool asStatic);
     void bodiesChanged();
 
     void simulationRunningChanged(bool running);

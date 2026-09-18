@@ -698,7 +698,7 @@ void MainWindow::onJointSelectionChanged()
     onPhysicsSelectionChanged();
 }
 
-void MainWindow::onCreateBody()
+void MainWindow::onCreateBody(bool asStatic)
 {
     const QStringList problems = m_scene->solidBodyProblems(m_scene->physicsSelection());
 
@@ -706,7 +706,10 @@ void MainWindow::onCreateBody()
     if (!body)
         return;
 
-    if (!problems.isEmpty()) {
+    if (asStatic) {
+        body->props().type = physics::BodyType::Static;
+        body->notifyPropertyChanged();
+    } else if (!problems.isEmpty()) {
         body->props().type = physics::BodyType::Static;
         body->notifyPropertyChanged();
 

@@ -35,6 +35,9 @@ struct PropertyRow {
     // Shown but not editable: a value the canvas or the running engine owns.
     // Without this the editor still accepts typing and silently discards it.
     bool readOnly = false;
+    // Editable only while this answers true -- a setting that means nothing
+    // until another one is switched on.
+    std::function<bool()> enabledWhen;
 };
 
 class PropertyPane : public QObject

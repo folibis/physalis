@@ -188,6 +188,7 @@ std::vector<PropertyRow> PhysicsPropertyPane::shotRows(ShotSettings *shot, const
         [shot, changed](const QVariant &v) { shot->fullImpulse = v.toDouble(); changed(); },
         0.0, 100000.0, {}, 3, 0.1, bodySection()};
     impulse.defaultValue = untouched.fullImpulse;
+    impulse.enabledWhen = [shot] { return shot->enabled; };
     impulse.tooltip = QObject::tr("The push at full pull, in the same units as the body's impulse"
                                   " properties. A shorter pull gives a share of it.");
     result.push_back(std::move(impulse));
@@ -197,6 +198,7 @@ std::vector<PropertyRow> PhysicsPropertyPane::shotRows(ShotSettings *shot, const
         [shot, changed](const QVariant &v) { shot->maxPull = v.toDouble(); changed(); },
         10.0, 5000.0, {}, 0, 10.0, bodySection()};
     pull.defaultValue = untouched.maxPull;
+    pull.enabledWhen = [shot] { return shot->enabled; };
     pull.tooltip = QObject::tr("How far, in scene units, you pull back for full power. Pulling"
                                " further adds nothing.");
     result.push_back(std::move(pull));

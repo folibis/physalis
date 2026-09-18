@@ -17,7 +17,8 @@ the **Physics** button on the right of the toolbar.
 2. Press **Create Body**. The selected shapes become one rigid body that moves
    as a whole.
 
-Double-clicking a shape that is not in a body also makes it a body.
+Double-clicking a shape that is not in a body makes it a dynamic body;
+**Ctrl+double-click** makes it a static one.
 
 To break a body back into loose shapes, select it and press **Remove** on the
 toolbar.
@@ -87,7 +88,8 @@ Two shapes collide only when each one's group is in the other's **Collides With*
 
 A **dynamic** body also has these rows:
 
-- **Can Be Shot**: during a run you can fling it with the mouse.
+- **Can Be Shot**: during a run you can fling it with the mouse. The two rows
+  below it can only be changed while it is ticked.
 - **Max Power**: the push at full pull.
 - **Max Pull**: how far you pull for full power.
 
