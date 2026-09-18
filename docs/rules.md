@@ -5,107 +5,136 @@ nav_order: 5
 
 # Rules
 
-Rules make things happen during a simulation: *when* something is true or
-something happens, *then* change a property or perform an action.
+Rules make a scene react while it runs. Each rule says **when** something
+should happen and **what** should then be done, for example:
 
-Rules are in the **Rules** tab. Press **+** to add one.
+- *when* the ball enters the pocket, *then* remove the ball;
+- *when* the cart's slider reaches its limit, *then* reverse its motor;
+- *when* 5 seconds have passed, *then* set off the explosion.
+
+Rules are kept in the **Rules** tab on the right. Press **+** to add one. A
+new rule appears as a card, which you fill in from top to bottom.
 
 ![Three rules: a pocket, a cue ball, and a timed speed-up](images/rules-panel.png)
 
-## A rule card
+## The rule card
 
-### Header
+The top line of a card holds its controls. The checkbox switches the rule on
+or off without deleting it, which is handy while trying things out. The
+triangle folds the card up to save space, and the bin deletes it. Double-click
+the rule's name to rename it. The up and down arrows change the order; rules
+are carried out in the order they are listed.
 
-| Control | What it does |
-|---|---|
-| Checkbox | Turns the rule on or off without deleting it |
-| Triangle | Collapses or expands the card |
-| Bin | Deletes the rule |
-| Name | **Double-click** to rename the rule |
-| Up / down arrows | Change the order. Rules are carried out in the order they are listed |
+Below that, the card has three parts: **When**, **Then** and **Do**.
 
-### When
+## When: the condition
 
-Pick the object the rule watches, or **World** for the simulation itself. Then
-pick either a property or an event.
+First choose the object the rule watches: a shape, a body, a joint, a ray,
+or **World** for the simulation as a whole. Then choose what about it to
+watch. This can be one of two things.
 
-**A property** is compared with a value:
-*equals*, *differs from*, *is greater than*, *is less than*, *is at least*,
-*is at most*, *is a multiple of*. For on/off properties the choice is *is* or
-*is not*, true or false.
+### A property compared with a value
 
-*Is a multiple of* rounds the property to a whole number and holds at every
-non-zero multiple of the value: with 5, at 5, 10, 15 and so on. **Frame** *is a
-multiple of* 60 fires once every 60 steps.
+For example, *ball · Speed · is less than · 5*, or *World · Elapsed Time ·
+is at least · 10*. The comparisons are:
 
-**An event** is something that happens:
+- **equals** and **differs from**,
+- **is greater than** and **is less than**,
+- **is at least** and **is at most**,
+- **is a multiple of**. The value is rounded to a whole number, and the
+  condition holds at every non-zero multiple: with 5, at 5, 10, 15 and so on.
+  *World · Frame · is a multiple of · 60* fires once every 60 steps, which is
+  once a second at the usual rate.
 
-| Event | On | Happens when |
-|---|---|---|
-| begins contact / ends contact | shapes | another shape starts or stops touching it |
-| is hit | shapes | an impact above the world's hit threshold |
-| is entered / is left | sensors | something enters or leaves the sensor |
-| is about to touch | shapes | just before a collision is worked out |
-| starts moving / comes to rest | bodies | the body wakes up or falls asleep |
-| detects | rays | the ray sees a particular shape |
-| to be removed | bodies and shapes | a rule is about to remove it (see below) |
-| starting simulation | World | once, when the run starts |
-| limit events | joints | a joint reaches one of its limits |
+For on/off properties the choice is simply **is** or **is not**, true or false.
 
-For events that involve another object (such as *begins contact*), a third box
-asks **which** object: *anything*, or one in particular.
+A rule fires at the moment its condition **becomes** true, not over and over
+while it stays true. *Speed is less than 5* fires once when the ball slows
+down, and fires again only if it speeds up and slows down once more.
 
-The World can also be watched by **Elapsed Time (s)** and **Frame**.
+### An event
 
-### Then
+An event is something that happens at a particular moment. Which events exist
+depends on the object and on the [physics engine](engines.md):
 
-Pick what the rule changes:
+- **begins contact** and **ends contact**: another shape starts or stops
+  touching this one.
+- **is hit**: something strikes this shape harder than the world's hit
+  threshold.
+- **is entered** and **is left**: something moves into or out of a
+  [sensor](physics.md#sensors).
+- **is about to touch**: two shapes are about to collide.
+- **starts moving** and **comes to rest**: a body wakes up, or settles and
+  falls asleep.
+- **detects**: a [ray](physics.md#rays) sees a particular shape.
+- **Lower limit reached** and **Upper limit reached**: a joint gets to the end
+  of its range.
+- **to be removed**: a rule is about to remove this body. See
+  [Answering a removal](#answering-a-removal-to-be-removed).
+- **starting simulation** (on **World**): happens once, at the start. See
+  [Setting things up](#setting-things-up-starting-simulation).
 
-- a named object,
-- **the shape that touched it** or **the body that touched it**: the other
-  object from the event,
-- or **World**.
+Events that involve a second object, such as *begins contact*, have one more
+box: which object it has to be. Choose *anything*, or name one in particular.
 
-Then pick a property to change, or an action to perform.
+## Then: the target
 
-### Do
+Choose what the rule acts on:
 
-For a property:
+- any object in the scene, by name;
+- **the shape that touched it** or **the body that touched it**, which means
+  the second object from the event. One rule on a pocket can remove whichever
+  ball fell in;
+- **World**, to change the simulation itself.
 
-| Operation | Effect |
-|---|---|
-| **Set to** | sets the property to a value |
-| **Toggle** | flips an on/off property |
-| **Negate** | flips the sign. This is how a motor reverses at a limit |
-| **Add** | adds a value to the property |
+## Do: the change or the action
 
-The value is either typed in (**Value**) or read from another object while the
-run goes (**Property**). With Property, **Value from** chooses the object, its
-property, and an offset to add.
+Choose either a property to change or an action to perform.
 
-## Actions
+### Changing a property
 
-| Action | On | What it does |
-|---|---|---|
-| **Remove** | bodies, shapes | Takes the body out of the simulation for the rest of the run |
-| **Init state** | bodies, shapes | Puts the body back where it was when the run started, facing the same way, not moving |
-| **Clone** | bodies, shapes | Makes a new body with all the same body and shape properties, with its origin at **X** and **Y**. Works on a body already removed. The clone lasts until the run stops and is never saved |
-| **Explode** | explosions | Sets off the blast |
-| **Push at a Point** | bodies | An impulse at a point; off the centre it also turns the body |
-| **Force at a Point (one step)** | bodies | A force for a single step |
-| **Recalculate Mass** | bodies | Works out mass and inertia again from the shapes |
-| **Break** | joints | Destroys the joint |
-| **Stop the simulation** | World | Ends the run and puts the scene back |
-| **Hold the simulation** | World | Pauses the run where it is |
+Choose the property, then the operation:
+
+- **Set to** gives the property a new value.
+- **Add** adds to its current value; a negative number subtracts.
+- **Negate** reverses its sign. This is the usual way to send a motor back
+  the other way.
+- **Toggle** switches an on/off property to the opposite state.
+
+The value can be typed in directly, or read from another object while the
+simulation runs: choose **Property** instead of **Value**, then name the
+object, its property and an offset to add. This is how one object can follow
+another, for example a platform that always stays 50 units below a ball.
+
+### Performing an action
+
+Actions do something rather than set a value. The ones that come with every
+engine are:
+
+- **Remove** takes a body out of the simulation for the rest of the run.
+- **Init state** puts a body back where it stood when the simulation started,
+  facing the same way and not moving.
+- **Clone** makes a new body identical to this one, with all its body and
+  shape properties, at the **X** and **Y** you give. It works even on a body
+  that has already been removed. Clones exist only while the simulation runs
+  and are never saved.
+- **Explode** sets off an [explosion](physics.md#explosions).
+- **Break** destroys a joint.
+- **Stop the simulation** (on **World**) ends the run and puts the scene
+  back, just like the Stop button.
+- **Hold the simulation** (on **World**) pauses the run where it is.
+
+Engines add their own actions, such as a push or a force at a point on a body,
+or working out a body's mass again after its shapes have changed.
 
 ## Answering a removal: "to be removed"
 
-When a rule is about to remove a body, Physalis first looks for rules on that
-body with the event **to be removed**.
+Before a rule removes a body, Physalis checks whether that body has a rule of
+its own with the event **to be removed**.
 
-- **No such rule:** the body is removed.
-- **There is one:** the removal is cancelled and that rule is carried out
-  instead. The body stays in the run.
+- If it has **none**, the body is removed as usual.
+- If it **has** one, the removal is cancelled and that rule is carried out
+  instead. The body stays in the simulation.
 
 ```mermaid
 flowchart LR
@@ -114,28 +143,30 @@ flowchart LR
     B -- yes --> D[That rule runs instead<br/>and the ball stays]
 ```
 
-If the answering rule itself removes the body, the body really is removed.
+This lets general rules treat one object differently without writing a
+separate rule for each case. If the answering rule itself removes the body,
+the body really is removed.
 
-### Example: a pool table
-
-- Each pocket is a **static sensor** with one rule:
-  *pocket* **is entered** by *anything* → **the body that touched it** → **Remove**.
-- The cue ball has one rule:
-  *cue ball* **to be removed** → *cue ball* → **Init state**.
-
-Every other ball disappears into a pocket. The cue ball goes back to where it
-started, standing still. Seven rules cover all six pockets.
+**Example: a pool table.** Each pocket is a static sensor with one rule:
+*pocket* **is entered** by *anything* → **the body that touched it** →
+**Remove**. The cue ball has one rule of its own: *cue ball* **to be removed**
+→ *cue ball* → **Init state**. Every other ball disappears into the pockets,
+while the cue ball returns to where it started. Seven rules cover all six
+pockets.
 
 ## Setting things up: "starting simulation"
 
-A rule on **World** with the event **starting simulation** runs once, when you
-press Simulate, before anything moves. Use it to set up the scene: give a body
-a starting speed, place something, open a gate.
-
-**Stop** still puts back everything these rules changed.
+A rule on **World** with the event **starting simulation** runs once, when
+you press Simulate and before anything moves. Use it to prepare the scene,
+for example to give a body a starting speed, place an object, or open a gate.
+**Stop** puts back everything these rules changed, as it does for every other
+rule.
 
 ## Tips
 
-- Name the shapes and bodies your rules use; the card shows names.
-- Rules run in the order they are listed. Move them with the arrows.
-- Untick a rule to switch it off while you try something.
+- Give meaningful names to the objects your rules use. The rule cards show
+  names, and `ball` is easier to recognise than `circle_7`.
+- To see why a rule does or does not fire, add the watched property to the log
+  (right-click it in the Properties tab and choose **Add to Log**) and watch it
+  during the run.
+- Untick a rule to switch it off for a moment instead of deleting it.

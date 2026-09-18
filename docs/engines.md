@@ -5,42 +5,59 @@ nav_order: 7
 
 # Physics engines
 
-Physalis does not simulate anything by itself. The physics comes from an
-**engine plugin**, and Physalis ships with two:
+Physalis is an editor and a player. It does not calculate the physics itself.
+The calculation is done by a **physics engine**, a separate library loaded as
+a plugin. The engine decides how bodies fall, collide, bounce and slide, and
+how joints hold them together. Physalis draws the result and lets you build and
+control the scene.
 
-| Engine | Good to know |
-|---|---|
-| **Box2D** | The default. Joints: Revolute, Distance, Weld, Prismatic, Wheel, Motor, Mouse, Filter |
-| **Chipmunk2D** | Joints: Pivot, Pin, Slide, Groove, Damped Spring, Rotary Spring, Rotary Limit, Ratchet, Gear, Simple Motor, Mouse |
+Physalis comes with plugins for two well-known open-source engines:
 
-**Help → About** lists the engines that were found.
+- **[Box2D](https://box2d.org)**, the default. It is fast and accurate, and is
+  used in a great many games. Its joints are Revolute, Distance, Weld,
+  Prismatic, Wheel, Motor, Mouse and Filter.
+- **[Chipmunk2D](https://chipmunk-physics.net)**, a lightweight engine with a
+  wider choice of constraints: Pivot, Pin, Slide, Groove, Damped Spring, Rotary
+  Spring, Rotary Limit, Ratchet, Gear, Simple Motor and Mouse.
+
+**Help → About** lists the engine plugins Physalis found.
+
+## What an engine decides
+
+The editor asks the engine what it can do and builds itself from the answer,
+so the following all come from the engine:
+
+- the properties on the **Body**, **Shape** and **Collision** pages, and the
+  settings of the world;
+- the joint types and their settings;
+- the events a [rule](rules.md) can wait for, and the actions it can perform.
+
+The common properties have the same names in both engines: velocity, density,
+friction, restitution, damping, sensors and collision groups. The features
+Physalis adds on top, such as the slingshot, the log, **to be removed**,
+**starting simulation**, **Init state** and **Clone**, work in the same way
+whichever engine a scene uses.
 
 ## Which engine a scene uses
 
-- A **new** scene uses the engine chosen in **Options → Common → Physics engine**.
-- The engine is saved in the `*.phys` file, and the scene always opens with it.
-- A scene whose engine is not installed is not opened; Physalis says which
-  engine it needs.
+A scene is built for one engine and keeps it:
+
+- A **new** scene uses the engine chosen in **Options → Common → Physics
+  engine**.
+- The engine is saved in the scene's file, and the scene always opens with it.
+- If the engine a scene needs is not installed, Physalis does not open the
+  scene and tells you which engine it needs.
 - Changing the engine in Options while a scene is open offers to save that
   scene, then starts a new, empty scene with the new engine.
 
-A scene cannot be switched to another engine, because engines differ in their
-joints and in part of their properties.
-
-## What differs between engines
-
-- **Joint types**: each engine has its own. See [Joints](joints.md).
-- **Properties**: the Body, Shape and Collision pages show only what the
-  engine offers.
-- **Events and actions**: the rule cards list what the engine reports and can do.
-
-Most everyday settings have the same name in both engines: position, velocity,
-density, friction, restitution, sensors and collision groups. The
-application's own features, such as the slingshot, **to be removed**,
-**starting simulation** and **Init state**, work the same way in both.
+An existing scene cannot be moved to another engine, because the two offer
+different joints and partly different properties, and part of the scene would
+be lost.
 
 ## Scale
 
-**Pixels per Meter** (in the field's properties) sets how many canvas units
-make one metre. At the common 1000 pixels per metre, bodies are light and
-forces are small: tenths of a newton already move things.
+Engines work in real units: metres, kilograms and seconds. The field's
+**Pixels per Meter** setting decides how the canvas maps onto them. At the
+common setting of 1000, a 40×40 box is 4 cm across and weighs a couple of
+grams. At that scale, forces of a few tenths of a newton already move things
+a lot. If a scene behaves too strongly or too weakly, check the scale first.
