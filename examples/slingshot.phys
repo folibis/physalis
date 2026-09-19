@@ -1,0 +1,1171 @@
+{
+    "bodies": [
+        {
+            "isEnabled": true,
+            "name": "body_1",
+            "physics": {
+            },
+            "shapes": [
+                1
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_2",
+            "physics": {
+            },
+            "shapes": [
+                2
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_3",
+            "physics": {
+            },
+            "shapes": [
+                4
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_4",
+            "physics": {
+            },
+            "shapes": [
+                5
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_5",
+            "physics": {
+            },
+            "shapes": [
+                6
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_6",
+            "physics": {
+            },
+            "shapes": [
+                7
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_7",
+            "physics": {
+            },
+            "shapes": [
+                9
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_8",
+            "physics": {
+            },
+            "shapes": [
+                10
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_9",
+            "physics": {
+            },
+            "shapes": [
+                8
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_10",
+            "physics": {
+            },
+            "shapes": [
+                11
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_11",
+            "physics": {
+            },
+            "shapes": [
+                12
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_12",
+            "physics": {
+            },
+            "shapes": [
+                13
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_13",
+            "physics": {
+            },
+            "shapes": [
+                14
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_15",
+            "physics": {
+            },
+            "shapes": [
+                15
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_16",
+            "physics": {
+            },
+            "shapes": [
+                24
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_17",
+            "physics": {
+            },
+            "shapes": [
+                23
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_18",
+            "physics": {
+            },
+            "shapes": [
+                22
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_19",
+            "physics": {
+            },
+            "shapes": [
+                21
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_20",
+            "physics": {
+            },
+            "shapes": [
+                20
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_21",
+            "physics": {
+            },
+            "shapes": [
+                19
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_22",
+            "physics": {
+            },
+            "shapes": [
+                16
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_23",
+            "physics": {
+            },
+            "shapes": [
+                17
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_24",
+            "physics": {
+                "isBullet": true
+            },
+            "shapes": [
+                18
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_25",
+            "physics": {
+            },
+            "shapes": [
+                25
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_26",
+            "physics": {
+            },
+            "shapes": [
+                26
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_27",
+            "physics": {
+            },
+            "shapes": [
+                27
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_28",
+            "physics": {
+            },
+            "shapes": [
+                3
+            ],
+            "shot": {
+                "enabled": true,
+                "fullImpulse": 5.999999999999996,
+                "maxPull": 300
+            },
+            "type": "dynamic"
+        }
+    ],
+    "engine": "Box2D",
+    "field": {
+        "backgroundColor": "#ffffffff",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 600,
+        "showGrid": true,
+        "width": 2000
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+    ],
+    "log": [
+        {
+            "label": "Speed",
+            "object": "body_14",
+            "property": "speed"
+        },
+        {
+            "label": "Kinetic Energy (J)",
+            "object": "body_14",
+            "property": "kineticEnergy"
+        }
+    ],
+    "shapes": [
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -100,
+                "y": 230
+            },
+            "rect": {
+                "height": 20,
+                "width": 1100,
+                "x": -200,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "rectangle_2",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 0,
+                "y": 130
+            },
+            "rect": {
+                "height": 180,
+                "width": 40,
+                "x": -100,
+                "y": -130
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "friction": 0.49999999999999994,
+                "restitution": 0.65
+            },
+            "pos": {
+                "x": -80,
+                "y": -40
+            },
+            "rect": {
+                "height": 70,
+                "width": 70,
+                "x": -35,
+                "y": -35
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 4,
+            "joinStyle": "round",
+            "name": "rectangle_3",
+            "origin": {
+                "x": -70,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 480,
+                "y": 130
+            },
+            "rect": {
+                "height": 80,
+                "width": 20,
+                "x": -80,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 5,
+            "joinStyle": "round",
+            "name": "rectangle_4",
+            "origin": {
+                "x": -70,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 560,
+                "y": 130
+            },
+            "rect": {
+                "height": 80,
+                "width": 20,
+                "x": -80,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 6,
+            "joinStyle": "round",
+            "name": "rectangle_5",
+            "origin": {
+                "x": -70,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 640,
+                "y": 130
+            },
+            "rect": {
+                "height": 80,
+                "width": 20,
+                "x": -80,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 7,
+            "joinStyle": "round",
+            "name": "rectangle_6",
+            "origin": {
+                "x": -70,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 720,
+                "y": 130
+            },
+            "rect": {
+                "height": 80,
+                "width": 20,
+                "x": -80,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 8,
+            "joinStyle": "round",
+            "name": "rectangle_7",
+            "origin": {
+                "x": -40,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 490,
+                "y": 50
+            },
+            "rect": {
+                "height": 20,
+                "width": 80,
+                "x": -80,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 9,
+            "joinStyle": "round",
+            "name": "rectangle_8",
+            "origin": {
+                "x": -40,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 650,
+                "y": 50
+            },
+            "rect": {
+                "height": 20,
+                "width": 80,
+                "x": -80,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 10,
+            "joinStyle": "round",
+            "name": "rectangle_9",
+            "origin": {
+                "x": -40,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 570,
+                "y": 50
+            },
+            "rect": {
+                "height": 20,
+                "width": 80,
+                "x": -80,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 11,
+            "joinStyle": "round",
+            "name": "rectangle_10",
+            "origin": {
+                "x": -70,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 560,
+                "y": 30
+            },
+            "rect": {
+                "height": 80,
+                "width": 20,
+                "x": -80,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 12,
+            "joinStyle": "round",
+            "name": "rectangle_11",
+            "origin": {
+                "x": -70,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 640,
+                "y": 30
+            },
+            "rect": {
+                "height": 80,
+                "width": 20,
+                "x": -80,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 13,
+            "joinStyle": "round",
+            "name": "rectangle_12",
+            "origin": {
+                "x": -40,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 570,
+                "y": -50
+            },
+            "rect": {
+                "height": 20,
+                "width": 80,
+                "x": -80,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 14,
+            "joinStyle": "round",
+            "name": "rectangle_13",
+            "origin": {
+                "x": -70,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 600,
+                "y": -70
+            },
+            "rect": {
+                "height": 80,
+                "width": 20,
+                "x": -80,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 15,
+            "joinStyle": "round",
+            "name": "rectangle_14",
+            "origin": {
+                "x": -80,
+                "y": 80
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 300,
+                "y": -30
+            },
+            "rect": {
+                "height": 260,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 16,
+            "joinStyle": "round",
+            "name": "rectangle_15",
+            "origin": {
+                "x": -80,
+                "y": 80
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 880,
+                "y": -10
+            },
+            "rect": {
+                "height": 500,
+                "width": 20,
+                "x": -80,
+                "y": -290
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 17,
+            "joinStyle": "round",
+            "name": "rectangle_16",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -100,
+                "y": -250
+            },
+            "rect": {
+                "height": 20,
+                "width": 1100,
+                "x": -200,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 18,
+            "joinStyle": "round",
+            "name": "rectangle_17",
+            "origin": {
+                "x": -80,
+                "y": 80
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -240,
+                "y": -10
+            },
+            "rect": {
+                "height": 500,
+                "width": 20,
+                "x": -80,
+                "y": -290
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 19,
+            "joinStyle": "round",
+            "name": "rectangle_18",
+            "origin": {
+                "x": -70,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 800,
+                "y": 130
+            },
+            "rect": {
+                "height": 80,
+                "width": 20,
+                "x": -80,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 20,
+            "joinStyle": "round",
+            "name": "rectangle_19",
+            "origin": {
+                "x": -40,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 730,
+                "y": 50
+            },
+            "rect": {
+                "height": 20,
+                "width": 80,
+                "x": -80,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 21,
+            "joinStyle": "round",
+            "name": "rectangle_20",
+            "origin": {
+                "x": -70,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 720,
+                "y": 30
+            },
+            "rect": {
+                "height": 80,
+                "width": 20,
+                "x": -80,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 22,
+            "joinStyle": "round",
+            "name": "rectangle_21",
+            "origin": {
+                "x": -40,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 650,
+                "y": -50
+            },
+            "rect": {
+                "height": 20,
+                "width": 80,
+                "x": -80,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 23,
+            "joinStyle": "round",
+            "name": "rectangle_22",
+            "origin": {
+                "x": -70,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 680,
+                "y": -70
+            },
+            "rect": {
+                "height": 80,
+                "width": 20,
+                "x": -80,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 24,
+            "joinStyle": "round",
+            "name": "rectangle_23",
+            "origin": {
+                "x": -40,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 610,
+                "y": -150
+            },
+            "rect": {
+                "height": 20,
+                "width": 80,
+                "x": -80,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 25,
+            "joinStyle": "round",
+            "name": "circle_2",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 571,
+                "y": -149
+            },
+            "rect": {
+                "height": 62,
+                "width": 62,
+                "x": -31,
+                "y": -31
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 26,
+            "joinStyle": "round",
+            "name": "circle_3",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 711,
+                "y": 51
+            },
+            "rect": {
+                "height": 62,
+                "width": 62,
+                "x": -31,
+                "y": -31
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 27,
+            "joinStyle": "round",
+            "name": "circle_4",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 431,
+                "y": 51
+            },
+            "rect": {
+                "height": 62,
+                "width": 62,
+                "x": -31,
+                "y": -31
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        }
+    ],
+    "version": 1,
+    "world": {
+        "physics": {
+        },
+        "pixelsPerMeter": 1000,
+        "solidBounds": false
+    }
+}

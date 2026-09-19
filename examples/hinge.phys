@@ -1,0 +1,1073 @@
+{
+    "bodies": [
+        {
+            "isEnabled": true,
+            "name": "body_1",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
+            "shapes": [
+                1
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_2",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
+            "shapes": [
+                2
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_3",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
+            "shapes": [
+                3
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_4",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
+            "shapes": [
+                4
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_5",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
+            "shapes": [
+                5
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_6",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
+            "shapes": [
+                6
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_7",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
+            "shapes": [
+                7
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_8",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
+            "shapes": [
+                8
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_9",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
+            "shapes": [
+                9
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_13",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
+            "shapes": [
+                12
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_14",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
+            "shapes": [
+                10,
+                11,
+                13
+            ],
+            "type": "dynamic"
+        }
+    ],
+    "engine": "Box2D",
+    "field": {
+        "backgroundColor": "#ffffffff",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 600,
+        "showGrid": true,
+        "width": 2000
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+        {
+            "anchorA": {
+                "x": -200,
+                "y": -100
+            },
+            "anchorB": {
+                "x": -200,
+                "y": -100
+            },
+            "axis": {
+                "x": 0.9948488910391416,
+                "y": -0.10136904852167802
+            },
+            "bodyA": "body_5",
+            "bodyB": "body_4",
+            "collideConnected": false,
+            "name": "revolute_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerAngle": 0,
+                "maxMotorTorque": 0,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": 340,
+                "y": 160
+            },
+            "anchorB": {
+                "x": 340,
+                "y": 160
+            },
+            "axis": {
+                "x": 0.9615239476408232,
+                "y": -0.274721127897378
+            },
+            "bodyA": "body_7",
+            "bodyB": "body_9",
+            "collideConnected": false,
+            "name": "revolute_2",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerAngle": 0,
+                "maxMotorTorque": 0,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": 480,
+                "y": 160
+            },
+            "anchorB": {
+                "x": 480,
+                "y": 160
+            },
+            "axis": {
+                "x": -0.9615239476408232,
+                "y": -0.2747211278973783
+            },
+            "bodyA": "body_8",
+            "bodyB": "body_9",
+            "collideConnected": false,
+            "name": "revolute_3",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": false,
+                "enableMotor": true,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerAngle": 0,
+                "maxMotorTorque": 100,
+                "motorSpeed": -180,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": 682.5,
+                "y": 202.5
+            },
+            "anchorB": {
+                "x": 682.5,
+                "y": 202.5
+            },
+            "axis": {
+                "x": 0,
+                "y": 1
+            },
+            "bodyA": "body_1",
+            "bodyB": "body_14",
+            "collideConnected": false,
+            "name": "prismatic_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "enableLimit": true,
+                "enableMotor": true,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerTranslation": -300,
+                "maxMotorForce": 2,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetTranslation": 0,
+                "upperTranslation": 0
+            },
+            "type": "prismatic"
+        }
+    ],
+    "log": [
+        {
+            "label": "Motor Speed (deg/s)",
+            "object": "revolute_3",
+            "property": "motorSpeed"
+        },
+        {
+            "label": "Motor Speed",
+            "object": "prismatic_1",
+            "property": "motorSpeed"
+        }
+    ],
+    "rules": [
+        {
+            "event": "contactBegin",
+            "name": "left wall turn",
+            "op": "negate",
+            "property": "motorSpeed",
+            "subject": "rectangle_4",
+            "target": "revolute_3",
+            "when": "rectangle_5"
+        },
+        {
+            "event": "contactBegin",
+            "name": "elevator ascent",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "rectangle_4",
+            "target": "prismatic_1",
+            "value": -150,
+            "when": "rectangle_5"
+        },
+        {
+            "event": "contactBegin",
+            "name": "elevator lowering",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "rectangle_5",
+            "target": "prismatic_1",
+            "value": 150,
+            "when": "rectangle_7"
+        },
+        {
+            "event": "contactBegin",
+            "name": "initial turn",
+            "op": "negate",
+            "property": "motorSpeed",
+            "subject": "rectangle_6",
+            "target": "revolute_3",
+            "when": "rectangle_8"
+        }
+    ],
+    "shapes": [
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 600,
+                "y": 191
+            },
+            "rect": {
+                "height": 41,
+                "width": 400,
+                "x": -500,
+                "y": 9
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "polyline_1",
+            "origin": {
+                "x": 249.5,
+                "y": 120
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "points": [
+                {
+                    "x": 500,
+                    "y": 200
+                },
+                {
+                    "x": 0,
+                    "y": 0
+                },
+                {
+                    "x": 0,
+                    "y": 40
+                },
+                {
+                    "x": 500,
+                    "y": 240
+                }
+            ],
+            "pos": {
+                "x": -400,
+                "y": 0
+            },
+            "rect": {
+                "height": 240,
+                "width": 500,
+                "x": 0,
+                "y": 0
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "rectangle_2",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": true,
+                "enableHitEvents": true,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": -600,
+                "y": 50
+            },
+            "rect": {
+                "height": 40,
+                "width": 300,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 4,
+            "joinStyle": "round",
+            "name": "rectangle_3",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": -100,
+                "y": -50
+            },
+            "rect": {
+                "height": 40,
+                "width": 700,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 5,
+            "joinStyle": "round",
+            "name": "polygon_1",
+            "origin": {
+                "x": 100,
+                "y": 58.5
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 2,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "points": [
+                {
+                    "x": 0,
+                    "y": 100
+                },
+                {
+                    "x": 200,
+                    "y": 0
+                },
+                {
+                    "x": 200,
+                    "y": 40
+                },
+                {
+                    "x": 47.58620689655169,
+                    "y": 119.3103448275862
+                }
+            ],
+            "pos": {
+                "x": -400,
+                "y": -100
+            },
+            "rect": {
+                "height": 119.3103448275862,
+                "width": 200,
+                "x": 0,
+                "y": 0
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 6,
+            "joinStyle": "round",
+            "name": "rectangle_4",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": true,
+                "enableHitEvents": true,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": -800,
+                "y": -10
+            },
+            "rect": {
+                "height": 140,
+                "width": 40,
+                "x": 60,
+                "y": -90
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 7,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 2,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 340,
+                "y": 160
+            },
+            "rect": {
+                "height": 80,
+                "width": 80,
+                "x": -40,
+                "y": -40
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 8,
+            "joinStyle": "round",
+            "name": "circle_2",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 2,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 480,
+                "y": 160
+            },
+            "rect": {
+                "height": 80,
+                "width": 80,
+                "x": -40,
+                "y": -40
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 9,
+            "joinStyle": "round",
+            "name": "rectangle_5",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": true,
+                "enableHitEvents": true,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 320,
+                "y": 110
+            },
+            "rect": {
+                "height": 40,
+                "width": 232,
+                "x": -26,
+                "y": 10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 10,
+            "joinStyle": "round",
+            "name": "rectangle_6",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": true,
+                "enableHitEvents": true,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 600,
+                "y": 250
+            },
+            "rect": {
+                "height": 40,
+                "width": 300,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 11,
+            "joinStyle": "round",
+            "name": "rectangle_7",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": true,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 700,
+                "y": 150
+            },
+            "rect": {
+                "height": 100,
+                "width": 40,
+                "x": 60,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 12,
+            "joinStyle": "round",
+            "name": "rectangle_8",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": true,
+                "enableHitEvents": true,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 600,
+                "y": 230
+            },
+            "rect": {
+                "height": 40,
+                "width": 700,
+                "x": -500,
+                "y": 10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 13,
+            "joinStyle": "round",
+            "name": "rectangle_9",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": 18446744073709552000,
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 600,
+                "y": 50
+            },
+            "rect": {
+                "height": 40,
+                "width": 300,
+                "x": -100,
+                "y": 10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        }
+    ],
+    "version": 1,
+    "world": {
+        "physics": {
+            "contactMargin": 2,
+            "gravityX": 0,
+            "gravityY": 9.81
+        },
+        "pixelsPerMeter": 1000,
+        "solidBounds": false
+    }
+}

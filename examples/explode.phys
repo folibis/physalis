@@ -1,0 +1,461 @@
+{
+    "bodies": [
+        {
+            "allowFastRotation": false,
+            "angularDamping": 0,
+            "angularVelocity": 0,
+            "enableSleep": true,
+            "fixedRotation": false,
+            "gravityScale": 1,
+            "isAwake": true,
+            "isBullet": false,
+            "isEnabled": true,
+            "linearDamping": 0,
+            "linearVelocity": {
+                "x": 0,
+                "y": 0
+            },
+            "name": "body_1",
+            "shapes": [
+                2
+            ],
+            "sleepThreshold": 0.05,
+            "type": "dynamic"
+        },
+        {
+            "allowFastRotation": false,
+            "angularDamping": 0,
+            "angularVelocity": 0,
+            "enableSleep": true,
+            "fixedRotation": false,
+            "gravityScale": 1,
+            "isAwake": true,
+            "isBullet": false,
+            "isEnabled": true,
+            "linearDamping": 0,
+            "linearVelocity": {
+                "x": 0,
+                "y": 0
+            },
+            "name": "body_2",
+            "shapes": [
+                4
+            ],
+            "sleepThreshold": 0.05,
+            "type": "dynamic"
+        },
+        {
+            "allowFastRotation": false,
+            "angularDamping": 0,
+            "angularVelocity": 0,
+            "enableSleep": true,
+            "fixedRotation": false,
+            "gravityScale": 1,
+            "isAwake": true,
+            "isBullet": false,
+            "isEnabled": true,
+            "linearDamping": 0,
+            "linearVelocity": {
+                "x": 0,
+                "y": 0
+            },
+            "name": "body_3",
+            "shapes": [
+                3
+            ],
+            "sleepThreshold": 0.05,
+            "type": "dynamic"
+        },
+        {
+            "allowFastRotation": false,
+            "angularDamping": 0,
+            "angularVelocity": 0,
+            "enableSleep": true,
+            "fixedRotation": false,
+            "gravityScale": 1,
+            "isAwake": true,
+            "isBullet": false,
+            "isEnabled": true,
+            "linearDamping": 0,
+            "linearVelocity": {
+                "x": 0,
+                "y": 0
+            },
+            "name": "body_4",
+            "shapes": [
+                1
+            ],
+            "sleepThreshold": 0.05,
+            "type": "static"
+        },
+        {
+            "allowFastRotation": false,
+            "angularDamping": 0,
+            "angularVelocity": 0,
+            "enableSleep": true,
+            "fixedRotation": false,
+            "gravityScale": 1,
+            "isAwake": true,
+            "isBullet": false,
+            "isEnabled": true,
+            "linearDamping": 0,
+            "linearVelocity": {
+                "x": 0,
+                "y": 0
+            },
+            "name": "body_5",
+            "shapes": [
+                5
+            ],
+            "sleepThreshold": 0.05,
+            "type": "dynamic"
+        },
+        {
+            "allowFastRotation": false,
+            "angularDamping": 0,
+            "angularVelocity": 0,
+            "enableSleep": true,
+            "fixedRotation": false,
+            "gravityScale": 1,
+            "isAwake": true,
+            "isBullet": false,
+            "isEnabled": true,
+            "linearDamping": 0,
+            "linearVelocity": {
+                "x": 0,
+                "y": 0
+            },
+            "name": "body_6",
+            "shapes": [
+                6
+            ],
+            "sleepThreshold": 0.05,
+            "type": "dynamic"
+        }
+    ],
+    "explosions": [
+        {
+            "name": "explosion_1",
+            "params": {
+                "impulse": 10
+            },
+            "x": 0,
+            "y": -99
+        }
+    ],
+    "field": {
+        "backgroundColor": "#ffffffff",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 600,
+        "showGrid": true,
+        "width": 2000
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+    ],
+    "log": [
+        {
+            "label": "Elapsed Time (s)",
+            "object": "@world",
+            "property": "time"
+        },
+        {
+            "label": "Frame",
+            "object": "@world",
+            "property": "frame"
+        }
+    ],
+    "rules": [
+        {
+            "action": "explode",
+            "actionParams": {
+            },
+            "compare": ">",
+            "op": "set",
+            "property": "",
+            "subject": "@world",
+            "target": "explosion_1",
+            "value": null,
+            "watch": "time",
+            "when": 3
+        }
+    ],
+    "shapes": [
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": 0,
+                "y": -30
+            },
+            "physics": {
+                "categoryBits": "0x0000000000000001",
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": "0xffffffffffffffff",
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 0,
+                "y": 50
+            },
+            "rect": {
+                "height": 40,
+                "width": 400,
+                "x": -200,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "rectangle_2",
+            "origin": {
+                "x": -80,
+                "y": -50
+            },
+            "physics": {
+                "categoryBits": "0x0000000000000001",
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": "0xffffffffffffffff",
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": -100,
+                "y": -50
+            },
+            "rect": {
+                "height": 160,
+                "width": 40,
+                "x": -100,
+                "y": -110
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "rectangle_3",
+            "origin": {
+                "x": -80,
+                "y": -30
+            },
+            "physics": {
+                "categoryBits": "0x0000000000000001",
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": "0xffffffffffffffff",
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 260,
+                "y": -50
+            },
+            "rect": {
+                "height": 160,
+                "width": 40,
+                "x": -100,
+                "y": -110
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 4,
+            "joinStyle": "round",
+            "name": "rectangle_4",
+            "origin": {
+                "x": 0,
+                "y": -30
+            },
+            "physics": {
+                "categoryBits": "0x0000000000000001",
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": "0xffffffffffffffff",
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 0,
+                "y": -150
+            },
+            "rect": {
+                "height": 40,
+                "width": 400,
+                "x": -200,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 5,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "physics": {
+                "categoryBits": "0x0000000000000001",
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": "0xffffffffffffffff",
+                "restitution": 1.0000000000000002,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": 140,
+                "y": -240
+            },
+            "rect": {
+                "height": 62,
+                "width": 62,
+                "x": -31,
+                "y": -31
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 6,
+            "joinStyle": "round",
+            "name": "rectangle_5",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "physics": {
+                "categoryBits": "0x0000000000000001",
+                "density": 1,
+                "enableContactEvents": false,
+                "enableHitEvents": false,
+                "enablePreSolveEvents": false,
+                "enableSensorEvents": false,
+                "friction": 0.6,
+                "groupIndex": 0,
+                "isSensor": false,
+                "maskBits": "0xffffffffffffffff",
+                "restitution": 0,
+                "rollingResistance": 0,
+                "tangentSpeed": 0
+            },
+            "pos": {
+                "x": -160,
+                "y": -280
+            },
+            "rect": {
+                "height": 50,
+                "width": 120,
+                "x": -20,
+                "y": 0
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        }
+    ],
+    "version": 1,
+    "world": {
+        "contactDampingRatio": 10,
+        "contactHertz": 30,
+        "enableContinuous": true,
+        "enableSleep": true,
+        "gravity": {
+            "x": 0,
+            "y": 9.81
+        },
+        "hitEventThreshold": 1,
+        "maxContactPushSpeed": 3,
+        "maximumLinearSpeed": 400,
+        "pixelsPerMeter": 1000,
+        "restitutionThreshold": 1,
+        "solidBounds": false
+    }
+}

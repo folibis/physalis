@@ -1,0 +1,2342 @@
+{
+    "bodies": [
+        {
+            "isEnabled": true,
+            "name": "body_1",
+            "physics": {
+            },
+            "shapes": [
+                16
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_2",
+            "physics": {
+            },
+            "shapes": [
+                3
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_3",
+            "physics": {
+            },
+            "shapes": [
+                1
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_4",
+            "physics": {
+            },
+            "shapes": [
+                14
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_5",
+            "physics": {
+            },
+            "shapes": [
+                15
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_7",
+            "physics": {
+            },
+            "shapes": [
+                2
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_8",
+            "physics": {
+            },
+            "shapes": [
+                4
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_9",
+            "physics": {
+            },
+            "shapes": [
+                5
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_10",
+            "physics": {
+            },
+            "shapes": [
+                6
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_11",
+            "physics": {
+            },
+            "shapes": [
+                7
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_12",
+            "physics": {
+            },
+            "shapes": [
+                8
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_13",
+            "physics": {
+            },
+            "shapes": [
+                9
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_14",
+            "physics": {
+            },
+            "shapes": [
+                10
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_15",
+            "physics": {
+            },
+            "shapes": [
+                11
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_16",
+            "physics": {
+            },
+            "shapes": [
+                12
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_17",
+            "physics": {
+            },
+            "shapes": [
+                13
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_18",
+            "physics": {
+            },
+            "shapes": [
+                17
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_19",
+            "physics": {
+            },
+            "shapes": [
+                18
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_23",
+            "physics": {
+            },
+            "shapes": [
+                20,
+                19,
+                21
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_24",
+            "physics": {
+            },
+            "shapes": [
+                46
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_25",
+            "physics": {
+            },
+            "shapes": [
+                22
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_26",
+            "physics": {
+            },
+            "shapes": [
+                23
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_30",
+            "physics": {
+            },
+            "shapes": [
+                25,
+                24
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_31",
+            "physics": {
+            },
+            "shapes": [
+                26
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_32",
+            "physics": {
+            },
+            "shapes": [
+                28
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_33",
+            "physics": {
+            },
+            "shapes": [
+                27
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_34",
+            "physics": {
+            },
+            "shapes": [
+                29
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_40",
+            "physics": {
+            },
+            "shapes": [
+                30
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_41",
+            "physics": {
+            },
+            "shapes": [
+                32
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_42",
+            "physics": {
+            },
+            "shapes": [
+                31
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_53",
+            "physics": {
+            },
+            "shapes": [
+                33
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_54",
+            "physics": {
+            },
+            "shapes": [
+                34
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_55",
+            "physics": {
+            },
+            "shapes": [
+                35
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_56",
+            "physics": {
+            },
+            "shapes": [
+                36
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_57",
+            "physics": {
+            },
+            "shapes": [
+                37
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_58",
+            "physics": {
+            },
+            "shapes": [
+                39
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_59",
+            "physics": {
+            },
+            "shapes": [
+                38
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_61",
+            "physics": {
+            },
+            "shapes": [
+                40
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_62",
+            "physics": {
+            },
+            "shapes": [
+                41
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_63",
+            "physics": {
+            },
+            "shapes": [
+                43
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_64",
+            "physics": {
+            },
+            "shapes": [
+                42
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_65",
+            "physics": {
+            },
+            "shapes": [
+                44
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_66",
+            "physics": {
+            },
+            "shapes": [
+                45
+            ],
+            "type": "static"
+        }
+    ],
+    "engine": "Box2D",
+    "explosions": [
+        {
+            "name": "explosion_1",
+            "params": {
+                "impulse": 5
+            },
+            "x": 15.714285714285717,
+            "y": 81.42857142857143
+        }
+    ],
+    "field": {
+        "backgroundColor": "#ffffffff",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 600,
+        "showGrid": true,
+        "width": 2000
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+        {
+            "anchorA": {
+                "x": 554.2857142857143,
+                "y": 40
+            },
+            "anchorB": {
+                "x": 554.2857142857143,
+                "y": 40
+            },
+            "axis": {
+                "x": 0.17888543819998318,
+                "y": -0.9838699100999074
+            },
+            "bodyA": "body_19",
+            "bodyB": "body_23",
+            "collideConnected": false,
+            "name": "revolute_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerAngle": 0,
+                "maxMotorTorque": 0,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": 670,
+                "y": 190
+            },
+            "anchorB": {
+                "x": 670,
+                "y": 190
+            },
+            "axis": {
+                "x": 0.5070201265633938,
+                "y": -0.8619342151577696
+            },
+            "bodyA": "body_30",
+            "bodyB": "body_31",
+            "collideConnected": false,
+            "name": "revolute_2",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerAngle": 0,
+                "maxMotorTorque": 0,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": 380,
+                "y": 230
+            },
+            "anchorB": {
+                "x": 500,
+                "y": 230
+            },
+            "axis": {
+                "x": 1,
+                "y": 0
+            },
+            "bodyA": "body_32",
+            "bodyB": "body_33",
+            "collideConnected": false,
+            "name": "prismatic_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "enableLimit": true,
+                "enableMotor": false,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerTranslation": -46,
+                "maxMotorForce": 0,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetTranslation": 0,
+                "upperTranslation": 135
+            },
+            "type": "prismatic"
+        },
+        {
+            "anchorA": {
+                "x": -191.46666666666667,
+                "y": 239.06666666666672
+            },
+            "anchorB": {
+                "x": -346.47058823529414,
+                "y": 10.588235294117652
+            },
+            "axis": {
+                "x": -0.5606389945632415,
+                "y": -0.8280603346224945
+            },
+            "bodyA": "body_59",
+            "bodyB": "body_58",
+            "collideConnected": false,
+            "name": "prismatic_2",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "enableLimit": true,
+                "enableMotor": false,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerTranslation": -277,
+                "maxMotorForce": 1,
+                "motorSpeed": -90,
+                "referenceAngle": 0,
+                "targetTranslation": 0,
+                "upperTranslation": 0
+            },
+            "type": "prismatic"
+        },
+        {
+            "anchorA": {
+                "x": -450,
+                "y": 250
+            },
+            "anchorB": {
+                "x": -450,
+                "y": -180
+            },
+            "axis": {
+                "x": 6.123031769111886e-17,
+                "y": 1
+            },
+            "bodyA": "body_65",
+            "bodyB": "body_61",
+            "collideConnected": false,
+            "name": "prismatic_3",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "enableLimit": true,
+                "enableMotor": false,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerTranslation": 430,
+                "maxMotorForce": 10,
+                "motorSpeed": 90,
+                "referenceAngle": 0,
+                "targetTranslation": 0,
+                "upperTranslation": 0
+            },
+            "type": "prismatic"
+        }
+    ],
+    "rules": [
+        {
+            "action": "explode",
+            "actionParams": {
+                "falloff": 100,
+                "impulse": 3,
+                "maskBits": 0,
+                "radius": 200
+            },
+            "event": "contactBegin",
+            "name": "explosion",
+            "op": "set",
+            "property": "",
+            "subject": "circle_2",
+            "target": "explosion_1",
+            "value": false,
+            "when": "rectangle_20"
+        },
+        {
+            "event": "contactBegin",
+            "name": "jump up",
+            "op": "set",
+            "property": "impulseY",
+            "subject": "rectangle_31",
+            "target": "body_34",
+            "value": -5,
+            "when": "circle_4"
+        },
+        {
+            "event": "contactBegin",
+            "name": "lift start",
+            "op": "set",
+            "property": "enableMotor",
+            "subject": "polygon_4",
+            "target": "prismatic_2",
+            "value": true,
+            "when": "circle_4"
+        },
+        {
+            "action": "removeBody",
+            "actionParams": {
+            },
+            "event": "contactBegin",
+            "name": "end",
+            "op": "set",
+            "property": "",
+            "subject": "circle_4",
+            "target": "body_34",
+            "value": false,
+            "when": "polyline_2"
+        },
+        {
+            "event": "contactBegin",
+            "name": "final lift start",
+            "op": "set",
+            "property": "enableMotor",
+            "subject": "circle_4",
+            "target": "prismatic_3",
+            "value": true,
+            "when": "rectangle_41"
+        },
+        {
+            "event": "limitUpper",
+            "name": "final lift stop",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "prismatic_3",
+            "target": "prismatic_3",
+            "value": false,
+            "when": ""
+        },
+        {
+            "action": "@stopRun",
+            "actionParams": {
+            },
+            "event": "contactBegin",
+            "name": "end",
+            "op": "set",
+            "property": "",
+            "subject": "circle_1",
+            "target": "@world",
+            "value": false,
+            "when": "circle_4"
+        }
+    ],
+    "shapes": [
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": 250,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -100,
+                "y": -150
+            },
+            "rect": {
+                "height": 40,
+                "width": 720,
+                "x": -100,
+                "y": 10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "rectangle_2",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -60,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "rectangle_3",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 0,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 4,
+            "joinStyle": "round",
+            "name": "rectangle_4",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 60,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 5,
+            "joinStyle": "round",
+            "name": "rectangle_5",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 120,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 6,
+            "joinStyle": "round",
+            "name": "rectangle_6",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 180,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 7,
+            "joinStyle": "round",
+            "name": "rectangle_7",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 240,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 8,
+            "joinStyle": "round",
+            "name": "rectangle_8",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 300,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 9,
+            "joinStyle": "round",
+            "name": "rectangle_9",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 360,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 10,
+            "joinStyle": "round",
+            "name": "rectangle_10",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 420,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 11,
+            "joinStyle": "round",
+            "name": "rectangle_11",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 480,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 12,
+            "joinStyle": "round",
+            "name": "rectangle_12",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 540,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 13,
+            "joinStyle": "round",
+            "name": "rectangle_13",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 600,
+                "y": -190
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 14,
+            "joinStyle": "round",
+            "name": "polygon_1",
+            "origin": {
+                "x": 78.5,
+                "y": 50
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 171,
+                    "y": 61
+                },
+                {
+                    "x": 171,
+                    "y": 101
+                },
+                {
+                    "x": -29,
+                    "y": 61
+                },
+                {
+                    "x": -29,
+                    "y": 21
+                }
+            ],
+            "pos": {
+                "x": -371,
+                "y": -201
+            },
+            "rect": {
+                "height": 80,
+                "width": 200,
+                "x": -29,
+                "y": 21
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 15,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -349,
+                "y": -209
+            },
+            "rect": {
+                "height": 62,
+                "width": 62,
+                "x": -31,
+                "y": -31
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 16,
+            "joinStyle": "round",
+            "name": "rectangle_14",
+            "origin": {
+                "x": 320,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+                "groupIndex": -1
+            },
+            "points": [
+                {
+                    "x": 300,
+                    "y": -30
+                },
+                {
+                    "x": 700,
+                    "y": -50
+                },
+                {
+                    "x": 740,
+                    "y": -50
+                },
+                {
+                    "x": 740,
+                    "y": -10
+                },
+                {
+                    "x": 300,
+                    "y": -10
+                }
+            ],
+            "pos": {
+                "x": -300,
+                "y": 130
+            },
+            "rect": {
+                "height": 40,
+                "width": 440,
+                "x": 300,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 17,
+            "joinStyle": "round",
+            "name": "circle_2",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 429.69565217391306,
+                "y": 49.69565217391304
+            },
+            "rect": {
+                "height": 60,
+                "width": 60,
+                "x": -30,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 18,
+            "joinStyle": "round",
+            "name": "rectangle_16",
+            "origin": {
+                "x": 0,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 460,
+                "y": 190
+            },
+            "rect": {
+                "height": 20,
+                "width": 460,
+                "x": -360,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 19,
+            "joinStyle": "round",
+            "name": "rectangle_17",
+            "origin": {
+                "x": -90,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 580,
+                "y": 110
+            },
+            "rect": {
+                "height": 20,
+                "width": 60,
+                "x": -120,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 20,
+            "joinStyle": "round",
+            "name": "rectangle_18",
+            "origin": {
+                "x": 0,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 580,
+                "y": 70
+            },
+            "rect": {
+                "height": 20,
+                "width": 200,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 21,
+            "joinStyle": "round",
+            "name": "rectangle_19",
+            "origin": {
+                "x": -90,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "groupIndex": -1
+            },
+            "pos": {
+                "x": 580,
+                "y": 90
+            },
+            "rect": {
+                "height": 20,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 22,
+            "joinStyle": "round",
+            "name": "polygon_2",
+            "origin": {
+                "x": 320,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+                "groupIndex": -1
+            },
+            "points": [
+                {
+                    "x": 720,
+                    "y": -30
+                },
+                {
+                    "x": 240,
+                    "y": -50
+                },
+                {
+                    "x": 160,
+                    "y": -50
+                },
+                {
+                    "x": 160,
+                    "y": -10
+                },
+                {
+                    "x": 720,
+                    "y": -10
+                }
+            ],
+            "pos": {
+                "x": -160,
+                "y": 10
+            },
+            "rect": {
+                "height": 40,
+                "width": 560,
+                "x": 160,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 23,
+            "joinStyle": "round",
+            "name": "circle_3",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 60,
+                "y": -60
+            },
+            "rect": {
+                "height": 40,
+                "width": 40,
+                "x": -20,
+                "y": -20
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 24,
+            "joinStyle": "round",
+            "name": "rectangle_21",
+            "origin": {
+                "x": -60,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 730,
+                "y": 150
+            },
+            "rect": {
+                "height": 20,
+                "width": 120,
+                "x": -120,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 25,
+            "joinStyle": "round",
+            "name": "rectangle_22",
+            "origin": {
+                "x": -10,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 680,
+                "y": 160
+            },
+            "rect": {
+                "height": 120,
+                "width": 20,
+                "x": -20,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 26,
+            "joinStyle": "round",
+            "name": "rectangle_24",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 840,
+                "y": -90
+            },
+            "rect": {
+                "height": 540,
+                "width": 60,
+                "x": -100,
+                "y": -170
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 27,
+            "joinStyle": "round",
+            "name": "rectangle_25",
+            "origin": {
+                "x": -40,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 540,
+                "y": 270
+            },
+            "rect": {
+                "height": 20,
+                "width": 280,
+                "x": -180,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 28,
+            "joinStyle": "round",
+            "name": "polygon_3",
+            "origin": {
+                "x": 320,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+                "groupIndex": -1
+            },
+            "points": [
+                {
+                    "x": 320,
+                    "y": -30
+                },
+                {
+                    "x": 656,
+                    "y": -50
+                },
+                {
+                    "x": 740,
+                    "y": -50
+                },
+                {
+                    "x": 740,
+                    "y": -10
+                },
+                {
+                    "x": 320,
+                    "y": -10
+                }
+            ],
+            "pos": {
+                "x": -380,
+                "y": 290
+            },
+            "rect": {
+                "height": 40,
+                "width": 420,
+                "x": 320,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 29,
+            "joinStyle": "round",
+            "name": "circle_4",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 331,
+                "y": 211
+            },
+            "rect": {
+                "height": 60,
+                "width": 60,
+                "x": -30,
+                "y": -30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 30,
+            "joinStyle": "round",
+            "name": "rectangle_31",
+            "origin": {
+                "x": -70,
+                "y": 20
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 20,
+                "y": 230
+            },
+            "rect": {
+                "height": 20,
+                "width": 40,
+                "x": -120,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 31,
+            "joinStyle": "round",
+            "name": "rectangle_32",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -100,
+                "y": -50
+            },
+            "rect": {
+                "height": 220,
+                "width": 20,
+                "x": 80,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 32,
+            "joinStyle": "round",
+            "name": "circle_5",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 30,
+                "y": 30
+            },
+            "rect": {
+                "height": 50,
+                "width": 50,
+                "x": -25,
+                "y": -25
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 33,
+            "joinStyle": "round",
+            "name": "rectangle_33",
+            "origin": {
+                "x": 0,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -60,
+                "y": 310
+            },
+            "rect": {
+                "height": 20,
+                "width": 100,
+                "x": -140,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 34,
+            "joinStyle": "round",
+            "name": "polyline_1",
+            "origin": {
+                "x": 22.5,
+                "y": 30.5
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 44,
+                    "y": -35
+                },
+                {
+                    "x": 124,
+                    "y": 45
+                },
+                {
+                    "x": 124,
+                    "y": -35
+                }
+            ],
+            "pos": {
+                "x": -144,
+                "y": -65
+            },
+            "rect": {
+                "height": 80,
+                "width": 80,
+                "x": 44,
+                "y": -35
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 35,
+            "joinStyle": "round",
+            "name": "rectangle_34",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -200,
+                "y": 50
+            },
+            "rect": {
+                "height": 260,
+                "width": 20,
+                "x": 80,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 36,
+            "joinStyle": "round",
+            "name": "rectangle_35",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -300,
+                "y": -50
+            },
+            "rect": {
+                "height": 200,
+                "width": 20,
+                "x": 80,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 37,
+            "joinStyle": "round",
+            "name": "polygon_4",
+            "origin": {
+                "x": 22.5,
+                "y": 30.5
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 44,
+                    "y": 96
+                },
+                {
+                    "x": 124,
+                    "y": 16
+                },
+                {
+                    "x": 124,
+                    "y": 96
+                }
+            ],
+            "pos": {
+                "x": -244,
+                "y": 164
+            },
+            "rect": {
+                "height": 80,
+                "width": 80,
+                "x": 44,
+                "y": 16
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 38,
+            "joinStyle": "round",
+            "name": "polygon_5",
+            "origin": {
+                "x": 31.111111111111114,
+                "y": 20.000000000000014
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 20,
+                    "y": 41.111111111111114
+                },
+                {
+                    "x": 60,
+                    "y": 1.1111111111111143
+                },
+                {
+                    "x": 3.75,
+                    "y": 17.048611111111114
+                }
+            ],
+            "pos": {
+                "x": -220,
+                "y": 218.88888888888889
+            },
+            "rect": {
+                "height": 40,
+                "width": 56.25,
+                "x": 3.75,
+                "y": 1.1111111111111143
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 39,
+            "joinStyle": "round",
+            "name": "rectangle_36",
+            "origin": {
+                "x": 90,
+                "y": 80
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 143.3524572134561,
+                    "y": -30.078134548643618
+                },
+                {
+                    "x": 157.49459283718704,
+                    "y": -44.22027017237457
+                },
+                {
+                    "x": 100,
+                    "y": 237.73273128661987
+                },
+                {
+                    "x": 86.07680793734573,
+                    "y": 252.05747114478885
+                }
+            ],
+            "pos": {
+                "x": -409.88888888888886,
+                "y": 75.562879688311
+            },
+            "rect": {
+                "height": 296.2777413171634,
+                "width": 71.41778489984131,
+                "x": 86.07680793734573,
+                "y": -44.22027017237457
+            },
+            "rotation": -45,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 40,
+            "joinStyle": "round",
+            "name": "rectangle_37",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -600,
+                "y": 90
+            },
+            "rect": {
+                "height": 540,
+                "width": 20,
+                "x": 80,
+                "y": -350
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 41,
+            "joinStyle": "round",
+            "name": "rectangle_38",
+            "origin": {
+                "x": -40,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 540,
+                "y": 310
+            },
+            "rect": {
+                "height": 20,
+                "width": 380,
+                "x": -180,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 42,
+            "joinStyle": "round",
+            "name": "rectangle_39",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -420,
+                "y": -230
+            },
+            "rect": {
+                "height": 20,
+                "width": 1320,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 43,
+            "joinStyle": "round",
+            "name": "rectangle_40",
+            "origin": {
+                "x": 0,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -360,
+                "y": 310
+            },
+            "rect": {
+                "height": 20,
+                "width": 280,
+                "x": -140,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 44,
+            "joinStyle": "round",
+            "name": "rectangle_41",
+            "origin": {
+                "x": -50,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -400,
+                "y": 210
+            },
+            "rect": {
+                "height": 20,
+                "width": 100,
+                "x": -100,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 45,
+            "joinStyle": "round",
+            "name": "polygon_6",
+            "origin": {
+                "x": 27,
+                "y": 21
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": -4,
+                    "y": 54
+                },
+                {
+                    "x": 16,
+                    "y": -6
+                },
+                {
+                    "x": -4,
+                    "y": -6
+                }
+            ],
+            "pos": {
+                "x": -496,
+                "y": -254
+            },
+            "rect": {
+                "height": 60,
+                "width": 20,
+                "x": -4,
+                "y": -6
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#8055ff7f",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 46,
+            "joinStyle": "round",
+            "name": "rectangle_20",
+            "origin": {
+                "x": -70,
+                "y": 20
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": -100,
+                    "y": 10
+                },
+                {
+                    "x": -40,
+                    "y": 10
+                },
+                {
+                    "x": -39.47368421052632,
+                    "y": 46.84210526315789
+                },
+                {
+                    "x": -100,
+                    "y": 50
+                }
+            ],
+            "pos": {
+                "x": 100,
+                "y": 50
+            },
+            "rect": {
+                "height": 40,
+                "width": 60.52631578947368,
+                "x": -100,
+                "y": 10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        }
+    ],
+    "version": 1,
+    "world": {
+        "physics": {
+        },
+        "pixelsPerMeter": 1000,
+        "solidBounds": false
+    }
+}
