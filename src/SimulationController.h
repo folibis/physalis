@@ -7,6 +7,7 @@
 #include <QStringList>
 #include <QHash>
 #include <QVector>
+#include <functional>
 #include <memory>
 
 #include "IPhysicsEngine.h"
@@ -67,6 +68,13 @@ public slots:
     // A push through a body's centre of mass, in the units the engine's
     // impulse properties take -- what the slingshot hands over on release.
     void shoot(PhysicsBody *body, const QPointF &impulse);
+
+    // Runs `use` with the scene as it stood when the run started -- every
+    // shape where it was, joint settings a rule has since changed put back,
+    // removed bodies and broken joints whole -- and the run's state back
+    // afterwards. What an export mid-run has to see: the scene, not a moment
+    // of the run. Stopped, it is just `use`.
+    void withSceneAsStarted(const std::function<void()> &use);
 
     void pause();
     void resume();

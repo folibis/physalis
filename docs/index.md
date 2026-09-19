@@ -118,5 +118,9 @@ example, has **Body**, **Shape** and **Collision** pages.
   simulation is not an undo step, because stopping already puts everything back.
 - **Copy and paste** shapes with **Ctrl+C** and **Ctrl+V**, including between
   two scenes.
+- **Save a screenshot** with **Edit → Save Screenshot…** (Ctrl+Shift+P) or the
+  camera button on the toolbar. It saves the scene exactly as it is drawn at
+  that moment, cut to the objects in it, as a PNG, JPG or another image format
+  (drawn at twice the size, so it stays sharp), or as SVG or PDF drawings.
 - **Export** a scene as a standalone program that runs it without Physalis:
   a C++ project or a web page. See [Exporting](exporting.md).

@@ -1,0 +1,14 @@
+// Box2D 2.4 has no hit events: a hit is a contact closing at speed.
+world.on("pre-solve", function (contact) {
+    var manifold = contact.getWorldManifold(null);
+    var point = manifold && manifold.points[0];
+    if (!point)
+        return;
+    var a = contact.getFixtureA(), b = contact.getFixtureB();
+    var closing = -pl.Vec2.dot(pl.Vec2.sub(b.getBody().getLinearVelocityFromWorldPoint(point),
+                                           a.getBody().getLinearVelocityFromWorldPoint(point)),
+                               manifold.normal);
+    if (closing > 0)
+        hits.push({ a: a, b: b, speed: closing, point: pl.Vec2.clone(point),
+                    normal: pl.Vec2.clone(manifold.normal) });
+});

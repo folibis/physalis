@@ -24,6 +24,8 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <utility>
+#include <vector>
 #include <cmath>
 
 const float PIXELS_PER_METER = {{PIXELS_PER_METER}}f;
@@ -31,17 +33,50 @@ const float PIXELS_PER_METER = {{PIXELS_PER_METER}}f;
 b2Vec2 m(float x, float y) { return b2Vec2{ x / PIXELS_PER_METER, y / PIXELS_PER_METER }; }
 float m(float length) { return length / PIXELS_PER_METER; }
 float rad(float degrees) { return degrees * B2_PI / 180.0f; }
-{{COLOURS}}
+
+// The editor paints a body by what it is -- dynamic, static, kinematic -- and
+// Box2D lets a shape carry its own debug-draw colour, so each shape is given
+// its body's.
+const b2HexColor COLOR_DYNAMIC = b2HexColor(0x{{COLOR_DYNAMIC}});
+const b2HexColor COLOR_STATIC = b2HexColor(0x{{COLOR_STATIC}});
+const b2HexColor COLOR_KINEMATIC = b2HexColor(0x{{COLOR_KINEMATIC}});
+const int FILL_ALPHA = {{FILL_ALPHA}};
+
+// A sensor is drawn open and hatched, the way the editor draws it. Box2D hands
+// a shape's custom colour to the draw callbacks as it is, so a bit above the 24
+// an RGB colour uses marks the shapes that are sensors.
+const uint32_t SENSOR = 0x1000000;
+const QColor SENSOR_COLOR({{SENSOR_COLOR}});
+const Qt::BrushStyle SENSOR_PATTERN = Qt::{{SENSOR_PATTERN}};
+const bool SENSOR_FILLED = {{SENSOR_FILLED}};
+
 b2WorldId world;
-{{IDS}}{{STATE}}
+// A rule asked for the run to end (1) or hold (2). Not inside the step, where the
+// rule is: the view carries it out once the step is over.
+int pendingRun = 0;
+{{IDS}}
+{{STATE}}
+
+{{HELPERS}}
+
 void createWorld()
 {
-{{RESETS}}{{WORLD}}{{BODIES}}{{FIELD_BOUNDS}}{{JOINTS}}}
+    {{RESETS}}
+
+    {{WORLD}}
+
+    {{BODIES}}
+
+    {{FIELD_BOUNDS}}
+
+    {{JOINTS}}
+}
 
 void step(float dt)
 {
     b2World_Step(world, dt, {{SUB_STEPS}});
-{{STEP}}}
+    {{STEP}}
+}
 
 // --- drawing ---------------------------------------------------------------
 //
@@ -265,7 +300,9 @@ void drawAxes(QPainter &painter, b2BodyId body)
         transform.p = b2TransformPoint(transform, b2MulSV(1.0f / mass, centre));
     drawTransform(transform, &painter);
 }
-{{RAY_HELPER}}
+
+{{DRAW_RAY}}
+
 // --- the window ------------------------------------------------------------
 
 class SceneView : public QWidget
@@ -282,6 +319,14 @@ public:
 
         QObject::connect(&timer, &QTimer::timeout, this, [this] {
             step(1.0f / {{STEPS_PER_SECOND}});
+            if (pendingRun) {
+                const int what = pendingRun;
+                pendingRun = 0;
+                if (what == 1)
+                    reset();
+                else
+                    run(false);
+            }
             update();
         });
         timer.start(1000 / {{STEPS_PER_SECOND}});
@@ -338,7 +383,9 @@ protected:
         draw.drawShapes = true;
         draw.context = &painter;
         b2World_Draw(world, &draw);
-{{DEBUG_DRAWING}}    }
+
+        {{DEBUG_DRAWING}}
+    }
 
     // Space runs and pauses, R goes back to the beginning, D shows joints and
     // centres of mass.
@@ -370,7 +417,9 @@ int main(int argc, char *argv[])
     scroll->setWidget(view);
     scroll->setWidgetResizable(true);
     window.setCentralWidget(scroll);
-{{CONTROLS}}
+
+    {{CONTROLS}}
+
     window.resize(std::min({{WIDTH}}, 1400), std::min({{HEIGHT}}, 800));
     window.show();
     view->setFocus();

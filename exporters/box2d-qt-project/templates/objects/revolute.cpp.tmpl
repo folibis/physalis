@@ -1,0 +1,22 @@
+//! A field without a value is left out, and b2DefaultRevoluteJointDef's stands.
+{
+    b2RevoluteJointDef jointDef = b2DefaultRevoluteJointDef();
+    jointDef.bodyIdA = {{BODY_A}};
+    jointDef.bodyIdB = {{BODY_B}};
+    jointDef.localAnchorA = b2Body_GetLocalPoint({{BODY_A}}, m({{ANCHOR_A_X}}, {{ANCHOR_A_Y}}));
+    jointDef.localAnchorB = b2Body_GetLocalPoint({{BODY_B}}, m({{ANCHOR_B_X}}, {{ANCHOR_B_Y}}));
+    jointDef.referenceAngle = rad({{REFERENCE_ANGLE}});
+    jointDef.targetAngle = rad({{TARGET_ANGLE}});
+    jointDef.enableSpring = {{ENABLE_SPRING}};
+    jointDef.hertz = {{HERTZ}};
+    jointDef.dampingRatio = {{DAMPING_RATIO}};
+    jointDef.enableLimit = {{ENABLE_LIMIT}};
+    jointDef.lowerAngle = rad({{LOWER_ANGLE}});
+    jointDef.upperAngle = rad({{UPPER_ANGLE}});
+    jointDef.enableMotor = {{ENABLE_MOTOR}};
+    jointDef.maxMotorTorque = {{MAX_MOTOR_TORQUE}};
+    jointDef.motorSpeed = rad({{MOTOR_SPEED}});
+    jointDef.collideConnected = {{COLLIDE_CONNECTED}};
+    {{ID}} = b2CreateRevoluteJoint(world, &jointDef);
+    b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
+}

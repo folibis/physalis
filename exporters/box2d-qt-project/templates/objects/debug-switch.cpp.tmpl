@@ -1,0 +1,4 @@
+QAction *debug = toolbar->addAction("Debug view");
+debug->setCheckable(true);
+debug->setChecked(view->debug);
+QObject::connect(debug, &QAction::toggled, view, [view](bool on) { view->setDebug(on); });

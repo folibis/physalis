@@ -1,4 +1,4 @@
-// The editor draws a sensor open and hatched, and both exports have to draw it
+// The editor draws a sensor open and hatched, and every export has to draw it
 // the same way -- in the colour and pattern the settings chose.
 
 #include "CanvasScene.h"
@@ -96,4 +96,27 @@ TEST(ExportSensors, ThePlanckPageHatchesThem)
     EXPECT_TRUE(page.contains(QStringLiteral("var SENSOR_FILLED = false;")));
     EXPECT_TRUE(page.contains(QStringLiteral("var sensor = fixture.isSensor();")));
     EXPECT_TRUE(page.contains(QStringLiteral("ctx.fillStyle = SENSOR_HATCH;")));
+}
+
+// qml-box2d's scene draws a sensor as the editor does: an open outline in its
+// body's colour, with SensorHatch -- a component the project carries -- laying
+// the pattern over it.
+TEST(ExportSensors, TheQmlSceneHatchesThem)
+{
+    CanvasScene scene;
+    buildSensor(&scene);
+    const QString qml = exported(&scene, QStringLiteral("qml-box2d"), QStringLiteral("Scene.qml"),
+                                 hatchedGreen());
+    ASSERT_FALSE(qml.isEmpty());
+
+    EXPECT_TRUE(qml.contains(QStringLiteral("color: \"transparent\"\n"))) << qml.toStdString();
+    EXPECT_TRUE(qml.contains(QStringLiteral("border.color: \"#279e6a\""))) << "the static body's colour";
+    EXPECT_TRUE(qml.contains(QStringLiteral("SensorHatch {")));
+    EXPECT_TRUE(qml.contains(QStringLiteral("color: \"#ff05c936\"")));
+    EXPECT_TRUE(qml.contains(QStringLiteral("pattern: Qt.BDiagPattern")));
+    EXPECT_TRUE(qml.contains(QStringLiteral("outline: \"rectangle\"")));
+
+    const QString hatch = exported(&scene, QStringLiteral("qml-box2d"), QStringLiteral("SensorHatch.qml"),
+                                   hatchedGreen());
+    EXPECT_TRUE(hatch.contains(QStringLiteral("ctx.createPattern(color, pattern)"))) << hatch.toStdString();
 }

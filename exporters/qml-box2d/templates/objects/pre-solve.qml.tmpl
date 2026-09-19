@@ -1,0 +1,6 @@
+// Box2D asks before it solves each contact, both ways round as the editor
+// raises it; noted here, acted on after the step.
+onPreSolve: (contact) => {
+    scene.aboutToTouch.push([contact.fixtureA, contact.fixtureB]);
+    scene.aboutToTouch.push([contact.fixtureB, contact.fixtureA]);
+}

@@ -1,0 +1,76 @@
+// Planck has no explosion; this is Box2D v3's, as the editor runs it.
+function explode(centre, impulsePerLength, radius, falloff, maskBits) {
+    for (var body = world.getBodyList(); body; body = body.getNext()) {
+        if (!body.isDynamic() || !body.isActive())
+            continue;
+        for (var fixture = body.getFixtureList(); fixture; fixture = fixture.getNext()) {
+            if (maskBits !== undefined && (fixture.getFilterCategoryBits() & maskBits) === 0)
+                continue;
+            var shape = fixture.getShape();
+            var points = [], round = 0;
+            if (shape.getType() === "circle") {
+                points = [body.getWorldPoint(shape.getCenter())];
+                round = shape.getRadius();
+            } else if (shape.getType() === "polygon") {
+                for (var v = 0; v < shape.m_count; ++v)
+                    points.push(body.getWorldPoint(shape.m_vertices[v]));
+            } else {
+                continue;
+            }
+            var near = nearestPoint(points, round, centre);
+            if (near.distance > radius + falloff)
+                continue;
+            var direction = pl.Vec2.sub(near.point, centre);
+            if (direction.length() > 1e-6)
+                direction.normalize();
+            else
+                direction = pl.Vec2(1, 0);
+            // How wide the fixture is across the line of the blast.
+            var lower = Infinity, upper = -Infinity;
+            for (var k = 0; k < points.length; ++k) {
+                var along = points[k].y * direction.x - points[k].x * direction.y;
+                lower = Math.min(lower, along);
+                upper = Math.max(upper, along);
+            }
+            var fade = near.distance > radius && falloff > 0
+                ? Math.max(0, Math.min(1, (radius + falloff - near.distance) / falloff)) : 1;
+            var magnitude = impulsePerLength * (upper - lower + 2 * round) * fade;
+            body.applyLinearImpulse(pl.Vec2.mul(direction, magnitude), near.point, true);
+        }
+    }
+}
+
+// The point of a convex outline (or a circle: one point and a radius) nearest
+// to `from`, and how far it is; inside it, the middle and no distance.
+function nearestPoint(points, round, from) {
+    if (points.length === 1) {
+        var away = pl.Vec2.sub(from, points[0]);
+        var d = away.length();
+        if (d <= round)
+            return { point: pl.Vec2.clone(points[0]), distance: 0 };
+        return { point: pl.Vec2.add(points[0], pl.Vec2.mul(away, round / d)), distance: d - round };
+    }
+    var inside = true, sign = 0, best = null;
+    for (var i = 0; i < points.length; ++i) {
+        var a = points[i], b = points[(i + 1) % points.length];
+        var edge = pl.Vec2.sub(b, a), rel = pl.Vec2.sub(from, a);
+        var cross = pl.Vec2.cross(edge, rel);
+        if (cross !== 0) {
+            if (sign && (cross > 0) !== (sign > 0))
+                inside = false;
+            sign = cross;
+        }
+        var t = Math.max(0, Math.min(1, pl.Vec2.dot(rel, edge) / (pl.Vec2.dot(edge, edge) || 1)));
+        var q = pl.Vec2.add(a, pl.Vec2.mul(edge, t));
+        var distance = pl.Vec2.distance(q, from);
+        if (!best || distance < best.distance)
+            best = { point: q, distance: distance };
+    }
+    if (inside) {
+        var middle = pl.Vec2();
+        for (var j = 0; j < points.length; ++j)
+            middle.add(pl.Vec2.mul(points[j], 1 / points.length));
+        return { point: middle, distance: 0 };
+    }
+    return best;
+}

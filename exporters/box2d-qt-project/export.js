@@ -8,9 +8,12 @@
 // Box2D. Nothing of the editor itself is carried across: no scene description
 // to load, no rules as data, nothing interpreting anything.
 //
-// main.cpp.tmpl is the program around the scene. This script works out the
-// parts that depend on the scene, and writes a def field only when it differs
-// from what b2Default*Def already sets.
+// main.cpp.tmpl is the program around the scene. Every piece of code that goes
+// into it -- the world, each body, shape and joint, the helpers the rules call,
+// the toolbar -- is a template under templates/objects/ (see render() below);
+// this script works out the values that go into them, and leaves a def field
+// out when it would only repeat what b2Default*Def already sets. The rules'
+// own code is the one part still written here.
 //
 // `scene` is the saved document plus scene.simulation (bodies and joints as
 // the engine receives them), scene.settings (the editor's preferences) and
@@ -21,6 +24,7 @@ var NEWLINE = String.fromCharCode(10);
 var T = null;       // template loader
 var PPM = 1000;     // scene units per metre
 var MOTION = 0.05;  // 50 / PPM -- the scale the editor quotes world speeds at
+var TOLERANCE = 0.1; // Box2D's length unit, from the world's Contact Margin, as the editor sets it
 
 var NAMES = null;   // editor name -> C++ identifier
 var TAKEN = null;   // identifiers already in use
@@ -46,6 +50,9 @@ function exportScene(scene, io) {
 
     PPM = world.pixelsPerMeter || 1000;
     MOTION = 50.0 / PPM;
+    // The world's Contact Margin, in scene units: Box2D makes a contact 4 x slop
+    // away, so its length unit is the margin over 4 x 5 mm at this scale.
+    TOLERANCE = Math.max(0.1, pickNumber(vals(world).contactMargin, 2)) / (4.0 * 0.005 * PPM);
 
     var cache = {};
     T = function (name) {
@@ -56,11 +63,10 @@ function exportScene(scene, io) {
 
     var project = safeName(own.projectName) || "PhysalisScene";
     var prefix = String(own.qtPath || "").trim();
-    io.write("CMakeLists.txt", fill(T("CMakeLists.txt.tmpl"), {
+    io.write("CMakeLists.txt", page("CMakeLists.txt.tmpl", {
         PROJECT: project,
         QT_PREFIX: prefix
-            ? ('set(CMAKE_PREFIX_PATH "' + prefix.split("\\").join("/")
-               + '" ${CMAKE_PREFIX_PATH})' + NEWLINE)
+            ? ('set(CMAKE_PREFIX_PATH "' + prefix.split("\\").join("/") + '" ${CMAKE_PREFIX_PATH})')
             : "",
         CXX_STANDARD: String(own.cxxStandard || "17"),
         BOX2D_REPO: String(own.box2dRepository || "https://github.com/erincatto/box2d.git").trim(),
@@ -79,20 +85,31 @@ function exportScene(scene, io) {
     WORLD_SETTINGS = world;
     LOST = destroys(scene);
 
+    HELPERS = { initState: false, preSolve: false, clones: {} };
+    ANSWERING = false;
     // The step code first: it decides which shape ids have to be kept.
     var stepCode = stepBody(scene, io);
     var colours = bodyColours(physics);
+    WATCHED = watchedShapes(scene);
+    var helpers = helpersCode(scene, colours);
     var steps = int(own.stepsPerSecond, 60);
     var width = Math.round(field.width || 1000);
     var height = Math.round(field.height || 600);
 
-    io.write("main.cpp", fill(T("main.cpp.tmpl"), {
+    io.write("main.cpp", page("main.cpp.tmpl", {
         TITLE: project,
         PIXELS_PER_METER: num(PPM),
-        COLOURS: colours.constants,
+        COLOR_DYNAMIC: colours.hex.dynamic,
+        COLOR_STATIC: colours.hex["static"],
+        COLOR_KINEMATIC: colours.hex.kinematic,
+        FILL_ALPHA: colours.fillAlpha,
+        SENSOR_COLOR: colours.sensorColor,
+        SENSOR_PATTERN: colours.sensorPattern,
+        SENSOR_FILLED: colours.sensorFilled,
         IDS: idDeclarations(scene),
-        STATE: STATE.length ? (NEWLINE + STATE.join("")) : "",
-        RESETS: RESETS.length ? (RESETS.join("") + NEWLINE) : "",
+        STATE: STATE.join(NEWLINE),
+        HELPERS: helpers,
+        RESETS: RESETS.join(NEWLINE),
         WORLD: worldCode(world),
         BODIES: bodiesCode(scene, colours),
         FIELD_BOUNDS: fieldBoundsCode(world, field),
@@ -110,7 +127,7 @@ function exportScene(scene, io) {
         VIEW_CENTER_Y: "0.0",
         BACKGROUND: field.backgroundColor || "#ffffffff",
         DEBUG_VIEW: bool(own.debugView),
-        RAY_HELPER: (scene.rays || []).length ? T("draw-ray.tmpl") : "",
+        DRAW_RAY: (scene.rays || []).length ? render("objects/draw-ray.cpp.tmpl", {}) : "",
         DEBUG_DRAWING: debugDrawing(scene),
         JOINT_COLOR: qtColour(physics.jointColor, "170, 232, 196, 106"),
         JOINT_ANCHOR_RADIUS: short(pickNumber(physics.jointAnchorRadius, 7)),
@@ -188,27 +205,10 @@ function idDeclarations(scene) {
         joints.push(NAMES["joint:" + j]);
     for (var r = 0; r < (scene.rays || []).length; ++r)
         rays.push(NAMES["ray:" + r]);
-
-    return declare("b2BodyId", bodies) + declare("b2ShapeId", shapes)
-           + declare("b2JointId", joints) + declare("b2RayResult", rays);
-}
-
-// One declaration for a list of names, wrapped the way a person would.
-function declare(type, names) {
-    if (names.length === 0)
-        return "";
-    var out = type + " ";
-    var line = out;
-    for (var i = 0; i < names.length; ++i) {
-        var piece = names[i] + (i + 1 < names.length ? ", " : ";");
-        if (line.length + piece.length > 88) {
-            out = out.replace(/ $/, "") + NEWLINE + "    ";
-            line = "    ";
-        }
-        out += piece;
-        line += piece;
-    }
-    return out + NEWLINE;
+    var list = function (names) { return names.length ? listValue(names) : null; };
+    return render("objects/ids.cpp.tmpl", {
+        BODIES: list(bodies), SHAPES: list(shapes), JOINTS: list(joints), RAYS: list(rays),
+    });
 }
 
 // --- the world -------------------------------------------------------------
@@ -216,36 +216,28 @@ function declare(type, names) {
 function worldCode(world) {
     var g = { x: pickNumber(vals(world).gravityX, 0),
               y: pickNumber(vals(world).gravityY, 9.81) };
-    var lines = [
-        "// Box2D's tolerances are lengths fixed for metre-sized objects: 5 mm of slop,",
-        "// contacts made 2 cm before shapes meet. This scene is drawn at " + num(PPM) + " units per",
-        "// metre, so they are scaled to what they would be at 50, or they show on screen.",
-        "b2SetLengthUnitsPerMeter(" + fnum(MOTION) + ");",
-        "",
-        "b2WorldDef worldDef = b2DefaultWorldDef();",
-        "worldDef.gravity = b2Vec2{ " + fnum(g.x * MOTION) + ", " + fnum(g.y * MOTION) + " };",
-    ];
     // b2SetLengthUnitsPerMeter scales Box2D's own defaults for these as well, so
     // a value is left out only when it matches the default after that call.
-    var speeds = [
-        ["maximumLinearSpeed", 400, 400], ["maxContactPushSpeed", 3, 3],
-        ["restitutionThreshold", 1, 1], ["hitEventThreshold", 1, 1],
-    ];
-    for (var i = 0; i < speeds.length; ++i) {
-        var value = pickNumber(world[speeds[i][0]], speeds[i][1]) * MOTION;
-        if (differs(value, speeds[i][2] * MOTION))
-            lines.push("worldDef." + speeds[i][0] + " = " + fnum(value) + ";");
-    }
-    if (differs(pickNumber(vals(world).contactHertz, 30), 30))
-        lines.push("worldDef.contactHertz = " + fnum(vals(world).contactHertz) + ";");
-    if (differs(pickNumber(vals(world).contactDampingRatio, 10), 10))
-        lines.push("worldDef.contactDampingRatio = " + fnum(vals(world).contactDampingRatio) + ";");
-    if (vals(world).enableSleep === false)
-        lines.push("worldDef.enableSleep = false;");
-    if (vals(world).enableContinuous === false)
-        lines.push("worldDef.enableContinuous = false;");
-    lines.push("world = b2CreateWorld(&worldDef);");
-    return indent("    ", lines);
+    var speed = function (key, fallback) {
+        var value = pickNumber(world[key], fallback) * MOTION;
+        return differs(value, fallback * TOLERANCE) ? fnum(value) : null;
+    };
+    var v = vals(world);
+    return render("objects/world.cpp.tmpl", {
+        PIXELS_PER_METER: num(PPM),
+        LENGTH_UNITS: fnum(TOLERANCE),
+        GRAVITY_X: fnum(g.x * MOTION),
+        GRAVITY_Y: fnum(g.y * MOTION),
+        MAXIMUM_LINEAR_SPEED: speed("maximumLinearSpeed", 400),
+        MAX_CONTACT_PUSH_SPEED: speed("maxContactPushSpeed", 3),
+        RESTITUTION_THRESHOLD: speed("restitutionThreshold", 1),
+        HIT_EVENT_THRESHOLD: speed("hitEventThreshold", 1),
+        CONTACT_HERTZ: differs(pickNumber(v.contactHertz, 30), 30) ? fnum(v.contactHertz) : null,
+        CONTACT_DAMPING_RATIO: differs(pickNumber(v.contactDampingRatio, 10), 10) ? fnum(v.contactDampingRatio) : null,
+        ENABLE_SLEEP: v.enableSleep === false ? "false" : null,
+        ENABLE_CONTINUOUS: v.enableContinuous === false ? "false" : null,
+        PRE_SOLVE: HELPERS.preSolve ? "notePreSolve" : null,
+    });
 }
 
 // --- bodies and shapes -----------------------------------------------------
@@ -254,6 +246,8 @@ function worldCode(world) {
 // on for these when a run starts, whatever the shape says, so the export does
 // the same -- without it Box2D never reports the contact the rule waits for.
 var WATCHED = null;
+var HELPERS = null;    // what the step code calls that has to be written out
+var ANSWERING = false; // writing a "to be removed" answer, which removes for real
 
 function watchedShapes(scene) {
     var names = {};
@@ -267,62 +261,48 @@ function watchedShapes(scene) {
 
 function bodiesCode(scene, colours) {
     WATCHED = watchedShapes(scene);
-    var out = "";
+    var out = [];
     var bodies = scene.simulation.bodies;
     for (var i = 0; i < bodies.length; ++i)
-        out += NEWLINE + bodyCode(bodies[i], NAMES["body:" + i], colours);
-    return out;
+        out.push(bodyCode(bodies[i], NAMES["body:" + i], colours));
+    return out.join(NEWLINE + NEWLINE);
 }
 
+var BODY_TYPES = { dynamic: "b2_dynamicBody", kinematic: "b2_kinematicBody" };
+
 function bodyCode(body, name, colours) {
-    var lines = ["b2BodyDef bodyDef = b2DefaultBodyDef();"];
-    if (body.type === "dynamic")
-        lines.push("bodyDef.type = b2_dynamicBody;");
-    else if (body.type === "kinematic")
-        lines.push("bodyDef.type = b2_kinematicBody;");
-
+    var v = vals(body);
     var p = body.position || { x: 0, y: 0 };
-    if (p.x || p.y)
-        lines.push("bodyDef.position = m(" + short(p.x) + ", " + short(p.y) + ");");
-    if (body.rotation)
-        lines.push("bodyDef.rotation = b2MakeRot(rad(" + short(body.rotation) + "));");
-    var v = { x: pickNumber(vals(body).velocityX, 0),
-              y: pickNumber(vals(body).velocityY, 0) };
-    if (v.x || v.y) {
-        lines.push("bodyDef.linearVelocity = b2Vec2{ " + fnum(v.x * MOTION) + ", "
-                   + fnum(v.y * MOTION) + " };");
-    }
-    if (vals(body).angularVelocity)
-        lines.push("bodyDef.angularVelocity = rad(" + short(vals(body).angularVelocity) + ");");
-    if (vals(body).linearDamping)
-        lines.push("bodyDef.linearDamping = " + fnum(vals(body).linearDamping) + ";");
-    if (vals(body).angularDamping)
-        lines.push("bodyDef.angularDamping = " + fnum(vals(body).angularDamping) + ";");
-    if (differs(pickNumber(vals(body).gravityScale, 1), 1))
-        lines.push("bodyDef.gravityScale = " + fnum(vals(body).gravityScale) + ";");
-    if (differs(pickNumber(vals(body).sleepThreshold, 0.05) * MOTION, 0.05 * MOTION))
-        lines.push("bodyDef.sleepThreshold = " + fnum(vals(body).sleepThreshold * MOTION) + ";");
-    if (vals(body).enableSleep === false)
-        lines.push("bodyDef.enableSleep = false;");
-    if (vals(body).isAwake === false)
-        lines.push("bodyDef.isAwake = false;");
-    if (vals(body).fixedRotation)
-        lines.push("bodyDef.fixedRotation = true;");
-    if (vals(body).isBullet)
-        lines.push("bodyDef.isBullet = true;");
-    if (vals(body).allowFastRotation)
-        lines.push("bodyDef.allowFastRotation = true;");
-    if (body.isEnabled === false)
-        lines.push("bodyDef.isEnabled = false;");
-    lines.push(name + " = b2CreateBody(world, &bodyDef);");
-
+    var velocity = { x: pickNumber(v.velocityX, 0), y: pickNumber(v.velocityY, 0) };
+    var moving = velocity.x || velocity.y;
     var counts = {};
+    var shapes = [];
     var parts = body.parts || [];
-    for (var i = 0; i < parts.length; ++i) {
-        lines.push("");
-        lines = lines.concat(shapeLines(parts[i], body, name, colours, i === 0, counts));
-    }
-    return "    {" + NEWLINE + indent("        ", lines) + "    }" + NEWLINE;
+    for (var i = 0; i < parts.length; ++i)
+        shapes.push(shapeCode(parts[i], body, name, colours, i === 0, counts));
+    return render("objects/body.cpp.tmpl", {
+        ID: name,
+        TYPE: BODY_TYPES[body.type] || null,
+        X: p.x || p.y ? short(p.x) : null,
+        Y: p.x || p.y ? short(p.y) : null,
+        ANGLE: body.rotation ? short(body.rotation) : null,
+        VELOCITY_X: moving ? fnum(velocity.x * MOTION) : null,
+        VELOCITY_Y: moving ? fnum(velocity.y * MOTION) : null,
+        ANGULAR_VELOCITY: v.angularVelocity ? short(v.angularVelocity) : null,
+        LINEAR_DAMPING: v.linearDamping ? fnum(v.linearDamping) : null,
+        ANGULAR_DAMPING: v.angularDamping ? fnum(v.angularDamping) : null,
+        GRAVITY_SCALE: differs(pickNumber(v.gravityScale, 1), 1) ? fnum(v.gravityScale) : null,
+        // b2DefaultBodyDef scales its own by the length unit, not by the pace.
+        SLEEP_THRESHOLD: differs(pickNumber(v.sleepThreshold, 0.05) * MOTION, 0.05 * TOLERANCE)
+            ? fnum(v.sleepThreshold * MOTION) : null,
+        ENABLE_SLEEP: v.enableSleep === false ? "false" : null,
+        AWAKE: v.isAwake === false ? "false" : null,
+        FIXED_ROTATION: v.fixedRotation ? "true" : null,
+        BULLET: v.isBullet ? "true" : null,
+        ALLOW_FAST_ROTATION: v.allowFastRotation ? "true" : null,
+        ENABLED: body.isEnabled === false ? "false" : null,
+        SHAPES: shapes.join(NEWLINE + NEWLINE),
+    });
 }
 
 function isOutline(part) { return part.kind === "polygon" && !isSolidPolygon(part) || part.kind === "chain"; }
@@ -354,48 +334,34 @@ function geometryName(kind, counts) {
     return counts[kind] === 1 ? kind : (kind + counts[kind]);
 }
 
-function shapeLines(part, body, bodyName, colours, first, counts) {
+function shapeCode(part, body, bodyName, colours, first, counts) {
     // An outline has no area and so no mass; Box2D would leave a dynamic body
     // made of one frozen in place, so the editor does not build it either.
-    if (isOutline(part) && body.type === "dynamic") {
-        return ["// " + (part.name || "an outline") + " is an outline, which has no mass, "
-                + "so a dynamic body cannot be made of it."];
-    }
+    if (isOutline(part) && body.type === "dynamic")
+        return render("objects/massless-outline.cpp.tmpl", { NAME: part.name || "an outline" });
 
-    var lines = [first ? "b2ShapeDef shapeDef = b2DefaultShapeDef();"
-                       : "shapeDef = b2DefaultShapeDef();"];
-    if (differs(pickNumber(vals(part).density, 1), 1))
-        lines.push("shapeDef.density = " + fnum(vals(part).density) + ";");
-    if (differs(pickNumber(vals(part).friction, 0.6), 0.6))
-        lines.push("shapeDef.material.friction = " + fnum(vals(part).friction) + ";");
-    if (vals(part).restitution)
-        lines.push("shapeDef.material.restitution = " + fnum(vals(part).restitution) + ";");
-    if (vals(part).rollingResistance)
-        lines.push("shapeDef.material.rollingResistance = " + fnum(vals(part).rollingResistance) + ";");
-    if (vals(part).tangentSpeed)
-        lines.push("shapeDef.material.tangentSpeed = m(" + short(vals(part).tangentSpeed) + ");");
-    if (colours.byType[body.type]) {
-        lines.push("shapeDef.material.customColor = " + colours.byType[body.type]
-                   + (vals(part).isSensor ? " | SENSOR" : "") + ";");
-    }
-    if (String(vals(part).categoryBits) !== "1" && vals(part).categoryBits !== undefined)
-        lines.push("shapeDef.filter.categoryBits = " + vals(part).categoryBits + "ull;");
-    if (String(vals(part).maskBits) !== "18446744073709551615" && vals(part).maskBits !== undefined)
-        lines.push("shapeDef.filter.maskBits = " + vals(part).maskBits + "ull;");
-    if (vals(part).groupIndex)
-        lines.push("shapeDef.filter.groupIndex = " + vals(part).groupIndex + ";");
-    if (vals(part).isSensor)
-        lines.push("shapeDef.isSensor = true;");
-    if (vals(part).enableSensorEvents)
-        lines.push("shapeDef.enableSensorEvents = true;");
-    // b2DefaultShapeDef leaves contact events off.
+    var v = vals(part);
+    var category = bits64(v.categoryBits, "0x1ull");
+    var mask = bits64(v.maskBits, ALL_BITS);
     var watched = WATCHED[part.name] || WATCHED[body.name];
-    if (vals(part).enableContactEvents || watched)
-        lines.push("shapeDef.enableContactEvents = true;");
-    if (vals(part).enableHitEvents || watched)
-        lines.push("shapeDef.enableHitEvents = true;");
-    if (vals(part).enablePreSolveEvents)
-        lines.push("shapeDef.enablePreSolveEvents = true;");
+    var def = render("objects/shape-def.cpp.tmpl", {
+        DECLARE: first ? "b2ShapeDef " : "",
+        DENSITY: differs(pickNumber(v.density, 1), 1) ? fnum(v.density) : null,
+        FRICTION: differs(pickNumber(v.friction, 0.6), 0.6) ? fnum(v.friction) : null,
+        RESTITUTION: v.restitution ? fnum(v.restitution) : null,
+        ROLLING_RESISTANCE: v.rollingResistance ? fnum(v.rollingResistance) : null,
+        TANGENT_SPEED: v.tangentSpeed ? short(v.tangentSpeed) : null,
+        CUSTOM_COLOR: colours.byType[body.type]
+            ? colours.byType[body.type] + (v.isSensor ? " | SENSOR" : "") : null,
+        CATEGORY: category !== "0x1ull" ? category : null,
+        MASK: mask !== ALL_BITS ? mask : null,
+        GROUP: v.groupIndex ? String(v.groupIndex) : null,
+        SENSOR: v.isSensor ? "true" : null,
+        SENSOR_EVENTS: v.enableSensorEvents ? "true" : null,
+        CONTACT_EVENTS: v.enableContactEvents || watched ? "true" : null,
+        HIT_EVENTS: v.enableHitEvents || watched ? "true" : null,
+        PRE_SOLVE_EVENTS: v.enablePreSolveEvents || (watched && HELPERS && HELPERS.preSolve) ? "true" : null,
+    });
 
     var keep = part.name && USED[part.name] && !isOutline(part)
         ? (NAMES["shape:" + part.name] + " = ") : "";
@@ -405,32 +371,25 @@ function shapeLines(part, body, bodyName, colours, first, counts) {
         var hw = part.halfExtents.x, hh = part.halfExtents.y;
         var r = Math.max(0, Math.min(part.cornerRadius || 0, Math.min(hw, hh)));
         var box = geometryName("box", counts);
-        var rot = part.rotation ? ("b2MakeRot(rad(" + short(part.rotation) + "))") : "b2Rot_identity";
-        var make;
-        if (r > 0 && !c.x && !c.y && !part.rotation) {
-            make = "b2MakeRoundedBox(m(" + short(Math.max(hw - r, 0.01)) + "), m("
-                   + short(Math.max(hh - r, 0.01)) + "), m(" + short(r) + "))";
-        } else if (r > 0) {
-            make = "b2MakeOffsetRoundedBox(m(" + short(Math.max(hw - r, 0.01)) + "), m("
-                   + short(Math.max(hh - r, 0.01)) + "), m(" + short(c.x) + ", " + short(c.y)
-                   + "), " + rot + ", m(" + short(r) + "))";
-        } else if (!c.x && !c.y && !part.rotation) {
-            make = "b2MakeBox(m(" + short(hw) + "), m(" + short(hh) + "))";
-        } else {
-            make = "b2MakeOffsetBox(m(" + short(hw) + "), m(" + short(hh) + "), m("
-                   + short(c.x) + ", " + short(c.y) + "), " + rot + ")";
-        }
-        lines.push("b2Polygon " + box + " = " + make + ";");
-        lines.push(keep + "b2CreatePolygonShape(" + bodyName + ", &shapeDef, &" + box + ");");
-        return lines;
+        var rot = part.rotation ? render("objects/rotation.cpp.tmpl", { ANGLE: short(part.rotation) })
+                                : "b2Rot_identity";
+        var centred = !c.x && !c.y && !part.rotation;
+        var size = r > 0 ? { HALF_WIDTH: short(Math.max(hw - r, 0.01)), HALF_HEIGHT: short(Math.max(hh - r, 0.01)) }
+                         : { HALF_WIDTH: short(hw), HALF_HEIGHT: short(hh) };
+        size.X = short(c.x);
+        size.Y = short(c.y);
+        size.ROTATION = rot;
+        size.RADIUS = short(r);
+        var make = render("objects/" + (r > 0 ? (centred ? "make-rounded-box" : "make-offset-rounded-box")
+                                              : (centred ? "make-box" : "make-offset-box")) + ".cpp.tmpl", size);
+        return render("objects/box.cpp.tmpl", { DEF: def, NAME: box, MAKE: make, KEEP: keep, BODY: bodyName });
     }
 
     if (part.kind === "circle") {
-        var circle = geometryName("circle", counts);
-        lines.push("b2Circle " + circle + " = { m(" + short(c.x) + ", " + short(c.y) + "), m("
-                   + short(part.radius) + ") };");
-        lines.push(keep + "b2CreateCircleShape(" + bodyName + ", &shapeDef, &" + circle + ");");
-        return lines;
+        return render("objects/circle.cpp.tmpl", {
+            DEF: def, NAME: geometryName("circle", counts), X: short(c.x), Y: short(c.y),
+            RADIUS: short(part.radius), KEEP: keep, BODY: bodyName,
+        });
     }
 
     var pts = part.points || [];
@@ -438,40 +397,28 @@ function shapeLines(part, body, bodyName, colours, first, counts) {
     var list = [];
     for (var i = 0; i < pts.length; ++i)
         list.push("m(" + short(pts[i].x) + ", " + short(pts[i].y) + ")");
-    lines = lines.concat(wrapList("b2Vec2 " + points + "[] = { ", list, " };"));
+    var pointsCode = render("objects/points.cpp.tmpl", { NAME: points, POINTS: listValue(list) });
 
     if (isSolidPolygon(part)) {
         var hull = geometryName("hull", counts);
-        var polygon = geometryName("polygon", counts);
-        lines.push("b2Hull " + hull + " = b2ComputeHull(" + points + ", " + pts.length + ");");
-        lines.push("b2Polygon " + polygon + " = b2MakePolygon(&" + hull + ", 0.0f);");
-        lines.push(keep + "b2CreatePolygonShape(" + bodyName + ", &shapeDef, &" + polygon + ");");
-        return lines;
+        return render("objects/polygon.cpp.tmpl", {
+            DEF: def, POINTS: pointsCode, HULL: hull, POINTS_NAME: points, COUNT: String(pts.length),
+            NAME: geometryName("polygon", counts), KEEP: keep, BODY: bodyName,
+        });
     }
 
     var closed = part.kind === "polygon" || part.closed;
     if (part.kind === "chain" && part.smoothChain && pts.length >= 4) {
-        // A chain is one-sided and smooth across its joins; the editor builds
-        // it with b2CreateChain when asked to.
-        lines.push("b2ChainDef chainDef = b2DefaultChainDef();");
-        lines.push("chainDef.points = " + points + ";");
-        lines.push("chainDef.count = " + pts.length + ";");
-        if (closed)
-            lines.push("chainDef.isLoop = true;");
-        lines.push("chainDef.filter = shapeDef.filter;");
-        lines.push("chainDef.materials = &shapeDef.material;");
-        lines.push("b2CreateChain(" + bodyName + ", &chainDef);");
-        return lines;
+        return render("objects/chain.cpp.tmpl", {
+            DEF: def, POINTS: pointsCode, POINTS_NAME: points, COUNT: String(pts.length),
+            LOOP: closed ? "true" : null, BODY: bodyName,
+        });
     }
-
-    // Otherwise one two-sided segment per edge.
-    var edges = closed ? pts.length : pts.length - 1;
-    var next = closed ? ("(i + 1) % " + pts.length) : "i + 1";
-    lines.push("for (int i = 0; i < " + edges + "; ++i) {");
-    lines.push("    b2Segment segment = { " + points + "[i], " + points + "[" + next + "] };");
-    lines.push("    b2CreateSegmentShape(" + bodyName + ", &shapeDef, &segment);");
-    lines.push("}");
-    return lines;
+    return render("objects/segments.cpp.tmpl", {
+        DEF: def, POINTS: pointsCode, POINTS_NAME: points,
+        COUNT: String(closed ? pts.length : pts.length - 1),
+        NEXT: closed ? ("(i + 1) % " + pts.length) : "i + 1", BODY: bodyName,
+    });
 }
 
 function wrapList(head, items, tail) {
@@ -494,74 +441,67 @@ function fieldBoundsCode(world, field) {
     if (!world.solidBounds)
         return "";
     var w = field.width || 1000, h = field.height || 1000, t = 40;
-    var walls = [
-        [w / 2 + t, t / 2, 0, -h / 2 - t / 2], [w / 2 + t, t / 2, 0, h / 2 + t / 2],
-        [t / 2, h / 2, -w / 2 - t / 2, 0], [t / 2, h / 2, w / 2 + t / 2, 0],
-    ];
-    var lines = [
-        "// The walls around the field.",
-        "b2BodyDef bodyDef = b2DefaultBodyDef();",
-        "b2BodyId walls = b2CreateBody(world, &bodyDef);",
-        "b2ShapeDef shapeDef = b2DefaultShapeDef();",
-    ];
-    for (var i = 0; i < walls.length; ++i) {
-        lines.push((i === 0 ? "b2Polygon wall = " : "wall = ") + "b2MakeOffsetBox(m("
-                   + short(walls[i][0]) + "), m(" + short(walls[i][1]) + "), m("
-                   + short(walls[i][2]) + ", " + short(walls[i][3]) + "), b2Rot_identity);");
-        lines.push("b2CreatePolygonShape(walls, &shapeDef, &wall);");
-    }
-    return NEWLINE + "    {" + NEWLINE + indent("        ", lines) + "    }" + NEWLINE;
+    return render("objects/walls.cpp.tmpl", {
+        HALF_SPAN: short(w / 2 + t),
+        HALF_THICKNESS: short(t / 2),
+        HALF_HEIGHT: short(h / 2),
+        TOP: short(-h / 2 - t / 2),
+        BOTTOM: short(h / 2 + t / 2),
+        LEFT: short(-w / 2 - t / 2),
+        RIGHT: short(w / 2 + t / 2),
+    });
 }
 
 // --- joints ----------------------------------------------------------------
 
 function jointsCode(scene) {
-    var out = "";
+    var out = [];
     var joints = scene.simulation.joints;
     for (var j = 0; j < joints.length; ++j)
-        out += NEWLINE + jointCode(scene, joints[j], NAMES["joint:" + j]);
-    return out;
+        out.push(jointCode(scene, joints[j], NAMES["joint:" + j], j));
+    return out.join(NEWLINE + NEWLINE);
 }
 
-function jointCode(scene, joint, name) {
+// Where each sliding joint's travel starts: the gap between its anchors along
+// its axis, in scene units. Box2D measures a prismatic or wheel joint between
+// its anchors, so one whose anchors start apart starts that far along; the
+// editor counts travel from there, and its engine adds this to the limits.
+function travelOrigin(joint) {
+    if (!joint || (joint.type !== "prismatic" && joint.type !== "wheel"))
+        return 0;
+    var anchors = joint.anchors || [];
+    var a = anchors[0] || { x: 0, y: 0 }, b = anchors[1] || a;
+    var ax = joint.axis || { x: 1, y: 0 };
+    var length = Math.sqrt(ax.x * ax.x + ax.y * ax.y) || 1;
+    return ((b.x - a.x) * ax.x + (b.y - a.y) * ax.y) / length;
+}
+
+function jointCode(scene, joint, name, index) {
     var p = joint.params || {};
     var bodies = scene.simulation.bodies;
     if (joint.bodyA < 0 || joint.bodyB < 0) {
-        return "    // " + name + " holds one body to a point in the world; not exported."
-               + NEWLINE;
+        return render("objects/unsupported-joint.cpp.tmpl", {
+            NAME: name, WHY: "holds one body to a point in the world; not exported.",
+        });
     }
-    var A = NAMES["body:" + joint.bodyA], B = NAMES["body:" + joint.bodyB];
     var anchors = joint.anchors || [];
     var a = anchors.length > 0 ? anchors[0] : { x: 0, y: 0 };
     var b = anchors.length > 1 ? anchors[1] : a;
     var type = joint.type;
-    var Type = type.charAt(0).toUpperCase() + type.slice(1);
 
-    var lines = ["b2" + Type + "JointDef jointDef = b2Default" + Type + "JointDef();",
-                 "jointDef.bodyIdA = " + A + ";", "jointDef.bodyIdB = " + B + ";"];
-    if (type !== "motor" && type !== "filter" && type !== "mouse") {
-        lines.push("jointDef.localAnchorA = b2Body_GetLocalPoint(" + A + ", m(" + short(a.x)
-                   + ", " + short(a.y) + "));");
-        lines.push("jointDef.localAnchorB = b2Body_GetLocalPoint(" + B + ", m(" + short(b.x)
-                   + ", " + short(b.y) + "));");
-    }
-
-    var set = function (field, value) { lines.push("jointDef." + field + " = " + value + ";"); };
-    var flag = function (field, value, fallback) {
-        if (!!value !== fallback)
-            set(field, bool(value));
-    };
-    var number = function (field, value, fallback) {
-        if (differs(Number(value) || 0, fallback))
-            set(field, fnum(value));
-    };
-    var length = function (field, value) {
-        if (value)
-            set(field, "m(" + short(value) + ")");
-    };
-    var angle = function (field, value) {
-        if (value)
-            set(field, "rad(" + short(value) + ")");
+    // A field is left out when it would only say what b2Default*JointDef does.
+    var flag = function (value, fallback) { return !!value !== fallback ? bool(value) : null; };
+    var number = function (value, fallback) { return differs(Number(value) || 0, fallback) ? fnum(value) : null; };
+    var length = function (value) { return value ? short(value) : null; };
+    var angle = function (value) { return value ? short(value) : null; };
+    var hertz = pick(p, "constraintHertz", 60), damping = pick(p, "constraintDampingRatio", 2);
+    var tuned = differs(hertz, 60) || differs(damping, 2);
+    var values = {
+        ID: name, BODY_A: NAMES["body:" + joint.bodyA], BODY_B: NAMES["body:" + joint.bodyB],
+        ANCHOR_A_X: short(a.x), ANCHOR_A_Y: short(a.y), ANCHOR_B_X: short(b.x), ANCHOR_B_Y: short(b.y),
+        COLLIDE_CONNECTED: flag(joint.collideConnected, false),
+        CONSTRAINT_HERTZ: tuned ? fnum(hertz) : null,
+        CONSTRAINT_DAMPING: tuned ? fnum(damping) : null,
     };
     // The angle the two bodies already stand at, so a joint made in place
     // starts unstrained.
@@ -573,93 +513,91 @@ function jointCode(scene, joint, name) {
         var turn = -(bodies[joint.bodyA].rotation || 0) * Math.PI / 180;
         var x = (ax.x * Math.cos(turn) - ax.y * Math.sin(turn)) / len;
         var y = (ax.x * Math.sin(turn) + ax.y * Math.cos(turn)) / len;
-        if (differs(x, fallbackX) || differs(y, fallbackY))
-            set("localAxisA", "b2Vec2{ " + fnum(x) + ", " + fnum(y) + " }");
+        var set = differs(x, fallbackX) || differs(y, fallbackY);
+        values.AXIS_X = set ? fnum(x) : null;
+        values.AXIS_Y = set ? fnum(y) : null;
     };
 
     if (type === "revolute") {
-        angle("referenceAngle", resting + pick(p, "referenceAngle", 0));
-        angle("targetAngle", pick(p, "targetAngle", 0));
-        flag("enableSpring", p.enableSpring, false);
-        number("hertz", pick(p, "hertz", 0), 0);
-        number("dampingRatio", pick(p, "dampingRatio", 0), 0);
-        flag("enableLimit", p.enableLimit, false);
         // Box2D asserts on lower > upper and on a limit past a half turn.
-        var angles = ordered(clampAngle(pick(p, "lowerAngle", 0)),
-                             clampAngle(pick(p, "upperAngle", 0)));
-        angle("lowerAngle", angles.lower);
-        angle("upperAngle", angles.upper);
-        flag("enableMotor", p.enableMotor, false);
-        number("maxMotorTorque", pick(p, "maxMotorTorque", 0), 0);
-        angle("motorSpeed", pick(p, "motorSpeed", 0));
+        var angles = ordered(clampAngle(pick(p, "lowerAngle", 0)), clampAngle(pick(p, "upperAngle", 0)));
+        values.REFERENCE_ANGLE = angle(resting + pick(p, "referenceAngle", 0));
+        values.TARGET_ANGLE = angle(pick(p, "targetAngle", 0));
+        values.ENABLE_SPRING = flag(p.enableSpring, false);
+        values.HERTZ = number(pick(p, "hertz", 0), 0);
+        values.DAMPING_RATIO = number(pick(p, "dampingRatio", 0), 0);
+        values.ENABLE_LIMIT = flag(p.enableLimit, false);
+        values.LOWER_ANGLE = angle(angles.lower);
+        values.UPPER_ANGLE = angle(angles.upper);
+        values.ENABLE_MOTOR = flag(p.enableMotor, false);
+        values.MAX_MOTOR_TORQUE = number(pick(p, "maxMotorTorque", 0), 0);
+        values.MOTOR_SPEED = angle(pick(p, "motorSpeed", 0));
     } else if (type === "prismatic" || type === "wheel") {
         var wheel = type === "wheel";
         axis(wheel ? 0 : 1, wheel ? 1 : 0);
-        if (!wheel) {
-            angle("referenceAngle", resting + pick(p, "referenceAngle", 0));
-            length("targetTranslation", pick(p, "targetTranslation", 0));
-        }
-        flag("enableSpring", pick(p, "enableSpring", wheel), wheel);
-        number("hertz", pick(p, "hertz", wheel ? 1 : 0), wheel ? 1 : 0);
-        number("dampingRatio", pick(p, "dampingRatio", wheel ? 0.7 : 0), wheel ? 0.7 : 0);
-        flag("enableLimit", p.enableLimit, false);
+        var origin = travelOrigin(joint);
         var span = ordered(pick(p, "lowerTranslation", 0), pick(p, "upperTranslation", 0));
-        length("lowerTranslation", span.lower);
-        length("upperTranslation", span.upper);
-        flag("enableMotor", p.enableMotor, false);
+        if (!wheel) {
+            values.REFERENCE_ANGLE = angle(resting + pick(p, "referenceAngle", 0));
+            values.TARGET_TRANSLATION = length(origin + pick(p, "targetTranslation", 0));
+        }
+        values.ENABLE_SPRING = flag(pick(p, "enableSpring", wheel), wheel);
+        values.HERTZ = number(pick(p, "hertz", wheel ? 1 : 0), wheel ? 1 : 0);
+        values.DAMPING_RATIO = number(pick(p, "dampingRatio", wheel ? 0.7 : 0), wheel ? 0.7 : 0);
+        values.ENABLE_LIMIT = flag(p.enableLimit, false);
+        values.LOWER_TRANSLATION = length(origin + span.lower);
+        values.UPPER_TRANSLATION = length(origin + span.upper);
+        values.ENABLE_MOTOR = flag(p.enableMotor, false);
         if (wheel) {
-            number("maxMotorTorque", pick(p, "maxMotorTorque", 0), 0);
-            angle("motorSpeed", pick(p, "motorSpeed", 0));
+            values.MAX_MOTOR_TORQUE = number(pick(p, "maxMotorTorque", 0), 0);
+            values.MOTOR_SPEED = angle(pick(p, "motorSpeed", 0));
         } else {
-            number("maxMotorForce", pick(p, "maxMotorForce", 0), 0);
-            length("motorSpeed", pick(p, "motorSpeed", 0));
+            values.MAX_MOTOR_FORCE = number(pick(p, "maxMotorForce", 0), 0);
+            values.MOTOR_SPEED = length(pick(p, "motorSpeed", 0));
         }
     } else if (type === "distance") {
         // Zero length means however far apart the anchors already are.
         var distance = pick(p, "length", 0);
         if (!(distance > 0))
             distance = Math.sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
-        set("length", "m(" + short(Math.max(distance, 1)) + ")");
-        flag("enableSpring", p.enableSpring, false);
-        number("hertz", pick(p, "hertz", 0), 0);
-        number("dampingRatio", pick(p, "dampingRatio", 0), 0);
-        flag("enableLimit", p.enableLimit, false);
-        length("minLength", pick(p, "minLength", 0));
-        length("maxLength", pick(p, "maxLength", 0));
-        flag("enableMotor", p.enableMotor, false);
-        number("maxMotorForce", pick(p, "maxMotorForce", 0), 0);
-        length("motorSpeed", pick(p, "motorSpeed", 0));
+        values.LENGTH = short(Math.max(distance, 1));
+        values.ENABLE_SPRING = flag(p.enableSpring, false);
+        values.HERTZ = number(pick(p, "hertz", 0), 0);
+        values.DAMPING_RATIO = number(pick(p, "dampingRatio", 0), 0);
+        values.ENABLE_LIMIT = flag(p.enableLimit, false);
+        values.MIN_LENGTH = length(pick(p, "minLength", 0));
+        values.MAX_LENGTH = length(pick(p, "maxLength", 0));
+        values.ENABLE_MOTOR = flag(p.enableMotor, false);
+        values.MAX_MOTOR_FORCE = number(pick(p, "maxMotorForce", 0), 0);
+        values.MOTOR_SPEED = length(pick(p, "motorSpeed", 0));
     } else if (type === "weld") {
-        angle("referenceAngle", resting + pick(p, "referenceAngle", 0));
-        number("linearHertz", pick(p, "linearHertz", 0), 0);
-        number("angularHertz", pick(p, "angularHertz", 0), 0);
-        number("linearDampingRatio", pick(p, "linearDampingRatio", 0), 0);
-        number("angularDampingRatio", pick(p, "angularDampingRatio", 0), 0);
+        values.REFERENCE_ANGLE = angle(resting + pick(p, "referenceAngle", 0));
+        values.LINEAR_HERTZ = number(pick(p, "linearHertz", 0), 0);
+        values.ANGULAR_HERTZ = number(pick(p, "angularHertz", 0), 0);
+        values.LINEAR_DAMPING_RATIO = number(pick(p, "linearDampingRatio", 0), 0);
+        values.ANGULAR_DAMPING_RATIO = number(pick(p, "angularDampingRatio", 0), 0);
     } else if (type === "motor") {
         var ox = pick(p, "linearOffsetX", 0), oy = pick(p, "linearOffsetY", 0);
-        if (ox || oy)
-            set("linearOffset", "m(" + short(ox) + ", " + short(oy) + ")");
-        angle("angularOffset", pick(p, "angularOffset", 0));
-        number("maxForce", pick(p, "maxForce", 1), 1);
-        number("maxTorque", pick(p, "maxTorque", 1), 1);
-        number("correctionFactor", pick(p, "correctionFactor", 0.3), 0.3);
+        values.OFFSET_X = ox || oy ? short(ox) : null;
+        values.OFFSET_Y = ox || oy ? short(oy) : null;
+        values.ANGULAR_OFFSET = angle(pick(p, "angularOffset", 0));
+        values.MAX_FORCE = number(pick(p, "maxForce", 1), 1);
+        values.MAX_TORQUE = number(pick(p, "maxTorque", 1), 1);
+        values.CORRECTION_FACTOR = number(pick(p, "correctionFactor", 0.3), 0.3);
     } else if (type === "mouse") {
         var tx = pick(p, "targetX", 0), ty = pick(p, "targetY", 0);
         var target = (tx === 0 && ty === 0) ? a : { x: tx, y: ty };
-        set("target", "m(" + short(target.x) + ", " + short(target.y) + ")");
-        number("hertz", pick(p, "hertz", 4), 4);
-        number("dampingRatio", pick(p, "dampingRatio", 1), 1);
-        number("maxForce", pick(p, "maxForce", 1), 1);
+        values.TARGET_X = short(target.x);
+        values.TARGET_Y = short(target.y);
+        values.HERTZ = number(pick(p, "hertz", 4), 4);
+        values.DAMPING_RATIO = number(pick(p, "dampingRatio", 1), 1);
+        values.MAX_FORCE = number(pick(p, "maxForce", 1), 1);
+    } else if (type !== "filter") {
+        return render("objects/unsupported-joint.cpp.tmpl", {
+            NAME: name, WHY: "is a kind of joint this converter does not know; not exported.",
+        });
     }
-    if (type !== "filter")
-        flag("collideConnected", joint.collideConnected, false);
-    lines.push(name + " = b2Create" + Type + "Joint(world, &jointDef);");
-
-    var hertz = pick(p, "constraintHertz", 60), damping = pick(p, "constraintDampingRatio", 2);
-    if (differs(hertz, 60) || differs(damping, 2))
-        lines.push("b2Joint_SetConstraintTuning(" + name + ", " + fnum(hertz) + ", "
-                   + fnum(damping) + ");");
-    return "    {" + NEWLINE + indent("        ", lines) + "    }" + NEWLINE;
+    return render("objects/" + type + ".cpp.tmpl", values);
 }
 
 // --- the step: the scene's rules as code -----------------------------------
@@ -673,7 +611,7 @@ function jointCode(scene, joint, name) {
 
 function stepBody(scene, io) {
     var rules = scene.rules || [];
-    var loops = { begin: [], end: [], hit: [], sensorBegin: [], sensorEnd: [],
+    var loops = { begin: [], end: [], hit: [], sensorBegin: [], sensorEnd: [], preSolve: [],
                   moved: [], asleep: [] };
     var checks = [];
 
@@ -701,7 +639,7 @@ function stepBody(scene, io) {
         out.push("++stepCount;");
     var rays = scene.rays || [];
     for (var r = 0; r < rays.length; ++r)
-        out = out.concat(rayCast(rays[r], NAMES["ray:" + r]));
+        out = out.concat(rayCast(rays[r], NAMES["ray:" + r]).split(NEWLINE));
 
     var contactLoops = [];
     contactLoops = contactLoops.concat(eventLoop("contacts.beginCount", "contacts.beginEvents",
@@ -715,6 +653,15 @@ function stepBody(scene, io) {
         out.push("");
         out.push("b2ContactEvents contacts = b2World_GetContactEvents(world);");
         out = out.concat(contactLoops);
+    }
+
+    // Box2D's pre-solve callback noted each pair as the step went through it.
+    var preSolveLoop = eventLoop("static_cast<int>(aboutToTouch.size())", "aboutToTouch", "first", "second",
+                                 "a", "b", loops.preSolve);
+    if (preSolveLoop.length) {
+        out.push("");
+        out = out.concat(preSolveLoop);
+        out.push("aboutToTouch.clear();");
     }
 
     var sensorLoops = [];
@@ -763,24 +710,24 @@ function stepBody(scene, io) {
         out.push("");
         out = out.concat(checks[c]);
     }
-    return out.length ? wrapLong(indent("    ", out)) : "";
+    return wrapLong(out.join(NEWLINE), 88);
 }
 
 // Breaks a line longer than about 90 columns after its last && or || that
 // fits, and indents what follows under it.
-function wrapLong(text) {
+function wrapLong(text, width) {
     var lines = text.split(NEWLINE);
     var out = [];
     for (var i = 0; i < lines.length; ++i) {
         var line = lines[i];
         var lead = line.match(/^ */)[0];
         var continuation = lead + "    ";
-        while (line.length > 92 && line.replace(/^ */, "").indexOf("//") !== 0) {
+        while (line.length > width && line.replace(/^ */, "").indexOf("//") !== 0) {
             // At an || if there is one, so a bracketed pair stays together.
             var cut = -1;
             var ops = [" || ", " && "];
             for (var o = 0; o < ops.length && cut < 0; ++o) {
-                var at = line.lastIndexOf(ops[o], 90);
+                var at = line.lastIndexOf(ops[o], width - 2);
                 if (at > lead.length + 8)
                     cut = at + ops[o].length - 1;
             }
@@ -836,7 +783,11 @@ function ruleCode(scene, rule, n, caption, loops) {
 
     var event = rule.event;
     var pair = { contactBegin: "begin", contactEnd: "end", contactHit: "hit",
-                 sensorBegin: "sensorBegin", sensorEnd: "sensorEnd" };
+                 sensorBegin: "sensorBegin", sensorEnd: "sensorEnd", preSolve: "preSolve" };
+
+    // Carried out where a removal is written: see actionLines.
+    if (event === "@aboutToBeRemoved")
+        return {};
 
     if (pair[event]) {
         var subject = side(scene, rule.subject);
@@ -848,6 +799,8 @@ function ruleCode(scene, rule, n, caption, loops) {
         var effect = effectLines(scene, rule, "other");
         if (!effect)
             return { error: "nothing in Box2D does " + describe(rule).split(", ")[1] };
+        if (event === "preSolve")
+            HELPERS.preSolve = true;
         loops[pair[event]].push({ caption: caption, subject: subject, partner: partner,
                                   sensor: event.indexOf("sensor") === 0, effect: effect,
                                   usesOther: needsOther(rule), once: once });
@@ -875,7 +828,10 @@ function ruleCode(scene, rule, n, caption, loops) {
     var condition;
     var startsTrue = "false";
     var effectOther = null;
-    if (event === "rayDetects") {
+    if (event === "@runStarted") {
+        // Once, after the first step.
+        condition = "true";
+    } else if (event === "rayDetects") {
         var ray = resolve(scene, rule.subject);
         if (!ray || ray.kind !== "ray")
             return { error: rule.subject + " is not a ray" };
@@ -899,6 +855,9 @@ function ruleCode(scene, rule, n, caption, loops) {
         var at = event === "limitLower" ? lower : event === "limitUpper" ? upper
                : ("(" + lower + " || " + upper + ")");
         condition = reader.prefix + "IsLimitEnabled(" + J + ") && " + at;
+        // A joint a rule can break is gone once it has been.
+        if (LOST)
+            condition = "b2Joint_IsValid(" + J + ") && " + condition;
         // Starting against the stop is not arriving at it.
         startsTrue = "true";
     } else if (event) {
@@ -929,8 +888,8 @@ function edgeBlock(caption, base, condition, effect, once, startsTrue) {
 }
 
 function remember(type, name, initial) {
-    STATE.push(type + " " + name + ";" + NEWLINE);
-    RESETS.push("    " + name + " = " + initial + ";" + NEWLINE);
+    STATE.push(render("objects/state.cpp.tmpl", { TYPE: type, NAME: name }));
+    RESETS.push(render("objects/reset.cpp.tmpl", { NAME: name, VALUE: initial }));
 }
 
 function needsOther(rule) { return rule.target === "@other" || rule.target === "@otherBody"; }
@@ -1004,32 +963,27 @@ var HITS = null;
 function hitRecords() {
     var lines = [];
     for (var i = 0; HITS && i < HITS.length; ++i) {
-        var s = HITS[i];
         lines.push("");
-        lines.push("// How hard " + s.handle + " was last hit, and where.");
-        lines.push("if (B2_ID_EQUALS(a, " + s.handle + ") || B2_ID_EQUALS(b, " + s.handle + ")) {");
-        lines.push("    " + s.handle + "HitSpeed = contacts.hitEvents[i].approachSpeed;");
-        lines.push("    " + s.handle + "HitPoint = contacts.hitEvents[i].point;");
-        lines.push("    " + s.handle + "HitNormal = B2_ID_EQUALS(a, " + s.handle
-                   + ") ? contacts.hitEvents[i].normal : b2Neg(contacts.hitEvents[i].normal);");
-        lines.push("}");
+        lines = lines.concat(render("objects/hit-record.cpp.tmpl", { ID: HITS[i].handle }).split(NEWLINE));
     }
     return lines.length ? [{ raw: lines }] : [];
 }
 
-function rayCast(ray, name) {
+// A ray and where it points, in scene units.
+function rayGeometry(ray) {
     var angle = (ray.angle || 0) * Math.PI / 180;
-    var dx = Math.cos(angle) * (ray.length || 0), dy = Math.sin(angle) * (ray.length || 0);
-    var call = "b2World_CastRayClosest(world, m(" + short(ray.x) + ", " + short(ray.y) + "), m("
-               + short(dx) + ", " + short(dy) + "), ";
+    return { X: short(ray.x), Y: short(ray.y),
+             DX: short(Math.cos(angle) * (ray.length || 0)), DY: short(Math.sin(angle) * (ray.length || 0)) };
+}
+
+function rayCast(ray, name) {
+    var values = rayGeometry(ray);
+    values.ID = name;
     var mask = String(ray.maskBits || "ffffffffffffffff").toLowerCase();
     if (/^f+$/.test(mask) && mask.length >= 16)
-        return [name + " = " + call + "b2DefaultQueryFilter());"];
-    return ["{",
-            "    b2QueryFilter filter = b2DefaultQueryFilter();",
-            "    filter.maskBits = 0x" + mask + "ull;",
-            "    " + name + " = " + call + "filter);",
-            "}"];
+        return render("objects/ray-cast.cpp.tmpl", values);
+    values.MASK = "0x" + mask + "ull";
+    return render("objects/ray-cast-filtered.cpp.tmpl", values);
 }
 
 // The editor's colour as QColor's arguments: red, green, blue, alpha.
@@ -1049,35 +1003,22 @@ function qtColour(colour, fallback) {
 
 // What the debug view adds: joints, each body's axes, and the rays.
 function debugDrawing(scene) {
-    var lines = ["", "if (debug) {"];
-    var joints = [], bodies = [];
+    var joints = [], bodies = [], rays = [];
     for (var j = 0; j < scene.simulation.joints.length; ++j)
         joints.push(NAMES["joint:" + j]);
     for (var b = 0; b < scene.simulation.bodies.length; ++b)
         bodies.push(NAMES["body:" + b]);
-    if (joints.length) {
-        lines = lines.concat(wrapList("    for (b2JointId joint : { ", joints, " })"));
-        lines.push("        drawJoint(painter, joint);");
+    var sceneRays = scene.rays || [];
+    for (var i = 0; i < sceneRays.length; ++i) {
+        var values = rayGeometry(sceneRays[i]);
+        values.ID = NAMES["ray:" + i];
+        rays.push(render("objects/ray-draw.cpp.tmpl", values));
     }
-    if (bodies.length) {
-        lines = lines.concat(wrapList("    for (b2BodyId body : { ", bodies, " })"));
-        lines.push("        drawAxes(painter, body);");
-    }
-    lines = lines.concat(rayLines(scene));
-    lines.push("}");
-    return indent("        ", lines);
-}
-
-function rayLines(scene) {
-    var rays = scene.rays || [];
-    var lines = [];
-    for (var i = 0; i < rays.length; ++i) {
-        var angle = (rays[i].angle || 0) * Math.PI / 180;
-        lines.push("    drawRay(painter, m(" + short(rays[i].x) + ", " + short(rays[i].y) + "), m("
-                   + short(Math.cos(angle) * rays[i].length) + ", "
-                   + short(Math.sin(angle) * rays[i].length) + "), " + NAMES["ray:" + i] + ");");
-    }
-    return lines;
+    return render("objects/debug-drawing.cpp.tmpl", {
+        JOINTS: joints.length ? render("objects/joint-drawing.cpp.tmpl", { JOINTS: listValue(joints) }) : "",
+        AXES: bodies.length ? render("objects/axes-drawing.cpp.tmpl", { BODIES: listValue(bodies) }) : "",
+        RAYS: rays.join(NEWLINE),
+    });
 }
 
 // --- what a name refers to, and what can be read or written on it ----------
@@ -1093,15 +1034,22 @@ function resolve(scene, name) {
         if (rays[r].name === name)
             return { kind: "ray", handle: NAMES["ray:" + r], ray: rays[r] };
     }
+    // What a rule sets off; the action finds where it is and what it carries.
+    var explosions = scene.explosions || [];
+    for (var x = 0; x < explosions.length; ++x) {
+        if (explosions[x].name === name)
+            return { kind: "explosion", explosion: explosions[x] };
+    }
     var joints = scene.simulation.joints;
     for (var j = 0; j < joints.length; ++j) {
         if (joints[j].name === name)
-            return { kind: "joint", type: joints[j].type, handle: NAMES["joint:" + j] };
+            return { kind: "joint", type: joints[j].type, handle: NAMES["joint:" + j],
+                     origin: travelOrigin(joints[j]) };
     }
     var bodies = scene.simulation.bodies;
     for (var b = 0; b < bodies.length; ++b) {
         if (bodies[b].name === name)
-            return { kind: "body", handle: NAMES["body:" + b] };
+            return { kind: "body", handle: NAMES["body:" + b], index: b };
     }
     for (var i = 0; i < bodies.length; ++i) {
         var parts = bodies[i].parts || [];
@@ -1113,7 +1061,7 @@ function resolve(scene, name) {
                 USED[name] = true;
             return { kind: "shape", handle: NAMES["shape:" + name], outline: outline,
                      shapeKind: parts[p].kind, isSensor: !!parts[p].isSensor,
-                     bodyHandle: NAMES["body:" + i] };
+                     bodyHandle: NAMES["body:" + i], index: i };
         }
     }
     return null;
@@ -1468,24 +1416,39 @@ function jointProperty(place, key) {
         case "lowerAngle": return limit("angle", "lower", "GetLowerLimit", "GetUpperLimit", "SetLimits", true);
         case "upperAngle": return limit("angle", "upper", "GetLowerLimit", "GetUpperLimit", "SetLimits", true);
         }
-    } else if (t === "prismatic") {
+    }
+    // Travel counted from where the joint starts, as the editor counts it.
+    var origin = "m(" + short(place.origin || 0) + ")";
+    var travel = function (end) {
+        var getter = P + (end === "lower" ? "GetLowerLimit" : "GetUpperLimit") + "(" + J + ")";
+        var other = P + (end === "lower" ? "GetUpperLimit" : "GetLowerLimit") + "(" + J + ")";
+        return prop("len", "(" + getter + " - " + origin + ")", function (v) {
+            var moved = "(" + v + ") + " + origin;
+            return [wake, P + "SetLimits(" + J + ", b2MinFloat(" + moved + ", " + other + "), b2MaxFloat("
+                    + moved + ", " + other + "));"];
+        });
+    };
+    if (t === "prismatic") {
         switch (key) {
-        case "translation": return simple("len", "GetTranslation", null);
+        case "translation": return prop("len", "(" + P + "GetTranslation(" + J + ") - " + origin + ")", null);
         case "speed": return simple("len", "GetSpeed", null);
         case "motorSpeed": return simple("len", "GetMotorSpeed", "SetMotorSpeed");
         case "motorForce": return simple("none", "GetMotorForce", null);
         case "maxMotorForce": return simple("none", "GetMaxMotorForce", "SetMaxMotorForce");
-        case "targetTranslation": return simple("len", null, "SetTargetTranslation");
-        case "lowerTranslation": return limit("len", "lower", "GetLowerLimit", "GetUpperLimit", "SetLimits", false);
-        case "upperTranslation": return limit("len", "upper", "GetLowerLimit", "GetUpperLimit", "SetLimits", false);
+        case "targetTranslation":
+            return prop("len", null, function (v) {
+                return [wake, P + "SetTargetTranslation(" + J + ", (" + v + ") + " + origin + ");"];
+            });
+        case "lowerTranslation": return travel("lower");
+        case "upperTranslation": return travel("upper");
         }
     } else if (t === "wheel") {
         switch (key) {
         case "motorSpeed": return simple("angle", "GetMotorSpeed", "SetMotorSpeed");
         case "motorTorque": return simple("none", "GetMotorTorque", null);
         case "maxMotorTorque": return simple("none", "GetMaxMotorTorque", "SetMaxMotorTorque");
-        case "lowerTranslation": return limit("len", "lower", "GetLowerLimit", "GetUpperLimit", "SetLimits", false);
-        case "upperTranslation": return limit("len", "upper", "GetLowerLimit", "GetUpperLimit", "SetLimits", false);
+        case "lowerTranslation": return travel("lower");
+        case "upperTranslation": return travel("upper");
         }
     } else if (t === "distance") {
         switch (key) {
@@ -1558,7 +1521,7 @@ function literal(unit, value) {
     if (unit === "torque")
         return x === 0 ? "0.0f" : ("m(m(" + short(x) + "))");
     if (unit === "int")    return String(Math.round(x));
-    if (unit === "bits")   return String(Math.max(0, Math.round(x))) + "ull";
+    if (unit === "bits")   return bits64(value, "0x0ull");
     return fnum(x);
 }
 
@@ -1694,6 +1657,41 @@ function writeLines(scene, rule, target) {
 function actionLines(scene, rule, target) {
     var params = rule.actionParams || {};
     var body = target.kind === "shape" ? target.bodyHandle : target.handle;
+    var isBody = target.kind === "body" || target.kind === "shape";
+
+    // Ending or holding the run cannot happen inside the step; the view does it
+    // once the step is over.
+    if (rule.action === "@stopRun")
+        return ["pendingRun = 1;"];
+    if (rule.action === "@holdRun")
+        return ["pendingRun = 2;"];
+    if (rule.action === "@initState") {
+        if (!isBody)
+            return null;
+        HELPERS.initState = true;
+        return ["initState(" + body + ");"];
+    }
+    if (rule.action === "@clone") {
+        // A copy of a body named in the rule; one met through "the other" is
+        // not known until the run, and there is nothing to copy it from.
+        if (!isBody || target.index === undefined)
+            return null;
+        HELPERS.clones[target.index] = true;
+        return ["cloneOf_" + NAMES["body:" + target.index] + "(m("
+                + short(pickNumber(params.x, 0)) + ", " + short(pickNumber(params.y, 0)) + "));"];
+    }
+    if (rule.action === "pushForceAt") {
+        if (!isBody)
+            return null;
+        var force = "m(" + short(pickNumber(params.impulseX, 0)) + ", " + short(pickNumber(params.impulseY, 0)) + ")";
+        var fx = pickNumber(params.offsetX, 0), fy = pickNumber(params.offsetY, 0);
+        if (!fx && !fy)
+            return ["b2Body_ApplyForceToCenter(" + body + ", " + force + ", true);"];
+        return ["b2Body_ApplyForce(" + body + ", " + force + ", b2Add(b2Body_GetWorldCenterOfMass("
+                + body + "), m(" + short(fx) + ", " + short(fy) + ")), true);"];
+    }
+    if (rule.action === "resetMass")
+        return isBody ? ["b2Body_ApplyMassFromShapes(" + body + ");"] : null;
 
     if (rule.action === "explode") {
         var settings = {}, key;
@@ -1726,7 +1724,7 @@ function actionLines(scene, rule, target) {
         if (pickNumber(settings.impulse, 0))
             lines.push("    explosion.impulsePerLength = m(" + short(settings.impulse) + ");");
         if (pickNumber(settings.maskBits, 0) > 0)
-            lines.push("    explosion.maskBits = " + Math.round(settings.maskBits) + "ull;");
+            lines.push("    explosion.maskBits = " + bits64(settings.maskBits, ALL_BITS) + ";");
         lines.push("    b2World_Explode(world, &explosion);");
         lines.push("}");
         return lines;
@@ -1745,8 +1743,11 @@ function actionLines(scene, rule, target) {
     if (rule.action === "removeBody") {
         if (target.kind !== "body" && target.kind !== "shape")
             return null;
-        // Box2D takes the body's shapes and joints with it.
-        return ["b2DestroyBody(" + body + ");"];
+        // Box2D takes the body's shapes and joints with it -- unless the body
+        // answers "to be removed", in which case the answer is carried out.
+        return removal(scene, rule, target, body, function (doomed) {
+            return ["b2DestroyBody(" + doomed + ");"];
+        });
     }
     if (rule.action === "breakJoint") {
         if (target.kind !== "joint")
@@ -1754,6 +1755,123 @@ function actionLines(scene, rule, target) {
         return ["b2Joint_WakeBodies(" + target.handle + ");", "b2DestroyJoint(" + target.handle + ");"];
     }
     return null;
+}
+
+// --- "to be removed" ---------------------------------------------------------
+//
+// Before a rule removes a body, the editor looks for rules on that body (or its
+// shapes) waiting for "to be removed"; if there are any, they are carried out
+// instead and the body stays. "The other object" in an answer is the subject of
+// the rule that did the removing. An answer that itself removes really removes.
+
+function answersByBody(scene) {
+    var byBody = {};
+    var rules = scene.rules || [];
+    var bodies = scene.simulation.bodies;
+    for (var i = 0; i < rules.length; ++i) {
+        var rule = rules[i];
+        if (rule.enabled === false || rule.event !== "@aboutToBeRemoved")
+            continue;
+        for (var b = 0; b < bodies.length; ++b) {
+            var named = bodies[b].name === rule.subject;
+            var parts = bodies[b].parts || [];
+            for (var p = 0; p < parts.length && !named; ++p)
+                named = parts[p].name === rule.subject;
+            if (named)
+                (byBody[b] = byBody[b] || []).push(rule);
+        }
+    }
+    return byBody;
+}
+
+function removal(scene, rule, target, body, remove) {
+    var answers = ANSWERING ? {} : answersByBody(scene);
+    var remover = resolve(scene, rule.subject);
+    var other = remover && remover.kind === "shape" && !remover.outline ? remover.handle : null;
+    var answer = function (rules) {
+        ANSWERING = true;
+        var lines = [];
+        for (var i = 0; i < rules.length; ++i) {
+            var made = effectLines(scene, rules[i], other);
+            lines = lines.concat(made || ["// (" + (rules[i].name || "an answer") + " could not be exported)"]);
+        }
+        ANSWERING = false;
+        return lines;
+    };
+    if (target.index !== undefined)
+        return answers[target.index] ? answer(answers[target.index]) : remove(body);
+    var keys = Object.keys(answers);
+    if (!keys.length)
+        return remove(body);
+    // Met through "the other": which body it is is only known during the run.
+    var lines = ["b2BodyId doomed = " + body + ";"];
+    for (var k = 0; k < keys.length; ++k) {
+        lines.push((k ? "} else if (" : "if (") + "B2_ID_EQUALS(doomed, " + NAMES["body:" + keys[k]] + ")) {");
+        lines = lines.concat(indentLines("    ", answer(answers[keys[k]])));
+    }
+    lines.push("} else {");
+    lines = lines.concat(indentLines("    ", remove("doomed")));
+    lines.push("}");
+    return lines;
+}
+
+// --- helpers the step code calls -------------------------------------------
+
+function helpersCode(scene, colours) {
+    var out = [];
+    var bodies = scene.simulation.bodies;
+    if (HELPERS.preSolve) {
+        RESETS.push(render("objects/pre-solve-reset.cpp.tmpl", {}));
+        out.push(render("objects/pre-solve.cpp.tmpl", {}));
+    }
+    if (HELPERS.initState) {
+        var starts = [];
+        for (var b = 0; b < bodies.length; ++b) {
+            var p = bodies[b].position || { x: 0, y: 0 };
+            starts.push("{ " + NAMES["body:" + b] + ", " + fnum(p.x) + ", " + fnum(p.y) + ", "
+                        + fnum(bodies[b].rotation || 0) + " }");
+        }
+        out.push(render("objects/init-state.cpp.tmpl", { STARTS: listValue(starts) }));
+    }
+    for (var index in HELPERS.clones) {
+        if (!has(HELPERS.clones, index))
+            continue;
+        // Built exactly as the original is, keeping no shape ids of its own.
+        var kept = USED;
+        USED = {};
+        var made = bodyCode(bodies[index], "clone", colours);
+        USED = kept;
+        out.push(render("objects/clone.cpp.tmpl", { NAME: bodies[index].name, ID: NAMES["body:" + index], BODY: made }));
+    }
+    return out.join(NEWLINE + NEWLINE);
+}
+
+// A 64-bit collision filter as an exact C++ literal. A scene keeps these as hex
+// strings, "0xffffffffffffffff", because a JavaScript number cannot hold 64 bits:
+// turned into one, all-ones came out as 18446744073709552000, which C++ wraps
+// round to 384 -- and every shape then collided with nothing.
+var ALL_BITS = "0xffffffffffffffffull";
+
+function bits64(value, fallback) {
+    if (value === undefined || value === null || value === "")
+        return fallback;
+    var text = String(value).trim().toLowerCase();
+    if (/^0x[0-9a-f]+$/.test(text)) {
+        var digits = text.slice(2).replace(/^0+(?=.)/, "");
+        if (digits.length > 16)
+            return ALL_BITS;
+        return (/^f{16}$/.test(digits) ? "0xffffffffffffffff" : "0x" + digits) + "ull";
+    }
+    var n = Number(value);
+    if (!isFinite(n) || n < 0)
+        return fallback;
+    // Past 2^53 a number is no longer exact; all-ones is what that almost
+    // always meant.
+    if (n >= 18446744073709549568)
+        return ALL_BITS;
+    if (n > 9007199254740991)
+        return "0x" + n.toString(16) + "ull";
+    return "0x" + Math.round(n).toString(16) + "ull";
 }
 
 function destroys(scene) {
@@ -1770,53 +1888,29 @@ function destroys(scene) {
 function controlsCode(own) {
     if (!own.addControls && !own.debugView)
         return "";
-    var lines = ["", "QToolBar *toolbar = window.addToolBar(\"Controls\");"];
-    if (own.addControls) {
-        lines.push("QObject::connect(toolbar->addAction(\"Start\"), &QAction::triggered, view,");
-        lines.push("                 [view] { view->run(true); });");
-        lines.push("QObject::connect(toolbar->addAction(\"Pause\"), &QAction::triggered, view,");
-        lines.push("                 [view] { view->run(false); });");
-        lines.push("QObject::connect(toolbar->addAction(\"Reset\"), &QAction::triggered, view,");
-        lines.push("                 [view] { view->reset(); });");
-    }
-    if (own.debugView) {
-        lines.push("QAction *debug = toolbar->addAction(\"Debug view\");");
-        lines.push("debug->setCheckable(true);");
-        lines.push("debug->setChecked(view->debug);");
-        lines.push("QObject::connect(debug, &QAction::toggled, view, [view](bool on) { view->setDebug(on); });");
-    }
-    return indent("    ", lines);
+    return render("objects/toolbar.cpp.tmpl", {
+        BUTTONS: own.addControls ? render("objects/buttons.cpp.tmpl", {}) : "",
+        DEBUG_SWITCH: own.debugView ? render("objects/debug-switch.cpp.tmpl", {}) : "",
+    });
 }
 
 // The editor paints a body by what it is -- dynamic, static, kinematic -- and
 // Box2D lets a shape carry its own debug-draw colour, so each shape is given
-// its body's.
+// its body's. The editor's own colours stand in for an export made without a
+// settings file.
 function bodyColours(physics) {
-    var out = { constants: "", byType: {} };
-    // The editor's own defaults, for an export made without a settings file.
-    var types = [["dynamic", "COLOR_DYNAMIC", physics.bodyDynamicColor, "2e86c1"],
-                 ["static", "COLOR_STATIC", physics.bodyStaticColor, "279e6a"],
-                 ["kinematic", "COLOR_KINEMATIC", physics.bodyKinematicColor, "884ea0"]];
-    var lines = [];
-    for (var i = 0; i < types.length; ++i) {
-        var hex = rgb(types[i][2]) || types[i][3];
-        lines.push("const b2HexColor " + types[i][1] + " = b2HexColor(0x" + hex + ");");
-        out.byType[types[i][0]] = types[i][1];
-    }
-    var alpha = Math.max(0, Math.min(255, Math.round(pickNumber(physics.fillAlpha, 90))));
-    lines.push("const int FILL_ALPHA = " + alpha + ";");
-
-    // A sensor is drawn open and hatched, the way the editor draws it. Box2D
-    // hands a shape's custom colour to the draw callbacks as it is, so a bit
-    // above the 24 an RGB colour uses marks the shapes that are sensors.
-    var sensor = qtColour(physics.sensorColor, "255, 5, 201, 54");
-    lines.push("");
-    lines.push("const uint32_t SENSOR = 0x1000000;");
-    lines.push("const QColor SENSOR_COLOR(" + sensor + ");");
-    lines.push("const Qt::BrushStyle SENSOR_PATTERN = Qt::" + BRUSH_STYLES[sensorPattern(physics.sensorPattern)] + ";");
-    lines.push("const bool SENSOR_FILLED = " + bool(settingTrue(physics.sensorFillsBody)) + ";");
-    out.constants = NEWLINE + lines.join(NEWLINE) + NEWLINE;
-    return out;
+    return {
+        hex: {
+            dynamic: rgb(physics.bodyDynamicColor) || "2e86c1",
+            "static": rgb(physics.bodyStaticColor) || "279e6a",
+            kinematic: rgb(physics.bodyKinematicColor) || "884ea0",
+        },
+        byType: { dynamic: "COLOR_DYNAMIC", "static": "COLOR_STATIC", kinematic: "COLOR_KINEMATIC" },
+        fillAlpha: String(Math.max(0, Math.min(255, Math.round(pickNumber(physics.fillAlpha, 90))))),
+        sensorColor: qtColour(physics.sensorColor, "255, 5, 201, 54"),
+        sensorPattern: BRUSH_STYLES[sensorPattern(physics.sensorPattern)],
+        sensorFilled: bool(settingTrue(physics.sensorFillsBody)),
+    };
 }
 
 // "#aarrggbb" or "#rrggbb" to "rrggbb".
@@ -1829,13 +1923,6 @@ function rgb(colour) {
 
 // --- odds and ends ---------------------------------------------------------
 
-function indent(prefix, lines) {
-    var out = "";
-    for (var i = 0; i < lines.length; ++i)
-        out += (lines[i] ? (prefix + lines[i]) : "") + NEWLINE;
-    return out;
-}
-
 function indentLines(prefix, lines) {
     var out = [];
     for (var i = 0; i < lines.length; ++i)
@@ -1843,13 +1930,94 @@ function indentLines(prefix, lines) {
     return out;
 }
 
-function fill(template, values) {
-    var out = template;
-    for (var key in values) {
-        if (Object.prototype.hasOwnProperty.call(values, key))
-            out = out.split("{{" + key + "}}").join(values[key]);
+// --- templates ---------------------------------------------------------------
+//
+// Every piece of code this converter writes is a template under templates/:
+// the project's files, and one file per kind of object under objects/.
+// render() fills one:
+//
+//  - a placeholder alone on its line takes a block -- any number of lines, each
+//    indented as the placeholder is -- and an empty block leaves the line out;
+//  - a placeholder inside a line takes a value, and a value of null leaves the
+//    whole line out. That is how a template lists every field an object can
+//    have while a scene sets only the ones it needs;
+//  - a line starting //! is a note for whoever edits the template.
+//
+// A placeholder this file does not fill is an error naming the template, so a
+// template edited out of step with the code says so rather than writing {{X}}.
+function render(name, values) {
+    var lines = T(name).replace(/\r/g, "").replace(/\n$/, "").split(NEWLINE);
+    var out = [];
+    for (var i = 0; i < lines.length; ++i) {
+        var line = lines[i];
+        if (/^\s*\/\/!/.test(line))
+            continue;
+        var block = line.match(/^(\s*)\{\{([A-Z0-9_]+)\}\}\s*$/);
+        if (block) {
+            var body = valueFor(name, values, block[2]);
+            if (body === null || body === "")
+                continue;
+            var parts = body.split(NEWLINE);
+            for (var k = 0; k < parts.length; ++k)
+                out.push(parts[k] ? block[1] + parts[k] : "");
+            continue;
+        }
+        var lead = line.match(/^\s*/)[0];
+        var dropped = false;
+        var filled = line.replace(/\{\{([A-Z0-9_]+)\}\}/g, function (all, key) {
+            var value = valueFor(name, values, key);
+            if (value === null) {
+                dropped = true;
+                return "";
+            }
+            return value.split(NEWLINE).join(NEWLINE + lead);
+        });
+        if (!dropped)
+            out = out.concat(filled.split(NEWLINE));
     }
+    return tidy(out).join(NEWLINE);
+}
+
+// A whole file: a template rendered, ending in a newline as a file should.
+function page(name, values) {
+    return render(name, values) + NEWLINE;
+}
+
+function valueFor(name, values, key) {
+    if (!has(values, key))
+        throw new Error("templates/" + name + " asks for {{" + key + "}}, which export.js does not fill");
+    var value = values[key];
+    if (value === null || value === undefined)
+        return null;
+    return String(value);
+}
+
+// Blocks left empty leave their blank lines behind: no two in a row, and none
+// just inside a brace or at either end.
+function tidy(lines) {
+    var out = [];
+    for (var i = 0; i < lines.length; ++i) {
+        var line = lines[i];
+        if (line.trim() === "") {
+            var before = out.length ? out[out.length - 1].trim() : "";
+            if (!out.length || before === "" || /[{\[]$/.test(before))
+                continue;
+            out.push("");
+            continue;
+        }
+        if (/^[}\]]/.test(line.trim()) && out.length && out[out.length - 1] === "")
+            out.pop();
+        out.push(line);
+    }
+    while (out.length && out[out.length - 1] === "")
+        out.pop();
     return out;
+}
+
+// A list written as a template value: as many items to a line as fit, the rest
+// on lines of their own, one step in from where the list starts.
+function listValue(items) {
+    return wrapList("", items, "").join(NEWLINE);
 }
 
 function ordered(lower, upper) {

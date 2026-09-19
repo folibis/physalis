@@ -1,0 +1,21 @@
+//! A field without a value is left out, and b2DefaultDistanceJointDef's stands.
+{
+    b2DistanceJointDef jointDef = b2DefaultDistanceJointDef();
+    jointDef.bodyIdA = {{BODY_A}};
+    jointDef.bodyIdB = {{BODY_B}};
+    jointDef.localAnchorA = b2Body_GetLocalPoint({{BODY_A}}, m({{ANCHOR_A_X}}, {{ANCHOR_A_Y}}));
+    jointDef.localAnchorB = b2Body_GetLocalPoint({{BODY_B}}, m({{ANCHOR_B_X}}, {{ANCHOR_B_Y}}));
+    jointDef.length = m({{LENGTH}});
+    jointDef.enableSpring = {{ENABLE_SPRING}};
+    jointDef.hertz = {{HERTZ}};
+    jointDef.dampingRatio = {{DAMPING_RATIO}};
+    jointDef.enableLimit = {{ENABLE_LIMIT}};
+    jointDef.minLength = m({{MIN_LENGTH}});
+    jointDef.maxLength = m({{MAX_LENGTH}});
+    jointDef.enableMotor = {{ENABLE_MOTOR}};
+    jointDef.maxMotorForce = {{MAX_MOTOR_FORCE}};
+    jointDef.motorSpeed = m({{MOTOR_SPEED}});
+    jointDef.collideConnected = {{COLLIDE_CONNECTED}};
+    {{ID}} = b2CreateDistanceJoint(world, &jointDef);
+    b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
+}

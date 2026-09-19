@@ -1,0 +1,8 @@
+// A copy of {{NAME}}, as it was drawn, with its origin at at.
+b2BodyId cloneOf_{{ID}}(b2Vec2 at)
+{
+    b2BodyId clone;
+    {{BODY}}
+    b2Body_SetTransform(clone, at, b2Body_GetRotation(clone));
+    return clone;
+}

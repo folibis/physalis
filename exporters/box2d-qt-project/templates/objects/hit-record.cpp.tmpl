@@ -1,0 +1,8 @@
+//! Inside the loop over this step's hit events: what a watched shape keeps of
+//! its last one.
+// How hard {{ID}} was last hit, and where.
+if (B2_ID_EQUALS(a, {{ID}}) || B2_ID_EQUALS(b, {{ID}})) {
+    {{ID}}HitSpeed = contacts.hitEvents[i].approachSpeed;
+    {{ID}}HitPoint = contacts.hitEvents[i].point;
+    {{ID}}HitNormal = B2_ID_EQUALS(a, {{ID}}) ? contacts.hitEvents[i].normal : b2Neg(contacts.hitEvents[i].normal);
+}

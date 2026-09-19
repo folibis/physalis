@@ -1,0 +1,6 @@
+QObject::connect(toolbar->addAction("Start"), &QAction::triggered, view,
+                 [view] { view->run(true); });
+QObject::connect(toolbar->addAction("Pause"), &QAction::triggered, view,
+                 [view] { view->run(false); });
+QObject::connect(toolbar->addAction("Reset"), &QAction::triggered, view,
+                 [view] { view->reset(); });

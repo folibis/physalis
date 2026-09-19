@@ -7,6 +7,7 @@ QIcon app() { return QIcon(QStringLiteral(":/app/icon.svg")); }
 QIcon newScene() { return QIcon(QStringLiteral(":/icons/new_scene.svg")); }
 QIcon loadScene() { return QIcon(QStringLiteral(":/icons/load_scene.svg")); }
 QIcon saveScene() { return QIcon(QStringLiteral(":/icons/save_scene.svg")); }
+QIcon exportScene() { return QIcon(QStringLiteral(":/icons/export.svg")); }
 QIcon add() { return QIcon(QStringLiteral(":/icons/add.svg")); }
 QIcon rectangle() { return QIcon(QStringLiteral(":/icons/rectangle.svg")); }
 QIcon circle() { return QIcon(QStringLiteral(":/icons/circle.svg")); }

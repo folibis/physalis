@@ -1,0 +1,13 @@
+//! A field without a value is left out, and b2DefaultMouseJointDef's stands.
+{
+    b2MouseJointDef jointDef = b2DefaultMouseJointDef();
+    jointDef.bodyIdA = {{BODY_A}};
+    jointDef.bodyIdB = {{BODY_B}};
+    jointDef.target = m({{TARGET_X}}, {{TARGET_Y}});
+    jointDef.hertz = {{HERTZ}};
+    jointDef.dampingRatio = {{DAMPING_RATIO}};
+    jointDef.maxForce = {{MAX_FORCE}};
+    jointDef.collideConnected = {{COLLIDE_CONNECTED}};
+    {{ID}} = b2CreateMouseJoint(world, &jointDef);
+    b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
+}

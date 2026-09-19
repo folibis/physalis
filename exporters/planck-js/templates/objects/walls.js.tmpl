@@ -1,0 +1,6 @@
+// The walls around the field.
+var walls = world.createBody();
+walls.createFixture(pl.Box(len({{HALF_SPAN}}), len({{HALF_THICKNESS}}), m(0, {{TOP}}), 0));
+walls.createFixture(pl.Box(len({{HALF_SPAN}}), len({{HALF_THICKNESS}}), m(0, {{BOTTOM}}), 0));
+walls.createFixture(pl.Box(len({{HALF_THICKNESS}}), len({{HALF_HEIGHT}}), m({{LEFT}}, 0), 0));
+walls.createFixture(pl.Box(len({{HALF_THICKNESS}}), len({{HALF_HEIGHT}}), m({{RIGHT}}, 0), 0));

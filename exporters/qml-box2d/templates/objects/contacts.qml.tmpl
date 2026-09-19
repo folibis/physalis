@@ -1,0 +1,4 @@
+//! A fixture a rule watches notes each contact as it starts or ends; afterStep()
+//! goes through what was noted.
+onBeginContact: (other) => scene.contactsBegun.push([{{BEGIN}}, other])
+onEndContact: (other) => scene.contactsEnded.push([{{END}}, other])

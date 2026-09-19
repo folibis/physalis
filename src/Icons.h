@@ -10,6 +10,7 @@ QIcon app();
 QIcon newScene();
 QIcon loadScene();
 QIcon saveScene();
+QIcon exportScene();
 
 QIcon add();
 QIcon rectangle();

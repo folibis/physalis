@@ -1,0 +1,7 @@
+//! An outline that is not a smooth chain: one two-sided edge per segment. A
+//! closed outline's points end where they began.
+for (var i = 0; i < {{COUNT}}; ++i) {
+    {{BODY}}.createFixture(pl.Edge({{POINTS}}[i], {{POINTS}}[i + 1]), {
+        {{DEF}}
+    });
+}

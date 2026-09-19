@@ -1,0 +1,31 @@
+//! One body: an Item that is drawn, holding the Body that moves it. The Body
+//! holds a fixture per shape; the Item holds what each shape looks like and,
+//! with the debug view, the body's axes. A property left without a value is
+//! left out, and qml-box2d's own default stands.
+// {{NAME}}
+Item {
+    id: {{ITEM_ID}}
+    x: {{X}}
+    y: {{Y}}
+    rotation: {{ROTATION}}
+    transformOrigin: Item.TopLeft
+    Body {
+        id: {{BODY_ID}}
+        world: world
+        target: {{ITEM_ID}}
+        bodyType: {{BODY_TYPE}}
+        linearVelocity: {{LINEAR_VELOCITY}}
+        angularVelocity: {{ANGULAR_VELOCITY}}
+        linearDamping: {{LINEAR_DAMPING}}
+        angularDamping: {{ANGULAR_DAMPING}}
+        gravityScale: {{GRAVITY_SCALE}}
+        sleepingAllowed: {{SLEEPING_ALLOWED}}
+        awake: {{AWAKE}}
+        fixedRotation: {{FIXED_ROTATION}}
+        bullet: {{BULLET}}
+        active: {{ACTIVE}}
+        {{FIXTURES}}
+    }
+    {{LOOKS}}
+    {{AXES}}
+}

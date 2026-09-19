@@ -1,0 +1,23 @@
+//! One body and its shapes, in a block of its own so each can have a bodyDef.
+//! A field without a value is left out, and b2DefaultBodyDef's stands.
+{
+    b2BodyDef bodyDef = b2DefaultBodyDef();
+    bodyDef.type = {{TYPE}};
+    bodyDef.position = m({{X}}, {{Y}});
+    bodyDef.rotation = b2MakeRot(rad({{ANGLE}}));
+    bodyDef.linearVelocity = b2Vec2{ {{VELOCITY_X}}, {{VELOCITY_Y}} };
+    bodyDef.angularVelocity = rad({{ANGULAR_VELOCITY}});
+    bodyDef.linearDamping = {{LINEAR_DAMPING}};
+    bodyDef.angularDamping = {{ANGULAR_DAMPING}};
+    bodyDef.gravityScale = {{GRAVITY_SCALE}};
+    bodyDef.sleepThreshold = {{SLEEP_THRESHOLD}};
+    bodyDef.enableSleep = {{ENABLE_SLEEP}};
+    bodyDef.isAwake = {{AWAKE}};
+    bodyDef.fixedRotation = {{FIXED_ROTATION}};
+    bodyDef.isBullet = {{BULLET}};
+    bodyDef.allowFastRotation = {{ALLOW_FAST_ROTATION}};
+    bodyDef.isEnabled = {{ENABLED}};
+    {{ID}} = b2CreateBody(world, &bodyDef);
+
+    {{SHAPES}}
+}

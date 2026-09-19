@@ -22,6 +22,7 @@
 #include "Joint.h"
 #include "SimulationController.h"
 #include "SceneExporter.h"
+#include "SceneScreenshot.h"
 
 #include <QJsonObject>
 #include <QJsonValue>
@@ -177,6 +178,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_ui->actionAddShape->setMenu(m_ui->menuAddShape);
     // Rebuilt as the menu opens rather than at startup, so a converter added
     // to the folder is there the moment it is looked for.
+    m_ui->menuExport->setIcon(Icons::exportScene());
     connect(m_ui->menuExport, &QMenu::aboutToShow, this, &MainWindow::refreshExportMenu);
     m_ui->actionAddJoint->setMenu(m_jointTypeMenu);
     for (QAction *action : { static_cast<QAction *>(m_ui->actionAddShape), m_ui->actionAddJoint }) {
@@ -197,6 +199,30 @@ MainWindow::MainWindow(QWidget *parent)
                          << separatorBefore(toolBar, m_ui->actionAddJoint);
     m_editModeActions.removeAll(nullptr);
     m_physicsModeActions.removeAll(nullptr);
+
+    // A run moves everything, and Stop puts it all back: whatever was added,
+    // deleted, opened or saved in between would be a change to a moment of the
+    // run, or would pull the scene out from under it. So all of it is off
+    // until Stop -- and whichever code would turn one back on mid-run, a
+    // selection handler or the undo stack, is overruled on the spot.
+    m_alwaysOnWhenStopped = { m_ui->actionNewScene, m_ui->actionLoadScene, m_ui->actionOptions,
+                              m_ui->actionAddShape, m_ui->actionAddRectangle,
+                              m_ui->actionAddCircle, m_ui->actionAddPolygon,
+                              m_ui->actionAddRay, m_ui->actionAddExplosion };
+    m_lockedWhileRunning = m_alwaysOnWhenStopped;
+    m_lockedWhileRunning << m_ui->actionSaveScene << m_ui->actionSaveSceneAs
+                         << m_ui->actionUndo << m_ui->actionRedo
+                         << m_ui->actionCopy << m_ui->actionPaste << m_ui->actionDelete
+                         << m_ui->actionMoveScale << m_ui->actionEditNodes << m_ui->actionRotate
+                         << m_ui->actionCreateBody << m_ui->actionDissolveBody
+                         << m_ui->actionAddJoint << m_ui->actionDeleteJoint
+                         << m_ui->menuAddShape->menuAction();
+    for (QAction *action : std::as_const(m_lockedWhileRunning)) {
+        connect(action, &QAction::changed, this, [this, action] {
+            if (action->isEnabled() && m_simulation && m_simulation->isActive())
+                action->setEnabled(false);
+        });
+    }
 
     m_simulation = new SimulationController(m_scene, this);
 
@@ -937,9 +963,12 @@ void MainWindow::updateUndoActions()
 
     // Same answer as the star in the title: with nothing changed there is
     // nothing to write. Save As stays open -- saving a copy of an untouched
-    // scene is a reasonable thing to ask for.
+    // scene is a reasonable thing to ask for. Neither while a run is going:
+    // it moves everything, and what it would save is a moment of the run.
     if (m_ui->actionSaveScene)
-        m_ui->actionSaveScene->setEnabled(!m_undo->isClean());
+        m_ui->actionSaveScene->setEnabled(!m_undo->isClean() && !running);
+    if (m_ui->actionSaveSceneAs)
+        m_ui->actionSaveSceneAs->setEnabled(!running);
 }
 
 void MainWindow::on_actionCopy_triggered()
@@ -954,6 +983,39 @@ void MainWindow::on_actionCopy_triggered()
     m_pasteCount = 0;
     updatePasteAction();
     statusBar()->showMessage(tr("Copied %1").arg(item->name()), 4000);
+}
+
+void MainWindow::on_actionSaveScreenshot_triggered()
+{
+    // Beside the scene's own file, named after it, unless a picture has been
+    // saved already -- then where that one went.
+    QString suggested = m_lastScreenshotPath;
+    if (suggested.isEmpty()) {
+        const QFileInfo scene(m_scenePath);
+        suggested = m_scenePath.isEmpty() ? QStringLiteral("scene.png")
+                                          : scene.absolutePath() + QLatin1Char('/') + scene.completeBaseName()
+                                                + QStringLiteral(".png");
+    }
+    QString chosenFilter;
+    QString path = QFileDialog::getSaveFileName(this, tr("Save Screenshot"), suggested,
+                                                SceneScreenshot::fileFilters().join(QStringLiteral(";;")),
+                                                &chosenFilter);
+    if (path.isEmpty())
+        return;
+    // A name typed without an extension takes the chosen format's.
+    if (QFileInfo(path).suffix().isEmpty()) {
+        const int star = chosenFilter.indexOf(QStringLiteral("*."));
+        path += star >= 0 ? chosenFilter.mid(star + 1).chopped(1) : QStringLiteral(".png");
+    }
+
+    QString error;
+    if (!SceneScreenshot::save(m_scene, path, &error)) {
+        QMessageBox::warning(this, tr("Save Screenshot"),
+                             tr("Couldn't save %1:\n%2").arg(QDir::toNativeSeparators(path), error));
+        return;
+    }
+    m_lastScreenshotPath = path;
+    statusBar()->showMessage(tr("Saved a screenshot to %1").arg(QDir::toNativeSeparators(path)), 4000);
 }
 
 void MainWindow::on_actionPaste_triggered()
@@ -1079,6 +1141,11 @@ bool MainWindow::openScene(const QString &path)
 
 bool MainWindow::onSaveScene()
 {
+    // Only a prompt about closing the scene gets here mid-run -- the actions
+    // are off -- so the run can end: stopping puts the scene back as it was,
+    // which is what gets saved.
+    if (m_simulation->isActive())
+        m_simulation->stop();
     if (m_scenePath.isEmpty())
         return onSaveSceneAs();
 
@@ -1426,13 +1493,11 @@ void MainWindow::onSimulationStateChanged()
                     .arg(m_simulation->isRunning() ? tr("Running") : tr("Paused"),
                          skipped.join(QStringLiteral(", "))));
         }
-        for (QAction *action : std::as_const(m_editModeActions))
+        for (QAction *action : std::as_const(m_lockedWhileRunning))
             action->setEnabled(false);
-        m_ui->actionCreateBody->setEnabled(false);
-        m_ui->actionDissolveBody->setEnabled(false);
-        m_ui->actionCopy->setEnabled(false);
-        m_ui->actionPaste->setEnabled(false);
     } else {
+        for (QAction *action : std::as_const(m_alwaysOnWhenStopped))
+            action->setEnabled(true);
         onPhysicsSelectionChanged();
         if (m_scene->editorMode() == EditorMode::Edit)
             onActiveItemChanged(m_scene->activeItem());
@@ -1555,6 +1620,10 @@ void MainWindow::onActiveItemChanged(ShapeItem *item)
 
 void MainWindow::on_canvasView_customContextMenuRequested(const QPoint &pos)
 {
+    // Every entry changes the scene, and nothing does that during a run.
+    if (m_simulation && m_simulation->isActive())
+        return;
+
     QMenu menu(this);
     ShapeItem *item = m_scene->activeItem();
 
@@ -1744,9 +1813,13 @@ void MainWindow::refreshExportMenu()
             QString error;
             QStringList written;
             QStringList log;
-            const bool converted =
-                SceneExporter::run(converter, m_scene, folder,
-                                   settingsAsJson(settingsFilePath()), &error, &written, &log);
+            bool converted = false;
+            // Exported mid-run, it is still the scene that is exported, as it
+            // stood when the run started -- not wherever the run has got to.
+            m_simulation->withSceneAsStarted([&] {
+                converted = SceneExporter::run(converter, m_scene, folder,
+                                               settingsAsJson(settingsFilePath()), &error, &written, &log);
+            });
 
             // Whatever the converter had to say for itself, under whichever
             // message it gets. It is the only thing that knows what it did.

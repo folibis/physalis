@@ -1,0 +1,43 @@
+cmake_minimum_required(VERSION 3.16)
+project({{PROJECT}} LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_AUTOMOC ON)
+
+{{QT_PREFIX}}
+find_package(Qt6 6.2 REQUIRED COMPONENTS Core Gui Qml Quick)
+
+# qml-box2d is fetched rather than expected, so the project builds anywhere with
+# nothing installed but Qt and a compiler. It is linked in statically, so there
+# is no plugin folder to deploy beside the program.
+#
+# The Box2D inside it (2.3) has its tolerances fixed in b2Settings.h for a world
+# built of metre-sized things. scale-box2d.cmake rewrites them for this scene's
+# scale before anything is compiled -- without it, shapes drawn a few pixels
+# apart would already count as touching.
+include(FetchContent)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(qmlbox2d
+    GIT_REPOSITORY {{REPOSITORY}}
+    GIT_TAG {{REF}}
+    PATCH_COMMAND ${CMAKE_COMMAND} -DSETTINGS=<SOURCE_DIR>/Box2D/Common/b2Settings.h
+                  -P ${CMAKE_CURRENT_SOURCE_DIR}/scale-box2d.cmake
+)
+FetchContent_MakeAvailable(qmlbox2d)
+
+# Qt 6.5 and later put a QML module's files under :/qt/qml/; main.cpp looks in
+# both places, so either answer to the policy works.
+if(QT_KNOWN_POLICY_QTP0001)
+    qt_policy(SET QTP0001 NEW)
+endif()
+
+qt_add_executable({{PROJECT}} main.cpp)
+qt_add_qml_module({{PROJECT}}
+    URI Scene
+    VERSION 1.0
+    QML_FILES Main.qml Scene.qml JointView.qml SensorHatch.qml
+)
+set_target_properties({{PROJECT}} PROPERTIES WIN32_EXECUTABLE TRUE)
+target_link_libraries({{PROJECT}} PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick qmlbox2d)

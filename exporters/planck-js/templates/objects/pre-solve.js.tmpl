@@ -1,0 +1,4 @@
+// Planck asks before it solves each contact; noted here, acted on after the step.
+world.on("pre-solve", function (contact) {
+    aboutToTouch.push([contact.getFixtureA(), contact.getFixtureB()]);
+});

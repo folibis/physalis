@@ -1,0 +1,7 @@
+// Box2D asks before it solves each contact; noted here, acted on after the step.
+std::vector<std::pair<b2ShapeId, b2ShapeId>> aboutToTouch;
+bool notePreSolve(b2ShapeId a, b2ShapeId b, b2Manifold *, void *)
+{
+    aboutToTouch.emplace_back(a, b);
+    return true;
+}

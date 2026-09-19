@@ -23,6 +23,15 @@ that were written or explains what went wrong.
 - **Planck.js / web page** writes a single `index.html` file that runs the
   scene in a web browser, using Planck.js, a JavaScript version of Box2D.
   Open the file in a browser, or put it on any website.
+- **QML / qml-box2d project** writes a Qt Quick project. The scene becomes QML
+  objects of the [qml-box2d](https://github.com/qml-box2d/qml-box2d) plugin:
+  a `World`, a `Body` with its fixtures for each body, and the joints. The rules
+  become JavaScript that runs after every step. The project downloads
+  qml-box2d when it is first configured and links it in, so the finished
+  program needs nothing else. Open it in Qt Creator, or build it with CMake.
+  qml-box2d is based on Box2D 2.3. Anything it cannot do, such as rounded
+  corners in collisions or a hinge spring, is listed in the message when the
+  export finishes.
 
 ## Export settings
 
@@ -33,7 +42,7 @@ For example:
 - whether the result has buttons to start, pause and restart the simulation;
 - whether helpers such as joints and centres of mass are drawn;
 - how many simulation steps are calculated per second;
-- which version of Box2D or Planck.js to use, and where to get it from.
+- which version of Box2D, Planck.js or qml-box2d to use, and where to get it from.
 
 ## Writing your own exporter
 

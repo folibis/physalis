@@ -82,6 +82,7 @@ private slots:
     bool clipboardHasShape() const;
     void on_actionCopy_triggered();
     void on_actionPaste_triggered();
+    void on_actionSaveScreenshot_triggered();
 
 private:
     void updateWindowTitle();
@@ -178,9 +179,17 @@ private:
     // Toolbar contents, shown and hidden with their editor mode.
     QList<QAction *> m_editModeActions;
     QList<QAction *> m_physicsModeActions;
+    // Everything that changes the scene or puts another in its place; all off
+    // while a run is going (see the constructor).
+    QList<QAction *> m_lockedWhileRunning;
+    // Of those, the ones nothing else turns back on after a run: nothing about
+    // the selection decides them.
+    QList<QAction *> m_alwaysOnWhenStopped;
     QList<QAction *> m_transportActions;
 
     QString m_scenePath;
+    // Where the last screenshot went, so the next one is offered beside it.
+    QString m_lastScreenshotPath;
     int m_pasteCount = 0;
     SimulationController *m_simulation = nullptr;
     QAction *m_resetScaleAction = nullptr;

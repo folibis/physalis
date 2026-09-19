@@ -4,6 +4,7 @@
 // objects -- the code someone who knows only C++ and Box2D would write.
 
 #include "CanvasScene.h"
+#include "ExplosionItem.h"
 #include "CircleItem.h"
 #include "Joint.h"
 #include "PhysicsBody.h"
@@ -324,4 +325,83 @@ TEST(RulesAsCode, ARuleSwitchedOffIsLeftOut)
     ASSERT_FALSE(code.isEmpty());
     EXPECT_TRUE(code.contains(QStringLiteral("switched off in the editor")));
     EXPECT_FALSE(code.contains(QStringLiteral("b2RevoluteJoint_SetMotorSpeed")));
+}
+
+// A rule that sets off an explosion names the explosion, not a body; it was
+// once not exported at all, and a chain of events waiting on it never started.
+TEST(RulesAsCode, AnExplosionIsBox2DsOwn)
+{
+    CanvasScene scene;
+    Rig rig = buildRig(&scene);
+    ASSERT_NE(rig.ball, nullptr);
+    ExplosionItem *blast = scene.addExplosion(QPointF(10, 50));
+    ASSERT_NE(blast, nullptr);
+    blast->params().insert(QStringLiteral("impulse"), 5.0);
+
+    Rule boom;
+    boom.subjectName = Rule::world();
+    boom.conditionKey = QStringLiteral("time");
+    boom.compare = Rule::Compare::Greater;
+    boom.conditionValue = 1.0;
+    boom.targetName = blast->name();
+    boom.actionId = QStringLiteral("explode");
+    boom.actionParams.insert(QStringLiteral("radius"), 200.0);
+    boom.actionParams.insert(QStringLiteral("impulse"), 3.0);
+    scene.setRules({ boom });
+
+    const QString code = mainFor(&scene);
+    EXPECT_TRUE(code.contains(QStringLiteral("explosion.position = m(10, 50);"))) << code.toStdString();
+    EXPECT_TRUE(code.contains(QStringLiteral("explosion.impulsePerLength = m(5);")))
+        << "the explosion's own impulse wins over the rule's";
+    EXPECT_TRUE(code.contains(QStringLiteral("b2World_Explode(world, &explosion);")));
+}
+
+// Box2D measures a prismatic joint between its anchors; the editor counts
+// travel from where the joint starts, and its engine adds the gap to the limits.
+TEST(RulesAsCode, ASlidersTravelCountsFromWhereItStarts)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    auto *base = scene.addCircle(QPointF(0, 0));
+    auto *lift = scene.addCircle(QPointF(0, 300));
+    scene.notifyShapesChanged();
+    scene.setEditorMode(EditorMode::Physics);
+    scene.selectForPhysics(base, true);
+    PhysicsBody *baseBody = scene.createBodyFromSelection();
+    scene.clearPhysicsSelection();
+    scene.selectForPhysics(lift, true);
+    PhysicsBody *liftBody = scene.createBodyFromSelection();
+    ASSERT_TRUE(baseBody && liftBody);
+
+    QVariantMap params;
+    params.insert(QStringLiteral("enableLimit"), true);
+    params.insert(QStringLiteral("lowerTranslation"), 0.0);
+    params.insert(QStringLiteral("upperTranslation"), 100.0);
+    Joint *slide = scene.createJoint(QStringLiteral("prismatic"), liftBody, baseBody, 2, params);
+    ASSERT_NE(slide, nullptr);
+    slide->setAnchorScenePos(Joint::End::A, QPointF(30, 330));
+    slide->setAnchorScenePos(Joint::End::B, QPointF(30, 30));
+    slide->setAxisScene(QPointF(0, -1));
+
+    const QString code = mainFor(&scene);
+    EXPECT_TRUE(code.contains(QStringLiteral("jointDef.lowerTranslation = m(300);"))) << code.toStdString();
+    EXPECT_TRUE(code.contains(QStringLiteral("jointDef.upperTranslation = m(400);")));
+}
+
+// A scene keeps a 64-bit collision filter as a hex string. Read as a JavaScript
+// number, all-ones came out as 18446744073709552000, which C++ wraps round to
+// 384: every shape collided with nothing.
+TEST(RulesAsCode, CollisionBitsAreExact)
+{
+    CanvasScene scene;
+    Rig rig = buildRig(&scene);
+    ASSERT_NE(rig.ball, nullptr);
+    rig.ball->part().params[QStringLiteral("maskBits")] = QStringLiteral("0x0000000000000005");
+    rig.ball->part().params[QStringLiteral("categoryBits")] = QStringLiteral("0x0000000000000002");
+    rig.ground->part().params[QStringLiteral("maskBits")] = QStringLiteral("0xffffffffffffffff");
+
+    const QString code = mainFor(&scene);
+    EXPECT_TRUE(code.contains(QStringLiteral("shapeDef.filter.maskBits = 0x5ull;"))) << code.toStdString();
+    EXPECT_TRUE(code.contains(QStringLiteral("shapeDef.filter.categoryBits = 0x2ull;")));
+    EXPECT_FALSE(code.contains(QStringLiteral("18446744073709552000")));
 }

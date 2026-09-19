@@ -1,0 +1,22 @@
+// Box2D's tolerances are lengths fixed for metre-sized objects: 5 mm of slop,
+// contacts made 2 cm before shapes meet. This scene is drawn at {{PIXELS_PER_METER}} units per
+// metre, so they are scaled to the scene's Contact Margin: a contact made that
+// many units before shapes meet. It is also how far ahead Box2D sees a contact
+// coming, and a body closing more than it in a step ends up inside.
+b2SetLengthUnitsPerMeter({{LENGTH_UNITS}});
+
+//! b2SetLengthUnitsPerMeter scales Box2D's own defaults for the speeds as well,
+//! so a speed is left out only when it matches the default after that call.
+b2WorldDef worldDef = b2DefaultWorldDef();
+worldDef.gravity = b2Vec2{ {{GRAVITY_X}}, {{GRAVITY_Y}} };
+worldDef.maximumLinearSpeed = {{MAXIMUM_LINEAR_SPEED}};
+worldDef.maxContactPushSpeed = {{MAX_CONTACT_PUSH_SPEED}};
+worldDef.restitutionThreshold = {{RESTITUTION_THRESHOLD}};
+worldDef.hitEventThreshold = {{HIT_EVENT_THRESHOLD}};
+worldDef.contactHertz = {{CONTACT_HERTZ}};
+worldDef.contactDampingRatio = {{CONTACT_DAMPING_RATIO}};
+worldDef.enableSleep = {{ENABLE_SLEEP}};
+worldDef.enableContinuous = {{ENABLE_CONTINUOUS}};
+world = b2CreateWorld(&worldDef);
+//! PRE_SOLVE is notePreSolve when a rule watches contacts about to be solved.
+b2World_SetPreSolveCallback(world, {{PRE_SOLVE}}, nullptr);

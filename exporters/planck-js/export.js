@@ -7,9 +7,12 @@
 // every fixture the world holds. Nothing of the editor itself is carried
 // across: no scene description to load, no rules as data.
 //
-// index.html.tmpl is the page around the scene; this script works out the
-// parts that depend on the scene, and writes a def field only when it differs
-// from Planck's own default.
+// index.html.tmpl is the page around the scene. Every piece of code that goes
+// into it -- the world, each body, fixture and joint, the listeners, the
+// helpers the rules call -- is a template under templates/objects/ (see
+// render() below); this script works out the values that go into them, and
+// leaves a def field out when it would only repeat Planck's own default. The
+// rules' own code is the one part still written here.
 //
 // Planck.js is Box2D 2.4, not v3, and several things the editor offers have no
 // counterpart in it. Those are reported through io.log() rather than dropped.
@@ -19,6 +22,10 @@ var NEWLINE = String.fromCharCode(10);
 var T = null;       // template loader
 var PPM = 1000;     // scene units per metre
 var MOTION = 0.05;  // 50 / PPM -- the scale the editor quotes world speeds at
+// The scale the editor sets Box2D's tolerances at, from the world's Contact
+// Margin: 2 px by default, a contact seen coming that far off. Tighter, and a
+// door slammed onto a ramp sank in before there was a contact to stop it.
+var TOLERANCE = 0.1;
 var MISSED = null;  // what this target cannot represent
 
 // How much every polygon is pulled in from its drawn outline, in scene units.
@@ -39,6 +46,11 @@ var COUNTERS = null;
 var STREAMS = null; // which Planck callbacks the step code needs recorded
 var HITS = null;
 var LOST = false;
+var EXPLODES = false; // whether the page needs explode()
+var PENDING = false;  // whether a rule can stop or hold the run
+var HELPERS = null;   // what the step code calls that has to be written out
+var ANSWERING = false; // writing a "to be removed" answer, which removes for real
+var TRAVEL = null;     // prismatic joint index -> where its travel starts, scene units
 var WORLD_SETTINGS = {};
 
 // What the engine says an object has, under the names it publishes. The
@@ -49,6 +61,18 @@ function vals(owner) {
     return (owner && owner.physics) || {};
 }
 
+// Box2D v3, which the editor runs, splits each step into sub-steps and a motor
+// joint closes `correctionFactor` of the gap on every one of them; Box2D 2.x
+// closes it once a step. The same number would move a motor joint's body
+// several times more slowly here, so it is turned into the once-a-step factor
+// that closes as much of the gap in a step: 0.05 at four sub-steps is 0.185.
+function stepCorrection(factor) {
+    var f = Math.max(0, Math.min(1, Number(factor)));
+    return 1 - Math.pow(1 - f, SUB_STEPS);
+}
+
+var SUB_STEPS = 4;
+
 function exportScene(scene, io) {
     var world = scene.world || {};
     var field = scene.field || {};
@@ -57,7 +81,11 @@ function exportScene(scene, io) {
 
     PPM = world.pixelsPerMeter || 1000;
     MOTION = 50.0 / PPM;
-    INSET = 2.0 * (2.0 * 0.005 * MOTION) * PPM;
+    // The world's Contact Margin, in scene units: Box2D makes a contact 4 x slop
+    // away, so its length unit is the margin over 4 x 5 mm at this scale.
+    TOLERANCE = Math.max(0.1, pickNumber(vals(world).contactMargin, 2)) / (4.0 * 0.005 * PPM);
+    SUB_STEPS = Math.max(1, Math.round(pickNumber(vals(world).subStepCount, 4)));
+    INSET = 2.0 * (2.0 * 0.005 * TOLERANCE) * PPM;
     MISSED = {};
 
     var cache = {};
@@ -71,11 +99,11 @@ function exportScene(scene, io) {
     var source = String(own.librarySource || "cdn");
     var libraryTag;
     if (source === "npm") {
-        libraryTag = '<script src="node_modules/planck/dist/planck.min.js"></script>' + NEWLINE;
+        libraryTag = render("objects/library.html.tmpl", { URL: "node_modules/planck/dist/planck.min.js" });
         io.write("package.json", packageJson(project, own));
         io.log("npm: run 'npm install' beside index.html before opening it.");
     } else {
-        libraryTag = '<script src="' + libraryUrl(own) + '"></script>' + NEWLINE;
+        libraryTag = render("objects/library.html.tmpl", { URL: libraryUrl(own) });
         io.log("index.html loads Planck.js from " + libraryUrl(own) + " -- opening it needs a network.");
     }
 
@@ -87,8 +115,13 @@ function exportScene(scene, io) {
     STATE = [];
     RESETS = [];
     COUNTERS = { time: false, frame: false };
-    STREAMS = { begun: false, ended: false, hits: false };
+    STREAMS = { begun: false, ended: false, hits: false, about: false };
     HITS = null;
+    EXPLODES = false;
+    PENDING = false;
+    HELPERS = { initState: false, clones: {} };
+    ANSWERING = false;
+    TRAVEL = travelOrigins(scene);
     LOST = destroys(scene);
     WORLD_SETTINGS = world;
 
@@ -96,20 +129,20 @@ function exportScene(scene, io) {
     // of Planck's callbacks have to be listened to.
     var stepCode = stepBody(scene, io);
 
-    io.write("index.html", fill(T("index.html.tmpl"), {
+    io.write("index.html", page("index.html.tmpl", {
         TITLE: project,
         PIXELS_PER_METER: num(PPM),
         SETTINGS: settingsCode(scene),
         IDS: idDeclarations(scene),
-        STATE: STATE.length ? (NEWLINE + STATE.join("")) : "",
-        RESETS: RESETS.length ? (RESETS.join("") + NEWLINE) : "",
+        STATE: STATE.join(NEWLINE),
+        RESETS: RESETS.join(NEWLINE),
         WORLD: worldCode(world),
         BODIES: bodiesCode(scene),
         FIELD_BOUNDS: fieldBoundsCode(world, field),
         JOINTS: jointsCode(scene),
         LISTENERS: listenersCode(),
         STEP: stepCode,
-        RAY_HELPER: (scene.rays || []).length ? rayHelper() : "",
+        HELPERS: helpersCode(scene),
         RAY_DRAWING: rayDrawing(scene),
         STEPS_PER_SECOND: int(own.stepsPerSecond, 60),
         WIDTH: String(Math.round(field.width || 1000)),
@@ -172,34 +205,22 @@ function packageJson(project, own) {
     var dependency = official && !ref
         ? String(own.libraryVersion || "1.0.0")
         : ("git+" + repo + (ref ? "#" + ref : ""));
-    return JSON.stringify({
-        name: project.toLowerCase(),
-        version: "1.0.0",
-        private: true,
-        description: "A Physalis scene, exported to Planck.js.",
-        dependencies: { planck: dependency },
-    }, null, 4) + NEWLINE;
+    return page("package.json.tmpl", {
+        NAME: JSON.stringify(project.toLowerCase()),
+        DEPENDENCY: JSON.stringify(dependency),
+    });
 }
 
 // Box2D 2.4's tuning lengths assume a world built of metre-sized things. This
 // one is not -- at 1000 px/m a drawn 40px box is 0.04m -- so they are scaled
 // with the scene.
 function settingsCode(scene) {
-    var s = num(MOTION);
-    var lines = [
-        "// Planck's tolerances assume metre-sized objects; these are scaled to this scene.",
-        "pl.Settings.linearSlop = 0.005 * " + s + ";",
-        "pl.Settings.maxLinearCorrection = 0.2 * " + s + ";",
-        "pl.Settings.maxTranslation = 2.0 * " + s + ";",
-        "pl.Settings.linearSleepTolerance = 0.01 * " + s + ";",
-        "pl.Settings.velocityThreshold = 1.0 * " + s + ";",
-    ];
-    if (hasRoundedBox(scene)) {
-        lines.push("// A rounded box is a polygon that walks round its corners, which takes more");
-        lines.push("// than Planck's usual twelve vertices.");
-        lines.push("pl.Settings.maxPolygonVertices = " + (4 * (CORNER_STEPS + 1)) + ";");
-    }
-    return lines.join(NEWLINE) + NEWLINE;
+    return render("objects/settings.js.tmpl", {
+        TOLERANCE: num(TOLERANCE),
+        MOTION: num(MOTION),
+        ROUNDED_BOXES: hasRoundedBox(scene)
+            ? render("objects/rounded-boxes.js.tmpl", { VERTICES: String(4 * (CORNER_STEPS + 1)) }) : "",
+    });
 }
 
 // How many straight pieces each rounded corner is built from.
@@ -243,7 +264,7 @@ function roundedBoxPoints(hw, hh, r, centre, degrees) {
 
 // --- names -----------------------------------------------------------------
 
-var RESERVED = ("world dt a b i m len rad pl step createWorld draw run reset canvas ctx debug "
+var RESERVED = ("world dt a b i m len rad pl step createWorld draw run reset canvas ctx debug explode nearestPoint pending what initState clone doomed aboutToTouch "
     + "timer other contact contactsBegun contactsEnded hits points fixture body joint shape "
     + "castRay drawRay colourOf elapsed stepCount PIXELS_PER_METER planck window document "
     + "break case catch class const continue debugger default delete do else enum export "
@@ -297,28 +318,11 @@ function idDeclarations(scene) {
     }
     for (var j = 0; j < sim.joints.length; ++j)
         names.push(NAMES["joint:" + j]);
-    var out = declare(names);
+    var out = names.length ? [render("objects/ids.js.tmpl", { NAMES: listValue(names) })] : [];
     var rays = scene.rays || [];
     for (var r = 0; r < rays.length; ++r)
-        out += "var " + NAMES["ray:" + r] + " = { hit: false };" + NEWLINE;
-    return out;
-}
-
-function declare(names) {
-    if (names.length === 0)
-        return "";
-    var out = "var ";
-    var line = out;
-    for (var i = 0; i < names.length; ++i) {
-        var piece = names[i] + (i + 1 < names.length ? ", " : ";");
-        if (line.length + piece.length > 88) {
-            out = out.replace(/ $/, "") + NEWLINE + "    ";
-            line = "    ";
-        }
-        out += piece;
-        line += piece;
-    }
-    return out + NEWLINE;
+        out.push(render("objects/ray-state.js.tmpl", { ID: NAMES["ray:" + r] }));
+    return out.join(NEWLINE);
 }
 
 // --- the world -------------------------------------------------------------
@@ -333,28 +337,16 @@ function worldCode(world) {
     if (pickNumber(vals(world).subStepCount, 4) !== 4)
         missing("solver sub-steps", "world -- Planck iterates instead");
 
-    var fields = ["gravity: pl.Vec2(" + plain(g.x * MOTION) + ", " + plain(g.y * MOTION) + ")"];
-    if (vals(world).enableSleep === false)
-        fields.push("allowSleep: false");
-    if (vals(world).enableContinuous === false)
-        fields.push("continuousPhysics: false");
-
     // No pre-solve hook holding contacts back until shapes overlap: the polygon
     // inset already keeps shapes drawn flush from jamming, and holding contacts
     // back let a ball sink and bounce back out on every landing, so it never
     // came to rest the way it does in Box2D v3.
-    return indent("    ", objectCall("world = pl.World(", fields, ");"));
-}
-
-// name(\n    field,\n    field,\n}) -- or all on one line when there is nothing.
-function objectCall(head, fields, tail) {
-    if (fields.length === 0)
-        return [head + tail];
-    var lines = [head + "{"];
-    for (var i = 0; i < fields.length; ++i)
-        lines.push("    " + fields[i] + ",");
-    lines.push("}" + tail);
-    return lines;
+    return render("objects/world.js.tmpl", {
+        GRAVITY_X: plain(g.x * MOTION),
+        GRAVITY_Y: plain(g.y * MOTION),
+        ALLOW_SLEEP: vals(world).enableSleep === false ? "false" : null,
+        CONTINUOUS: vals(world).enableContinuous === false ? "false" : null,
+    });
 }
 
 // --- bodies and fixtures ---------------------------------------------------
@@ -363,53 +355,44 @@ var GEOMETRY_COUNTS = null;
 
 function bodiesCode(scene) {
     GEOMETRY_COUNTS = {};
-    var out = "";
+    var out = [];
     var bodies = scene.simulation.bodies;
     for (var i = 0; i < bodies.length; ++i)
-        out += NEWLINE + indent("    ", bodyLines(bodies[i], NAMES["body:" + i]));
-    return out;
+        out.push(bodyCode(bodies[i], NAMES["body:" + i]));
+    return out.join(NEWLINE + NEWLINE);
 }
 
-function bodyLines(body, name) {
-    var fields = [];
-    if (body.type === "dynamic" || body.type === "kinematic")
-        fields.push("type: \"" + body.type + "\"");
+function bodyCode(body, name) {
+    var v = vals(body);
     var p = body.position || { x: 0, y: 0 };
-    if (p.x || p.y)
-        fields.push("position: m(" + short(p.x) + ", " + short(p.y) + ")");
-    if (body.rotation)
-        fields.push("angle: rad(" + short(body.rotation) + ")");
-    var v = { x: pickNumber(vals(body).velocityX, 0),
-              y: pickNumber(vals(body).velocityY, 0) };
-    if (v.x || v.y)
-        fields.push("linearVelocity: pl.Vec2(" + num(v.x * MOTION) + ", " + num(v.y * MOTION) + ")");
-    if (vals(body).angularVelocity)
-        fields.push("angularVelocity: rad(" + short(vals(body).angularVelocity) + ")");
-    if (vals(body).linearDamping)
-        fields.push("linearDamping: " + num(vals(body).linearDamping));
-    if (vals(body).angularDamping)
-        fields.push("angularDamping: " + num(vals(body).angularDamping));
-    if (differs(pickNumber(vals(body).gravityScale, 1), 1))
-        fields.push("gravityScale: " + num(vals(body).gravityScale));
-    if (vals(body).enableSleep === false)
-        fields.push("allowSleep: false");
-    if (vals(body).isAwake === false)
-        fields.push("awake: false");
-    if (vals(body).fixedRotation)
-        fields.push("fixedRotation: true");
-    if (vals(body).isBullet)
-        fields.push("bullet: true");
-    if (body.isEnabled === false)
-        fields.push("active: false");
-    if (vals(body).allowFastRotation)
+    var velocity = { x: pickNumber(v.velocityX, 0), y: pickNumber(v.velocityY, 0) };
+    var moving = velocity.x || velocity.y;
+    if (v.allowFastRotation)
         missing("allow fast rotation", "body " + body.name);
 
-    var lines = fields.length ? objectCall(name + " = world.createBody(", fields, ");")
-                              : [name + " = world.createBody();"];
+    var fixtures = [];
     var parts = body.parts || [];
     for (var i = 0; i < parts.length; ++i)
-        lines = lines.concat(fixtureLines(parts[i], body, name));
-    return lines;
+        fixtures.push(fixtureCode(parts[i], body, name));
+    return render("objects/body.js.tmpl", {
+        ID: name,
+        TYPE: body.type === "dynamic" || body.type === "kinematic" ? body.type : null,
+        X: p.x || p.y ? short(p.x) : null,
+        Y: p.x || p.y ? short(p.y) : null,
+        ANGLE: body.rotation ? short(body.rotation) : null,
+        VELOCITY_X: moving ? num(velocity.x * MOTION) : null,
+        VELOCITY_Y: moving ? num(velocity.y * MOTION) : null,
+        ANGULAR_VELOCITY: v.angularVelocity ? short(v.angularVelocity) : null,
+        LINEAR_DAMPING: v.linearDamping ? num(v.linearDamping) : null,
+        ANGULAR_DAMPING: v.angularDamping ? num(v.angularDamping) : null,
+        GRAVITY_SCALE: differs(pickNumber(v.gravityScale, 1), 1) ? num(v.gravityScale) : null,
+        ALLOW_SLEEP: v.enableSleep === false ? "false" : null,
+        AWAKE: v.isAwake === false ? "false" : null,
+        FIXED_ROTATION: v.fixedRotation ? "true" : null,
+        BULLET: v.isBullet ? "true" : null,
+        ACTIVE: body.isEnabled === false ? "false" : null,
+        FIXTURES: fixtures.join(NEWLINE),
+    });
 }
 
 function isOutline(part) { return (part.kind === "polygon" && !isSolidPolygon(part)) || part.kind === "chain"; }
@@ -435,97 +418,113 @@ function isConvex(points) {
     return sign !== 0;
 }
 
-function fixtureLines(part, body, bodyName) {
-    if (isOutline(part) && body.type === "dynamic") {
-        return ["// " + (part.name || "an outline") + " is an outline, which has no mass, "
-                + "so a dynamic body cannot be made of it."];
-    }
+function fixtureCode(part, body, bodyName) {
+    if (isOutline(part) && body.type === "dynamic")
+        return render("objects/massless-outline.js.tmpl", { NAME: part.name || "an outline" });
     if (pickNumber(vals(part).rollingResistance, 0) !== 0)
         missing("rolling resistance", "shape " + part.name);
     if (pickNumber(vals(part).tangentSpeed, 0) !== 0)
         missing("surface speed", "shape " + part.name);
 
     // Planck's own defaults are density 0 and friction 0.2.
-    var def = [];
-    if (differs(pickNumber(vals(part).density, 1), 0))
-        def.push("density: " + plain(pickNumber(vals(part).density, 1)));
-    if (differs(pickNumber(vals(part).friction, 0.6), 0.2))
-        def.push("friction: " + plain(pickNumber(vals(part).friction, 0.6)));
-    if (vals(part).restitution)
-        def.push("restitution: " + plain(vals(part).restitution));
-    if (vals(part).isSensor)
-        def.push("isSensor: true");
+    //
+    // A shape built inside its outline (see INSET), or a rounded box walked
+    // round its corners, is denser by the area it lost, so it weighs what the
+    // editor's does and balances where it does: a see-saw pivoted on its centre
+    // of mass stays level.
+    var density = pickNumber(vals(part).density, 1) * densityScale(part);
     var category = filterBits(vals(part).categoryBits, 1, part.name);
     var mask = filterBits(vals(part).maskBits, 0xFFFF, part.name);
-    if (category !== 1)
-        def.push("filterCategoryBits: " + category);
-    if (mask !== 0xFFFF)
-        def.push("filterMaskBits: " + mask);
-    if (vals(part).groupIndex)
-        def.push("filterGroupIndex: " + vals(part).groupIndex);
-    var defText = def.length ? (", { " + def.join(", ") + " }") : "";
+    var def = render("objects/fixture-def.js.tmpl", {
+        DENSITY: differs(density, 0) ? plain(density) : null,
+        FRICTION: differs(pickNumber(vals(part).friction, 0.6), 0.2) ? plain(pickNumber(vals(part).friction, 0.6)) : null,
+        RESTITUTION: vals(part).restitution ? plain(vals(part).restitution) : null,
+        SENSOR: vals(part).isSensor ? "true" : null,
+        CATEGORY: category !== 1 ? String(category) : null,
+        MASK: mask !== 0xFFFF ? String(mask) : null,
+        GROUP: vals(part).groupIndex ? String(vals(part).groupIndex) : null,
+    });
 
     var keep = part.name && USED[part.name] && !isOutline(part)
         ? (NAMES["shape:" + part.name] + " = ") : "";
     var c = part.center || { x: 0, y: 0 };
+    var solid = function (shape, note) {
+        return render("objects/fixture.js.tmpl", { NOTE: note || null, KEEP: keep, BODY: bodyName, SHAPE: shape, DEF: def });
+    };
+    var at = function (list) {
+        var out = [];
+        for (var i = 0; i < list.length; ++i)
+            out.push("m(" + short(list[i].x) + ", " + short(list[i].y) + ")");
+        return listValue(out);
+    };
 
     if (part.kind === "box" && (part.cornerRadius || 0) > 0) {
         var hw = pullIn(part.halfExtents.x), hh = pullIn(part.halfExtents.y);
         // The corners come in by the inset too, so growing the polygon back
         // out when it is drawn gives the corners the editor drew.
         var radius = Math.max(0, Math.min(part.cornerRadius - INSET, hw, hh));
-        var rounded = roundedBoxPoints(hw, hh, radius, c, part.rotation);
-        var corners = [];
-        for (var q = 0; q < rounded.length; ++q)
-            corners.push("m(" + short(rounded[q].x) + ", " + short(rounded[q].y) + ")");
-        return ["// " + (part.name || "a box") + ", its corners rounded to " + short(part.cornerRadius) + "."]
-            .concat(wrapList(keep + bodyName + ".createFixture(pl.Polygon([", corners,
-                             "])" + defText + ");"));
+        return solid(render("objects/polygon-shape.js.tmpl", { POINTS: at(roundedBoxPoints(hw, hh, radius, c, part.rotation)) }),
+                     (part.name || "a box") + ", its corners rounded to " + short(part.cornerRadius) + ".");
     }
-
     if (part.kind === "box") {
-        var shape = "pl.Box(len(" + short(pullIn(part.halfExtents.x)) + "), len("
-                    + short(pullIn(part.halfExtents.y)) + ")";
-        if (c.x || c.y || part.rotation)
-            shape += ", m(" + short(c.x) + ", " + short(c.y) + "), rad(" + short(part.rotation || 0) + ")";
-        return [keep + bodyName + ".createFixture(" + shape + ")" + defText + ");"];
+        return solid(render("objects/box-shape.js.tmpl", {
+            HALF_WIDTH: short(pullIn(part.halfExtents.x)), HALF_HEIGHT: short(pullIn(part.halfExtents.y)),
+            X: short(c.x), Y: short(c.y), ANGLE: short(part.rotation || 0),
+        }));
     }
+    if (part.kind === "circle")
+        return solid(render("objects/circle-shape.js.tmpl", { X: short(c.x), Y: short(c.y), RADIUS: short(part.radius) }));
 
-    if (part.kind === "circle") {
-        var circle = (c.x || c.y)
-            ? ("pl.Circle(m(" + short(c.x) + ", " + short(c.y) + "), len(" + short(part.radius) + "))")
-            : ("pl.Circle(len(" + short(part.radius) + "))");
-        return [keep + bodyName + ".createFixture(" + circle + defText + ");"];
-    }
+    if (isSolidPolygon(part))
+        return solid(render("objects/polygon-shape.js.tmpl", { POINTS: at(pulledInOutline(part.points || [])) }));
 
-    var pts = isSolidPolygon(part) ? pulledInOutline(part.points || []) : (part.points || []);
-    var list = [];
-    for (var i = 0; i < pts.length; ++i)
-        list.push("m(" + short(pts[i].x) + ", " + short(pts[i].y) + ")");
-
-    if (isSolidPolygon(part)) {
-        var lines = wrapList(keep + bodyName + ".createFixture(pl.Polygon([", list, "])" + defText + ");");
-        return lines;
-    }
-
-    var points = geometryName("points");
-    var out = wrapList("var " + points + " = [", list, "];");
+    var pts = part.points || [];
     var closed = part.kind === "polygon" || part.closed;
+    var name = geometryName("points");
     if (part.kind === "chain" && part.smoothChain && pts.length >= 4) {
-        out.push(bodyName + ".createFixture(pl.Chain(" + points + ", " + bool(closed) + ")" + defText + ");");
-        return out;
+        return [render("objects/points.js.tmpl", { NAME: name, POINTS: at(pts) }),
+                render("objects/chain.js.tmpl", { BODY: bodyName, POINTS: name, LOOP: bool(closed), DEF: def })]
+            .join(NEWLINE);
     }
-    // One two-sided edge per segment.
     var edges = closed ? pts.length : pts.length - 1;
-    out.push("for (var i = 0; i < " + edges + "; ++i)");
-    out.push("    " + bodyName + ".createFixture(pl.Edge(" + points + "[i], " + points + "["
-             + (closed ? ("(i + 1) % " + pts.length) : "i + 1") + "])" + defText + ");");
-    return out;
+    return [render("objects/points.js.tmpl", { NAME: name, POINTS: at(closed ? pts.concat([pts[0]]) : pts) }),
+            render("objects/edges.js.tmpl", { BODY: bodyName, POINTS: name, COUNT: String(edges), DEF: def })]
+        .join(NEWLINE);
 }
 
 function geometryName(kind) {
     GEOMETRY_COUNTS[kind] = (GEOMETRY_COUNTS[kind] || 0) + 1;
     return GEOMETRY_COUNTS[kind] === 1 ? kind : (kind + GEOMETRY_COUNTS[kind]);
+}
+
+// How much denser a shape has to be to weigh what the editor's engine gives it:
+// a box -- rounded or not -- by its full rectangle, a polygon by its outline.
+function densityScale(part) {
+    var built = 0, drawn = 0;
+    if (part.kind === "box") {
+        var hw = part.halfExtents.x, hh = part.halfExtents.y;
+        drawn = 4 * hw * hh;
+        if ((part.cornerRadius || 0) > 0) {
+            var phw = pullIn(hw), phh = pullIn(hh);
+            var r = Math.max(0, Math.min(part.cornerRadius - INSET, phw, phh));
+            built = Math.abs(polygonArea(roundedBoxPoints(phw, phh, r, { x: 0, y: 0 }, 0)));
+        } else {
+            built = 4 * pullIn(hw) * pullIn(hh);
+        }
+    } else if (isSolidPolygon(part)) {
+        drawn = Math.abs(polygonArea(part.points));
+        built = Math.abs(polygonArea(pulledInOutline(part.points)));
+    }
+    return built > 0 && drawn > 0 ? drawn / built : 1;
+}
+
+function polygonArea(pts) {
+    var twice = 0;
+    for (var i = 0; i < pts.length; ++i) {
+        var p = pts[i], q = pts[(i + 1) % pts.length];
+        twice += p.x * q.y - q.x * p.y;
+    }
+    return twice / 2;
 }
 
 function pullIn(half) {
@@ -592,57 +591,54 @@ function fieldBoundsCode(world, field) {
     if (!world.solidBounds)
         return "";
     var w = field.width || 1000, h = field.height || 1000, t = 40;
-    var walls = [
-        [w / 2 + t, t / 2, 0, -h / 2 - t / 2], [w / 2 + t, t / 2, 0, h / 2 + t / 2],
-        [t / 2, h / 2, -w / 2 - t / 2, 0], [t / 2, h / 2, w / 2 + t / 2, 0],
-    ];
-    var lines = ["// The walls around the field.", "var walls = world.createBody();"];
-    for (var i = 0; i < walls.length; ++i) {
-        lines.push("walls.createFixture(pl.Box(len(" + short(walls[i][0]) + "), len(" + short(walls[i][1])
-                   + "), m(" + short(walls[i][2]) + ", " + short(walls[i][3]) + "), 0));");
-    }
-    return NEWLINE + indent("    ", lines);
+    return render("objects/walls.js.tmpl", {
+        HALF_SPAN: short(w / 2 + t),
+        HALF_THICKNESS: short(t / 2),
+        HALF_HEIGHT: short(h / 2),
+        TOP: short(-h / 2 - t / 2),
+        BOTTOM: short(h / 2 + t / 2),
+        LEFT: short(-w / 2 - t / 2),
+        RIGHT: short(w / 2 + t / 2),
+    });
 }
 
 // --- joints ----------------------------------------------------------------
 
 function jointsCode(scene) {
-    var out = "";
+    var out = [];
     var joints = scene.simulation.joints;
     for (var j = 0; j < joints.length; ++j) {
-        var lines = jointLines(scene, joints[j], NAMES["joint:" + j]);
-        if (lines.length)
-            out += NEWLINE + indent("    ", lines);
+        var code = jointCode(scene, joints[j], NAMES["joint:" + j], j);
+        if (code)
+            out.push(code);
     }
-    return out;
+    return out.join(NEWLINE + NEWLINE);
 }
 
-function jointLines(scene, joint, name) {
+function jointCode(scene, joint, name, index) {
     var p = joint.params || {};
     var bodies = scene.simulation.bodies;
+    var unsupported = function (why) {
+        return render("objects/unsupported-joint.js.tmpl", { NAME: name, WHY: why });
+    };
     if (joint.bodyA < 0 || joint.bodyB < 0)
-        return ["// " + name + " holds one body to a point in the world; not exported."];
+        return unsupported("holds one body to a point in the world; not exported.");
     var A = NAMES["body:" + joint.bodyA], B = NAMES["body:" + joint.bodyB];
     var anchors = joint.anchors || [];
     var a = anchors.length > 0 ? anchors[0] : { x: 0, y: 0 };
     var b = anchors.length > 1 ? anchors[1] : a;
-    var at = function (point) { return "m(" + short(point.x) + ", " + short(point.y) + ")"; };
-    var fields = [];
     var type = joint.type;
     var resting = (bodies[joint.bodyB].rotation || 0) - (bodies[joint.bodyA].rotation || 0);
-    var angle = function (field, value) {
-        if (value)
-            fields.push(field + ": rad(" + short(value) + ")");
+    // A field is left out when it would only say Planck's own default.
+    var angle = function (value) { return value ? short(value) : null; };
+    var number = function (value, fallback) { return differs(Number(value) || 0, fallback) ? plain(value) : null; };
+    var flag = function (value) { return value ? "true" : null; };
+    var values = {
+        ID: name, BODY_A: A, BODY_B: B, COLLIDE_CONNECTED: flag(joint.collideConnected),
+        ANCHOR_A_X: short(a.x), ANCHOR_A_Y: short(a.y), ANCHOR_B_X: short(b.x), ANCHOR_B_Y: short(b.y),
+        ANCHOR_X: short(a.x), ANCHOR_Y: short(a.y),
     };
-    var number = function (field, value, fallback) {
-        if (differs(Number(value) || 0, fallback))
-            fields.push(field + ": " + plain(value));
-    };
-    var flag = function (field, value) {
-        if (value)
-            fields.push(field + ": true");
-    };
-    var call;
+    var build = function (template) { return render("objects/" + template, values); };
 
     if (has(p, "constraintHertz") || has(p, "constraintDampingRatio"))
         missing("per-joint constraint tuning", "joint " + joint.name);
@@ -650,115 +646,109 @@ function jointLines(scene, joint, name) {
     if (type === "revolute") {
         if (p.enableSpring)
             missing("revolute spring", "joint " + joint.name);
-        angle("referenceAngle", resting + pick(p, "referenceAngle", 0));
-        flag("enableLimit", p.enableLimit);
         var angles = ordered(clampAngle(pick(p, "lowerAngle", 0)), clampAngle(pick(p, "upperAngle", 0)));
-        angle("lowerAngle", angles.lower);
-        angle("upperAngle", angles.upper);
-        flag("enableMotor", p.enableMotor);
-        number("maxMotorTorque", pick(p, "maxMotorTorque", 0), 0);
-        angle("motorSpeed", pick(p, "motorSpeed", 0));
-        flag("collideConnected", joint.collideConnected);
-        if (differs(a.x, b.x) || differs(a.y, b.y)) {
-            fields.unshift("localAnchorB: " + B + ".getLocalPoint(" + at(b) + ")");
-            fields.unshift("localAnchorA: " + A + ".getLocalPoint(" + at(a) + ")");
-            call = [A, B];
-        } else {
-            call = [A, B, at(a)];
-        }
-        return jointCall(name, "RevoluteJoint", fields, call);
+        values.REFERENCE_ANGLE = angle(resting + pick(p, "referenceAngle", 0));
+        values.ENABLE_LIMIT = flag(p.enableLimit);
+        values.LOWER_ANGLE = angle(angles.lower);
+        values.UPPER_ANGLE = angle(angles.upper);
+        values.ENABLE_MOTOR = flag(p.enableMotor);
+        values.MAX_MOTOR_TORQUE = number(pick(p, "maxMotorTorque", 0), 0);
+        values.MOTOR_SPEED = angle(pick(p, "motorSpeed", 0));
+        return build("revolute.js.tmpl");
     }
     if (type === "prismatic") {
         if (p.enableSpring)
             missing("prismatic spring and target translation", "joint " + joint.name);
-        fields.push("localAnchorA: " + A + ".getLocalPoint(" + at(a) + ")");
-        fields.push("localAnchorB: " + B + ".getLocalPoint(" + at(b) + ")");
         var ax = localAxis(joint, bodies[joint.bodyA]);
-        fields.push("localAxisA: pl.Vec2(" + num(ax.x) + ", " + num(ax.y) + ")");
-        angle("referenceAngle", resting + pick(p, "referenceAngle", 0));
-        flag("enableLimit", p.enableLimit);
+        // Box2D measures the travel between the anchors, so a joint whose anchors
+        // start apart starts that far along; the editor's limits count from there.
+        var origin = TRAVEL[index] || 0;
         var span = ordered(pick(p, "lowerTranslation", 0), pick(p, "upperTranslation", 0));
-        if (span.lower) fields.push("lowerTranslation: len(" + short(span.lower) + ")");
-        if (span.upper) fields.push("upperTranslation: len(" + short(span.upper) + ")");
-        flag("enableMotor", p.enableMotor);
-        number("maxMotorForce", pick(p, "maxMotorForce", 0), 0);
-        if (pick(p, "motorSpeed", 0))
-            fields.push("motorSpeed: len(" + short(p.motorSpeed) + ")");
-        flag("collideConnected", joint.collideConnected);
-        return jointCall(name, "PrismaticJoint", fields, [A, B]);
+        values.AXIS_X = num(ax.x);
+        values.AXIS_Y = num(ax.y);
+        values.REFERENCE_ANGLE = angle(resting + pick(p, "referenceAngle", 0));
+        values.ENABLE_LIMIT = flag(p.enableLimit);
+        values.LOWER_TRANSLATION = span.lower + origin ? short(span.lower + origin) : null;
+        values.UPPER_TRANSLATION = span.upper + origin ? short(span.upper + origin) : null;
+        values.ENABLE_MOTOR = flag(p.enableMotor);
+        values.MAX_MOTOR_FORCE = number(pick(p, "maxMotorForce", 0), 0);
+        values.MOTOR_SPEED = pick(p, "motorSpeed", 0) ? short(p.motorSpeed) : null;
+        return build("prismatic.js.tmpl");
     }
     if (type === "wheel") {
         if (p.enableLimit)
             missing("wheel joint limit", "joint " + joint.name);
-        flag("enableMotor", p.enableMotor);
-        number("maxMotorTorque", pick(p, "maxMotorTorque", 0), 0);
-        angle("motorSpeed", pick(p, "motorSpeed", 0));
         // No spring is a frequency of zero in Planck.
         var springs = pick(p, "enableSpring", true);
         var hertz = springs ? pick(p, "hertz", 1) : 0;
-        number("frequencyHz", hertz, 2);
-        number("dampingRatio", springs ? pick(p, "dampingRatio", 0.7) : 0, 0.7);
-        flag("collideConnected", joint.collideConnected);
         var axis = joint.axis || { x: 1, y: 0 };
-        var lines = jointCall(name, "WheelJoint", fields,
-                              [A, B, at(a), "pl.Vec2(" + num(axis.x) + ", " + num(axis.y) + ")"]);
-        if (!(hertz > 0)) {
-            // Planck 1.0 fills these only when there is a spring and reads them
-            // every step regardless; left undefined they make the world NaN.
-            lines.push(name + ".m_sAx = 0;");
-            lines.push(name + ".m_sBx = 0;");
-        }
-        return lines;
+        values.ENABLE_MOTOR = flag(p.enableMotor);
+        values.MAX_MOTOR_TORQUE = number(pick(p, "maxMotorTorque", 0), 0);
+        values.MOTOR_SPEED = angle(pick(p, "motorSpeed", 0));
+        values.FREQUENCY = number(hertz, 2);
+        values.DAMPING_RATIO = number(springs ? pick(p, "dampingRatio", 0.7) : 0, 0.7);
+        values.AXIS_X = num(axis.x);
+        values.AXIS_Y = num(axis.y);
+        values.NO_SPRING = hertz > 0 ? null : name;
+        return build("wheel.js.tmpl");
     }
     if (type === "distance") {
         if (p.enableLimit)
             missing("distance joint limit", "joint " + joint.name);
         if (p.enableMotor)
             missing("distance joint motor", "joint " + joint.name);
-        if (pick(p, "length", 0) > 0)
-            fields.push("length: len(" + short(p.length) + ")");
-        number("frequencyHz", p.enableSpring ? pick(p, "hertz", 0) : 0, 0);
-        number("dampingRatio", p.enableSpring ? pick(p, "dampingRatio", 0) : 0, 0);
-        flag("collideConnected", joint.collideConnected);
-        return jointCall(name, "DistanceJoint", fields, [A, B, at(a), at(b)]);
+        values.LENGTH = pick(p, "length", 0) > 0 ? short(p.length) : null;
+        values.FREQUENCY = number(p.enableSpring ? pick(p, "hertz", 0) : 0, 0);
+        values.DAMPING_RATIO = number(p.enableSpring ? pick(p, "dampingRatio", 0) : 0, 0);
+        return build("distance.js.tmpl");
     }
     if (type === "weld") {
         if (pickNumber(p.linearHertz, 0) && pickNumber(p.angularHertz, 0) && p.linearHertz !== p.angularHertz)
             missing("separate linear and angular weld springs", "joint " + joint.name + " -- the linear one is used");
-        angle("referenceAngle", resting + pick(p, "referenceAngle", 0));
-        number("frequencyHz", pickNumber(p.linearHertz, 0) || pickNumber(p.angularHertz, 0), 0);
-        number("dampingRatio", pickNumber(p.linearDampingRatio, 0) || pickNumber(p.angularDampingRatio, 0), 0);
-        flag("collideConnected", joint.collideConnected);
-        return jointCall(name, "WeldJoint", fields, [A, B, at(a)]);
+        values.REFERENCE_ANGLE = angle(resting + pick(p, "referenceAngle", 0));
+        values.FREQUENCY = number(pickNumber(p.linearHertz, 0) || pickNumber(p.angularHertz, 0), 0);
+        values.DAMPING_RATIO = number(pickNumber(p.linearDampingRatio, 0) || pickNumber(p.angularDampingRatio, 0), 0);
+        return build("weld.js.tmpl");
     }
     if (type === "motor") {
         var ox = pick(p, "linearOffsetX", 0), oy = pick(p, "linearOffsetY", 0);
-        if (ox || oy)
-            fields.push("linearOffset: m(" + short(ox) + ", " + short(oy) + ")");
-        angle("angularOffset", pick(p, "angularOffset", 0));
-        number("maxForce", pick(p, "maxForce", 1), 1);
-        number("maxTorque", pick(p, "maxTorque", 1), 1);
-        number("correctionFactor", pick(p, "correctionFactor", 0.3), 0.3);
-        flag("collideConnected", joint.collideConnected);
-        return jointCall(name, "MotorJoint", fields, [A, B]);
+        values.OFFSET_X = ox || oy ? short(ox) : null;
+        values.OFFSET_Y = ox || oy ? short(oy) : null;
+        values.ANGULAR_OFFSET = angle(pick(p, "angularOffset", 0));
+        values.MAX_FORCE = number(pick(p, "maxForce", 1), 1);
+        values.MAX_TORQUE = number(pick(p, "maxTorque", 1), 1);
+        values.CORRECTION_FACTOR = number(stepCorrection(pick(p, "correctionFactor", 0.3)), 0.3);
+        return build("motor.js.tmpl");
     }
     if (type === "mouse") {
         var tx = pick(p, "targetX", 0), ty = pick(p, "targetY", 0);
-        number("maxForce", pick(p, "maxForce", 1), 0);
-        number("frequencyHz", pick(p, "hertz", 4), 5);
-        number("dampingRatio", pick(p, "dampingRatio", 1), 0.7);
-        return jointCall(name, "MouseJoint", fields, [A, B, at((tx === 0 && ty === 0) ? a : { x: tx, y: ty })]);
+        var target = (tx === 0 && ty === 0) ? a : { x: tx, y: ty };
+        values.MAX_FORCE = number(pick(p, "maxForce", 1), 0);
+        values.FREQUENCY = number(pick(p, "hertz", 4), 5);
+        values.DAMPING_RATIO = number(pick(p, "dampingRatio", 1), 0.7);
+        values.TARGET_X = short(target.x);
+        values.TARGET_Y = short(target.y);
+        return build("mouse.js.tmpl");
     }
     missing("the filter joint", "joint " + joint.name + " -- it is not created");
-    return ["// " + name + ": Planck has no filter joint; not exported."];
+    return unsupported("Planck has no filter joint; not exported.");
 }
 
-function jointCall(name, type, fields, args) {
-    var tail = (fields.length ? "}, " : "{}, ") + args.join(", ") + "));";
-    if (!fields.length)
-        return [name + " = world.createJoint(pl." + type + "({}, " + args.join(", ") + "));"];
-    return objectCall(name + " = world.createJoint(pl." + type + "(", fields, "").slice(0, -1)
-        .concat([tail]);
+// Where each prismatic joint's travel starts: the gap between its anchors along
+// its axis, in scene units -- what the editor's own engine adds to its limits.
+function travelOrigins(scene) {
+    var out = {};
+    var joints = scene.simulation.joints;
+    for (var j = 0; j < joints.length; ++j) {
+        if (joints[j].type !== "prismatic")
+            continue;
+        var anchors = joints[j].anchors || [];
+        var a = anchors[0] || { x: 0, y: 0 }, b = anchors[1] || a;
+        var ax = joints[j].axis || { x: 1, y: 0 };
+        var length = Math.sqrt(ax.x * ax.x + ax.y * ax.y) || 1;
+        out[j] = ((b.x - a.x) * ax.x + (b.y - a.y) * ax.y) / length;
+    }
+    return out;
 }
 
 // A prismatic joint's axis, turned into body A's own frame.
@@ -779,41 +769,21 @@ function localAxis(joint, bodyA) {
 // variable remembers whether it was true last time.
 
 function listenersCode() {
-    var lines = [];
-    if (STREAMS.begun) {
-        lines.push("world.on(\"begin-contact\", function (contact) {");
-        lines.push("    contactsBegun.push([contact.getFixtureA(), contact.getFixtureB()]);");
-        lines.push("});");
-    }
-    if (STREAMS.ended) {
-        lines.push("world.on(\"end-contact\", function (contact) {");
-        lines.push("    contactsEnded.push([contact.getFixtureA(), contact.getFixtureB()]);");
-        lines.push("});");
-    }
-    if (STREAMS.hits) {
-        lines = lines.concat([
-            "// Box2D 2.4 has no hit events: a hit is a contact closing at speed.",
-            "world.on(\"pre-solve\", function (contact) {",
-            "    var manifold = contact.getWorldManifold(null);",
-            "    var point = manifold && manifold.points[0];",
-            "    if (!point)",
-            "        return;",
-            "    var a = contact.getFixtureA(), b = contact.getFixtureB();",
-            "    var closing = -pl.Vec2.dot(pl.Vec2.sub(b.getBody().getLinearVelocityFromWorldPoint(point),",
-            "                                           a.getBody().getLinearVelocityFromWorldPoint(point)),",
-            "                               manifold.normal);",
-            "    if (closing > 0)",
-            "        hits.push({ a: a, b: b, speed: closing, point: pl.Vec2.clone(point),",
-            "                    normal: pl.Vec2.clone(manifold.normal) });",
-            "});",
-        ]);
-    }
-    return lines.length ? (NEWLINE + indent("    ", lines)) : "";
+    var out = [];
+    if (STREAMS.begun)
+        out.push(render("objects/begin-contact.js.tmpl", {}));
+    if (STREAMS.ended)
+        out.push(render("objects/end-contact.js.tmpl", {}));
+    if (STREAMS.about)
+        out.push(render("objects/pre-solve.js.tmpl", {}));
+    if (STREAMS.hits)
+        out.push(render("objects/hits.js.tmpl", {}));
+    return out.join(NEWLINE);
 }
 
 function stepBody(scene, io) {
     var rules = scene.rules || [];
-    var loops = { begun: [], ended: [], hits: [] };
+    var loops = { begun: [], ended: [], hits: [], about: [] };
     var polls = [];
     var checks = [];
 
@@ -862,6 +832,11 @@ function stepBody(scene, io) {
         remember("var", "contactsEnded", "[]");
         out = out.concat(pairLoop("contactsEnded", "contactsEnded[i][0]", "contactsEnded[i][1]", loops.ended));
     }
+    if (loops.about.length) {
+        STREAMS.about = true;
+        remember("var", "aboutToTouch", "[]");
+        out = out.concat(pairLoop("aboutToTouch", "aboutToTouch[i][0]", "aboutToTouch[i][1]", loops.about));
+    }
     for (var p = 0; p < polls.length; ++p) {
         out.push("");
         out = out.concat(polls[p]);
@@ -870,7 +845,9 @@ function stepBody(scene, io) {
         out.push("");
         out = out.concat(checks[c]);
     }
-    return out.length ? wrapLong(indent("    ", out)) : "";
+    if (PENDING)
+        out = out.concat([""]).concat(render("objects/pending.js.tmpl", {}).split(NEWLINE));
+    return wrapLong(out.join(NEWLINE), 88);
 }
 
 function describe(rule) {
@@ -902,8 +879,8 @@ function ruleVariable(rule, n) {
 }
 
 function remember(kind, name, initial) {
-    STATE.push("var " + name + ";" + NEWLINE);
-    RESETS.push("    " + name + " = " + initial + ";" + NEWLINE);
+    STATE.push(render("objects/state.js.tmpl", { NAME: name }));
+    RESETS.push(render("objects/reset.js.tmpl", { NAME: name, VALUE: initial }));
 }
 
 function needsOther(rule) { return rule.target === "@other" || rule.target === "@otherBody"; }
@@ -919,7 +896,11 @@ function ruleCode(scene, rule, n, caption, loops, polls) {
     }
     var event = rule.event;
     var streams = { contactBegin: "begun", sensorBegin: "begun", contactEnd: "ended",
-                    sensorEnd: "ended", contactHit: "hits" };
+                    sensorEnd: "ended", contactHit: "hits", preSolve: "about" };
+
+    // Carried out where a removal is written: see actionLines.
+    if (event === "@aboutToBeRemoved")
+        return {};
 
     if (streams[event]) {
         var subject = side(scene, rule.subject);
@@ -936,7 +917,7 @@ function ruleCode(scene, rule, n, caption, loops, polls) {
         var fixtureBoth = subject.fixture && (!partner || partner.fixture);
         if (sensorEvent && !subject.isSensor && !(partner && partner.isSensor))
             guard = "(a.isSensor() || b.isSensor())";
-        else if (!sensorEvent && event !== "contactHit"
+        else if (!sensorEvent && event !== "contactHit" && event !== "preSolve"
                  && !(fixtureBoth && !subject.isSensor && !(partner && partner.isSensor)))
             guard = "!a.isSensor() && !b.isSensor()";
         loops[streams[event]].push({ caption: caption, subject: subject, partner: partner,
@@ -946,6 +927,14 @@ function ruleCode(scene, rule, n, caption, loops, polls) {
     }
 
     var condition, startsTrue = "false", effectOther = null;
+    if (event === "@runStarted") {
+        // Once, after the first step.
+        condition = "true";
+        var started = effectLines(scene, rule, null);
+        if (!started)
+            return { error: "nothing in Planck does " + describe(rule).split(", ")[1] };
+        return { check: edgeBlock(caption, base, condition, started, once, startsTrue) };
+    }
     if (event === "bodyMoved" || event === "bodyFellAsleep") {
         var body = resolve(scene, rule.subject);
         if (body && body.kind === "shape")
@@ -994,6 +983,9 @@ function ruleCode(scene, rule, n, caption, loops, polls) {
         var at = event === "limitLower" ? lower : event === "limitUpper" ? upper
                : ("(" + lower + " || " + upper + ")");
         condition = J + ".isLimitEnabled() && " + at;
+        // A joint a rule can break is gone once it has been.
+        if (LOST)
+            condition = J + " && " + condition;
         startsTrue = "true";
     } else if (event) {
         return { error: "Planck has no " + event + " event to read" };
@@ -1076,62 +1068,36 @@ function side(scene, name) {
 function hitRecords() {
     var lines = [];
     for (var i = 0; HITS && i < HITS.length; ++i) {
-        var f = HITS[i].handle;
         lines.push("");
-        lines.push("// How hard " + f + " was last hit, and where.");
-        lines.push("if (a === " + f + " || b === " + f + ") {");
-        lines.push("    " + f + "HitSpeed = hits[i].speed;");
-        lines.push("    " + f + "HitPoint = hits[i].point;");
-        lines.push("    " + f + "HitNormal = a === " + f + " ? hits[i].normal : pl.Vec2.neg(hits[i].normal);");
-        lines.push("}");
+        lines = lines.concat(render("objects/hit-record.js.tmpl", { ID: HITS[i].handle }).split(NEWLINE));
     }
     return lines;
 }
 
-function rayCast(ray, name) {
+// A ray and where it points, in scene units.
+function rayGeometry(ray) {
     var angle = (ray.angle || 0) * Math.PI / 180;
-    var mask = filterBits(parseInt(String(ray.maskBits || "ffff"), 16), 0xFFFF, "ray " + ray.name);
-    return name + " = castRay(m(" + short(ray.x) + ", " + short(ray.y) + "), m("
-           + short(Math.cos(angle) * (ray.length || 0)) + ", " + short(Math.sin(angle) * (ray.length || 0))
-           + ")" + (mask !== 0xFFFF ? (", " + mask) : "") + ");";
+    return { X: short(ray.x), Y: short(ray.y),
+             DX: short(Math.cos(angle) * (ray.length || 0)), DY: short(Math.sin(angle) * (ray.length || 0)) };
 }
 
-function rayHelper() {
-    return [
-        "",
-        "// The nearest fixture along a ray, the way a rangefinder sees it.",
-        "function castRay(from, translation, maskBits) {",
-        "    var result = { hit: false, fraction: 1 };",
-        "    world.rayCast(from, pl.Vec2.add(from, translation), function (fixture, point, normal, fraction) {",
-        "        if (maskBits !== undefined && (fixture.getFilterCategoryBits() & maskBits) === 0)",
-        "            return -1;",
-        "        result = { hit: true, point: pl.Vec2.clone(point), fixture: fixture, fraction: fraction };",
-        "        return fraction;",
-        "    });",
-        "    return result;",
-        "}",
-        "",
-        "function drawRay(from, translation, result) {",
-        "    var end = result.hit ? result.point : pl.Vec2.add(from, translation);",
-        "    ctx.strokeStyle = result.hit ? \"#e86a6a\" : \"#9a9a9a\";",
-        "    ctx.beginPath();",
-        "    ctx.moveTo(from.x, from.y);",
-        "    ctx.lineTo(end.x, end.y);",
-        "    ctx.stroke();",
-        "}",
-    ].join(NEWLINE) + NEWLINE;
+function rayCast(ray, name) {
+    var mask = filterBits(parseInt(String(ray.maskBits || "ffff"), 16), 0xFFFF, "ray " + ray.name);
+    var values = rayGeometry(ray);
+    values.ID = name;
+    values.MASK = mask !== 0xFFFF ? String(mask) : "undefined";
+    return render("objects/ray-cast.js.tmpl", values);
 }
 
 function rayDrawing(scene) {
     var rays = scene.rays || [];
-    var lines = [];
+    var out = [];
     for (var i = 0; i < rays.length; ++i) {
-        var angle = (rays[i].angle || 0) * Math.PI / 180;
-        lines.push("drawRay(m(" + short(rays[i].x) + ", " + short(rays[i].y) + "), m("
-                   + short(Math.cos(angle) * rays[i].length) + ", "
-                   + short(Math.sin(angle) * rays[i].length) + "), " + NAMES["ray:" + i] + ");");
+        var values = rayGeometry(rays[i]);
+        values.ID = NAMES["ray:" + i];
+        out.push(render("objects/ray-draw.js.tmpl", values));
     }
-    return lines.length ? indent("    ", lines) : "";
+    return out.join(NEWLINE);
 }
 
 // --- what a name refers to, and what can be read or written on it ----------
@@ -1145,6 +1111,11 @@ function resolve(scene, name) {
     for (var r = 0; r < rays.length; ++r) {
         if (rays[r].name === name)
             return { kind: "ray", handle: NAMES["ray:" + r], ray: rays[r] };
+    }
+    var explosions = scene.explosions || [];
+    for (var x = 0; x < explosions.length; ++x) {
+        if (explosions[x].name === name)
+            return { kind: "explosion", explosion: explosions[x] };
     }
     var joints = scene.simulation.joints;
     for (var j = 0; j < joints.length; ++j) {
@@ -1377,14 +1348,25 @@ function jointProperty(place, key) {
         case "upperAngle": return limit("angle", "upper");
         }
     } else if (t === "prismatic") {
+        // Travel counted from where the joint starts, as the editor counts it.
+        var origin = "len(" + short(TRAVEL[place.index] || 0) + ")";
+        var travel = function (end) {
+            var getter = J + (end === "lower" ? ".getLowerLimit()" : ".getUpperLimit()");
+            var other = J + (end === "lower" ? ".getUpperLimit()" : ".getLowerLimit()");
+            return prop("len", "(" + getter + " - " + origin + ")", function (v) {
+                var moved = "(" + v + ") + " + origin;
+                return wake.concat([J + ".setLimits(Math.min(" + moved + ", " + other + "), Math.max("
+                                    + moved + ", " + other + "));"]);
+            });
+        };
         switch (key) {
-        case "translation": return prop("len", J + ".getJointTranslation()", null);
+        case "translation": return prop("len", "(" + J + ".getJointTranslation() - " + origin + ")", null);
         case "speed": return prop("len", J + ".getJointSpeed()", null);
         case "motorSpeed": return simple("len", "getMotorSpeed", "setMotorSpeed");
         case "motorForce": return prop("none", J + ".getMotorForce(1 / dt)", null);
         case "maxMotorForce": return simple("none", "getMaxMotorForce", "setMaxMotorForce");
-        case "lowerTranslation": return limit("len", "lower");
-        case "upperTranslation": return limit("len", "upper");
+        case "lowerTranslation": return travel("lower");
+        case "upperTranslation": return travel("upper");
         }
     } else if (t === "wheel") {
         switch (key) {
@@ -1403,7 +1385,13 @@ function jointProperty(place, key) {
         switch (key) {
         case "maxForce": return simple("none", "getMaxForce", "setMaxForce");
         case "maxTorque": return simple("none", "getMaxTorque", "setMaxTorque");
-        case "correctionFactor": return simple("none", "getCorrectionFactor", "setCorrectionFactor");
+        case "correctionFactor":
+            // In the editor's terms: per sub-step, as Box2D v3 takes it.
+            return prop("none", "(1 - Math.pow(1 - " + J + ".getCorrectionFactor(), 1 / " + SUB_STEPS + "))",
+                        function (v) {
+                return wake.concat([J + ".setCorrectionFactor(1 - Math.pow(1 - Math.max(0, Math.min(1, " + v
+                                    + ")), " + SUB_STEPS + "));"]);
+            });
         case "angularOffset": return simple("angle", "getAngularOffset", "setAngularOffset");
         case "linearOffsetX":
         case "linearOffsetY":
@@ -1582,6 +1570,44 @@ function writeLines(scene, rule, target) {
 
 function actionLines(scene, rule, target) {
     var params = rule.actionParams || {};
+    var isBody = target.kind === "body" || target.kind === "shape";
+    var who = target.kind === "shape" ? target.bodyHandle : target.handle;
+
+    if (rule.action === "@initState") {
+        if (!isBody)
+            return null;
+        HELPERS.initState = true;
+        return ["initState(" + who + ");"];
+    }
+    if (rule.action === "@clone") {
+        // A copy of a body named in the rule; one met through "the other" is
+        // not known until the run, and there is nothing to copy it from.
+        var index = target.kind === "shape" ? target.body : target.index;
+        if (!isBody || index === undefined)
+            return null;
+        HELPERS.clones[index] = true;
+        return ["cloneOf_" + NAMES["body:" + index] + "(m(" + short(pickNumber(params.x, 0)) + ", "
+                + short(pickNumber(params.y, 0)) + "));"];
+    }
+    if (rule.action === "pushForceAt") {
+        if (!isBody)
+            return null;
+        return [who + ".applyForce(m(" + short(pickNumber(params.impulseX, 0)) + ", "
+                + short(pickNumber(params.impulseY, 0)) + "), pl.Vec2.add(" + who + ".getWorldCenter(), m("
+                + short(pickNumber(params.offsetX, 0)) + ", " + short(pickNumber(params.offsetY, 0)) + ")), true);"];
+    }
+    if (rule.action === "resetMass")
+        return isBody ? [who + ".resetMassData();"] : null;
+
+    // Ending or holding the run cannot happen inside the step, with the rules
+    // still going through the world; step() carries it out once they are done.
+    if (rule.action === "@stopRun" || rule.action === "@holdRun") {
+        if (!PENDING) {
+            PENDING = true;
+            remember("var", "pending", "null");
+        }
+        return ["pending = \"" + (rule.action === "@stopRun" ? "stop" : "hold") + "\";"];
+    }
     var body = target.kind === "shape" ? target.bodyHandle : target.handle;
 
     if (rule.action === "explode") {
@@ -1591,48 +1617,25 @@ function actionLines(scene, rule, target) {
                 settings[key] = params[key];
         }
         var at = null;
-        var explosions = scene.explosions || [];
-        for (var i = 0; i < explosions.length; ++i) {
-            if (explosions[i].name !== rule.target)
-                continue;
-            at = "m(" + short(explosions[i].x) + ", " + short(explosions[i].y) + ")";
-            var own = explosions[i].params || {};
+        if (target.kind === "explosion") {
+            at = "m(" + short(target.explosion.x) + ", " + short(target.explosion.y) + ")";
+            // The explosion's own settings win over the rule's, as in the editor.
+            var own = target.explosion.params || {};
             for (key in own) {
                 if (has(own, key))
                     settings[key] = own[key];
             }
-        }
-        if (!at && (target.kind === "body" || target.kind === "shape"))
+        } else if (target.kind === "body" || target.kind === "shape") {
             at = body + ".getPosition()";
+        }
         var radius = pickNumber(settings.radius, 0);
         if (!at || !(radius > 0))
             return null;
-        var falloff = pickNumber(settings.falloff, 0);
+        EXPLODES = true;
         var mask = pickNumber(settings.maskBits, 0);
-        // Planck has no world explode: every dynamic body within reach is
-        // pushed away from the centre, fading to nothing across the falloff.
-        var lines = [
-            "var centre = " + at + ";",
-            "for (var hit = world.getBodyList(); hit; hit = hit.getNext()) {",
-            "    if (!hit.isDynamic())",
-            "        continue;",
-        ];
-        if (mask > 0) {
-            lines.push("    if ((hit.getFixtureList().getFilterCategoryBits() & " + (Math.round(mask) & 0xFFFF) + ") === 0)");
-            lines.push("        continue;");
-        }
-        lines = lines.concat([
-            "    var away = pl.Vec2.sub(hit.getWorldCenter(), centre);",
-            "    var distance = away.length();",
-            "    if (distance < 1e-6 || distance > len(" + short(radius + falloff) + "))",
-            "        continue;",
-            "    var strength = distance <= len(" + short(radius) + ") ? 1 : "
-                + (falloff > 0 ? ("1 - (distance - len(" + short(radius) + ")) / len(" + short(falloff) + ")") : "0") + ";",
-            "    away.mul(len(" + short(pickNumber(settings.impulse, 0)) + ") * strength / distance);",
-            "    hit.applyLinearImpulse(away, hit.getWorldCenter(), true);",
-            "}",
-        ]);
-        return lines;
+        return ["explode(" + at + ", len(" + short(pickNumber(settings.impulse, 0)) + "), len(" + short(radius)
+                + "), len(" + short(pickNumber(settings.falloff, 0)) + ")"
+                + (mask > 0 ? (", " + (Math.round(mask) & 0xFFFF)) : "") + ");"];
     }
     if (rule.action === "pushAt") {
         if (target.kind !== "body" && target.kind !== "shape")
@@ -1644,6 +1647,16 @@ function actionLines(scene, rule, target) {
     if (rule.action === "removeBody") {
         if (target.kind !== "body" && target.kind !== "shape")
             return null;
+        if (!ANSWERING) {
+            var answered = removal(scene, rule, target, function () {
+                ANSWERING = true;
+                var real = actionLines(scene, rule, target);
+                ANSWERING = false;
+                return real;
+            });
+            if (answered)
+                return answered;
+        }
         // Destroying a body takes its joints with it; the variables that held
         // them are emptied so nothing below reaches for them.
         var out = [];
@@ -1690,6 +1703,99 @@ function actionLines(scene, rule, target) {
     return null;
 }
 
+// --- "to be removed" ---------------------------------------------------------
+//
+// Before a rule removes a body, the editor looks for rules on that body (or its
+// shapes) waiting for "to be removed"; if there are any, they are carried out
+// instead and the body stays. "The other object" in an answer is the subject of
+// the rule that did the removing. An answer that itself removes really removes.
+
+function answersByBody(scene) {
+    var byBody = {};
+    var rules = scene.rules || [];
+    var bodies = scene.simulation.bodies;
+    for (var i = 0; i < rules.length; ++i) {
+        var rule = rules[i];
+        if (rule.enabled === false || rule.event !== "@aboutToBeRemoved")
+            continue;
+        for (var b = 0; b < bodies.length; ++b) {
+            var named = bodies[b].name === rule.subject;
+            var parts = bodies[b].parts || [];
+            for (var p = 0; p < parts.length && !named; ++p)
+                named = parts[p].name === rule.subject;
+            if (named)
+                (byBody[b] = byBody[b] || []).push(rule);
+        }
+    }
+    return byBody;
+}
+
+// The answer in place of the removal, or null when nothing answers and the
+// body is simply removed.
+function removal(scene, rule, target, remove) {
+    var answers = answersByBody(scene);
+    var remover = resolve(scene, rule.subject);
+    var other = remover && remover.kind === "shape" && !remover.outline ? remover.handle : null;
+    var answer = function (rules) {
+        ANSWERING = true;
+        var lines = [];
+        for (var i = 0; i < rules.length; ++i) {
+            var made = effectLines(scene, rules[i], other);
+            lines = lines.concat(made || ["// (" + (rules[i].name || "an answer") + " could not be exported)"]);
+        }
+        ANSWERING = false;
+        return lines;
+    };
+    var index = target.kind === "shape" ? target.body : target.index;
+    if (index !== undefined)
+        return answers[index] ? answer(answers[index]) : null;
+    var keys = Object.keys(answers);
+    if (!keys.length)
+        return null;
+    // Met through "the other": which body it is is only known during the run.
+    var lines = ["var doomed = " + target.handle + ";"];
+    for (var k = 0; k < keys.length; ++k) {
+        lines.push((k ? "} else if (" : "if (") + "doomed === " + NAMES["body:" + keys[k]] + ") {");
+        lines = lines.concat(indentLines("    ", answer(answers[keys[k]])));
+    }
+    lines.push("} else {");
+    lines = lines.concat(indentLines("    ", remove()));
+    lines.push("}");
+    return lines;
+}
+
+// --- helpers the step code calls -------------------------------------------
+
+function helpersCode(scene) {
+    var out = [];
+    var bodies = scene.simulation.bodies;
+    if ((scene.rays || []).length)
+        out.push(render("objects/cast-ray.js.tmpl", {}));
+    // Box2D v3's explosion, which the editor runs, fixture by fixture.
+    if (EXPLODES)
+        out.push(render("objects/explode.js.tmpl", {}));
+    if (HELPERS.initState) {
+        var starts = [];
+        for (var b = 0; b < bodies.length; ++b) {
+            var p = bodies[b].position || { x: 0, y: 0 };
+            starts.push("[" + NAMES["body:" + b] + ", " + short(p.x) + ", " + short(p.y) + ", "
+                        + short(bodies[b].rotation || 0) + "]");
+        }
+        out.push(render("objects/init-state.js.tmpl", { STARTS: listValue(starts) }));
+    }
+    for (var index in HELPERS.clones) {
+        if (!has(HELPERS.clones, index))
+            continue;
+        // Built exactly as the original is, keeping no fixture handles of its own.
+        var kept = USED;
+        USED = {};
+        var made = bodyCode(bodies[index], "clone");
+        USED = kept;
+        out.push(render("objects/clone.js.tmpl", { NAME: bodies[index].name, ID: NAMES["body:" + index], BODY: made }));
+    }
+    return out.join(NEWLINE + NEWLINE);
+}
+
 function destroys(scene) {
     var rules = scene.rules || [];
     for (var i = 0; i < rules.length; ++i) {
@@ -1704,45 +1810,35 @@ function destroys(scene) {
 function controlsHtml(own) {
     if (!own.addControls && !own.debugView)
         return "";
-    var out = "<div id=\"controls\">" + NEWLINE;
-    if (own.addControls) {
-        out += "  <button id=\"start\">Start</button>" + NEWLINE
-               + "  <button id=\"pause\">Pause</button>" + NEWLINE
-               + "  <button id=\"reset\">Reset</button>" + NEWLINE;
-    }
-    if (own.debugView)
-        out += "  <label><input type=\"checkbox\" id=\"debug\"> Debug view</label>" + NEWLINE;
-    return out + "</div>" + NEWLINE;
+    return render("objects/controls.html.tmpl", {
+        BUTTONS: own.addControls ? render("objects/buttons.html.tmpl", {}) : "",
+        DEBUG_SWITCH: own.debugView ? render("objects/debug-switch.html.tmpl", {}) : "",
+    });
 }
 
 function controlsWiring(own) {
-    var lines = [];
-    if (own.addControls) {
-        lines.push("document.getElementById(\"start\").onclick = function () { run(true); };");
-        lines.push("document.getElementById(\"pause\").onclick = function () { run(false); };");
-        lines.push("document.getElementById(\"reset\").onclick = reset;");
-    }
-    if (own.debugView) {
-        lines.push("document.getElementById(\"debug\").checked = debug;");
-        lines.push("document.getElementById(\"debug\").onchange = function () { debug = this.checked; draw(); };");
-    }
-    return lines.length ? (lines.join(NEWLINE) + NEWLINE) : "";
+    var out = [];
+    if (own.addControls)
+        out.push(render("objects/buttons-wiring.js.tmpl", {}));
+    if (own.debugView)
+        out.push(render("objects/debug-wiring.js.tmpl", {}));
+    return out.join(NEWLINE);
 }
 
 // --- odds and ends ---------------------------------------------------------
 
-function wrapLong(text) {
+function wrapLong(text, width) {
     var lines = text.split(NEWLINE);
     var out = [];
     for (var i = 0; i < lines.length; ++i) {
         var line = lines[i];
         var lead = line.match(/^ */)[0];
-        while (line.length > 92 && line.replace(/^ */, "").indexOf("//") !== 0) {
+        while (line.length > width && line.replace(/^ */, "").indexOf("//") !== 0) {
             // At an || if there is one, so a bracketed pair stays together.
             var cut = -1;
             var ops = [" || ", " && "];
             for (var o = 0; o < ops.length && cut < 0; ++o) {
-                var at = line.lastIndexOf(ops[o], 90);
+                var at = line.lastIndexOf(ops[o], width - 2);
                 if (at > lead.length + 8)
                     cut = at + ops[o].length - 1;
             }
@@ -1754,13 +1850,6 @@ function wrapLong(text) {
         out.push(line);
     }
     return out.join(NEWLINE);
-}
-
-function indent(prefix, lines) {
-    var out = "";
-    for (var i = 0; i < lines.length; ++i)
-        out += (lines[i] ? (prefix + lines[i]) : "") + NEWLINE;
-    return out;
 }
 
 function indentLines(prefix, lines) {
@@ -1797,13 +1886,94 @@ function opaque(colour) {
     return text.length === 9 && text.charAt(0) === "#" ? ("#ff" + text.substring(3)) : colour;
 }
 
-function fill(template, values) {
-    var out = template;
-    for (var key in values) {
-        if (Object.prototype.hasOwnProperty.call(values, key))
-            out = out.split("{{" + key + "}}").join(values[key]);
+// --- templates ---------------------------------------------------------------
+//
+// Every piece of code this converter writes is a template under templates/:
+// the page itself, and one file per kind of object under objects/. render()
+// fills one:
+//
+//  - a placeholder alone on its line takes a block -- any number of lines, each
+//    indented as the placeholder is -- and an empty block leaves the line out;
+//  - a placeholder inside a line takes a value, and a value of null leaves the
+//    whole line out. That is how a template lists every field an object can
+//    have while a scene sets only the ones it needs;
+//  - a line starting //! is a note for whoever edits the template.
+//
+// A placeholder this file does not fill is an error naming the template, so a
+// template edited out of step with the code says so rather than writing {{X}}.
+function render(name, values) {
+    var lines = T(name).replace(/\r/g, "").replace(/\n$/, "").split(NEWLINE);
+    var out = [];
+    for (var i = 0; i < lines.length; ++i) {
+        var line = lines[i];
+        if (/^\s*\/\/!/.test(line))
+            continue;
+        var block = line.match(/^(\s*)\{\{([A-Z0-9_]+)\}\}\s*$/);
+        if (block) {
+            var body = valueFor(name, values, block[2]);
+            if (body === null || body === "")
+                continue;
+            var parts = body.split(NEWLINE);
+            for (var k = 0; k < parts.length; ++k)
+                out.push(parts[k] ? block[1] + parts[k] : "");
+            continue;
+        }
+        var lead = line.match(/^\s*/)[0];
+        var dropped = false;
+        var filled = line.replace(/\{\{([A-Z0-9_]+)\}\}/g, function (all, key) {
+            var value = valueFor(name, values, key);
+            if (value === null) {
+                dropped = true;
+                return "";
+            }
+            return value.split(NEWLINE).join(NEWLINE + lead);
+        });
+        if (!dropped)
+            out = out.concat(filled.split(NEWLINE));
     }
+    return tidy(out).join(NEWLINE);
+}
+
+// A whole file: a template rendered, ending in a newline as a file should.
+function page(name, values) {
+    return render(name, values) + NEWLINE;
+}
+
+function valueFor(name, values, key) {
+    if (!has(values, key))
+        throw new Error("templates/" + name + " asks for {{" + key + "}}, which export.js does not fill");
+    var value = values[key];
+    if (value === null || value === undefined)
+        return null;
+    return String(value);
+}
+
+// Blocks left empty leave their blank lines behind: no two in a row, and none
+// just inside a brace or at either end.
+function tidy(lines) {
+    var out = [];
+    for (var i = 0; i < lines.length; ++i) {
+        var line = lines[i];
+        if (line.trim() === "") {
+            var before = out.length ? out[out.length - 1].trim() : "";
+            if (!out.length || before === "" || /[{\[]$/.test(before))
+                continue;
+            out.push("");
+            continue;
+        }
+        if (/^[}\]]/.test(line.trim()) && out.length && out[out.length - 1] === "")
+            out.pop();
+        out.push(line);
+    }
+    while (out.length && out[out.length - 1] === "")
+        out.pop();
     return out;
+}
+
+// A list written as a template value: as many items to a line as fit, the rest
+// on lines of their own, one step in from where the list starts.
+function listValue(items) {
+    return wrapList("", items, "").join(NEWLINE);
 }
 
 function ordered(lower, upper) {

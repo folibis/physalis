@@ -1,0 +1,20 @@
+//! The body's axes, shown with the debug view, from where the editor puts its
+//! centre of mass.
+Rectangle {
+    visible: scene.debug
+    antialiasing: true
+    x: {{X}}
+    y: {{ACROSS_Y}}
+    width: {{LENGTH}}
+    height: {{THICKNESS}}
+    color: "{{X_COLOR}}"
+}
+Rectangle {
+    visible: scene.debug
+    antialiasing: true
+    x: {{ACROSS_X}}
+    y: {{Y}}
+    width: {{THICKNESS}}
+    height: {{LENGTH}}
+    color: "{{Y_COLOR}}"
+}

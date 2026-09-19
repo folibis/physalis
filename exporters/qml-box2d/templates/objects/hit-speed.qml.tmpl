@@ -1,0 +1,5 @@
+// How fast two fixtures' bodies are closing, in metres per second.
+function hitSpeed(a, b) {
+    var va = a.getBody().linearVelocity, vb = b.getBody().linearVelocity;
+    return Math.sqrt((va.x - vb.x) * (va.x - vb.x) + (va.y - vb.y) * (va.y - vb.y));
+}

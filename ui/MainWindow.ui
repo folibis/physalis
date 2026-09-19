@@ -86,6 +86,8 @@
     <addaction name="separator"/>
     <addaction name="actionCopy"/>
     <addaction name="actionPaste"/>
+    <addaction name="separator"/>
+    <addaction name="actionSaveScreenshot"/>
    </widget>
    <widget class="QMenu" name="menuShapes">
     <property name="title">
@@ -132,6 +134,7 @@
    <addaction name="actionNewScene"/>
    <addaction name="actionLoadScene"/>
    <addaction name="actionSaveScene"/>
+   <addaction name="actionSaveScreenshot"/>
    <addaction name="separator"/>
    <addaction name="actionAddShape"/>
    <addaction name="actionDelete"/>
@@ -321,6 +324,21 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+V</string>
+   </property>
+  </action>
+  <action name="actionSaveScreenshot">
+   <property name="icon">
+    <iconset resource="../resources/icons.qrc">
+     <normaloff>:/icons/screenshot.svg</normaloff>:/icons/screenshot.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Save &amp;Screenshot...</string>
+   </property>
+   <property name="toolTip">
+    <string>Save a picture of the scene as it is drawn now, cut to the objects in it</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+P</string>
    </property>
   </action>
   <action name="actionAddRectangle">

@@ -1,0 +1,12 @@
+{{ID}} = world.createJoint(pl.RevoluteJoint({
+    localAnchorA: {{BODY_A}}.getLocalPoint(m({{ANCHOR_A_X}}, {{ANCHOR_A_Y}})),
+    localAnchorB: {{BODY_B}}.getLocalPoint(m({{ANCHOR_B_X}}, {{ANCHOR_B_Y}})),
+    referenceAngle: rad({{REFERENCE_ANGLE}}),
+    enableLimit: {{ENABLE_LIMIT}},
+    lowerAngle: rad({{LOWER_ANGLE}}),
+    upperAngle: rad({{UPPER_ANGLE}}),
+    enableMotor: {{ENABLE_MOTOR}},
+    maxMotorTorque: {{MAX_MOTOR_TORQUE}},
+    motorSpeed: rad({{MOTOR_SPEED}}),
+    collideConnected: {{COLLIDE_CONNECTED}},
+}, {{BODY_A}}, {{BODY_B}}));

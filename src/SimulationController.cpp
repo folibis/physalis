@@ -86,6 +86,58 @@ void SimulationController::restoreSnapshot()
     m_snapshot.clear();
 }
 
+void SimulationController::withSceneAsStarted(const std::function<void()> &use)
+{
+    if (!isActive()) {
+        use();
+        return;
+    }
+
+    // Everything restoreSnapshot, restoreJointParams and stop() put back, set
+    // aside rather than thrown away, so the run carries on as it was.
+    QVector<Snapshot> running;
+    running.reserve(m_snapshot.size());
+    for (const Snapshot &entry : m_snapshot) {
+        running.push_back({ entry.shape, entry.shape->pos(), entry.shape->rotation() });
+        entry.shape->setPos(entry.pos);
+        entry.shape->setRotation(entry.rotation);
+    }
+    QHash<Joint *, QVariantMap> runningParams;
+    for (auto it = m_jointParamSnapshot.cbegin(); it != m_jointParamSnapshot.cend(); ++it) {
+        if (!it.key() || it.key()->params() == it.value())
+            continue;
+        runningParams.insert(it.key(), it.key()->params());
+        it.key()->params() = it.value();
+    }
+    QVector<PhysicsBody *> removed;
+    for (const BoundBody &bound : m_bound) {
+        if (bound.body->isRemoved()) {
+            removed.append(bound.body);
+            bound.body->setRemoved(false);
+        }
+    }
+    QVector<Joint *> broken;
+    for (Joint *joint : m_scene->joints()) {
+        if (joint->isBroken()) {
+            broken.append(joint);
+            joint->setBroken(false);
+        }
+    }
+
+    use();
+
+    for (Joint *joint : broken)
+        joint->setBroken(true);
+    for (PhysicsBody *body : removed)
+        body->setRemoved(true);
+    for (auto it = runningParams.cbegin(); it != runningParams.cend(); ++it)
+        it.key()->params() = it.value();
+    for (const Snapshot &entry : running) {
+        entry.shape->setPos(entry.pos);
+        entry.shape->setRotation(entry.rotation);
+    }
+}
+
 void SimulationController::addFieldBounds(IPhysicsEngine *engine) const
 {
     const QRectF field = m_scene->sceneRect();

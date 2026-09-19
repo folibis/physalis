@@ -1,0 +1,14 @@
+{
+    // The walls around the field.
+    b2BodyDef bodyDef = b2DefaultBodyDef();
+    b2BodyId walls = b2CreateBody(world, &bodyDef);
+    b2ShapeDef shapeDef = b2DefaultShapeDef();
+    b2Polygon wall = b2MakeOffsetBox(m({{HALF_SPAN}}), m({{HALF_THICKNESS}}), m(0, {{TOP}}), b2Rot_identity);
+    b2CreatePolygonShape(walls, &shapeDef, &wall);
+    wall = b2MakeOffsetBox(m({{HALF_SPAN}}), m({{HALF_THICKNESS}}), m(0, {{BOTTOM}}), b2Rot_identity);
+    b2CreatePolygonShape(walls, &shapeDef, &wall);
+    wall = b2MakeOffsetBox(m({{HALF_THICKNESS}}), m({{HALF_HEIGHT}}), m({{LEFT}}, 0), b2Rot_identity);
+    b2CreatePolygonShape(walls, &shapeDef, &wall);
+    wall = b2MakeOffsetBox(m({{HALF_THICKNESS}}), m({{HALF_HEIGHT}}), m({{RIGHT}}, 0), b2Rot_identity);
+    b2CreatePolygonShape(walls, &shapeDef, &wall);
+}

@@ -1,0 +1,18 @@
+//! What a shape is made of. The first shape of a body declares shapeDef
+//! (DECLARE is "b2ShapeDef "), the rest start it over.
+{{DECLARE}}shapeDef = b2DefaultShapeDef();
+shapeDef.density = {{DENSITY}};
+shapeDef.material.friction = {{FRICTION}};
+shapeDef.material.restitution = {{RESTITUTION}};
+shapeDef.material.rollingResistance = {{ROLLING_RESISTANCE}};
+shapeDef.material.tangentSpeed = m({{TANGENT_SPEED}});
+shapeDef.material.customColor = {{CUSTOM_COLOR}};
+shapeDef.filter.categoryBits = {{CATEGORY}};
+shapeDef.filter.maskBits = {{MASK}};
+shapeDef.filter.groupIndex = {{GROUP}};
+shapeDef.isSensor = {{SENSOR}};
+shapeDef.enableSensorEvents = {{SENSOR_EVENTS}};
+//! b2DefaultShapeDef leaves contact events off; a shape a rule watches has them on.
+shapeDef.enableContactEvents = {{CONTACT_EVENTS}};
+shapeDef.enableHitEvents = {{HIT_EVENTS}};
+shapeDef.enablePreSolveEvents = {{PRE_SOLVE_EVENTS}};

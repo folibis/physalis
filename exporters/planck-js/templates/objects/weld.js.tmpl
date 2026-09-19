@@ -1,0 +1,6 @@
+{{ID}} = world.createJoint(pl.WeldJoint({
+    referenceAngle: rad({{REFERENCE_ANGLE}}),
+    frequencyHz: {{FREQUENCY}},
+    dampingRatio: {{DAMPING_RATIO}},
+    collideConnected: {{COLLIDE_CONNECTED}},
+}, {{BODY_A}}, {{BODY_B}}, m({{ANCHOR_X}}, {{ANCHOR_Y}})));

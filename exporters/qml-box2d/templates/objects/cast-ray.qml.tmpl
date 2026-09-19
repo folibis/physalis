@@ -1,0 +1,7 @@
+// The nearest fixture along a ray, the way a rangefinder sees it.
+function castRay(x0, y0, x1, y1, mask) {
+    rayCaster.best = { hit: false, fixture: null, point: Qt.point(x1, y1), fraction: 1 };
+    rayCaster.mask = mask;
+    world.rayCast(rayCaster, Qt.point(x0, y0), Qt.point(x1, y1));
+    return rayCaster.best;
+}

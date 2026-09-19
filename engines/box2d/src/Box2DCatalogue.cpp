@@ -833,6 +833,17 @@ PropertyList Box2DEngine::worldProperties() const
                QObject::tr("How many times the solver relaxes the constraints within one"
                            " step. More holds a tall stack together; fewer is faster and"
                            " springier. Box2D's samples use 4.")),
+
+        // Box2D's tolerances, which it fixes as lengths: set through its length
+        // unit before the world is made, so stored and never changed after.
+        number(QStringLiteral("contactMargin"), QObject::tr("Contact Margin (px)"), false, false,
+               0.1, 100.0, 1, 0.5,
+               QObject::tr("How close two shapes come before Box2D makes a contact between"
+                           " them -- and so how far ahead it sees one coming. A shape that"
+                           " moves further than this in one step can end up inside what it"
+                           " hits, and a hinged body can jam there. Larger is safer for fast"
+                           " bodies, but \"begins contact\" fires that far before shapes"
+                           " touch. In scene units, whatever the scale.")),
     };
 
     markStored(&properties, {
@@ -847,6 +858,7 @@ PropertyList Box2DEngine::worldProperties() const
         {QStringLiteral("contactDampingRatio"), 10.0},
         {QStringLiteral("maxContactPushSpeed"), 3.0},
         {QStringLiteral("subStepCount"), 4},
+        {QStringLiteral("contactMargin"), 2.0},
         {QStringLiteral("enableSleep"), true},
         {QStringLiteral("enableContinuous"), true},
     }, QObject::tr("Solver"));

@@ -4,7 +4,8 @@ project({{PROJECT}} LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD {{CXX_STANDARD}})
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-{{QT_PREFIX}}find_package(Qt6 COMPONENTS Widgets REQUIRED)
+{{QT_PREFIX}}
+find_package(Qt6 COMPONENTS Widgets REQUIRED)
 
 # Box2D is fetched rather than expected: this project is meant to be built
 # anywhere, out of the box, with nothing installed but Qt and a compiler.

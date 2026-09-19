@@ -1,0 +1,8 @@
+// Planck's tolerances assume metre-sized objects; these are scaled to this scene:
+// the lengths as the editor scales Box2D's, the speeds by the pace.
+pl.Settings.linearSlop = 0.005 * {{TOLERANCE}};
+pl.Settings.maxLinearCorrection = 0.2 * {{TOLERANCE}};
+pl.Settings.maxTranslation = 2.0 * {{MOTION}};
+pl.Settings.linearSleepTolerance = 0.01 * {{MOTION}};
+pl.Settings.velocityThreshold = 1.0 * {{MOTION}};
+{{ROUNDED_BOXES}}

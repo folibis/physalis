@@ -1,0 +1,5 @@
+{{DEF}}
+{{POINTS}}
+b2Hull {{HULL}} = b2ComputeHull({{POINTS_NAME}}, {{COUNT}});
+b2Polygon {{NAME}} = b2MakePolygon(&{{HULL}}, 0.0f);
+{{KEEP}}b2CreatePolygonShape({{BODY}}, &shapeDef, &{{NAME}});

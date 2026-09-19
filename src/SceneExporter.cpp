@@ -230,7 +230,9 @@ QJsonObject simulationView(const CanvasScene *scene)
     QJsonArray bodies;
     QHash<const PhysicsBody *, int> indices;
     for (PhysicsBody *body : scene->bodies()) {
-        if (body->isEmpty())
+        // A clone is the run's, not the scene's; the saved document leaves it
+        // out too.
+        if (body->isEmpty() || body->isRunOnly())
             continue;
         indices.insert(body, bodies.size());
 

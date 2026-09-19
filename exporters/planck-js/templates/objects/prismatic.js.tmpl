@@ -1,0 +1,15 @@
+//! Box2D measures the travel between the anchors, so a joint whose anchors
+//! start apart starts that far along; the limits here already count from there.
+{{ID}} = world.createJoint(pl.PrismaticJoint({
+    localAnchorA: {{BODY_A}}.getLocalPoint(m({{ANCHOR_A_X}}, {{ANCHOR_A_Y}})),
+    localAnchorB: {{BODY_B}}.getLocalPoint(m({{ANCHOR_B_X}}, {{ANCHOR_B_Y}})),
+    localAxisA: pl.Vec2({{AXIS_X}}, {{AXIS_Y}}),
+    referenceAngle: rad({{REFERENCE_ANGLE}}),
+    enableLimit: {{ENABLE_LIMIT}},
+    lowerTranslation: len({{LOWER_TRANSLATION}}),
+    upperTranslation: len({{UPPER_TRANSLATION}}),
+    enableMotor: {{ENABLE_MOTOR}},
+    maxMotorForce: {{MAX_MOTOR_FORCE}},
+    motorSpeed: len({{MOTOR_SPEED}}),
+    collideConnected: {{COLLIDE_CONNECTED}},
+}, {{BODY_A}}, {{BODY_B}}));

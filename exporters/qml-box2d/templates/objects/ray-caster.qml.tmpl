@@ -1,0 +1,12 @@
+// Casts one ray and keeps the nearest fixture it meets.
+RayCast {
+    id: rayCaster
+    property var best: null
+    property int mask: 0xFFFF
+    onFixtureReported: (fixture, point, normal, fraction) => {
+        if ((fixture.categories & mask) === 0)
+            return;
+        maxFraction = fraction;
+        best = { hit: true, fixture: fixture, point: point, fraction: fraction };
+    }
+}

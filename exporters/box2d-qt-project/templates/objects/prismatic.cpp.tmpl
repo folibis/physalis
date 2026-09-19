@@ -1,0 +1,23 @@
+//! A field without a value is left out, and b2DefaultPrismaticJointDef's stands.
+{
+    b2PrismaticJointDef jointDef = b2DefaultPrismaticJointDef();
+    jointDef.bodyIdA = {{BODY_A}};
+    jointDef.bodyIdB = {{BODY_B}};
+    jointDef.localAnchorA = b2Body_GetLocalPoint({{BODY_A}}, m({{ANCHOR_A_X}}, {{ANCHOR_A_Y}}));
+    jointDef.localAnchorB = b2Body_GetLocalPoint({{BODY_B}}, m({{ANCHOR_B_X}}, {{ANCHOR_B_Y}}));
+    jointDef.localAxisA = b2Vec2{ {{AXIS_X}}, {{AXIS_Y}} };
+    jointDef.referenceAngle = rad({{REFERENCE_ANGLE}});
+    jointDef.targetTranslation = m({{TARGET_TRANSLATION}});
+    jointDef.enableSpring = {{ENABLE_SPRING}};
+    jointDef.hertz = {{HERTZ}};
+    jointDef.dampingRatio = {{DAMPING_RATIO}};
+    jointDef.enableLimit = {{ENABLE_LIMIT}};
+    jointDef.lowerTranslation = m({{LOWER_TRANSLATION}});
+    jointDef.upperTranslation = m({{UPPER_TRANSLATION}});
+    jointDef.enableMotor = {{ENABLE_MOTOR}};
+    jointDef.maxMotorForce = {{MAX_MOTOR_FORCE}};
+    jointDef.motorSpeed = m({{MOTOR_SPEED}});
+    jointDef.collideConnected = {{COLLIDE_CONNECTED}};
+    {{ID}} = b2CreatePrismaticJoint(world, &jointDef);
+    b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
+}

@@ -1,0 +1,13 @@
+//! A ray, drawn to where it last hit or to its full length.
+// {{NAME}}
+Shape {
+    antialiasing: true
+    ShapePath {
+        strokeColor: scene.{{ID}}.hit ? "#e86a6a" : "#9a9a9a"
+        strokeWidth: 1.5
+        fillColor: "transparent"
+        startX: {{X}}
+        startY: {{Y}}
+        PathLine { x: scene.{{ID}}.point.x; y: scene.{{ID}}.point.y }
+    }
+}

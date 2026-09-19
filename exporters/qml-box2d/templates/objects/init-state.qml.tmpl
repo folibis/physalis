@@ -1,0 +1,16 @@
+//! Where every body stood when the run started: [body, x, y, rotation].
+readonly property var starts: [{{STARTS}}]
+
+// Back where the run started, facing the same way, and not moving.
+function initState(body) {
+    for (var i = 0; i < starts.length; ++i) {
+        if (starts[i][0] !== body)
+            continue;
+        body.target.x = starts[i][1];
+        body.target.y = starts[i][2];
+        body.target.rotation = starts[i][3];
+        body.linearVelocity = Qt.point(0, 0);
+        body.angularVelocity = 0;
+        body.awake = true;
+    }
+}

@@ -33,9 +33,9 @@ enters the pocket, return it to the start*.
   It comes with plugins for [Box2D](https://box2d.org) and
   [Chipmunk2D](https://chipmunk-physics.net), and further engines can be added
   as plugins.
-- **Export:** turn a scene into a standalone Box2D/Qt C++ project or a
-  Planck.js web page. Export formats are JavaScript plugins, so new ones can be
-  added without rebuilding.
+- **Export:** turn a scene into a standalone Box2D/Qt C++ project, a Qt Quick
+  project built on qml-box2d, or a Planck.js web page. Export formats are
+  JavaScript plugins, so new ones can be added without rebuilding.
 
 ## Building
 

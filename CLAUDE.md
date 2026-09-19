@@ -5,8 +5,7 @@
 **Physalis** — a Qt6 desktop application for building 2D physics scenes and
 running them. You draw shapes, group them into bodies, connect them with
 joints, add rays, sensors and explosions, and write rules that fire on events
-("when the basket touches the left wall, reverse the motor"). Scenes are saved
-as `*.phys` (JSON).
+Scenes are saved as `*.phys` (JSON).
 
 The simulation itself is not part of the application. It lives in a **plugin**.
 
@@ -67,6 +66,7 @@ src/              the application (Qt widgets, canvas, panels, serialization)
     SimulationController   drives the engine, polls events, applies rules
     SceneSerializer   *.phys read/write
     SceneExporter     finds export converters and runs one
+    SceneScreenshot   the scene as drawn, cut to its objects, to an image, SVG or PDF
     MainWindow, UndoStack, OptionsDialog, AboutDialog, SceneTree
 ui/               .ui forms (AUTOUIC searches here, not beside the sources)
 resources/        icons (physalis.svg), the .rc that gives the exe its icon
@@ -78,6 +78,18 @@ exporters/        export converters -- one folder each, all JavaScript
     box2d-qt-project/  manifest.json, export.js, templates/ -> one plain Box2D
                        program, main.cpp; rules become ifs after b2World_Step
     planck-js/         the same, as one index.html of plain Planck.js
+    qml-box2d/         a Qt Quick project: Scene.qml holds the scene as
+                       qml-box2d objects, rules as JavaScript after each step;
+                       its drawing code is QML components the project carries
+                       (templates/components/)
+                  All three write no code of their own but the rules': every
+                  object -- world, body, shape, joint, helper, toolbar -- is a
+                  template under templates/objects/, filled by render() in
+                  export.js. A placeholder alone on a line takes a block; a line
+                  whose value is null is left out, so a template lists every
+                  field and a scene sets only what differs from the default; a
+                  `//!` line is a note that is not written; a placeholder the
+                  script does not fill is an error naming the template
 deploy/           the *.phys file association template
 cmake/            Version.h.in
 ```
@@ -91,6 +103,13 @@ cmake -S . -B build
 cmake --build build
 ctest --test-dir build
 ```
+
+Parts can be left out with options, all `ON` by default: `WITH_BOX2D`,
+`WITH_CHIPMUNK` (the engine plugins), `WITH_EXPORTER_BOX2D_QT`,
+`WITH_EXPORTER_PLANCK`, `WITH_EXPORTER_QML` (which converter folders are
+installed -- they are JavaScript, nothing is compiled) and `WITH_TESTS`. The
+suite runs scenes on both engines, so `WITH_TESTS` refuses to configure
+without both plugins.
 
 Run one test: `ctest --test-dir build -R RuleSource --output-on-failure`, or
 `build/PhysalisTests.exe --gtest_filter=RuleSource.*` with the Qt bin directory
@@ -296,6 +315,9 @@ so `SimulationController` remembers one and acts on it once the step is over.
   off **anchor B**, since zero is where that anchor stands, and drawing it from
   anchor A put the whole range somewhere the joint could never reach as soon as
   the two anchors were apart.
+  Every exporter has to add the same offset (`travelOrigin(s)` in each
+  `export.js`) -- the C++ and Planck.js ones once did not, and a lift set to
+  rise 0 to 430 had its whole range behind it.
 - **An engine may not end the process.** Box2D checks its own arithmetic and,
   left alone, calls `abort()` when a check fails -- which used to take the
   editor down mid-run, unsaved work and all. `createWorld` installs
@@ -315,6 +337,17 @@ so `SimulationController` remembers one and acts on it once the step is over.
   time a tick would have carried instead of waiting for it.
 - **`stop()` restores the snapshot**, so reading positions after it gives you
   the pre-run state.
+- **Collision bits are 64-bit hex strings in a scene.** A JavaScript number
+  cannot hold them: all-ones read as a number came out as
+  18446744073709552000, which C++ wraps round to 384, and every shape in the
+  C++ export collided with nothing. Exporters turn them into literals from the
+  string (`bits64` in the Box2D/Qt one).
+- **Exports run older Box2D, and the same number can mean something else
+  there.** Box2D v3 applies a motor joint's `correctionFactor` on each of its
+  sub-steps, 2.3/2.4 once a step, so Planck and qml-box2d get
+  `1 - (1 - f)^subSteps` (`stepCorrection`) -- 0.05 left as it was made the
+  can in 11.phys crawl. Compare an export against the app by tracing both,
+  step for step; building and running it is not enough.
 
 ## Exporting
 

@@ -1,0 +1,12 @@
+// Back where the run started, facing the same way, and not moving.
+function initState(body) {
+    var starts = [{{STARTS}}];
+    for (var i = 0; i < starts.length; ++i) {
+        if (starts[i][0] !== body || !body)
+            continue;
+        body.setTransform(m(starts[i][1], starts[i][2]), rad(starts[i][3]));
+        body.setLinearVelocity(pl.Vec2(0, 0));
+        body.setAngularVelocity(0);
+        body.setAwake(true);
+    }
+}

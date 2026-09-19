@@ -1,0 +1,4 @@
+//! KEEP is "name = " when the step code needs the shape's id.
+{{DEF}}
+b2Polygon {{NAME}} = {{MAKE}};
+{{KEEP}}b2CreatePolygonShape({{BODY}}, &shapeDef, &{{NAME}});

@@ -1,0 +1,15 @@
+//! The joints as the editor draws them, with the debug view (JointView.qml).
+//! Each entry is a joint and its two anchors, on its own two bodies.
+JointView {
+    id: jointView
+    x: -field.x
+    y: -field.y
+    width: scene.width
+    height: scene.height
+    visible: scene.debug
+    world: world
+    origin: Qt.point(field.x, field.y)
+    color: "{{COLOR}}"
+    ringRadius: {{RING_RADIUS}}
+    joints: [{{JOINTS}}]
+}

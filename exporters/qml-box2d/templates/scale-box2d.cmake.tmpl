@@ -1,0 +1,22 @@
+# Rewrites Box2D 2.3's tolerances for a scene drawn at {{PIXELS_PER_METER}} units per metre.
+#
+# Box2D quotes them for metre-sized objects: 5 mm of slop, 1 m/s below which
+# nothing bounces. This scene is not built of metre-sized things, so the lengths
+# are multiplied by {{TOLERANCE}} and the speeds by {{MOTION}} -- the factors the
+# editor's own engine uses.
+# Run by FetchContent once qml-box2d is downloaded; running it twice changes
+# nothing, since every value is written outright.
+
+file(READ "${SETTINGS}" text)
+foreach(pair
+        "b2_linearSlop;{{LINEAR_SLOP}}"
+        "b2_aabbExtension;{{AABB_EXTENSION}}"
+        "b2_velocityThreshold;{{VELOCITY_THRESHOLD}}"
+        "b2_maxLinearCorrection;{{MAX_LINEAR_CORRECTION}}"
+        "b2_maxTranslation;{{MAX_TRANSLATION}}"
+        "b2_linearSleepTolerance;{{LINEAR_SLEEP_TOLERANCE}}")
+    list(GET pair 0 name)
+    list(GET pair 1 value)
+    string(REGEX REPLACE "#define ${name}([ \t]+)[0-9.eE+-]+f" "#define ${name}\\1${value}f" text "${text}")
+endforeach()
+file(WRITE "${SETTINGS}" "${text}")

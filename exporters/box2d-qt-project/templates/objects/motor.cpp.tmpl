@@ -1,0 +1,14 @@
+//! A field without a value is left out, and b2DefaultMotorJointDef's stands.
+{
+    b2MotorJointDef jointDef = b2DefaultMotorJointDef();
+    jointDef.bodyIdA = {{BODY_A}};
+    jointDef.bodyIdB = {{BODY_B}};
+    jointDef.linearOffset = m({{OFFSET_X}}, {{OFFSET_Y}});
+    jointDef.angularOffset = rad({{ANGULAR_OFFSET}});
+    jointDef.maxForce = {{MAX_FORCE}};
+    jointDef.maxTorque = {{MAX_TORQUE}};
+    jointDef.correctionFactor = {{CORRECTION_FACTOR}};
+    jointDef.collideConnected = {{COLLIDE_CONNECTED}};
+    {{ID}} = b2CreateMotorJoint(world, &jointDef);
+    b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
+}

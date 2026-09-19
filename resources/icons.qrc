@@ -10,6 +10,8 @@
         <file alias="new_scene.svg">icons/new_scene.svg</file>
         <file alias="load_scene.svg">icons/load_scene.svg</file>
         <file alias="save_scene.svg">icons/save_scene.svg</file>
+        <file alias="export.svg">icons/export.svg</file>
+        <file alias="screenshot.svg">icons/screenshot.svg</file>
         <file alias="add.svg">icons/add.svg</file>
         <file alias="rectangle.svg">icons/rectangle.svg</file>
         <file alias="circle.svg">icons/circle.svg</file>

@@ -92,12 +92,22 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
 
     // Box2D's tolerances are lengths too, and fixed for a world measured in
     // metres: 5 mm of slop, and a contact made once two shapes are within
-    // 2 cm. At 1000 px per metre a drawn box is a few centimetres, so those
-    // show on screen -- "begins contact" arrived while shapes were still 20 px
-    // apart. Box2D scales them by its length unit, which is set to the same
-    // reference the pace is quoted at, so they are what they would be at
-    // 50 px per metre whatever the scene's scale. Set before the world is made.
-    b2SetLengthUnitsPerMeter(static_cast<float>(m_motionScale));
+    // 4 x slop = 2 cm. At 1000 px per metre a drawn box is a few centimetres,
+    // so those show on screen -- "begins contact" arrived while shapes were
+    // still 20 px apart. Box2D scales them all by its length unit, which is
+    // worked out from the scene's contact margin: that many scene units, at
+    // whatever scale.
+    //
+    // The margin is also how far ahead Box2D sees a contact coming, and a body
+    // closing more than it in one step is already inside what it hits before
+    // there is a contact to stop it. At 1 px a hinged door slamming shut onto a
+    // ramp sank 2.4 px in, was held there by its own hinge, and jammed: the car
+    // could open it once and never again. Hence 2 by default. Box2D sets every
+    // speed it scales this way (sleep, push-out, restitution) from the pace
+    // above, not from this, so only the tolerances move. Set before the world
+    // is made.
+    const qreal margin = qBound(0.1, number(desc.params, "contactMargin", 2.0), 100.0);
+    b2SetLengthUnitsPerMeter(static_cast<float>(margin / (4.0 * 0.005 * m_pixelsPerMeter)));
 
     const QVariantMap &world = desc.params;
     b2WorldDef worldDef = b2DefaultWorldDef();
@@ -460,14 +470,18 @@ void Box2DEngine::collectWreckage()
     // A body whose position or velocity is no longer a number cannot be
     // brought back: whatever it was doing is gone, and every contact it takes
     // part in spreads the damage. It is taken out of the world and named, once.
+    // Nor can one whose rotation is no longer a rotation: every number still
+    // finite, but Box2D asserts on it the moment the body next moves.
     for (size_t i = 0; i < m_bodies.size(); ++i) {
         const b2BodyId body = m_bodies[i];
         if (!b2Body_IsValid(body) || !b2Body_IsEnabled(body))
             continue;
         const b2Vec2 position = b2Body_GetPosition(body);
         const b2Vec2 velocity = b2Body_GetLinearVelocity(body);
+        const b2Rot rotation = b2Body_GetRotation(body);
         if (b2IsValidVec2(position) && b2IsValidVec2(velocity)
-            && b2IsValidFloat(b2Body_GetAngularVelocity(body)))
+            && b2IsValidFloat(b2Body_GetAngularVelocity(body))
+            && b2IsValidRotation(rotation) && b2IsNormalizedRot(rotation))
             continue;
 
         const QString name = QString::fromUtf8(b2Body_GetName(body));

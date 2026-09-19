@@ -1,0 +1,13 @@
+{{ID}} = world.createJoint(pl.WheelJoint({
+    enableMotor: {{ENABLE_MOTOR}},
+    maxMotorTorque: {{MAX_MOTOR_TORQUE}},
+    motorSpeed: rad({{MOTOR_SPEED}}),
+    frequencyHz: {{FREQUENCY}},
+    dampingRatio: {{DAMPING_RATIO}},
+    collideConnected: {{COLLIDE_CONNECTED}},
+}, {{BODY_A}}, {{BODY_B}}, m({{ANCHOR_X}}, {{ANCHOR_Y}}), pl.Vec2({{AXIS_X}}, {{AXIS_Y}})));
+//! Planck 1.0 fills these only when there is a spring and reads them every
+//! step regardless; left undefined they make the world NaN. NO_SPRING is the
+//! joint's name when it has no spring.
+{{NO_SPRING}}.m_sAx = 0;
+{{NO_SPRING}}.m_sBx = 0;

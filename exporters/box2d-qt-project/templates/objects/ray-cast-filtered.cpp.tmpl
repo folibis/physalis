@@ -1,0 +1,6 @@
+//! In step(): a ray that sees only some collision groups looks again.
+{
+    b2QueryFilter filter = b2DefaultQueryFilter();
+    filter.maskBits = {{MASK}};
+    {{ID}} = b2World_CastRayClosest(world, m({{X}}, {{Y}}), m({{DX}}, {{DY}}), filter);
+}

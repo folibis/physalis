@@ -1,0 +1,14 @@
+// Back where the run started, facing the same way, and not moving.
+void initState(b2BodyId body)
+{
+    struct Start { b2BodyId id; float x, y, degrees; };
+    const Start starts[] = { {{STARTS}} };
+    for (const Start &start : starts) {
+        if (!B2_ID_EQUALS(start.id, body) || !b2Body_IsValid(body))
+            continue;
+        b2Body_SetTransform(body, m(start.x, start.y), b2MakeRot(rad(start.degrees)));
+        b2Body_SetLinearVelocity(body, b2Vec2_zero);
+        b2Body_SetAngularVelocity(body, 0.0f);
+        b2Body_SetAwake(body, true);
+    }
+}

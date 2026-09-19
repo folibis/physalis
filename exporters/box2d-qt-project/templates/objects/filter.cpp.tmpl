@@ -1,0 +1,8 @@
+//! A field without a value is left out, and b2DefaultFilterJointDef's stands.
+{
+    b2FilterJointDef jointDef = b2DefaultFilterJointDef();
+    jointDef.bodyIdA = {{BODY_A}};
+    jointDef.bodyIdB = {{BODY_B}};
+    {{ID}} = b2CreateFilterJoint(world, &jointDef);
+    b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
+}

@@ -1,0 +1,13 @@
+//! A mouse joint pulls one body towards a point; qml-box2d wants a body to
+//! pull it from, which is ground.qml.tmpl.
+// {{NAME}}
+MouseJoint {
+    id: {{ID}}
+    bodyA: ground
+    bodyB: {{BODY_B}}
+    target: {{TARGET}}
+    maxForce: {{MAX_FORCE}}
+    frequencyHz: {{FREQUENCY}}
+    dampingRatio: {{DAMPING_RATIO}}
+    collideConnected: {{COLLIDE_CONNECTED}}
+}

@@ -46,17 +46,40 @@ endif()
 
 qt_standard_project_setup()
 
+# What is built and what an installed copy carries. All of it by default; a
+# part turned off is left out of both. The exporters are JavaScript, not
+# compiled, so theirs decide only whether the folder is installed.
+option(WITH_BOX2D "Build the Box2D engine plugin" ON)
+option(WITH_CHIPMUNK "Build the Chipmunk2D engine plugin" ON)
+option(WITH_EXPORTER_BOX2D_QT "Install the Box2D / Qt project export converter" ON)
+option(WITH_EXPORTER_PLANCK "Install the Planck.js web page export converter" ON)
+option(WITH_EXPORTER_QML "Install the QML / qml-box2d project export converter" ON)
+option(WITH_TESTS "Build the test suite" ON)
+
+# The suite runs scenes on both engines, so without one of them a good part of
+# it cannot pass; better to say so here than in a hundred failures.
+if(WITH_TESTS AND NOT (WITH_BOX2D AND WITH_CHIPMUNK))
+    message(FATAL_ERROR "WITH_TESTS needs WITH_BOX2D and WITH_CHIPMUNK: the test suite runs "
+                        "scenes on both engines. Turn WITH_TESTS off to build without one.")
+endif()
+if(NOT WITH_BOX2D AND NOT WITH_CHIPMUNK)
+    message(WARNING "No engine plugin is being built: Physalis will find nothing to run a "
+                    "scene with.")
+endif()
+
 include(FetchContent)
 
-# GoogleTest, for the test suite. The engines fetch their own
-# dependencies -- nothing up here knows what any of them wrap.
-FetchContent_Declare(googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG v1.15.2
-)
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
+if(WITH_TESTS)
+    # GoogleTest, for the test suite. The engines fetch their own
+    # dependencies -- nothing up here knows what any of them wrap.
+    FetchContent_Declare(googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.15.2
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+endif()
 
 # OBJECT, not STATIC: a static library lets the linker drop the compiled .qrc
 # because nothing references it by name, and every icon then comes out empty.
@@ -155,6 +178,7 @@ add_library(PhysalisCore OBJECT
     src/SceneSerializer.cpp
     src/SceneExporter.h
     src/SceneExporter.cpp
+    src/SceneScreenshot.cpp
     src/Icons.h
     src/Icons.cpp
     src/ObjectIcons.cpp
@@ -220,8 +244,12 @@ if(WIN32)
                 $<TARGET_FILE:Qt6::Qml> $<TARGET_FILE_DIR:Physalis>)
 endif()
 
-add_subdirectory(engines/box2d)
-add_subdirectory(engines/chipmunk)
+if(WITH_BOX2D)
+    add_subdirectory(engines/box2d)
+endif()
+if(WITH_CHIPMUNK)
+    add_subdirectory(engines/chipmunk)
+endif()
 
 # --- what an installed copy is made of --------------------------------------
 
@@ -229,8 +257,20 @@ install(TARGETS Physalis RUNTIME DESTINATION ${PHYSALIS_INSTALL_DIR}
                          BUNDLE DESTINATION ${PHYSALIS_INSTALL_DIR})
 
 # The export converters are read at run time from the folder named in Options,
-# which defaults to this one.
-install(DIRECTORY exporters/ DESTINATION ${PHYSALIS_INSTALL_DIR}/exporters)
+# which defaults to this one. One folder each, as the options above choose.
+set(PHYSALIS_EXPORTERS)
+if(WITH_EXPORTER_BOX2D_QT)
+    list(APPEND PHYSALIS_EXPORTERS box2d-qt-project)
+endif()
+if(WITH_EXPORTER_PLANCK)
+    list(APPEND PHYSALIS_EXPORTERS planck-js)
+endif()
+if(WITH_EXPORTER_QML)
+    list(APPEND PHYSALIS_EXPORTERS qml-box2d)
+endif()
+foreach(exporter IN LISTS PHYSALIS_EXPORTERS)
+    install(DIRECTORY exporters/${exporter} DESTINATION ${PHYSALIS_INSTALL_DIR}/exporters)
+endforeach()
 
 if(WIN32)
     # The Qt runtime travels with the program on Windows: windeployqt copies
@@ -358,7 +398,9 @@ if(WIN32)
                    ${CMAKE_BINARY_DIR}/unregister-phys.reg COPYONLY)
 endif()
 
-enable_testing()
-# gtest_discover_tests(), so CTest lists each case rather than one binary.
-include(GoogleTest)
-add_subdirectory(tests)
+if(WITH_TESTS)
+    enable_testing()
+    # gtest_discover_tests(), so CTest lists each case rather than one binary.
+    include(GoogleTest)
+    add_subdirectory(tests)
+endif()

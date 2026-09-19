@@ -1,0 +1,7 @@
+//! Inside the loop over this step's hits: what a watched fixture keeps of its last one.
+// How hard {{ID}} was last hit, and where.
+if (a === {{ID}} || b === {{ID}}) {
+    {{ID}}HitSpeed = hits[i].speed;
+    {{ID}}HitPoint = hits[i].point;
+    {{ID}}HitNormal = a === {{ID}} ? hits[i].normal : pl.Vec2.neg(hits[i].normal);
+}

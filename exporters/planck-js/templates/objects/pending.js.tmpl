@@ -1,0 +1,11 @@
+//! A rule that stops or holds the run leaves it in `pending`; it is carried out
+//! here, once the rules are done with the world. Stop puts the scene back where
+//! it started and waits, as the editor's Stop does; hold just waits.
+if (pending) {
+    var what = pending;
+    pending = null;
+    if (what === "stop")
+        reset();
+    else
+        run(false);
+}

@@ -1,0 +1,8 @@
+{{ID}} = world.createJoint(pl.MotorJoint({
+    linearOffset: m({{OFFSET_X}}, {{OFFSET_Y}}),
+    angularOffset: rad({{ANGULAR_OFFSET}}),
+    maxForce: {{MAX_FORCE}},
+    maxTorque: {{MAX_TORQUE}},
+    correctionFactor: {{CORRECTION_FACTOR}},
+    collideConnected: {{COLLIDE_CONNECTED}},
+}, {{BODY_A}}, {{BODY_B}}));

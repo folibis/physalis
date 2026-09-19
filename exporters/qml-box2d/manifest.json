@@ -1,0 +1,57 @@
+{
+    "name": "QML / qml-box2d project",
+    "description": "A Qt Quick project: the scene as QML objects of the qml-box2d plugin, its rules as JavaScript, built with CMake.",
+    "settings": [
+        {
+            "key": "projectName",
+            "label": "Project name",
+            "type": "string",
+            "default": "PhysalisScene",
+            "tooltip": "The CMake project, the executable and the window title. Letters, digits and underscores."
+        },
+        {
+            "key": "addControls",
+            "label": "Add controls",
+            "type": "bool",
+            "default": true,
+            "tooltip": "A toolbar with Start, Pause and Reset above the scene. Without it the window opens running; Space still pauses and resumes."
+        },
+        {
+            "key": "debugView",
+            "label": "Debug view",
+            "type": "bool",
+            "default": true,
+            "tooltip": "Adds a Debug view switch, and starts with it on: the joints and each body's axes as the editor draws them, with qml-box2d's own picture of the fixtures over the scene."
+        },
+        {
+            "key": "qtPath",
+            "label": "Qt prefix path",
+            "type": "path",
+            "default": "",
+            "tooltip": "Where Qt is installed, e.g. C:/Qt/6.5.1/mingw_64. Written into the project as CMAKE_PREFIX_PATH; leave empty when CMake finds Qt by itself, as it does in Qt Creator."
+        },
+        {
+            "key": "stepsPerSecond",
+            "label": "Steps per second",
+            "type": "int",
+            "default": 60,
+            "min": 15,
+            "max": 480,
+            "tooltip": "The time step the world advances by. qml-box2d steps once per frame drawn, so this is the simulated time each frame stands for."
+        },
+        {
+            "key": "repository",
+            "label": "qml-box2d repository",
+            "type": "string",
+            "default": "https://github.com/qml-box2d/qml-box2d.git",
+            "tooltip": "The git repository the generated project fetches qml-box2d from. Point it at a fork or a mirror."
+        },
+        {
+            "key": "ref",
+            "label": "qml-box2d tag, branch or commit",
+            "type": "string",
+            "default": "e3674e0fe030c406a1d915e47eab760624fffa55",
+            "tooltip": "Which commit of that repository to build. Pinned by default to the one this converter was written against (September 2025), so the project builds the same way twice."
+        }
+    ]
+}

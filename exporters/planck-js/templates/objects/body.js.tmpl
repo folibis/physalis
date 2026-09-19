@@ -1,0 +1,18 @@
+//! One body and its fixtures. A field without a value is left out, and
+//! Planck's own default stands.
+{{ID}} = world.createBody({
+    type: "{{TYPE}}",
+    position: m({{X}}, {{Y}}),
+    angle: rad({{ANGLE}}),
+    linearVelocity: pl.Vec2({{VELOCITY_X}}, {{VELOCITY_Y}}),
+    angularVelocity: rad({{ANGULAR_VELOCITY}}),
+    linearDamping: {{LINEAR_DAMPING}},
+    angularDamping: {{ANGULAR_DAMPING}},
+    gravityScale: {{GRAVITY_SCALE}},
+    allowSleep: {{ALLOW_SLEEP}},
+    awake: {{AWAKE}},
+    fixedRotation: {{FIXED_ROTATION}},
+    bullet: {{BULLET}},
+    active: {{ACTIVE}},
+});
+{{FIXTURES}}

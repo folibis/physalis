@@ -1,0 +1,20 @@
+// The nearest fixture along a ray, the way a rangefinder sees it.
+function castRay(from, translation, maskBits) {
+    var result = { hit: false, fraction: 1 };
+    world.rayCast(from, pl.Vec2.add(from, translation), function (fixture, point, normal, fraction) {
+        if (maskBits !== undefined && (fixture.getFilterCategoryBits() & maskBits) === 0)
+            return -1;
+        result = { hit: true, point: pl.Vec2.clone(point), fixture: fixture, fraction: fraction };
+        return fraction;
+    });
+    return result;
+}
+
+function drawRay(from, translation, result) {
+    var end = result.hit ? result.point : pl.Vec2.add(from, translation);
+    ctx.strokeStyle = result.hit ? "#e86a6a" : "#9a9a9a";
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+}
