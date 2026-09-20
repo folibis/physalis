@@ -71,8 +71,11 @@ void ShapeItem::setName(const QString &name)
 {
     if (m_name == name)
         return;
-    const auto *canvas = qobject_cast<const CanvasScene *>(scene());
+    auto *canvas = qobject_cast<CanvasScene *>(scene());
+    const QString previous = m_name;
     m_name = canvas ? canvas->uniqueName(name, this) : name;
+    if (canvas)
+        canvas->objectRenamed(previous, m_name);
     emit propertyChanged();
 }
 

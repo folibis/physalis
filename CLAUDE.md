@@ -411,9 +411,13 @@ cd build && cpack
   and there is no QML in it. The generators are `NSIS;ZIP` where `makensis` is
   on the path and `ZIP` alone where it is not -- the archive is the same tree,
   unpacked.
-- **Linux** carries none of Qt. `CPACK_DEBIAN_PACKAGE_SHLIBDEPS` reads what the
-  program and the plugins actually link and writes the dependencies from the
-  packages providing them, so the list cannot drift from the build. The program
+- **Linux** carries none of Qt: the distribution's own packages provide it.
+  Which package is built is whichever the machine has the tools for --
+  `dpkg-shlibdeps` gives a `.deb`, `rpmbuild` an `.rpm`, and a `TGZ` is always
+  made; asking for the other one fails the whole run. Both read what the
+  program and the plugins actually link and write the dependencies from the
+  packages providing them (`CPACK_DEBIAN_PACKAGE_SHLIBDEPS`, rpm's own
+  autoreq), so the list cannot drift from the build. The program
   goes in `<libdir>/physalis` with its plugins, a link from `bin/physalis`
   points at it (Qt resolves that before it looks for plugins), and the desktop
   entry, icon and `*.phys` MIME description go where a desktop expects them.

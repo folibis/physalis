@@ -1,424 +1,425 @@
 {
     "bodies": [
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_1",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 14
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_2",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 2
             ],
-            "sleepThreshold": 0.05,
             "type": "dynamic"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_3",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 1
             ],
-            "sleepThreshold": 0.05,
             "type": "dynamic"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_4",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 3
             ],
-            "sleepThreshold": 0.05,
             "type": "dynamic"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_5",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 4
             ],
-            "sleepThreshold": 0.05,
             "type": "dynamic"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_6",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 5
             ],
-            "sleepThreshold": 0.05,
             "type": "dynamic"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_7",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 6
             ],
-            "sleepThreshold": 0.05,
             "type": "dynamic"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_8",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 7
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_9",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 19
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_10",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 10
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_11",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 16
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_12",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 9
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_13",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 8
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_14",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 11
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_15",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 12
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_16",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 13
             ],
-            "sleepThreshold": 0.05,
             "type": "dynamic"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_17",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 15
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_18",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 17
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         },
         {
-            "allowFastRotation": false,
-            "angularDamping": 0,
-            "angularVelocity": 0,
-            "enableSleep": true,
-            "fixedRotation": false,
-            "gravityScale": 1,
-            "isAwake": true,
-            "isBullet": false,
             "isEnabled": true,
-            "linearDamping": 0,
-            "linearVelocity": {
-                "x": 0,
-                "y": 0
-            },
             "name": "body_19",
+            "physics": {
+                "allowFastRotation": false,
+                "angularDamping": 0,
+                "angularVelocity": 0,
+                "enableSleep": true,
+                "fixedRotation": false,
+                "gravityScale": 1,
+                "isAwake": true,
+                "isBullet": false,
+                "linearDamping": 0,
+                "sleepThreshold": 0.05,
+                "velocityX": 0,
+                "velocityY": 0
+            },
             "shapes": [
                 18
             ],
-            "sleepThreshold": 0.05,
             "type": "static"
         }
     ],
+    "engine": "Box2D",
     "field": {
         "backgroundColor": "#ffffffff",
         "gridCellSize": 20,
@@ -480,7 +481,7 @@
             "bodyA": "body_1",
             "bodyB": "body_2",
             "collideConnected": false,
-            "name": "revolute_2",
+            "name": "scissors_motor",
             "params": {
                 "constraintDampingRatio": 2,
                 "constraintHertz": 60,
@@ -502,11 +503,11 @@
         {
             "anchorA": {
                 "x": 305,
-                "y": 10.833333333333734
+                "y": 10.833333333333748
             },
             "anchorB": {
                 "x": 305,
-                "y": 10.833333333333723
+                "y": 10.833333333333734
             },
             "axis": {
                 "x": 0.9851888639330207,
@@ -744,17 +745,17 @@
     "log": [
         {
             "label": "Angle (deg)",
-            "object": "revolute_2",
+            "object": "scissors_motor",
             "property": "angle"
         },
         {
             "label": "Motor Speed (deg/s)",
-            "object": "revolute_2",
+            "object": "scissors_motor",
             "property": "motorSpeed"
         },
         {
             "label": "Enabled",
-            "object": "revolute_2",
+            "object": "scissors_motor",
             "property": "enableMotor"
         }
     ],
@@ -765,7 +766,7 @@
             "op": "set",
             "property": "enableMotor",
             "subject": "circle_1",
-            "target": "revolute_2",
+            "target": "scissors_motor",
             "value": true,
             "when": "rectangle_14"
         },
@@ -774,8 +775,8 @@
             "name": "lift up stop",
             "op": "set",
             "property": "motorSpeed",
-            "subject": "revolute_2",
-            "target": "revolute_2",
+            "subject": "scissors_motor",
+            "target": "scissors_motor",
             "value": false,
             "watch": "angle",
             "when": -14
@@ -806,7 +807,7 @@
             "op": "set",
             "property": "motorSpeed",
             "subject": "circle_1",
-            "target": "revolute_2",
+            "target": "scissors_motor",
             "value": 10,
             "when": "polyline_1"
         },
@@ -815,8 +816,8 @@
             "name": "lift down stop",
             "op": "set",
             "property": "enableMotor",
-            "subject": "revolute_2",
-            "target": "revolute_2",
+            "subject": "scissors_motor",
+            "target": "scissors_motor",
             "value": false,
             "watch": "angle",
             "when": 0
@@ -827,7 +828,7 @@
             "op": "set",
             "property": "motorSpeed",
             "subject": "rectangle_16",
-            "target": "revolute_2",
+            "target": "scissors_motor",
             "value": -10,
             "when": ""
         }
@@ -849,7 +850,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -858,7 +859,7 @@
                 "friction": 0.6,
                 "groupIndex": -1,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -893,7 +894,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -902,7 +903,7 @@
                 "friction": 0.6,
                 "groupIndex": -1,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -937,7 +938,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -946,7 +947,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -981,7 +982,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -990,7 +991,7 @@
                 "friction": 0.6,
                 "groupIndex": -1,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1025,7 +1026,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1034,7 +1035,7 @@
                 "friction": 0.6,
                 "groupIndex": -1,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1070,7 +1071,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1079,7 +1080,7 @@
                 "friction": 0.6,
                 "groupIndex": -1,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1132,7 +1133,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1141,7 +1142,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1176,7 +1177,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1185,7 +1186,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1221,7 +1222,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1230,7 +1231,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1287,7 +1288,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1296,7 +1297,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1332,7 +1333,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1341,7 +1342,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1394,7 +1395,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1403,7 +1404,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1438,7 +1439,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": true,
                 "enableHitEvents": true,
@@ -1447,7 +1448,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0.6,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1483,7 +1484,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1492,7 +1493,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1545,7 +1546,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": true,
                 "enableHitEvents": true,
@@ -1554,7 +1555,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": true,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1590,7 +1591,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1599,7 +1600,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1652,7 +1653,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1661,7 +1662,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1697,7 +1698,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1706,7 +1707,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1764,7 +1765,7 @@
             },
             "outline": false,
             "physics": {
-                "categoryBits": "0x0000000000000001",
+                "categoryBits": 1,
                 "density": 1,
                 "enableContactEvents": false,
                 "enableHitEvents": false,
@@ -1773,7 +1774,7 @@
                 "friction": 0.6,
                 "groupIndex": 0,
                 "isSensor": false,
-                "maskBits": "0xffffffffffffffff",
+                "maskBits": 18446744073709552000,
                 "restitution": 0,
                 "rollingResistance": 0,
                 "tangentSpeed": 0
@@ -1813,20 +1814,20 @@
     ],
     "version": 1,
     "world": {
-        "contactDampingRatio": 10,
-        "contactHertz": 30,
-        "enableContinuous": true,
-        "enableSleep": true,
-        "gravity": {
-            "x": 0,
-            "y": 9.81
+        "physics": {
+            "contactDampingRatio": 10,
+            "contactHertz": 30,
+            "enableContinuous": true,
+            "enableSleep": true,
+            "gravityX": 0,
+            "gravityY": 9.81,
+            "hitEventThreshold": 1,
+            "maxContactPushSpeed": 3,
+            "maximumLinearSpeed": 400,
+            "restitutionThreshold": 1,
+            "subStepCount": 4
         },
-        "hitEventThreshold": 1,
-        "maxContactPushSpeed": 3,
-        "maximumLinearSpeed": 400,
         "pixelsPerMeter": 1000,
-        "restitutionThreshold": 1,
-        "solidBounds": false,
-        "subStepCount": 4
+        "solidBounds": false
     }
 }

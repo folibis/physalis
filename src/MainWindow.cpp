@@ -1255,31 +1255,46 @@ void MainWindow::flipShape(ShapeItem *item, bool horizontally)
 
 QString MainWindow::logLabelFor(const CanvasScene::Watch &watch) const
 {
-    // A watch carries the name it was given when it was added, and a joint has
-    // a Spring, a Limit and a Motor each with a switch called "Enabled" -- so
-    // an entry made before the name included its heading says only "Enabled",
-    // which names none of the three. The heading is asked for again here so an
-    // entry already in a file reads properly without being added a second
-    // time; the stored name stands when the catalogue has nothing to say.
-    if (watch.label.contains(QStringLiteral(" · ")))
-        return watch.label;
-
+    // What the row is called is asked of the engine every time it is drawn,
+    // never remembered: the catalogue is where a property's name lives, and an
+    // entry made before a label changed -- or before the name carried its
+    // heading -- would otherwise keep saying the old thing. A joint has a
+    // Spring, a Limit and a Motor each with a switch called "Enabled", so
+    // without the heading the row names none of the three. What the file
+    // carries stands only where the catalogue has nothing to say.
     auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName());
     if (!engine)
         return watch.label;
 
+    const auto named = [&watch](const physics::PropertyList &properties, QString *label) {
+        for (const physics::JointParam &property : properties) {
+            if (property.key != watch.propertyKey)
+                continue;
+            *label = property.section.isEmpty()
+                         ? property.label
+                         : tr("%1 · %2").arg(property.section, property.label);
+            return true;
+        }
+        return false;
+    };
+
+    QString label;
     for (Joint *joint : m_scene->joints()) {
         if (joint->name() != watch.objectName)
             continue;
         for (const physics::JointType &type : engine->jointTypes()) {
-            if (type.id != joint->typeId())
-                continue;
-            for (const physics::JointParam &param : type.params) {
-                if (param.key == watch.propertyKey && !param.section.isEmpty())
-                    return tr("%1 · %2").arg(param.section, param.label);
-            }
+            if (type.id == joint->typeId() && named(type.params, &label))
+                return label;
         }
+        if (named(engine->jointReadables(joint->typeId()), &label))
+            return label;
     }
+    if (watch.objectName == Rule::world() && named(engine->worldProperties(), &label))
+        return label;
+    // A body's and a shape's properties share no keys, so whichever has it is
+    // the one the row is about.
+    if (named(engine->bodyProperties(), &label) || named(engine->shapeProperties(), &label))
+        return label;
     return watch.label;
 }
 

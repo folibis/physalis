@@ -1,0 +1,156 @@
+name: release
+
+# Packages, not tests: build.yml is what says whether the code works. This runs
+# on a version tag -- git tag v0.1.57 && git push origin v0.1.57 -- and can be
+# started by hand to see whether the packaging still works before tagging.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # The installer carries the Qt runtime, so Qt comes from Qt's own installer
+  # here rather than from the runner: windeployqt copies what it needs beside
+  # the program. MinGW, to match what the project is developed with.
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt and MinGW
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.5.1'
+          arch: 'win64_mingw'
+          tools: 'tools_mingw1310'
+          cache: true
+
+      # Found rather than named, so the version in the directory cannot drift
+      # away from the version in the tool id.
+      - name: Put MinGW on PATH
+        run: |
+          bin=$(find "$IQTA_TOOLS" -maxdepth 3 -type d -name bin -path '*mingw*' | head -1)
+          test -n "$bin" || { echo "no MinGW found under $IQTA_TOOLS"; exit 1; }
+          echo "$bin" >> "$GITHUB_PATH"
+
+      # NSIS builds the installer. The runner image carries it, and CMake looks
+      # where it installs, so nothing has to go on the PATH.
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y || true
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Package
+        run: cmake --build build --target package
+
+      # An installer and the same tree as an archive. Without NSIS there would
+      # be only the archive, which is not a release -- so this says so.
+      - name: Check the installer was built
+        run: |
+          ls -l build/Physalis-*.exe build/Physalis-*.zip
+          test -f "$(ls build/Physalis-*.exe | head -1)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            build/Physalis-*.exe
+            build/Physalis-*.zip
+
+  # The .deb depends on the distribution's Qt rather than carrying one, so Qt
+  # comes from apt: dpkg-shlibdeps reads what the binaries link and writes the
+  # dependencies from the packages providing them. Qt from anywhere else would
+  # leave it depending on packages that do not exist.
+  debian:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt and the build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake g++ file \
+            qt6-base-dev qt6-svg-dev qt6-declarative-dev libgl1-mesa-dev
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Package
+        run: cmake --build build --target package
+
+      # What the package ended up depending on: the one thing worth reading in
+      # this log when an installed copy will not start.
+      - name: What the package requires
+        run: |
+          ls -l build/*.deb
+          dpkg-deb --info build/*.deb | sed -n '/Depends/,+2p'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debian
+          path: build/*.deb
+
+  # The same again on Fedora, where rpmbuild writes the Requires itself.
+  redhat:
+    runs-on: ubuntu-latest
+    container: fedora:41
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt and the build tools
+        run: |
+          dnf -y install cmake ninja-build gcc-c++ git rpm-build \
+            qt6-qtbase-devel qt6-qtsvg-devel qt6-qtdeclarative-devel \
+            mesa-libGL-devel
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Package
+        run: cmake --build build --target package
+
+      - name: What the package requires
+        run: |
+          ls -l build/*.rpm
+          rpm -qpR build/*.rpm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: redhat
+          path: build/*.rpm
+
+  # One release carrying all three, for a tag. Started by hand there is nothing
+  # to attach them to, so the artifacts above are all there is.
+  publish:
+    needs: [windows, debian, redhat]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            packages/windows/*
+            packages/debian/*
+            packages/redhat/*
+          draft: true
+          generate_release_notes: true

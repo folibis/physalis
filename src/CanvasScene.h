@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Ruslan Muhlinin. See LICENSE.
 #pragma once
 
 #include <QGraphicsScene>
@@ -149,7 +151,11 @@ public:
     const QVector<Rule> &rules() const { return m_rules; }
     QVector<Rule> &rules() { return m_rules; }
     void setRules(const QVector<Rule> &rules);
-    void renameInRules(const QString &previous, const QString &current);
+    // One object has been renamed. Everything that named it by name follows:
+    // a rule that watches it, acts on it, compares against it or takes a value
+    // from it, and any row in the log. Bodies and joints say so through their
+    // nameChanged; a shape, a ray and an explosion call this from setName.
+    void objectRenamed(const QString &previous, const QString &current);
     void notifyRulesChanged() { emit rulesChanged(); }
 
     void clearContents();

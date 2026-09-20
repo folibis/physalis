@@ -24,7 +24,10 @@ void RayItem::setName(const QString &name)
 {
     if (m_name == name)
         return;
+    const QString previous = m_name;
     m_name = name;
+    if (auto *canvas = qobject_cast<CanvasScene *>(scene()))
+        canvas->objectRenamed(previous, m_name);
     update();
     emit propertyChanged();
 }

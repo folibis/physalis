@@ -231,6 +231,9 @@ add_executable(Physalis
     src/main.cpp
 )
 target_link_libraries(Physalis PRIVATE PhysalisCore)
+# A windowed program, not a console one: without this Windows opens a console
+# behind the window and keeps it there for as long as the program runs.
+set_target_properties(Physalis PROPERTIES WIN32_EXECUTABLE TRUE MACOSX_BUNDLE TRUE)
 # Only a build that stamps needs to wait for the stamp.
 if(PHYSALIS_STAMPS_BUILDS)
     add_dependencies(Physalis PhysalisVersion)
@@ -255,6 +258,14 @@ endif()
 
 install(TARGETS Physalis RUNTIME DESTINATION ${PHYSALIS_INSTALL_DIR}
                          BUNDLE DESTINATION ${PHYSALIS_INSTALL_DIR})
+
+# The terms the program is under travel with it: beside it on Windows, where a
+# package is a folder, and under share/doc on Linux, where they belong.
+if(WIN32)
+    install(FILES LICENSE DESTINATION ${PHYSALIS_INSTALL_DIR})
+else()
+    install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/physalis)
+endif()
 
 # The export converters are read at run time from the folder named in Options,
 # which defaults to this one. One folder each, as the options above choose.
@@ -337,11 +348,16 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A 2D physics scene editor")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "Physalis")
 set(CPACK_PACKAGE_EXECUTABLES "Physalis" "Physalis")
 set(CPACK_STRIP_FILES ON)
+# Shown as the installer's licence page, and installed beside the program.
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 
 if(WIN32)
     # NSIS builds the installer, and is not part of this toolchain -- without
     # it a plain archive is still produced, which is the same tree unpacked.
-    find_program(PHYSALIS_MAKENSIS makensis)
+    # It does not put itself on the PATH, so where it installs is looked in too.
+    find_program(PHYSALIS_MAKENSIS makensis
+                 HINTS "$ENV{ProgramFiles}/NSIS" "$ENV{ProgramFiles\(x86\)}/NSIS"
+                       "$ENV{LOCALAPPDATA}/Programs/NSIS")
     set(CPACK_GENERATOR "ZIP")
     if(PHYSALIS_MAKENSIS)
         list(PREPEND CPACK_GENERATOR "NSIS")
@@ -354,6 +370,19 @@ if(WIN32)
     set(CPACK_NSIS_EXECUTABLES_DIRECTORY ".")
     set(CPACK_NSIS_MUI_ICON "${CMAKE_SOURCE_DIR}/resources/physalis.ico")
     set(CPACK_NSIS_MUI_UNIICON "${CMAKE_SOURCE_DIR}/resources/physalis.ico")
+    # The picture down the side of the first and last page, and the strip along
+    # the top of the pages between. NSIS takes bitmaps of exactly these sizes
+    # (164 x 314 and 150 x 57), and the path in its own escaped form.
+    set(PHYSALIS_NSIS_IMAGES
+        WELCOMEFINISHPAGE_BITMAP "${CMAKE_SOURCE_DIR}/deploy/installer-welcome.bmp"
+        UNWELCOMEFINISHPAGE_BITMAP "${CMAKE_SOURCE_DIR}/deploy/installer-welcome.bmp"
+        HEADERIMAGE "${CMAKE_SOURCE_DIR}/deploy/installer-header.bmp")
+    while(PHYSALIS_NSIS_IMAGES)
+        list(POP_FRONT PHYSALIS_NSIS_IMAGES image path)
+        file(TO_NATIVE_PATH "${path}" path)
+        string(REPLACE "\\" "\\\\" path "${path}")
+        set(CPACK_NSIS_MUI_${image} "${path}")
+    endwhile()
     set(CPACK_NSIS_INSTALLED_ICON_NAME "Physalis.exe")
     # The *.phys file association is left to the two .reg files in deploy/,
     # which the build writes with the path they are meant to register. NSIS
@@ -361,7 +390,23 @@ if(WIN32)
     # mis-escaped one writes a broken association rather than none.
 
 else()
-    set(CPACK_GENERATOR "DEB;TGZ")
+    # Which package this machine can build is what it has the tools for: a
+    # Debian box has dpkg-shlibdeps, a Red Hat one rpmbuild, and asking for the
+    # other fails the whole run. A tarball needs neither and is always made.
+    find_program(PHYSALIS_DPKG_SHLIBDEPS dpkg-shlibdeps)
+    find_program(PHYSALIS_RPMBUILD rpmbuild)
+    set(CPACK_GENERATOR "TGZ")
+    if(PHYSALIS_DPKG_SHLIBDEPS)
+        list(PREPEND CPACK_GENERATOR "DEB")
+    endif()
+    if(PHYSALIS_RPMBUILD)
+        list(PREPEND CPACK_GENERATOR "RPM")
+    endif()
+    if(NOT PHYSALIS_DPKG_SHLIBDEPS AND NOT PHYSALIS_RPMBUILD)
+        message(WARNING "Neither dpkg-shlibdeps nor rpmbuild was found: cpack will produce "
+                        "a tarball and no distribution package.")
+    endif()
+
     set(CPACK_DEBIAN_PACKAGE_NAME "physalis")
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Physalis")
     set(CPACK_DEBIAN_PACKAGE_SECTION "graphics")
@@ -374,6 +419,24 @@ else()
     # links the same ones.
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
     set(CPACK_PACKAGE_CONTACT "Physalis <physalis@example.invalid>")
+
+    # The same bargain as the .deb: rpmbuild reads what the binaries link and
+    # writes the Requires itself, so the list cannot drift from the build.
+    set(CPACK_RPM_PACKAGE_NAME "physalis")
+    set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+    set(CPACK_RPM_PACKAGE_GROUP "Applications/Engineering")
+    set(CPACK_RPM_PACKAGE_AUTOREQ ON)
+    set(CPACK_RPM_PACKAGE_LICENSE "MIT")
+    # These belong to the distribution's own packages; an rpm claiming them
+    # conflicts with filesystem and refuses to install beside it.
+    list(APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
+         "${CMAKE_INSTALL_DATAROOTDIR}/applications"
+         "${CMAKE_INSTALL_DATAROOTDIR}/icons"
+         "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor"
+         "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable"
+         "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps"
+         "${CMAKE_INSTALL_DATAROOTDIR}/mime"
+         "${CMAKE_INSTALL_DATAROOTDIR}/mime/packages")
     set(CPACK_PACKAGE_DESCRIPTION
         "Physalis builds 2D physics scenes and runs them: shapes grouped into bodies,
 "

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Ruslan Muhlinin. See LICENSE.
 #pragma once
 
 // GoogleTest prints values with operator<<, and knows nothing about Qt's

@@ -474,7 +474,7 @@ PhysicsBody *CanvasScene::createEmptyBody(bool announce)
     auto *body = new PhysicsBody(this);
     body->setName(Naming::nextName(QStringLiteral("body"), takenNames()));
 
-    connect(body, &PhysicsBody::nameChanged, this, &CanvasScene::renameInRules);
+    connect(body, &PhysicsBody::nameChanged, this, &CanvasScene::objectRenamed);
     connect(body, &PhysicsBody::propertyChanged, this, [this] {
         update();
     });
@@ -684,7 +684,7 @@ Joint *CanvasScene::createJoint(const QString &typeId, PhysicsBody *bodyA, Physi
         }
     }
 
-    connect(joint, &Joint::nameChanged, this, &CanvasScene::renameInRules);
+    connect(joint, &Joint::nameChanged, this, &CanvasScene::objectRenamed);
     connect(joint, &Joint::propertyChanged, this, [this] {
         update();
     });
@@ -1153,35 +1153,57 @@ Joint *CanvasScene::jointAt(const QPointF &scenePos, int *end) const
     return nullptr;
 }
 
-void CanvasScene::renameInRules(const QString &previous, const QString &current)
+void CanvasScene::objectRenamed(const QString &previous, const QString &current)
 {
     if (previous.isEmpty() || previous == current)
     {
         return;
     }
 
-    bool touched = false;
+    bool inRules = false;
     for (Rule &rule : m_rules)
     {
         if (rule.subjectName == previous)
         {
             rule.subjectName = current;
-            touched = true;
+            inRules = true;
         }
         if (rule.isEvent() && rule.conditionValue.toString() == previous)
         {
             rule.conditionValue = current;
-            touched = true;
+            inRules = true;
         }
         if (rule.targetName == previous)
         {
             rule.targetName = current;
-            touched = true;
+            inRules = true;
+        }
+        // Where the value comes from, for a rule reading one object onto
+        // another.
+        if (rule.sourceObject == previous)
+        {
+            rule.sourceObject = current;
+            inRules = true;
         }
     }
+    if (inRules)
+    {
+        emit rulesChanged();
+    }
 
-    Q_UNUSED(touched);
-    emit rulesChanged();
+    bool inLog = false;
+    for (Watch &watch : m_watches)
+    {
+        if (watch.objectName == previous)
+        {
+            watch.objectName = current;
+            inLog = true;
+        }
+    }
+    if (inLog)
+    {
+        emit watchesChanged();
+    }
 }
 
 void CanvasScene::setRules(const QVector<Rule> &rules)

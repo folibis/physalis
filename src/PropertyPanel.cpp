@@ -228,11 +228,30 @@ void PropertyPanel::addRow(QTableWidget *table, const PropertyRow &row)
     }
     case PropertyFieldType::String: {
         auto *edit = new QLineEdit(table);
-        connect(edit, &QLineEdit::editingFinished, this, [this, setter, edit] {
+        const std::function<QVariant()> accepted = row.getter;
+        connect(edit, &QLineEdit::editingFinished, this, [this, setter, accepted, edit] {
             if (m_updating)
                 return;
+            // Nothing typed, nothing to do. editingFinished also arrives when
+            // the field merely loses focus -- including while the window is
+            // being torn down around it, where an edit would report itself to
+            // an undo stack whose window is half gone.
+            if (accepted && accepted().toString() == edit->text())
+                return;
             setter(edit->text());
-            updateModifiedMarks();
+            // What the object made of it, put back: a name that had to be made
+            // unique is not the one that was typed, and the field would go on
+            // showing what it cannot have. Selecting it is also the only sign
+            // Enter did anything where the value was taken as it stood.
+            //
+            // Queued, and through a guarded pointer: a rename rebuilds the
+            // table from its own signal, and this editor is then already gone.
+            QPointer<QLineEdit> alive(edit);
+            QMetaObject::invokeMethod(this, [this, alive] {
+                refreshValues();
+                if (alive && alive->hasFocus())
+                    alive->selectAll();
+            }, Qt::QueuedConnection);
             if (!m_item)
                 emit fieldSettingsChanged();
         });
