@@ -137,14 +137,24 @@ jobs:
 
   # One release carrying all three, for a tag. Started by hand there is nothing
   # to attach them to, so the artifacts above are all there is.
+  #
+  # Whatever was built gets attached, even where one platform failed: a release
+  # missing its .rpm is worth more than a release with nothing on it, and the
+  # run says plainly which job failed. Each job's own artifact is there either
+  # way, on the run page.
   publish:
     needs: [windows, debian, redhat]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: always() && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: packages
+          # One job failing leaves its artifact missing, not the step.
+          merge-multiple: false
+
+      - name: What is being attached
+        run: ls -lR packages
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -152,5 +162,6 @@ jobs:
             packages/windows/*
             packages/debian/*
             packages/redhat/*
-          draft: true
-          generate_release_notes: true
+          # A release made by hand for this tag is kept as it is -- published or
+          # draft, with whatever notes it carries; only the files are added.
+          fail_on_unmatched_files: false

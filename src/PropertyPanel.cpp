@@ -2,6 +2,7 @@
 #include "ShapeItem.h"
 #include "CanvasScene.h"
 #include "Joint.h"
+#include "ExplosionItem.h"
 #include "RayItem.h"
 #include "Rule.h"
 #include "PhysicsBody.h"
