@@ -2,13 +2,17 @@
 
 [![build](https://github.com/folibis/physalis/actions/workflows/build.yml/badge.svg)](https://github.com/folibis/physalis/actions/workflows/build.yml)
 
-Physalis is a desktop application for building and running two-dimensional
-physics simulations. You draw shapes, group them into rigid bodies with their
-own physical properties, connect them with joints such as hinges, sliders,
-springs and motors, and run the scene. During a simulation you can push bodies
-with forces and impulses, measure distances with rays, set off explosions, and
-describe how the scene reacts to events with rules, for example *when the ball
-enters the pocket, return it to the start*.
+Physalis is a desktop editor for 2D physics scenes. The application allows
+drawing rectangles, circles and polygons on a canvas, grouping them into rigid
+bodies with their own physical properties, connecting those bodies with joints
+-- hinges, sliders, springs, motors -- and running the result. The simulation
+itself belongs to a physics engine loaded as a plugin.
+
+A run is not only watched. The application applies forces and impulses to
+bodies, measures distances with rays, sets off explosions, and carries out
+rules that describe how the scene answers events, with no programming --
+*when the ball enters the pocket, return it to the start*. A finished scene
+can be exported as a standalone C++, QML or JavaScript program.
 
 <p align="center">
   <img src="docs/images/overview.png" alt="The Physalis window in Physics mode" width="640">

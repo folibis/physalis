@@ -5,15 +5,15 @@ nav_order: 1
 
 # Physalis
 
-Physalis is a desktop application for building and running two-dimensional
-physics simulations. A scene is made of **shapes**: rectangles, circles and
-polygons. Shapes are grouped into **rigid bodies**, and each body has its own
-physical properties: mass, friction, bounciness, damping and the way it moves.
-Bodies can be connected by **joints**, such as hinges, sliders, springs, ropes
-and motors. During a simulation you can push them with **forces and
-impulses**, measure distances with **rays**, set off **explosions**, and
-describe how the scene should react to events with **rules**, for example
-*when the ball enters the pocket, return it to the start*.
+Physalis is a desktop editor for 2D physics scenes. The application allows
+drawing **shapes** -- rectangles, circles and polygons -- and grouping them
+into **rigid bodies**, each with its own physical properties: mass, friction,
+bounciness, damping and the way it moves. **Joints** hold one body to another:
+hinges, sliders, springs, ropes and motors. During a run the application
+applies **forces and impulses** to bodies, measures distances with **rays**,
+sets off **explosions**, and carries out **rules** that describe how the scene
+answers events, for example *when the ball enters the pocket, return it to the
+start*.
 
 ![The Physalis window: a scene in Physics mode, with a body selected and its properties on the right](images/overview.png)
 

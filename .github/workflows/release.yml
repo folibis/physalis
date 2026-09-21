@@ -186,6 +186,11 @@ jobs:
             packages/windows/*
             packages/debian/*
             packages/redhat/*
-          # A release made by hand for this tag is kept as it is -- published or
-          # draft, with whatever notes it carries; only the files are added.
+          # A release made by hand for this tag keeps its notes, but not its
+          # flags: GitHub's own form ticks "pre-release" for a tag it cannot
+          # read as semver -- which v.0.1.1 is not -- and a pre-release is
+          # never the latest one, so the repository's front page shows "1 tag"
+          # and no version at all.
+          prerelease: false
+          make_latest: true
           fail_on_unmatched_files: false

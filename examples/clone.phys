@@ -1,0 +1,239 @@
+{
+    "bodies": [
+        {
+            "isEnabled": true,
+            "name": "body_1",
+            "physics": {
+            },
+            "shapes": [
+                2
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_2",
+            "physics": {
+            },
+            "shapes": [
+                1
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_3",
+            "physics": {
+            },
+            "shapes": [
+                3
+            ],
+            "type": "static"
+        }
+    ],
+    "engine": "Box2D",
+    "field": {
+        "backgroundColor": "#ffffffff",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 1000,
+        "showGrid": true,
+        "width": 1000
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+    ],
+    "rays": [
+        {
+            "angle": 0,
+            "length": 960,
+            "maskBits": "ffffffffffffffff",
+            "name": "ray_1",
+            "x": -480,
+            "y": 220
+        }
+    ],
+    "rules": [
+        {
+            "action": "@clone",
+            "actionParams": {
+                "x": 0,
+                "y": -300
+            },
+            "compare": "%",
+            "op": "set",
+            "property": "",
+            "subject": "@world",
+            "target": "circle_1",
+            "value": 0,
+            "watch": "frame",
+            "when": 100
+        },
+        {
+            "action": "removeBody",
+            "actionParams": {
+            },
+            "event": "rayDetects",
+            "op": "set",
+            "property": "",
+            "subject": "ray_1",
+            "target": "@otherBody",
+            "value": 0,
+            "when": ""
+        }
+    ],
+    "shapes": [
+        {
+            "bodyColor": "#80add8e6",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.49999999999999994
+            },
+            "pos": {
+                "x": 0,
+                "y": -300
+            },
+            "rect": {
+                "height": 70,
+                "width": 70,
+                "x": -35,
+                "y": -35
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "bodyColor": "#80add8e6",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": 100,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": -300,
+                    "y": -70
+                },
+                {
+                    "x": -100,
+                    "y": 0
+                },
+                {
+                    "x": 80,
+                    "y": -30
+                },
+                {
+                    "x": 300,
+                    "y": 0
+                },
+                {
+                    "x": 500,
+                    "y": -30
+                },
+                {
+                    "x": 500,
+                    "y": 50
+                },
+                {
+                    "x": -300,
+                    "y": 50
+                }
+            ],
+            "pos": {
+                "x": -100,
+                "y": 150
+            },
+            "rect": {
+                "height": 120,
+                "width": 800,
+                "x": -300,
+                "y": -70
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "bodyColor": "#80add8e6",
+            "borderColor": "#cc64aadc",
+            "borderWidth": 2,
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "polygon_1",
+            "origin": {
+                "x": 500,
+                "y": 311
+            },
+            "outline": true,
+            "physics": {
+                "friction": 0.05000000000000002
+            },
+            "points": [
+                {
+                    "x": 1,
+                    "y": 623
+                },
+                {
+                    "x": 1001,
+                    "y": 623
+                },
+                {
+                    "x": 1001,
+                    "y": 3
+                },
+                {
+                    "x": 1,
+                    "y": 3
+                }
+            ],
+            "pos": {
+                "x": -501,
+                "y": -363
+            },
+            "rect": {
+                "height": 620,
+                "width": 1000,
+                "x": 1,
+                "y": 3
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        }
+    ],
+    "version": 1,
+    "world": {
+        "physics": {
+        },
+        "pixelsPerMeter": 1000,
+        "solidBounds": false
+    }
+}

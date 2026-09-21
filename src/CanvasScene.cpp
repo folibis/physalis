@@ -1160,6 +1160,16 @@ void CanvasScene::objectRenamed(const QString &previous, const QString &current)
         return;
     }
 
+    // A run must not write to the document. Nothing in it renames anything a
+    // rule could mean -- the only naming it does is giving a clone's copies
+    // names of their own, and a clone is run state that no rule may name -- so
+    // anything arriving here mid-run is that, wearing the name it was copied
+    // from.
+    if (m_simulationRunning)
+    {
+        return;
+    }
+
     bool inRules = false;
     for (Rule &rule : m_rules)
     {

@@ -439,8 +439,14 @@ void SimulationController::cloneBody(PhysicsBody *parent, const QPointF &at)
         }
         copy->setVisible(true);
         copy->part().watchedByRules = original->part().watchedByRules;
-        m_scene->addItem(copy);
+        // Named before it joins the scene, for the reason the body's name went
+        // straight into its props above: a shape renamed on the canvas passes
+        // the new name to every rule and log row naming the old one, and the
+        // old name here is the shape this was copied from. Renamed after
+        // addItem, the first clone repointed the rules at itself -- and when
+        // the run ended and the clones went, they named nothing at all.
         copy->setName(Naming::makeUnique(original->name(), m_scene->takenNames(copy)));
+        m_scene->addItem(copy);
         body->addShape(copy);
     }
     if (body->isEmpty()) {

@@ -3,9 +3,9 @@
 ## What this is
 
 **Physalis** — a Qt6 desktop application for building 2D physics scenes and
-running them. You draw shapes, group them into bodies, connect them with
-joints, add rays, sensors and explosions, and write rules that fire on events
-Scenes are saved as `*.phys` (JSON).
+running them. It allows drawing shapes, grouping them into bodies, connecting
+those bodies with joints, adding rays, sensors and explosions, and writing
+rules that fire on events. Scenes are saved as `*.phys` (JSON).
 
 The simulation itself is not part of the application. It lives in a **plugin**.
 
