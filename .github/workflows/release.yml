@@ -44,8 +44,16 @@ jobs:
       - name: Install NSIS
         run: choco install nsis --no-progress -y || true
 
+      # Built as the tag says: v0.1.58 and v.0.1.58 both mean 0.1.58. Started by
+      # hand there is no tag, and the empty value leaves CMake to use the
+      # version in CMakeLists.txt.
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_TESTS=OFF
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          version="${version#.}"
+          case "$version" in ''|*[!0-9.]*) version="" ;; esac
+          echo "building as: ${version:-the version in CMakeLists.txt}"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_TESTS=OFF -DPHYSALIS_VERSION="$version"
 
       - name: Build
         run: cmake --build build
@@ -72,7 +80,7 @@ jobs:
   # dependencies from the packages providing them. Qt from anywhere else would
   # leave it depending on packages that do not exist.
   debian:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -82,8 +90,16 @@ jobs:
           sudo apt-get install -y ninja-build cmake g++ file \
             qt6-base-dev qt6-svg-dev qt6-declarative-dev libgl1-mesa-dev
 
+      # Built as the tag says: v0.1.58 and v.0.1.58 both mean 0.1.58. Started by
+      # hand there is no tag, and the empty value leaves CMake to use the
+      # version in CMakeLists.txt.
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_TESTS=OFF
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          version="${version#.}"
+          case "$version" in ''|*[!0-9.]*) version="" ;; esac
+          echo "building as: ${version:-the version in CMakeLists.txt}"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_TESTS=OFF -DPHYSALIS_VERSION="$version"
 
       - name: Build
         run: cmake --build build
@@ -106,7 +122,7 @@ jobs:
   # The same again on Fedora, where rpmbuild writes the Requires itself.
   redhat:
     runs-on: ubuntu-latest
-    container: fedora:41
+    container: fedora:44
     steps:
       - uses: actions/checkout@v4
 
@@ -116,8 +132,16 @@ jobs:
             qt6-qtbase-devel qt6-qtsvg-devel qt6-qtdeclarative-devel \
             mesa-libGL-devel
 
+      # Built as the tag says: v0.1.58 and v.0.1.58 both mean 0.1.58. Started by
+      # hand there is no tag, and the empty value leaves CMake to use the
+      # version in CMakeLists.txt.
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_TESTS=OFF
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          version="${version#.}"
+          case "$version" in ''|*[!0-9.]*) version="" ;; esac
+          echo "building as: ${version:-the version in CMakeLists.txt}"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_TESTS=OFF -DPHYSALIS_VERSION="$version"
 
       - name: Build
         run: cmake --build build

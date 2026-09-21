@@ -46,6 +46,12 @@ endif()
 
 qt_standard_project_setup()
 
+# Everything, dependencies included. The engines are shared libraries and the
+# physics they wrap is fetched and built static, and a static library without
+# it cannot go into a shared one: on Linux the plugin failed to link with
+# "recompile with -fPIC".
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # What is built and what an installed copy carries. All of it by default; a
 # part turned off is left out of both. The exporters are JavaScript, not
 # compiled, so theirs decide only whether the folder is installed.
@@ -81,32 +87,23 @@ if(WITH_TESTS)
     FetchContent_MakeAvailable(googletest)
 endif()
 
+# What this build calls itself, in the window's About box and on every package
+# it produces. A release is built from a tag and handed it --
+# cmake -DPHYSALIS_VERSION=0.1.58 -- and everything else falls back to what
+# project() says above, so a working copy needs nothing.
+set(PHYSALIS_VERSION "" CACHE STRING
+    "The version to build as; project()'s own is used when this is empty")
+if(PHYSALIS_VERSION STREQUAL "")
+    set(PHYSALIS_FULL_VERSION "${PROJECT_VERSION}")
+elseif(PHYSALIS_VERSION MATCHES "^[0-9]+(\\.[0-9]+)*$")
+    set(PHYSALIS_FULL_VERSION "${PHYSALIS_VERSION}")
+else()
+    message(FATAL_ERROR
+        "PHYSALIS_VERSION is \"${PHYSALIS_VERSION}\": it has to be digits and dots, as in 0.1.58.")
+endif()
+
 # OBJECT, not STATIC: a static library lets the linker drop the compiled .qrc
 # because nothing references it by name, and every icon then comes out empty.
-# Bumped before a Release build, so a shipped copy can be traced back to one.
-# Debug builds skip it: the number would change on every build, which forces a
-# recompile and relink even when nothing else moved.
-set(PHYSALIS_BUILD_COUNTER "${CMAKE_BINARY_DIR}/build_number.txt")
-# Only a build that ships gets a new number. In Debug the counter would move
-# on every build, and because Version.h is an output of this command ninja
-# would regenerate it, recompile main.cpp and relink -- every single time.
-set(PHYSALIS_STAMPS_BUILDS OFF)
-if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo"
-   OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-    set(PHYSALIS_STAMPS_BUILDS ON)
-    add_custom_target(PhysalisVersion ALL
-        COMMAND ${CMAKE_COMMAND}
-                -DCOUNTER_FILE=${PHYSALIS_BUILD_COUNTER}
-                -DTEMPLATE_FILE=${CMAKE_SOURCE_DIR}/cmake/Version.h.in
-                -DOUTPUT_FILE=${CMAKE_BINARY_DIR}/generated/Version.h
-                -DVERSION_MAJOR=${PROJECT_VERSION_MAJOR}
-                -DVERSION_MINOR=${PROJECT_VERSION_MINOR}
-                -P ${CMAKE_SOURCE_DIR}/cmake/BumpBuildNumber.cmake
-        BYPRODUCTS ${CMAKE_BINARY_DIR}/generated/Version.h
-        COMMENT "Stamping the build number"
-        VERBATIM
-    )
-endif()
 add_library(PhysalisCore OBJECT
     src/MainWindow.h
     src/MainWindow.cpp
@@ -210,17 +207,6 @@ target_include_directories(PhysalisCore PUBLIC
 # application uses QML itself.
 target_link_libraries(PhysalisCore PUBLIC Qt6::Widgets Qt6::Svg Qt6::Qml)
 
-# The header has to exist for any build, stamped or not. Written once here at
-# configure time, with whatever the counter last reached.
-if(EXISTS "${PHYSALIS_BUILD_COUNTER}")
-    file(READ "${PHYSALIS_BUILD_COUNTER}" PHYSALIS_BUILD_NUMBER)
-    string(STRIP "${PHYSALIS_BUILD_NUMBER}" PHYSALIS_BUILD_NUMBER)
-endif()
-if(NOT PHYSALIS_BUILD_NUMBER MATCHES "^[0-9]+$")
-    set(PHYSALIS_BUILD_NUMBER 0)
-endif()
-set(PHYSALIS_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
-set(PHYSALIS_VERSION_MINOR ${PROJECT_VERSION_MINOR})
 configure_file(cmake/Version.h.in "${CMAKE_BINARY_DIR}/generated/Version.h" @ONLY)
 
 # The application itself is only main() plus the icon resource.
@@ -234,10 +220,6 @@ target_link_libraries(Physalis PRIVATE PhysalisCore)
 # A windowed program, not a console one: without this Windows opens a console
 # behind the window and keeps it there for as long as the program runs.
 set_target_properties(Physalis PROPERTIES WIN32_EXECUTABLE TRUE MACOSX_BUNDLE TRUE)
-# Only a build that stamps needs to wait for the stamp.
-if(PHYSALIS_STAMPS_BUILDS)
-    add_dependencies(Physalis PhysalisVersion)
-endif()
 
 # QJSEngine runs the export converters, and Qt6Qml is not among the DLLs that
 # the rest of the Qt runtime was deployed with.
@@ -320,11 +302,14 @@ if(WIN32)
                         "tree will not carry the Qt runtime.")
     endif()
 else()
-    # On the path, pointing at the copy in the library directory.
+    # On the path, pointing at the copy in the library directory. Through
+    # DESTDIR, which is how cpack installs into a staging folder: without it the
+    # link is written to the real /usr/bin, which is refused -- and would not be
+    # in the package anyway.
     install(CODE "
-        file(MAKE_DIRECTORY \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\")
-        file(CREATE_LINK ../${PHYSALIS_INSTALL_DIR}/Physalis
-             \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/physalis\" SYMBOLIC)
+        set(where \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\")
+        file(MAKE_DIRECTORY \"\${where}\")
+        file(CREATE_LINK ../${PHYSALIS_INSTALL_DIR}/Physalis \"\${where}/physalis\" SYMBOLIC)
     ")
     configure_file(deploy/physalis.desktop.in
                    ${CMAKE_BINARY_DIR}/physalis.desktop @ONLY)
@@ -343,7 +328,7 @@ endif()
 
 set(CPACK_PACKAGE_NAME "Physalis")
 set(CPACK_PACKAGE_VENDOR "Physalis")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}.${PHYSALIS_BUILD_NUMBER}")
+set(CPACK_PACKAGE_VERSION "${PHYSALIS_FULL_VERSION}")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A 2D physics scene editor")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "Physalis")
 set(CPACK_PACKAGE_EXECUTABLES "Physalis" "Physalis")
@@ -390,6 +375,20 @@ if(WIN32)
     # mis-escaped one writes a broken association rather than none.
 
 else()
+    # Which distribution a Linux package was built against decides where it can
+    # be installed, so it is part of the name: physalis_0.1.58_ubuntu24.04_amd64.deb
+    # says what "physalis_0.1.58_amd64.deb" leaves the reader to guess.
+    set(PHYSALIS_DISTRO "linux")
+    if(EXISTS /etc/os-release)
+        file(READ /etc/os-release PHYSALIS_OS_RELEASE)
+        string(REGEX MATCH "(^|\n)ID=\"?([a-zA-Z0-9._-]+)\"?" _match "${PHYSALIS_OS_RELEASE}")
+        set(PHYSALIS_DISTRO_ID "${CMAKE_MATCH_2}")
+        string(REGEX MATCH "(^|\n)VERSION_ID=\"?([a-zA-Z0-9._-]+)\"?" _match "${PHYSALIS_OS_RELEASE}")
+        if(PHYSALIS_DISTRO_ID)
+            set(PHYSALIS_DISTRO "${PHYSALIS_DISTRO_ID}${CMAKE_MATCH_2}")
+        endif()
+    endif()
+
     # Which package this machine can build is what it has the tools for: a
     # Debian box has dpkg-shlibdeps, a Red Hat one rpmbuild, and asking for the
     # other fails the whole run. A tarball needs neither and is always made.
@@ -407,10 +406,19 @@ else()
                         "a tarball and no distribution package.")
     endif()
 
+    # dpkg has its own names for the architectures -- amd64, not x86_64.
+    execute_process(COMMAND dpkg --print-architecture
+                    OUTPUT_VARIABLE PHYSALIS_DEB_ARCH OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(NOT PHYSALIS_DEB_ARCH)
+        set(PHYSALIS_DEB_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+    set(CPACK_ARCHIVE_FILE_NAME
+        "physalis-${PHYSALIS_FULL_VERSION}-${PHYSALIS_DISTRO}-${CMAKE_SYSTEM_PROCESSOR}")
     set(CPACK_DEBIAN_PACKAGE_NAME "physalis")
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Physalis")
     set(CPACK_DEBIAN_PACKAGE_SECTION "graphics")
-    set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+    set(CPACK_DEBIAN_FILE_NAME
+        "physalis_${PHYSALIS_FULL_VERSION}_${PHYSALIS_DISTRO}_${PHYSALIS_DEB_ARCH}.deb")
     # Qt comes from the distribution: shlibdeps reads what the binaries
     # actually link and writes the dependencies from the packages providing
     # them, so the list cannot drift from the build.
@@ -423,7 +431,8 @@ else()
     # The same bargain as the .deb: rpmbuild reads what the binaries link and
     # writes the Requires itself, so the list cannot drift from the build.
     set(CPACK_RPM_PACKAGE_NAME "physalis")
-    set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+    set(CPACK_RPM_FILE_NAME
+        "physalis-${PHYSALIS_FULL_VERSION}-${PHYSALIS_DISTRO}.${CMAKE_SYSTEM_PROCESSOR}.rpm")
     set(CPACK_RPM_PACKAGE_GROUP "Applications/Engineering")
     set(CPACK_RPM_PACKAGE_AUTOREQ ON)
     set(CPACK_RPM_PACKAGE_LICENSE "MIT")

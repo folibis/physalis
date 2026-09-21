@@ -247,6 +247,10 @@ so `SimulationController` remembers one and acts on it once the step is over.
 
 ## Things that have bitten before
 
+- **Everything is built `-fPIC`** (`CMAKE_POSITION_INDEPENDENT_CODE`). The
+  engines are shared libraries around static Box2D and Chipmunk, and a static
+  library built without it cannot go into a shared one -- the Linux build
+  stopped at "recompile with -fPIC".
 - **`PhysalisCore` is an OBJECT library, not STATIC.** A static library lets the
   linker drop the compiled `.qrc`, and every icon comes out empty.
 - **Scale.** `pixelsPerMeter` is a world setting; forces and gravity are scaled
@@ -411,6 +415,12 @@ cd build && cpack
   and there is no QML in it. The generators are `NSIS;ZIP` where `makensis` is
   on the path and `ZIP` alone where it is not -- the archive is the same tree,
   unpacked.
+- **A Linux package says which distribution it was built against** --
+  `physalis_0.1.58_ubuntu24.04_amd64.deb` -- since that is what decides where it
+  can be installed. The name comes from `/etc/os-release` at configure time.
+  A symlink or anything else an `install(CODE)` writes has to go through
+  `$ENV{DESTDIR}`: cpack installs into a staging folder, and a path built from
+  `CMAKE_INSTALL_PREFIX` alone lands in the real `/usr/bin`, which is refused.
 - **Linux** carries none of Qt: the distribution's own packages provide it.
   Which package is built is whichever the machine has the tools for --
   `dpkg-shlibdeps` gives a `.deb`, `rpmbuild` an `.rpm`, and a `TGZ` is always
@@ -430,10 +440,16 @@ cd build && cpack
 
 ## Versioning
 
-`x.y` comes from `project(Physalis VERSION ...)`; `z` is a build counter that
-increments on its own. **Only Release-type builds stamp it** — a Debug build
-writes `Version.h` once at configure time, so Build → Run does not rebuild the
-world. `Version.h` is included by `main.cpp` only, never by `PhysalisCore`.
+One number, `PHYSALIS_FULL_VERSION`, in the About box and on every package.
+`project(Physalis VERSION ...)` says what a working copy is; a build that ships
+is handed the tag it was built from instead, `-DPHYSALIS_VERSION=0.1.58`, which
+has to be digits and dots or the configure fails. `Version.h` is written at
+configure time from `cmake/Version.h.in` and included by `main.cpp` only, never
+by `PhysalisCore`.
+
+There was a build counter in a file in the build directory. It counted builds
+of one folder, which is nothing anybody wants to read on a package: CI, whose
+folder is new every run, called its packages 0.1.1 whatever the tag said.
 
 ## Style
 
