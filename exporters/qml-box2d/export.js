@@ -219,6 +219,11 @@ function worldWarnings(world) {
         missing("max push speed", "world");
     if (v.enableSleep === false)
         missing("switching sleep off for the whole world", "world -- set it on each body instead");
+    // Box2D 2.3 behind qml-box2d has neither switch exposed.
+    if (vals(world).enableWarmStarting === false)
+        missing("switching warm starting off", "world -- qml-box2d does not expose it");
+    if (vals(world).enableSpeculative === false)
+        missing("switching speculative contacts off", "world -- Box2D 2.3 has none");
 }
 
 function tolerance(v) {

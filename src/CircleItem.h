@@ -9,7 +9,7 @@ class CircleItem : public ShapeItem
 public:
     CircleItem();
 
-    static QRectF createdRect() { return QRectF(-75, -75, 150, 150); }
+    static QRectF createdRect() { return QRectF(-80, -80, 160, 160); }
     QRectF defaultRect() const override { return createdRect(); }
     QString typeName() const override { return QStringLiteral("circle"); }
 

@@ -348,6 +348,11 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_resetScaleAction, &QAction::triggered, this, [this] { m_scene->setCurrentScale(100.0); });
     squareButton(toolBar, m_resetScaleAction);
 
+    // Taking a picture of the scene belongs with what is being looked at
+    // rather than with saving the file, so it sits after the zoom.
+    toolBar->addAction(m_ui->actionSaveScreenshot);
+    squareButton(toolBar, m_ui->actionSaveScreenshot);
+
     auto *toolBarSpacer = new QWidget(toolBar);
     toolBarSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     toolBar->addWidget(toolBarSpacer);

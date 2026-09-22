@@ -18,5 +18,9 @@ worldDef.contactDampingRatio = {{CONTACT_DAMPING_RATIO}};
 worldDef.enableSleep = {{ENABLE_SLEEP}};
 worldDef.enableContinuous = {{ENABLE_CONTINUOUS}};
 world = b2CreateWorld(&worldDef);
+//! Neither is a field of b2WorldDef: both are switched on the world once it
+//! exists, and both are on unless the scene turned them off.
+b2World_EnableWarmStarting(world, {{ENABLE_WARM_STARTING}});
+b2World_EnableSpeculative(world, {{ENABLE_SPECULATIVE}});
 //! PRE_SOLVE is notePreSolve when a rule watches contacts about to be solved.
 b2World_SetPreSolveCallback(world, {{PRE_SOLVE}}, nullptr);

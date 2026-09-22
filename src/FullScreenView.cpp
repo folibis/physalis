@@ -17,6 +17,12 @@ FullScreenView::FullScreenView(CanvasScene *scene, QWidget *parent)
     setWindowTitle(tr("Physalis — Simulation"));
     setFrameShape(QFrame::NoFrame);
     setRenderHint(QPainter::Antialiasing, true);
+    // The same as the main view, which sets it in the form. Joints, body axes
+    // and the rest of the run are painted in the scene's foreground, which
+    // belongs to no item -- so nothing marks the ground they cover as dirty,
+    // and the default minimal update leaves the last frame's joints behind as
+    // the bodies move out from under them.
+    setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     // Nothing in the scene is draggable, selectable or editable: a click during

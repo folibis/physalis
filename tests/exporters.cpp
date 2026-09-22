@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QTemporaryDir>
+#include <cmath>
 #include <gtest/gtest.h>
 
 // The three converters. The application knows no formats, so the only things
@@ -93,8 +94,68 @@ void buildEverything(CanvasScene *scene)
     rule.targetName = crateBody->name();
     rule.actionId = QStringLiteral("pushAt");
     rule.actionParams.insert(QStringLiteral("impulseX"), 5.0);
-    scene->setRules({ rule });
+
+    // A rule on being hit, so that the world's hit threshold is a setting this
+    // scene can be affected by rather than one no converter has any use for.
+    Rule hit;
+    hit.subjectName = crate->name();
+    hit.eventId = QStringLiteral("contactHit");
+    hit.targetName = crateBody->name();
+    hit.actionId = Rule::initStateAction();
+
+    // And one on touching, so contact tuning matters too.
+    Rule touch;
+    touch.subjectName = wheel->name();
+    touch.eventId = QStringLiteral("contactBegin");
+    touch.targetName = wheelBody->name();
+    touch.actionId = Rule::initStateAction();
+
+    scene->setRules({ rule, hit, touch });
 }
+
+// A world setting a format has no answer for. Each is named with the reason,
+// so a converter that quietly drops a setting it could have written fails
+// rather than hiding among them. Where a converter says so itself through
+// io.log(), it does not need to be in here at all.
+const QSet<QString> kCannotExpress {
+    // Planck is Box2D 2.4 and qml-box2d is 2.3: contacts are rigid in both, so
+    // there is no stiffness or damping to set.
+    QStringLiteral("planck-js/contactHertz"),
+    QStringLiteral("planck-js/contactDampingRatio"),
+    QStringLiteral("qml-box2d/contactHertz"),
+    QStringLiteral("qml-box2d/contactDampingRatio"),
+    // Neither has a world speed ceiling.
+    QStringLiteral("planck-js/maximumLinearSpeed"),
+    QStringLiteral("qml-box2d/maximumLinearSpeed"),
+    // Nor a hit event, so there is nothing to set a threshold on.
+    QStringLiteral("planck-js/hitEventThreshold"),
+    // Neither has a push speed to cap either; both say so in their own words.
+    QStringLiteral("planck-js/maxContactPushSpeed"),
+    QStringLiteral("qml-box2d/maxContactPushSpeed"),
+    // Planck fixes its restitution threshold in Settings; the converter says so.
+    QStringLiteral("planck-js/restitutionThreshold"),
+    // Nor a per-body sleep threshold: 2.3 and 2.4 decide it themselves.
+    QStringLiteral("planck-js/sleepThreshold"),
+    QStringLiteral("qml-box2d/sleepThreshold"),
+    // Both inset their polygons to collide flush with what is drawn, and make
+    // the mass up by adjusting the density -- so the number written is
+    // deliberately not the one the app uses, and the mass is what matches.
+    QStringLiteral("planck-js/density"),
+    QStringLiteral("qml-box2d/density"),
+    // Collision filters are written as literals, and in sixteen bits where the
+    // format has only sixteen: never as the decimal the scene keeps.
+    QStringLiteral("box2d-qt-project/categoryBits"),
+    QStringLiteral("box2d-qt-project/maskBits"),
+    QStringLiteral("planck-js/categoryBits"),
+    QStringLiteral("planck-js/maskBits"),
+    QStringLiteral("qml-box2d/categoryBits"),
+    QStringLiteral("qml-box2d/maskBits"),
+    // The contact margin is not written as a number: it becomes Box2D's length
+    // unit, which TheSceneScaleReachesEveryExport checks on its own.
+    QStringLiteral("box2d-qt-project/contactMargin"),
+    QStringLiteral("planck-js/contactMargin"),
+    QStringLiteral("qml-box2d/contactMargin"),
+};
 
 struct Output {
     bool ok = false;
@@ -186,20 +247,21 @@ TEST(Exporters, AVelocityMeansTheSameInTheExportAsInTheApp)
         const Output out = exportWith(converter, &scene);
         ASSERT_TRUE(out.ok) << converter.id.toStdString() << ": " << out.error.toStdString();
 
-        // The line that sets a body's starting velocity, whatever the format
-        // spells it -- looking for the bare number anywhere in the file finds
-        // every other 5 and 0.1 in it and proves nothing.
-        QString velocityLine;
+        // Every line that mentions a linear velocity, whatever the format
+        // spells it: a rule that sets one while the scene runs writes the same
+        // words, so the first match is not necessarily the body's own. Looking
+        // for the bare number anywhere in the file instead finds every other
+        // 5 and 0.1 in it and proves nothing.
+        QStringList velocityLines;
         for (const QString &line : out.text.split(QLatin1Char('\n'))) {
-            if (line.contains(QStringLiteral("inearVelocity"))) {
-                velocityLine = line.trimmed();
-                break;
-            }
+            if (line.contains(QStringLiteral("inearVelocity")))
+                velocityLines << line.trimmed();
         }
-        ASSERT_FALSE(velocityLine.isEmpty())
+        ASSERT_FALSE(velocityLines.isEmpty())
             << converter.id.toStdString() << " writes no starting velocity at all";
+        const QString velocityLine = velocityLines.join(QStringLiteral(" | "));
 
-        // Every number on that line, and one of them has to be the velocity.
+        // Every number on those lines, and one of them has to be the velocity.
         bool found = false;
         static const QRegularExpression number(QStringLiteral("-?\\d+(?:\\.\\d+)?(?:e-?\\d+)?"));
         auto it = number.globalMatch(velocityLine);
@@ -241,5 +303,125 @@ TEST(Exporters, TheSceneScaleReachesEveryExport)
         EXPECT_TRUE(setsTheScale)
             << converter.id.toStdString() << " writes nothing that sets Box2D's tolerances to"
             << " the scene's scale, so it will make contacts at a different distance to the app";
+    }
+}
+
+namespace {
+
+// How the app scales a property on its way to the solver. Everything the
+// engines do falls into three: a number that means the same to Box2D as it
+// does here, a length (and now a speed) divided by the scene's scale, and the
+// handful of quantities quoted at the reference scale of fifty units to the
+// metre -- gravity and the thresholds that answer to it. A converter has to
+// use the one the app uses, so the test says which that is rather than
+// accepting whichever of them makes the number turn up.
+enum class Scaled { Raw, ByScale, AtTheReferencePace };
+
+Scaled scalingOf(const QString &key)
+{
+    static const QSet<QString> pace {
+        QStringLiteral("gravityX"), QStringLiteral("gravityY"),
+        QStringLiteral("maximumLinearSpeed"), QStringLiteral("maxContactPushSpeed"),
+        QStringLiteral("restitutionThreshold"), QStringLiteral("hitEventThreshold"),
+        QStringLiteral("sleepThreshold"),
+    };
+    static const QSet<QString> byScale {
+        QStringLiteral("velocityX"), QStringLiteral("velocityY"),
+        QStringLiteral("tangentSpeed"),
+    };
+    if (pace.contains(key))
+        return Scaled::AtTheReferencePace;
+    if (byScale.contains(key))
+        return Scaled::ByScale;
+    return Scaled::Raw;
+}
+
+// The number the app itself hands the solver for this property.
+double asTheAppUsesIt(const QString &key, double value, double pixelsPerMeter)
+{
+    switch (scalingOf(key)) {
+    case Scaled::ByScale:
+        return value / pixelsPerMeter;
+    case Scaled::AtTheReferencePace:
+        return value * (physics::kReferencePixelsPerMeter / pixelsPerMeter);
+    case Scaled::Raw:
+        break;
+    }
+    return value;
+}
+
+bool carriesTheNumber(const QString &text, double wanted)
+{
+    for (int digits = 6; digits >= 3; --digits) {
+        if (text.contains(QString::number(wanted, 'g', digits)))
+            return true;
+    }
+    return false;
+}
+
+} // namespace
+
+// Every property the scene keeps is written into the export with the value the
+// app itself uses. Not "something changed" -- the number. This is the test the
+// exports never had: the old suite checked that every event and action was
+// present, and a converter could write a body's friction as somebody else's
+// default for years without a word.
+TEST(Exporters, EveryPropertyIsExportedWithTheValueTheAppUses)
+{
+    auto engine = physics::EngineRegistry::create(QStringLiteral("Box2D"));
+    ASSERT_TRUE(engine);
+    const double ppm = 1000.0;      // what buildEverything draws at
+
+    struct Where { const char *what; physics::PropertyList list; };
+    const QVector<Where> groups {
+        { "world", engine->worldProperties() },
+        { "body",  engine->bodyProperties() },
+        { "shape", engine->shapeProperties() },
+    };
+
+    for (const Where &group : groups) {
+        for (const physics::JointParam &property : group.list) {
+            if (!property.stored || property.type == physics::ParamType::Bool
+                || property.type == physics::ParamType::Choice) {
+                continue;   // flags and choices carry no number to look for
+            }
+            // A value nothing else in the scene happens to be, so finding it
+            // in the output means it came from here.
+            double wanted = qBound(property.minValue, 37.25, property.maxValue);
+            if (property.decimals == 0)
+                wanted = std::round(wanted);   // a count is a count on both sides
+            if (qFuzzyCompare(wanted, property.defaultValue.toDouble()))
+                continue;
+
+            CanvasScene scene;
+            buildEverything(&scene);
+            if (group.what == QLatin1String("world"))
+                scene.world().params[property.key] = wanted;
+            else if (group.what == QLatin1String("body"))
+                scene.bodies().first()->props().params[property.key] = wanted;
+            else
+                scene.shapes().first()->part().params[property.key] = wanted;
+
+            for (const SceneExporter::Converter &converter : shipped()) {
+                const Output out = exportWith(converter, &scene);
+                ASSERT_TRUE(out.ok) << converter.id.toStdString() << ": "
+                                    << out.error.toStdString();
+
+                const QString said = out.log.join(QLatin1Char('\n'));
+                const bool saidItCannot = said.contains(property.label, Qt::CaseInsensitive)
+                                          || said.contains(property.key, Qt::CaseInsensitive);
+                const bool knownGap =
+                    kCannotExpress.contains(converter.id + QLatin1Char('/') + property.key);
+                if (saidItCannot || knownGap)
+                    continue;
+
+                const double appUses = asTheAppUsesIt(property.key, wanted, ppm);
+                EXPECT_TRUE(carriesTheNumber(out.text, appUses))
+                    << converter.id.toStdString() << " writes the " << group.what << "'s "
+                    << property.key.toStdString() << " as something other than the " << appUses
+                    << " the app hands the solver (" << wanted
+                    << " in scene units), and never said it could not write it";
+            }
+        }
     }
 }

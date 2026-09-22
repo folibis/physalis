@@ -134,7 +134,6 @@
    <addaction name="actionNewScene"/>
    <addaction name="actionLoadScene"/>
    <addaction name="actionSaveScene"/>
-   <addaction name="actionSaveScreenshot"/>
    <addaction name="separator"/>
    <addaction name="actionAddShape"/>
    <addaction name="actionDelete"/>

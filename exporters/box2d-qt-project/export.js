@@ -218,11 +218,14 @@ function worldCode(world) {
               y: pickNumber(vals(world).gravityY, 9.81) };
     // b2SetLengthUnitsPerMeter scales Box2D's own defaults for these as well, so
     // a value is left out only when it matches the default after that call.
+    var v = vals(world);
+    // From the world's physics block, not from the world object itself: the
+    // settings live in the block, so reading them off the object found nothing
+    // and every one of these was written at its default whatever the scene said.
     var speed = function (key, fallback) {
-        var value = pickNumber(world[key], fallback) * MOTION;
+        var value = pickNumber(v[key], fallback) * MOTION;
         return differs(value, fallback * TOLERANCE) ? fnum(value) : null;
     };
-    var v = vals(world);
     return render("objects/world.cpp.tmpl", {
         PIXELS_PER_METER: num(PPM),
         LENGTH_UNITS: fnum(TOLERANCE),
@@ -236,6 +239,8 @@ function worldCode(world) {
         CONTACT_DAMPING_RATIO: differs(pickNumber(v.contactDampingRatio, 10), 10) ? fnum(v.contactDampingRatio) : null,
         ENABLE_SLEEP: v.enableSleep === false ? "false" : null,
         ENABLE_CONTINUOUS: v.enableContinuous === false ? "false" : null,
+        ENABLE_WARM_STARTING: v.enableWarmStarting === false ? "false" : null,
+        ENABLE_SPECULATIVE: v.enableSpeculative === false ? "false" : null,
         PRE_SOLVE: HELPERS.preSolve ? "notePreSolve" : null,
     });
 }

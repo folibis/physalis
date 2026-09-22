@@ -336,6 +336,12 @@ function worldCode(world) {
         missing("restitution threshold", "world");
     if (pickNumber(vals(world).subStepCount, 4) !== 4)
         missing("solver sub-steps", "world -- Planck iterates instead");
+    // Planck has no switch for either: warm starting is always on, and it has
+    // no speculative contacts at all.
+    if (vals(world).enableWarmStarting === false)
+        missing("switching warm starting off", "world -- Planck always warm-starts");
+    if (vals(world).enableSpeculative === false)
+        missing("switching speculative contacts off", "world -- Planck has none");
 
     // No pre-solve hook holding contacts back until shapes overlap: the polygon
     // inset already keeps shapes drawn flush from jamming, and holding contacts
