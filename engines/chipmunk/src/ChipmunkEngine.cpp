@@ -220,7 +220,9 @@ ChipmunkEngine::ShapeRecord *ChipmunkEngine::addShape(BodyRecord *record, cpShap
     }
     if (m_sensorWatched)
         made->sensorEvents = true;
-    made->tangentSpeed = number(values, "tangentSpeed", 0.0);
+    // Scene units a second, like the rule that sets it and the reading that
+    // gives it back -- both of which go through the scene's scale.
+    made->tangentSpeed = number(values, "tangentSpeed", 0.0) / m_pixelsPerMeter;
     cpShapeSetUserData(shape, made);
 
     cpSpaceAddShape(m_space, shape);
@@ -428,8 +430,11 @@ BodyHandle ChipmunkEngine::addBody(const BodyDesc &desc)
 
     // Quoted at the reference scale, the same as gravity. Scenery has none.
     if (desc.type != BodyType::Static) {
-        cpBodySetVelocity(body, cpv(number(values, "velocityX", 0.0) * m_motionScale,
-                                    number(values, "velocityY", 0.0) * m_motionScale));
+        // Scene units a second: what the table shows, what a rule sets and
+        // what a reading gives back. The pace scale is for gravity and the
+        // forces that answer to it, not for a speed the user typed in.
+        cpBodySetVelocity(body, cpv(number(values, "velocityX", 0.0) / m_pixelsPerMeter,
+                                    number(values, "velocityY", 0.0) / m_pixelsPerMeter));
         cpBodySetAngularVelocity(body,
                                  qDegreesToRadians(number(values, "angularVelocity", 0.0)));
     }

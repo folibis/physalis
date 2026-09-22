@@ -320,7 +320,9 @@ function bodyCode(body, index, colours) {
         Y: short(p.y),
         ROTATION: body.rotation ? short(body.rotation) : null,
         BODY_TYPE: body.type === "dynamic" || body.type === "kinematic" ? BODY_TYPES[body.type] : null,
-        LINEAR_VELOCITY: vx || vy ? "Qt.point(" + num(vx * MOTION) + ", " + num(vy * MOTION) + ")" : null,
+        // Scene units a second, divided by the scale -- see the same line in
+        // the Box2D/Qt converter.
+        LINEAR_VELOCITY: vx || vy ? "Qt.point(" + num(vx / PPM) + ", " + num(vy / PPM) + ")" : null,
         ANGULAR_VELOCITY: v.angularVelocity ? short(v.angularVelocity) : null,
         LINEAR_DAMPING: v.linearDamping ? plain(v.linearDamping) : null,
         ANGULAR_DAMPING: v.angularDamping ? plain(v.angularDamping) : null,

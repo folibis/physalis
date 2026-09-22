@@ -861,6 +861,8 @@ PropertyList Box2DEngine::worldProperties() const
         {QStringLiteral("contactMargin"), 2.0},
         {QStringLiteral("enableSleep"), true},
         {QStringLiteral("enableContinuous"), true},
+        {QStringLiteral("enableWarmStarting"), true},
+        {QStringLiteral("enableSpeculative"), true},
     }, QObject::tr("Solver"));
     return properties;
 }

@@ -286,8 +286,12 @@ function bodyCode(body, name, colours) {
         X: p.x || p.y ? short(p.x) : null,
         Y: p.x || p.y ? short(p.y) : null,
         ANGLE: body.rotation ? short(body.rotation) : null,
-        VELOCITY_X: moving ? fnum(velocity.x * MOTION) : null,
-        VELOCITY_Y: moving ? fnum(velocity.y * MOTION) : null,
+        // Scene units a second, as the editor means it: divided by the scale,
+        // the same as a position. It was once multiplied by the pace instead,
+        // which is what gravity is quoted at -- so an exported scene started
+        // its bodies fifty times faster than the app did.
+        VELOCITY_X: moving ? fnum(velocity.x / PPM) : null,
+        VELOCITY_Y: moving ? fnum(velocity.y / PPM) : null,
         ANGULAR_VELOCITY: v.angularVelocity ? short(v.angularVelocity) : null,
         LINEAR_DAMPING: v.linearDamping ? fnum(v.linearDamping) : null,
         ANGULAR_DAMPING: v.angularDamping ? fnum(v.angularDamping) : null,
@@ -350,7 +354,8 @@ function shapeCode(part, body, bodyName, colours, first, counts) {
         FRICTION: differs(pickNumber(v.friction, 0.6), 0.6) ? fnum(v.friction) : null,
         RESTITUTION: v.restitution ? fnum(v.restitution) : null,
         ROLLING_RESISTANCE: v.rollingResistance ? fnum(v.rollingResistance) : null,
-        TANGENT_SPEED: v.tangentSpeed ? short(v.tangentSpeed) : null,
+        // A speed, so it goes through the scale like every other one.
+        TANGENT_SPEED: v.tangentSpeed ? fnum(v.tangentSpeed / PPM) : null,
         CUSTOM_COLOR: colours.byType[body.type]
             ? colours.byType[body.type] + (v.isSensor ? " | SENSOR" : "") : null,
         CATEGORY: category !== "0x1ull" ? category : null,

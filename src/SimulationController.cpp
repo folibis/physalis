@@ -642,6 +642,12 @@ void SimulationController::advance(qreal wallSeconds)
 {
     if (!m_engine)
         return;
+    // Wall-clock time only moves a run that is running. Paused, the timer is
+    // stopped and this is never called -- but a paused run that steps when
+    // somebody hands it the clock is wrong on its own terms, and Step is what
+    // moves a paused run, one step at a time.
+    if (m_state != State::Running)
+        return;
 
     // Played at twice the speed, a second of ours is two of the world's, so it
     // is the time that is multiplied and never the step: the solver is handed

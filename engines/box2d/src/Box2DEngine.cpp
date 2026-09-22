@@ -139,7 +139,11 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
     // getters for them, so what the world starts with is remembered here.
     m_contactTuning = { worldDef.contactHertz, worldDef.contactDampingRatio,
                         worldDef.maxContactPushSpeed };
-    m_speculative = true;
+    // Neither of these is a b2WorldDef field: both are switched on the world
+    // once it exists, below. Speculative contacts have no getter either, so
+    // what the scene asked for is remembered here to answer with.
+    const bool warmStarting = flag(world, "enableWarmStarting", true);
+    m_speculative = flag(world, "enableSpeculative", true);
     // Not part of b2WorldDef -- it is an argument to every b2World_Step, so it
     // is kept rather than handed over.
     m_subStepCount = qBound(1, static_cast<int>(number(world, "subStepCount", 4.0)), 64);
@@ -147,6 +151,9 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
     b2SetAssertFcn(rememberAssertion);
     g_lastAssertion.clear();
     m_worldId = b2CreateWorld(&worldDef);
+
+    b2World_EnableWarmStarting(m_worldId, warmStarting);
+    b2World_EnableSpeculative(m_worldId, m_speculative);
 
     // Without this the shapes' Pre-Solve Events flag reaches Box2D and then
     // has nowhere to go. Box2D calls it only for shapes that asked, and only
@@ -328,10 +335,15 @@ BodyHandle Box2DEngine::addBody(const BodyDesc &desc)
     bodyDef.type = toB2BodyType(desc.type);
     bodyDef.position = toMeters(desc.position);
     bodyDef.rotation = b2MakeRot(static_cast<float>(qDegreesToRadians(desc.rotationDegrees)));
-    // Same reasoning as gravity: quoted at the reference scale.
+    // Scene units a second, the way the rest of the application means it: a
+    // rule setting Velocity X divides by the scale, and reading it back
+    // multiplies by it. This once multiplied by the pace scale instead, as
+    // gravity does -- so a velocity typed into the table came out fifty times
+    // larger when the run read it back, and nothing told the user which of the
+    // two numbers the body was actually moving at.
     bodyDef.linearVelocity =
-        b2Vec2 { static_cast<float>(number(body, "velocityX", 0.0) * m_motionScale),
-                 static_cast<float>(number(body, "velocityY", 0.0) * m_motionScale) };
+        b2Vec2 { static_cast<float>(number(body, "velocityX", 0.0) / m_pixelsPerMeter),
+                 static_cast<float>(number(body, "velocityY", 0.0) / m_pixelsPerMeter) };
     bodyDef.angularVelocity =
         static_cast<float>(qDegreesToRadians(number(body, "angularVelocity", 0.0)));
     bodyDef.linearDamping = static_cast<float>(number(body, "linearDamping", 0.0));
@@ -376,7 +388,10 @@ BodyHandle Box2DEngine::addBody(const BodyDesc &desc)
             static_cast<float>(std::max(0.0, number(shape, "restitution", 0.0)));
         shapeDef.material.rollingResistance =
             static_cast<float>(std::max(0.0, number(shape, "rollingResistance", 0.0)));
-        shapeDef.material.tangentSpeed = static_cast<float>(number(shape, "tangentSpeed", 0.0));
+        // Scene units a second, like every other speed the table shows -- and
+        // like the rule that sets this one and the reading that gives it back.
+        shapeDef.material.tangentSpeed =
+            static_cast<float>(number(shape, "tangentSpeed", 0.0) / m_pixelsPerMeter);
         shapeDef.filter.categoryBits = bits(shape, "categoryBits", 1);
         shapeDef.filter.maskBits = bits(shape, "maskBits", ~uint64_t(0));
         shapeDef.filter.groupIndex = static_cast<int>(number(shape, "groupIndex", 0.0));

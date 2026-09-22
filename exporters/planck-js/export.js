@@ -380,8 +380,10 @@ function bodyCode(body, name) {
         X: p.x || p.y ? short(p.x) : null,
         Y: p.x || p.y ? short(p.y) : null,
         ANGLE: body.rotation ? short(body.rotation) : null,
-        VELOCITY_X: moving ? num(velocity.x * MOTION) : null,
-        VELOCITY_Y: moving ? num(velocity.y * MOTION) : null,
+        // Scene units a second, divided by the scale -- see the same line in
+        // the Box2D/Qt converter.
+        VELOCITY_X: moving ? num(velocity.x / PPM) : null,
+        VELOCITY_Y: moving ? num(velocity.y / PPM) : null,
         ANGULAR_VELOCITY: v.angularVelocity ? short(v.angularVelocity) : null,
         LINEAR_DAMPING: v.linearDamping ? num(v.linearDamping) : null,
         ANGULAR_DAMPING: v.angularDamping ? num(v.angularDamping) : null,
