@@ -38,6 +38,20 @@ namespace {
 
 const QString kEventPrefix = QStringLiteral("@event:");
 
+// QFormLayout::setRowVisible arrived in Qt 6.4, and this tree still builds
+// against Qt 5.15. Hiding both items of the row is what it does underneath.
+void setFormRowVisible(QFormLayout *form, int row, bool on)
+{
+    if (!form || row < 0 || row >= form->rowCount())
+        return;
+    for (QFormLayout::ItemRole role : { QFormLayout::LabelRole, QFormLayout::FieldRole }) {
+        if (QLayoutItem *item = form->itemAt(row, role)) {
+            if (QWidget *widget = item->widget())
+                widget->setVisible(on);
+        }
+    }
+}
+
 } // namespace
 
 class ObjectComboBox : public QComboBox
@@ -425,7 +439,7 @@ QWidget *RulesPanel::buildCard(int index)
     row.source = new ObjectComboBox([this] { return sourceChoices(); }, card);
     row.source->setEmptyText(tr("(no objects yet)"));
     row.source->selectData(rule.subjectName);
-    connect(row.source, &QComboBox::currentIndexChanged, this, [this, index](int) {
+    connect(row.source, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
@@ -449,7 +463,7 @@ QWidget *RulesPanel::buildCard(int index)
         },
         card);
     row.event->setEmptyText(tr("(nothing readable)"));
-    connect(row.event, &QComboBox::currentIndexChanged, this, [this, index](int) {
+    connect(row.event, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
         if (m_building)
             return;
         applyWatchChoice(index, m_rows[index].event->currentData().toString());
@@ -474,7 +488,7 @@ QWidget *RulesPanel::buildCard(int index)
     row.compare->setCurrentIndex(row.compare->findData(Rule::compareName(rule.compare)));
     row.compare->setToolTip(tr("The action runs when this becomes true, not for as long"
                                  " as it stays true."));
-    connect(row.compare, &QComboBox::currentIndexChanged, this, [this, index](int) {
+    connect(row.compare, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
@@ -497,7 +511,7 @@ QWidget *RulesPanel::buildCard(int index)
     // --- then ------------------------------------------------------------
     row.target = new ObjectComboBox([this] { return targetChoices(); }, card);
     row.target->selectData(rule.targetName);
-    connect(row.target, &QComboBox::currentIndexChanged, this, [this, index](int) {
+    connect(row.target, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
@@ -520,7 +534,7 @@ QWidget *RulesPanel::buildCard(int index)
         },
         card);
     row.property->setEmptyText(tr("(nothing changeable)"));
-    connect(row.property, &QComboBox::currentIndexChanged, this, [this, index](int) {
+    connect(row.property, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
@@ -563,7 +577,7 @@ QWidget *RulesPanel::buildCard(int index)
     row.op->addItem(tr("Add"), static_cast<int>(Rule::Op::Add));
     row.op->setCurrentIndex(row.op->findData(static_cast<int>(rule.op)));
     row.op->setToolTip(tr("Negate flips the sign, which is how a motor reverses at a limit."));
-    connect(row.op, &QComboBox::currentIndexChanged, this, [this, index](int) {
+    connect(row.op, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
@@ -582,7 +596,7 @@ QWidget *RulesPanel::buildCard(int index)
     row.valueMode->addItem(tr("Property"), true);
     row.valueMode->setToolTip(tr("A number you type, or one taken from another "
                                  "object while the rule runs."));
-    connect(row.valueMode, &QComboBox::currentIndexChanged, this, [this, index](int) {
+    connect(row.valueMode, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
@@ -945,7 +959,7 @@ void RulesPanel::refreshConditionEditor(int index)
         combo->setObjectName(QStringLiteral("conditionOther"));
         combo->setToolTip(tr("Which object, or anything."));
         combo->selectData(rule.conditionValue.toString());
-        connect(combo, &QComboBox::currentIndexChanged, this, [this, index, combo](int) {
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, combo](int) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
@@ -963,7 +977,7 @@ void RulesPanel::refreshConditionEditor(int index)
         combo->setToolTip(param->tooltip);
         combo->setCurrentIndex(qBound(0, rule.conditionValue.toInt(),
                                       param->choices.size() - 1));
-        connect(combo, &QComboBox::currentIndexChanged, this, [this, index](int at) {
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int at) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
@@ -981,7 +995,7 @@ void RulesPanel::refreshConditionEditor(int index)
         combo->setCurrentIndex(rule.conditionValue.toBool() ? 0 : 1);
         if (const physics::JointParam *param = describe(rule.subjectName, rule.conditionKey))
             combo->setToolTip(param->tooltip);
-        connect(combo, &QComboBox::currentIndexChanged, this, [this, index, combo](int) {
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, combo](int) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
@@ -997,7 +1011,7 @@ void RulesPanel::refreshConditionEditor(int index)
         spin->setDecimals(1);
         spin->setSingleStep(10.0);
         spin->setValue(rule.conditionValue.toDouble());
-        connect(spin, &QDoubleSpinBox::valueChanged, this, [this, index](double v) {
+        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, index](double v) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
@@ -1215,7 +1229,7 @@ QWidget *RulesPanel::buildActionParamEditor(int index, const Rule &rule,
         spin->setSingleStep(param.step);
         spin->setToolTip(param.tooltip);
         spin->setValue(current.toDouble());
-        connect(spin, &QDoubleSpinBox::valueChanged, this,
+        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
                 [this, index, key = param.key](double v) {
                     if (m_building)
                         return;
@@ -1285,7 +1299,7 @@ void RulesPanel::applyWatchChoice(int index, const QString &chosen)
     if (chosen.startsWith(kEventPrefix)) {
         updated.eventId = chosen.mid(kEventPrefix.size());
         updated.conditionKey.clear();
-        if (updated.conditionValue.typeId() != QMetaType::QString
+        if (updated.conditionValue.userType() != QMetaType::QString
             || !eventNamesOther(updated.subjectName, updated.eventId))
             updated.conditionValue = QString();
     } else {
@@ -1486,7 +1500,7 @@ void RulesPanel::refreshValueEditor(int index)
         combo->setToolTip(param->tooltip);
         combo->setCurrentIndex(qBound(0, rule.value.toInt(), param->choices.size() - 1));
         seedShownValue(combo->currentIndex());
-        connect(combo, &QComboBox::currentIndexChanged, this, [this, index](int at) {
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int at) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
@@ -1532,7 +1546,7 @@ void RulesPanel::refreshValueEditor(int index)
         // Read back rather than assumed: the range the engine declared may not
         // reach zero, and the box has already clamped into it.
         seedShownValue(spin->value());
-        connect(spin, &QDoubleSpinBox::valueChanged, this, [this, index](double v) {
+        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, index](double v) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
@@ -1553,8 +1567,7 @@ void RulesPanel::refreshValueEditor(int index)
         row.valueMode->setVisible(canSource);
         row.valueMode->setCurrentIndex(row.valueMode->findData(sourced));
     }
-    if (row.form)
-        row.form->setRowVisible(row.sourceRow, sourced);
+    setFormRowVisible(row.form, row.sourceRow, sourced);
     // The two are alternatives, so the typed editor goes away entirely rather
     // than sitting there greyed out next to the object that replaced it.
     row.valueHolder->setVisible(!sourced);
@@ -1567,7 +1580,7 @@ void RulesPanel::refreshValueEditor(int index)
         from->setMinimumContentsLength(10);
         from->selectData(rule.sourceObject);
         from->setToolTip(tr("Which object the value is read from."));
-        connect(from, &QComboBox::currentIndexChanged, this, [this, index](int) {
+        connect(from, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
@@ -1593,7 +1606,7 @@ void RulesPanel::refreshValueEditor(int index)
         what->setMinimumContentsLength(10);
         what->selectData(rule.sourceProperty);
         what->setToolTip(tr("Which of its properties to read."));
-        connect(what, &QComboBox::currentIndexChanged, this, [this, index](int) {
+        connect(what, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
@@ -1611,7 +1624,7 @@ void RulesPanel::refreshValueEditor(int index)
         offset->setValue(rule.sourceOffset);
         offset->setToolTip(tr("Added to whatever that property reads. Zero to "
                               "take it as it comes."));
-        connect(offset, &QDoubleSpinBox::valueChanged, this, [this, index](double v) {
+        connect(offset, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, index](double v) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);

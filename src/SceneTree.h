@@ -3,6 +3,7 @@
 #pragma once
 
 #include <QPointer>
+#include <QSet>
 #include <QWidget>
 
 class CanvasScene;

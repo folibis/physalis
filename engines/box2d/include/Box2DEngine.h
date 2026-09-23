@@ -4,6 +4,7 @@
 
 #include "IPhysicsEngine.h"
 #include <box2d/box2d.h>
+#include <QSet>
 #include <vector>
 
 namespace physics {

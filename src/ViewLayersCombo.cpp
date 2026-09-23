@@ -82,7 +82,7 @@ bool ViewLayersCombo::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == view()->viewport() && event->type() == QEvent::MouseButtonRelease) {
         const auto *click = static_cast<QMouseEvent *>(event);
-        const QModelIndex index = view()->indexAt(click->position().toPoint());
+        const QModelIndex index = view()->indexAt(click->pos());
         if (index.isValid()) {
             toggleRow(index.row());
             // Swallowed, so the list stays open for the next one.

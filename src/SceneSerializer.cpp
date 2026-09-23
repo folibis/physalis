@@ -146,7 +146,7 @@ void partFromJson(const QJsonObject &o, physics::ShapePart *part)
     for (const char *bits : { "categoryBits", "maskBits" }) {
         const QString key = QLatin1String(bits);
         const QVariant value = part->params.value(key);
-        if (value.typeId() == QMetaType::QString)
+        if (value.userType() == QMetaType::QString)
             part->params.insert(key, double(bitsFromJson(o.value(key), 0)));
     }
 }

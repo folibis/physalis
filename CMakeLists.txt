@@ -28,7 +28,70 @@ set(CMAKE_AUTOUIC ON)
 # Forms live in ui/, not beside the sources that use them.
 set(CMAKE_AUTOUIC_SEARCH_PATHS ${CMAKE_CURRENT_SOURCE_DIR}/ui)
 
-find_package(Qt6 COMPONENTS Widgets Svg Qml Test REQUIRED)
+set(PHYSALIS_QT_COMPONENTS Widgets Svg Qml Test)
+
+# Which Qt to use is settled before asking for it. CMake keeps the first Qt on
+# CMAKE_PREFIX_PATH even when it turns out to be missing a module, and a second
+# QtConfig cannot be loaded after it -- the first one's helpers are
+# include-guarded, so the second's go missing. A distribution's Qt without its
+# Svg and Qml packages would otherwise hide a complete Qt further down the path.
+if(Qt6_DIR)
+    set(QT_VERSION_MAJOR 6)
+elseif(Qt5_DIR)
+    set(QT_VERSION_MAJOR 5)
+else()
+    foreach(_major 6 5)
+        foreach(_prefix IN LISTS CMAKE_PREFIX_PATH)
+            file(GLOB _dirs "${_prefix}/lib/cmake/Qt${_major}"
+                            "${_prefix}/lib/*/cmake/Qt${_major}")
+            foreach(_dir IN LISTS _dirs)
+                get_filename_component(_root "${_dir}" DIRECTORY)
+                set(_complete TRUE)
+                foreach(_c IN LISTS PHYSALIS_QT_COMPONENTS)
+                    if(NOT EXISTS "${_root}/Qt${_major}${_c}/Qt${_major}${_c}Config.cmake")
+                        set(_complete FALSE)
+                        break()
+                    endif()
+                endforeach()
+                if(_complete)
+                    set(Qt${_major}_DIR "${_dir}" CACHE PATH "Qt package directory" FORCE)
+                    set(QT_VERSION_MAJOR ${_major})
+                    break()
+                endif()
+            endforeach()
+            if(QT_VERSION_MAJOR)
+                break()
+            endif()
+        endforeach()
+        if(QT_VERSION_MAJOR)
+            break()
+        endif()
+    endforeach()
+endif()
+
+if(QT_VERSION_MAJOR)
+    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${PHYSALIS_QT_COMPONENTS})
+else()
+    # Nothing on the prefix path carried all of them; let the default search
+    # have its say. QUIET because Qt5Config turns a missing required component
+    # into an aborted configure, and the message below is the better one.
+    find_package(Qt6 QUIET COMPONENTS ${PHYSALIS_QT_COMPONENTS})
+    if(Qt6_FOUND)
+        set(QT_VERSION_MAJOR 6)
+    else()
+        find_package(Qt5 5.15 QUIET COMPONENTS ${PHYSALIS_QT_COMPONENTS})
+        if(Qt5_FOUND)
+            set(QT_VERSION_MAJOR 5)
+        endif()
+    endif()
+endif()
+
+if(NOT QT_VERSION_MAJOR)
+    message(FATAL_ERROR
+        "Physalis needs Qt Widgets, Svg, Qml and Test, from Qt6 or Qt5 (5.15 or "
+        "later). Nothing on CMAKE_PREFIX_PATH (${CMAKE_PREFIX_PATH}) provides all "
+        "four. Point it at a complete Qt, or set Qt6_DIR.")
+endif()
 
 include(GNUInstallDirs)
 
@@ -44,7 +107,10 @@ else()
         CACHE STRING "Where the program and its plugins are installed")
 endif()
 
-qt_standard_project_setup()
+# Qt 6.3+ only; what it would set is already set explicitly above.
+if(QT_VERSION_MAJOR GREATER_EQUAL 6)
+    qt_standard_project_setup()
+endif()
 
 # Everything, dependencies included. The engines are shared libraries and the
 # physics they wrap is fetched and built static, and a static library without
@@ -205,7 +271,7 @@ target_include_directories(PhysalisCore PUBLIC
 # No Box2D here any more: the engine lives in a plugin. Qml is here for
 # QJSEngine alone -- export converters are JavaScript, and nothing in the
 # application uses QML itself.
-target_link_libraries(PhysalisCore PUBLIC Qt6::Widgets Qt6::Svg Qt6::Qml)
+target_link_libraries(PhysalisCore PUBLIC Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Svg Qt${QT_VERSION_MAJOR}::Qml)
 
 configure_file(cmake/Version.h.in "${CMAKE_BINARY_DIR}/generated/Version.h" @ONLY)
 
@@ -221,12 +287,12 @@ target_link_libraries(Physalis PRIVATE PhysalisCore)
 # behind the window and keeps it there for as long as the program runs.
 set_target_properties(Physalis PROPERTIES WIN32_EXECUTABLE TRUE MACOSX_BUNDLE TRUE)
 
-# QJSEngine runs the export converters, and Qt6Qml is not among the DLLs that
-# the rest of the Qt runtime was deployed with.
+# QJSEngine runs the export converters, and the Qml DLL is not among those the
+# rest of the Qt runtime was deployed with.
 if(WIN32)
     add_custom_command(TARGET Physalis POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:Qt6::Qml> $<TARGET_FILE_DIR:Physalis>)
+                $<TARGET_FILE:Qt${QT_VERSION_MAJOR}::Qml> $<TARGET_FILE_DIR:Physalis>)
 endif()
 
 if(WITH_BOX2D)
@@ -274,11 +340,19 @@ if(WIN32)
     #
     # Nothing of Qt is shipped on Linux: the package asks the distribution for
     # it instead.
-    get_target_property(PHYSALIS_QMAKE Qt6::qmake IMPORTED_LOCATION)
+    get_target_property(PHYSALIS_QMAKE Qt${QT_VERSION_MAJOR}::qmake IMPORTED_LOCATION)
     get_filename_component(PHYSALIS_QT_TOOLS "${PHYSALIS_QMAKE}" DIRECTORY)
     find_program(PHYSALIS_WINDEPLOYQT windeployqt HINTS "${PHYSALIS_QT_TOOLS}")
 
     if(PHYSALIS_WINDEPLOYQT)
+        # The on-screen keyboard drags Qt Quick in behind it, and a desktop
+        # editor has no use for either. Qt5's windeployqt has no
+        # --skip-plugin-types and stops at an option it does not know.
+        set(PHYSALIS_WINDEPLOYQT_SKIP)
+        if(QT_VERSION_MAJOR GREATER_EQUAL 6)
+            set(PHYSALIS_WINDEPLOYQT_SKIP
+                --skip-plugin-types qmltooling,designer,qmllint,platforminputcontexts)
+        endif()
         install(CODE "
             message(STATUS \"Collecting the Qt runtime with windeployqt\")
             execute_process(
@@ -290,9 +364,7 @@ if(WIN32)
                         # QJSEngine is the only part of Qml this uses: there is
                         # no QML in the program, and nothing to scan for.
                         --no-quick-import
-                        # The on-screen keyboard drags Qt Quick in behind it, and a
-                        # desktop editor has no use for either.
-                        --skip-plugin-types qmltooling,designer,qmllint,platforminputcontexts
+                        ${PHYSALIS_WINDEPLOYQT_SKIP}
                         --compiler-runtime
                         \"\${CMAKE_INSTALL_PREFIX}/${PHYSALIS_INSTALL_DIR}/Physalis.exe\"
                 COMMAND_ERROR_IS_FATAL ANY)

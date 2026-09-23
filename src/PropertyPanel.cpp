@@ -154,7 +154,7 @@ void PropertyPanel::addRow(QTableWidget *table, const PropertyRow &row)
 
     QToolButton *resetButton = nullptr;
     if (row.defaultValue.isValid()) {
-        const QString defaultText = row.defaultValue.typeId() == QMetaType::Bool
+        const QString defaultText = row.defaultValue.userType() == QMetaType::Bool
                                         ? (row.defaultValue.toBool() ? tr("on") : tr("off"))
                                         : row.defaultValue.toString();
 
@@ -203,7 +203,7 @@ void PropertyPanel::addRow(QTableWidget *table, const PropertyRow &row)
         const bool fineGrained = (row.maxValue - row.minValue) <= 2.0;
         spin->setDecimals(row.decimals >= 0 ? row.decimals : (fineGrained ? 2 : 1));
         spin->setSingleStep(row.step > 0.0 ? row.step : (fineGrained ? 0.05 : 1.0));
-        connect(spin, &QDoubleSpinBox::valueChanged, this, [this, setter](double v) {
+        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, setter](double v) {
             if (m_updating)
                 return;
             setter(v);
@@ -632,7 +632,7 @@ bool differsFromDefault(const QVariant &value, const QVariant &def)
     if (!def.isValid())
         return false;
 
-    switch (def.typeId()) {
+    switch (def.userType()) {
     case QMetaType::Double:
     case QMetaType::Float:
         return qAbs(value.toDouble() - def.toDouble()) > 1e-6;

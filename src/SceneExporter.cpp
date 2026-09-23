@@ -15,6 +15,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QObject>
+#include <QQmlEngine>
 #include <QTextStream>
 #include <QTransform>
 
@@ -38,6 +39,19 @@ bool resolveInside(const QString &base, const QString &relative, QString *resolv
         return false;
     *resolved = full;
     return true;
+}
+
+// UTF-8 whichever Qt this was built against. Not a portability nicety: Qt5's
+// QTextStream defaults to the machine's locale codec where Qt6 defaults to
+// UTF-8, so leaving it unsaid would make a converter's templates -- and the
+// project it writes -- depend on where the program was started.
+void useUtf8(QTextStream &stream)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    stream.setEncoding(QStringConverter::Utf8);
+#else
+    stream.setCodec("UTF-8");
+#endif
 }
 
 // What the script is given to reach the world with. Reading is scoped to the
@@ -71,7 +85,7 @@ public:
             return {};
         }
         QTextStream in(&file);
-        in.setEncoding(QStringConverter::Utf8);
+        useUtf8(in);
         return in.readAll();
     }
 
@@ -98,7 +112,7 @@ public:
             return false;
         }
         QTextStream out(&file);
-        out.setEncoding(QStringConverter::Utf8);
+        useUtf8(out);
         out << contents;
         m_written << relative;
         return true;
@@ -385,7 +399,9 @@ bool run(const Converter &converter, const CanvasScene *scene,
 
     ExportIo io(&js, converter.folder, outputFolder);
     const QJSValue ioValue = js.newQObject(&io);
-    js.setObjectOwnership(&io, QJSEngine::CppOwnership);
+    // QQmlEngine's rather than QJSEngine's: the same static call, and the only
+    // one of the two that exists on Qt5 as well.
+    QQmlEngine::setObjectOwnership(&io, QQmlEngine::CppOwnership);
 
     const QJSValue result = js.evaluate(source, script.fileName());
     if (result.isError()) {
@@ -395,7 +411,8 @@ bool run(const Converter &converter, const CanvasScene *scene,
                         .arg(result.toString()));
     }
 
-    const QJSValue entry = js.globalObject().property(QStringLiteral("exportScene"));
+    // Not const: QJSValue::call() only became const in Qt6.
+    QJSValue entry = js.globalObject().property(QStringLiteral("exportScene"));
     if (!entry.isCallable())
         return fail(QObject::tr("%1 defines no exportScene(scene, io) function.").arg(kScriptFile));
 

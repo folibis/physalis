@@ -8,6 +8,8 @@
 #include "RayPropertyPane.h"
 #include "SensorPropertyPane.h"
 
+#include <typeinfo>
+
 PropertyPaneFactory::PropertyPaneFactory(QObject *parent)
     : QObject(parent)
 {
@@ -15,7 +17,7 @@ PropertyPaneFactory::PropertyPaneFactory(QObject *parent)
 
 PropertyPane *PropertyPaneFactory::paneFor(ShapeItem *item)
 {
-    const std::type_index key(typeid(*item));
+    const std::size_t key = typeid(*item).hash_code();
     auto it = m_shapePanes.constFind(key);
     PropertyPane *pane;
     if (it == m_shapePanes.constEnd()) {

@@ -1397,9 +1397,12 @@ void CanvasScene::addWatch(const Watch &watch)
 void CanvasScene::removeWatch(const QString &objectName, const QString &propertyKey)
 {
     const int before = m_watches.size();
-    m_watches.removeIf([&](const Watch &w) {
-        return w.objectName == objectName && w.propertyKey == propertyKey;
-    });
+    m_watches.erase(std::remove_if(m_watches.begin(), m_watches.end(),
+                                   [&](const Watch &w) {
+                                       return w.objectName == objectName
+                                              && w.propertyKey == propertyKey;
+                                   }),
+                    m_watches.end());
     if (m_watches.size() != before)
     {
         emit watchesChanged();

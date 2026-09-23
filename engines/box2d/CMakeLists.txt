@@ -20,6 +20,11 @@ FetchContent_Declare(box2d
 )
 FetchContent_MakeAvailable(box2d)
 
+# CMAKE_AUTOMOC is on for the project and reaches this target too, which adds a
+# C++ moc file to a C library that has no Qt in it -- and that file then
+# inherits Box2D's own -Wmissing-prototypes, a C-only flag, and warns.
+set_target_properties(box2d PROPERTIES AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+
 add_library(physalis_box2d SHARED
     include/Box2DEngine.h
     src/Box2DPlugin.cpp
@@ -40,7 +45,7 @@ target_include_directories(physalis_box2d PRIVATE
 
 # Qt for the container and string types the interface is expressed in; Box2D
 # because that is what this plugin actually wraps.
-target_link_libraries(physalis_box2d PRIVATE Qt6::Core Qt6::Gui box2d)
+target_link_libraries(physalis_box2d PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Gui box2d)
 
 # Beside the executable, which is the only place the loader looks.
 set_target_properties(physalis_box2d PROPERTIES

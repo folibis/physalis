@@ -126,7 +126,7 @@ void FullScreenView::mousePressEvent(QMouseEvent *event)
         return;
     }
     if (canvas && event->button() == Qt::LeftButton
-        && canvas->beginShot(mapToScene(event->position().toPoint()))) {
+        && canvas->beginShot(mapToScene(event->pos()))) {
         event->accept();
         return;
     }
@@ -137,7 +137,7 @@ void FullScreenView::mouseMoveEvent(QMouseEvent *event)
 {
     auto *canvas = qobject_cast<CanvasScene *>(scene());
     if (canvas && canvas->isAimingShot()) {
-        canvas->aimShot(mapToScene(event->position().toPoint()));
+        canvas->aimShot(mapToScene(event->pos()));
         event->accept();
         return;
     }

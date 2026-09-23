@@ -11,6 +11,15 @@
 
 int main(int argc, char *argv[])
 {
+    // Qt6 scales for a high-DPI screen by itself and has deprecated both of
+    // these; Qt5 does neither unless asked, and an unasked Qt5 build draws the
+    // canvas and its SVG icons at the wrong size on a scaled display. They have
+    // to be set before the QApplication exists, which is why they are here.
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+#endif
+
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("Physalis"));
     app.setWindowIcon(Icons::app());

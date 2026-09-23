@@ -83,9 +83,9 @@ std::vector<PropertyRow> SensorPropertyPane::rows(EditorMode mode) const
     PropertyRow movement;
     movement.label = QObject::tr("Movement");
     movement.type = PropertyFieldType::Choice;
-    movement.choices = { QObject::tr("Fixed in place"),
-                         QObject::tr("Moved by rules"),
-                         QObject::tr("Falls and is pushed") };
+    movement.choices = QStringList{ QObject::tr("Fixed in place"),
+                                    QObject::tr("Moved by rules"),
+                                    QObject::tr("Falls and is pushed") };
     movement.getter = [props] { return int(props->type); };
     movement.setter = [props, changed](const QVariant &v) {
         props->type = static_cast<physics::BodyType>(v.toInt());

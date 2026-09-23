@@ -26,6 +26,11 @@ set_target_properties(chipmunk_static PROPERTIES
     C_EXTENSIONS ON
     # Linked into a shared library, so it has to be relocatable on Linux too.
     POSITION_INDEPENDENT_CODE ON
+    # Nothing of Qt is in here; the project's AUTOMOC would only add a C++ moc
+    # file to a C library.
+    AUTOMOC OFF
+    AUTOUIC OFF
+    AUTORCC OFF
 )
 # Without NDEBUG Chipmunk prints a banner for every space it makes, and its
 # soft assertions abort the process instead of reporting anything. The plugin
@@ -51,7 +56,7 @@ target_include_directories(physalis_chipmunk PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(physalis_chipmunk PRIVATE Qt6::Core Qt6::Gui chipmunk_static)
+target_link_libraries(physalis_chipmunk PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Gui chipmunk_static)
 
 # Beside the executable, which is the only place the loader looks.
 set_target_properties(physalis_chipmunk PROPERTIES

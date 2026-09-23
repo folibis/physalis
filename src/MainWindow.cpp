@@ -260,7 +260,7 @@ MainWindow::MainWindow(QWidget *parent)
         m_speedCombo->addItem(speedLabel(factor), factor);
     m_speedCombo->setCurrentIndex(m_speedCombo->findData(1.0));
     m_transportActions << toolBar->addWidget(m_speedCombo);
-    connect(m_speedCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+    connect(m_speedCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
         const double factor = m_speedCombo->itemData(index).toDouble();
         m_simulation->setSpeed(factor);
         saveSettingsToFile(currentSettingsSnapshot());
@@ -336,7 +336,7 @@ MainWindow::MainWindow(QWidget *parent)
         else
             m_scaleCombo->setCurrentText(tr("%1%").arg(qRound(m_scene->currentScale())));
     });
-    connect(m_scaleCombo, &QComboBox::activated, this, [this](int index) {
+    connect(m_scaleCombo, qOverload<int>(&QComboBox::activated), this, [this](int index) {
         QString text = m_scaleCombo->itemText(index);
         text.remove(QLatin1Char('%'));
         m_scene->setCurrentScale(text.toDouble());
@@ -1342,7 +1342,7 @@ void MainWindow::updateLogOverlay()
 
         QString shown = tr("--");
         if (value.isValid()) {
-            shown = value.typeId() == QMetaType::Bool
+            shown = value.userType() == QMetaType::Bool
                         ? (value.toBool() ? tr("true") : tr("false"))
                         : formatLogNumber(value.toDouble());
         }

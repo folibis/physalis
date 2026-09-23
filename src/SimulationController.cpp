@@ -816,7 +816,7 @@ bool SimulationController::evaluate(
     if (!current.isValid())
         return false; // nothing by that name, or nothing readable by that key
 
-    if (current.typeId() == QMetaType::Bool) {
+    if (current.userType() == QMetaType::Bool) {
         const bool a = current.toBool();
         const bool b = rule.conditionValue.toBool();
         switch (rule.compare) {

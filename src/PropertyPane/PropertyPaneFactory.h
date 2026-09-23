@@ -4,7 +4,7 @@
 
 #include <QObject>
 #include <QHash>
-#include <typeindex>
+#include <cstddef>
 
 class ShapeItem;
 class CanvasScene;
@@ -26,7 +26,7 @@ public:
     PropertyPane *paneForRay(CanvasScene *scene);
 
 private:
-    QHash<std::type_index, PropertyPane *> m_shapePanes;
+    QHash<std::size_t, PropertyPane *> m_shapePanes;
     PropertyPane *m_fieldPane = nullptr;
     PropertyPane *m_physicsPane = nullptr;
     PropertyPane *m_jointsPane = nullptr;
