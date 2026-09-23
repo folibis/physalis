@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 # Major and minor are set here; the build number counts up on its own.
-project(Physalis VERSION 0.1 LANGUAGES C CXX)
+project(Physalis VERSION 0.2 LANGUAGES C CXX)
 
 # windres ships beside the MinGW compiler but is usually not on PATH, and CMake
 # then records the bare name, which fails at build time. Resolve it explicitly
@@ -30,36 +30,47 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS ${CMAKE_CURRENT_SOURCE_DIR}/ui)
 
 set(PHYSALIS_QT_COMPONENTS Widgets Svg Qml Test)
 
+# True when dir is a QtN package directory with every component above beside it.
+function(_physalis_qt_complete dir major out)
+    get_filename_component(_root "${dir}" DIRECTORY)
+    foreach(_c IN LISTS PHYSALIS_QT_COMPONENTS)
+        if(NOT EXISTS "${_root}/Qt${major}${_c}/Qt${major}${_c}Config.cmake")
+            set(${out} FALSE PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+    set(${out} TRUE PARENT_SCOPE)
+endfunction()
+
 # Which Qt to use is settled before asking for it. CMake keeps the first Qt on
 # CMAKE_PREFIX_PATH even when it turns out to be missing a module, and a second
 # QtConfig cannot be loaded after it -- the first one's helpers are
 # include-guarded, so the second's go missing. A distribution's Qt without its
 # Svg and Qml packages would otherwise hide a complete Qt further down the path.
-if(Qt6_DIR)
-    set(QT_VERSION_MAJOR 6)
-elseif(Qt5_DIR)
-    set(QT_VERSION_MAJOR 5)
-else()
-    foreach(_major 6 5)
-        foreach(_prefix IN LISTS CMAKE_PREFIX_PATH)
-            file(GLOB _dirs "${_prefix}/lib/cmake/Qt${_major}"
-                            "${_prefix}/lib/*/cmake/Qt${_major}")
-            foreach(_dir IN LISTS _dirs)
-                get_filename_component(_root "${_dir}" DIRECTORY)
-                set(_complete TRUE)
-                foreach(_c IN LISTS PHYSALIS_QT_COMPONENTS)
-                    if(NOT EXISTS "${_root}/Qt${_major}${_c}/Qt${_major}${_c}Config.cmake")
-                        set(_complete FALSE)
-                        break()
-                    endif()
-                endforeach()
-                if(_complete)
-                    set(Qt${_major}_DIR "${_dir}" CACHE PATH "Qt package directory" FORCE)
-                    set(QT_VERSION_MAJOR ${_major})
-                    break()
-                endif()
-            endforeach()
-            if(QT_VERSION_MAJOR)
+#
+# A cached Qt<N>_DIR is checked rather than believed: the fallback below leaves
+# one behind for the Qt it rejected, and on the next run of an existing build
+# directory that would pin the choice to the Qt that was not good enough.
+foreach(_major 6 5)
+    if(QT_VERSION_MAJOR)
+        break()
+    endif()
+    if(Qt${_major}_DIR)
+        _physalis_qt_complete("${Qt${_major}_DIR}" ${_major} _complete)
+        if(_complete)
+            set(QT_VERSION_MAJOR ${_major})
+            break()
+        endif()
+        unset(Qt${_major}_DIR CACHE)
+    endif()
+    foreach(_prefix IN LISTS CMAKE_PREFIX_PATH)
+        file(GLOB _dirs "${_prefix}/lib/cmake/Qt${_major}"
+                        "${_prefix}/lib/*/cmake/Qt${_major}")
+        foreach(_dir IN LISTS _dirs)
+            _physalis_qt_complete("${_dir}" ${_major} _complete)
+            if(_complete)
+                set(Qt${_major}_DIR "${_dir}" CACHE PATH "Qt package directory" FORCE)
+                set(QT_VERSION_MAJOR ${_major})
                 break()
             endif()
         endforeach()
@@ -67,7 +78,7 @@ else()
             break()
         endif()
     endforeach()
-endif()
+endforeach()
 
 if(QT_VERSION_MAJOR)
     find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS ${PHYSALIS_QT_COMPONENTS})
@@ -484,7 +495,10 @@ else()
     if(NOT PHYSALIS_DEB_ARCH)
         set(PHYSALIS_DEB_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
     endif()
-    set(CPACK_ARCHIVE_FILE_NAME
+    # The tarball's name. CPACK_ARCHIVE_FILE_NAME is what the archive generators
+    # document, and it does not reach this one -- only CPACK_PACKAGE_FILE_NAME
+    # does, which the .deb and .rpm then override with their own below.
+    set(CPACK_PACKAGE_FILE_NAME
         "physalis-${PHYSALIS_FULL_VERSION}-${PHYSALIS_DISTRO}-${CMAKE_SYSTEM_PROCESSOR}")
     set(CPACK_DEBIAN_PACKAGE_NAME "physalis")
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Physalis")

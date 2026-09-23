@@ -119,6 +119,57 @@ jobs:
           name: debian
           path: build/*.deb
 
+  # 22.04 carries no Qt6 Svg or Qml, so the package for it is built against the
+  # Qt5 the distribution does have -- the same sources, since the tree builds on
+  # either. The two .deb files do not collide: the distribution is part of the
+  # name, physalis_0.1.58_ubuntu22.04_amd64.deb against _ubuntu24.04_.
+  debian-qt5:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt and the build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake g++ file \
+            qtbase5-dev libqt5svg5-dev qtdeclarative5-dev libgl1-mesa-dev
+
+      # Built as the tag says: v0.1.58 and v.0.1.58 both mean 0.1.58. Started by
+      # hand there is no tag, and the empty value leaves CMake to use the
+      # version in CMakeLists.txt.
+      - name: Configure
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          version="${version#.}"
+          case "$version" in ''|*[!0-9.]*) version="" ;; esac
+          echo "building as: ${version:-the version in CMakeLists.txt}"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWITH_TESTS=OFF -DPHYSALIS_VERSION="$version"
+
+      # Which Qt was chosen is the one thing worth reading here: the runner has
+      # no Qt6 Svg, and a package built against half a Qt6 would be the bug.
+      - name: Check it picked Qt5
+        run: |
+          grep -E '^Qt[56]_DIR' build/CMakeCache.txt
+          grep -q '^Qt5_DIR' build/CMakeCache.txt
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Package
+        run: cmake --build build --target package
+
+      # What the package ended up depending on: the one thing worth reading in
+      # this log when an installed copy will not start.
+      - name: What the package requires
+        run: |
+          ls -l build/*.deb
+          dpkg-deb --info build/*.deb | sed -n '/Depends/,+2p'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debian-qt5
+          path: build/*.deb
+
   # The same again on Fedora, where rpmbuild writes the Requires itself.
   redhat:
     runs-on: ubuntu-latest
@@ -167,7 +218,7 @@ jobs:
   # run says plainly which job failed. Each job's own artifact is there either
   # way, on the run page.
   publish:
-    needs: [windows, debian, redhat]
+    needs: [windows, debian, debian-qt5, redhat]
     if: always() && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -185,6 +236,7 @@ jobs:
           files: |
             packages/windows/*
             packages/debian/*
+            packages/debian-qt5/*
             packages/redhat/*
           # A release made by hand for this tag keeps its notes, but not its
           # flags: GitHub's own form ticks "pre-release" for a tag it cannot

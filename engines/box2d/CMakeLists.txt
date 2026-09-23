@@ -18,7 +18,20 @@ FetchContent_Declare(box2d
     # Physalis package to Physalis.
     EXCLUDE_FROM_ALL
 )
-FetchContent_MakeAvailable(box2d)
+# FetchContent_Declare only learned EXCLUDE_FROM_ALL in CMake 3.28. Below that
+# it is accepted and ignored, and Box2D's headers and static library end up in
+# the .deb -- Ubuntu 22.04 carries 3.22, so this is not hypothetical. Adding the
+# subdirectory by hand is the same exclusion, and the single-argument
+# FetchContent_Populate it needs is deprecated from 3.30, hence the split.
+if(CMAKE_VERSION VERSION_LESS 3.28)
+    FetchContent_GetProperties(box2d)
+    if(NOT box2d_POPULATED)
+        FetchContent_Populate(box2d)
+        add_subdirectory(${box2d_SOURCE_DIR} ${box2d_BINARY_DIR} EXCLUDE_FROM_ALL)
+    endif()
+else()
+    FetchContent_MakeAvailable(box2d)
+endif()
 
 # CMAKE_AUTOMOC is on for the project and reaches this target too, which adds a
 # C++ moc file to a C library that has no Qt in it -- and that file then
