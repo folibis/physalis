@@ -30,5 +30,7 @@ QIcon explosion() { return QIcon(QStringLiteral(":/icons/explosion.svg")); }
 QIcon world() { return QIcon(QStringLiteral(":/icons/world.svg")); }
 QIcon ray() { return QIcon(QStringLiteral(":/icons/ray.svg")); }
 QIcon warning() { return QIcon(QStringLiteral(":/icons/warning.svg")); }
+QIcon variable() { return QIcon(QStringLiteral(":/icons/variable.svg")); }
+QIcon log() { return QIcon(QStringLiteral(":/icons/log.svg")); }
 
 } // namespace Icons

@@ -15,6 +15,7 @@
 #include "PropertyPanel.h"
 #include "SceneTree.h"
 #include "RulesPanel.h"
+#include "VariablesPanel.h"
 #include "UndoStack.h"
 #include "RectangleItem.h"
 #include "CircleItem.h"
@@ -146,6 +147,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_ui->propertyPanel->setScene(m_scene);
     m_ui->sceneTree->setScene(m_scene);
     m_ui->rulesPanel->setScene(m_scene);
+    m_ui->variablesPanel->setScene(m_scene);
     connect(m_ui->rulesPanel, &RulesPanel::incompleteCountChanged, this,
             &MainWindow::showIncompleteRules);
     showIncompleteRules(m_ui->rulesPanel->incompleteCount());
@@ -1270,6 +1272,13 @@ QString MainWindow::logLabelFor(const CanvasScene::Watch &watch) const
     // Spring, a Limit and a Motor each with a switch called "Enabled", so
     // without the heading the row names none of the three. What the file
     // carries stands only where the catalogue has nothing to say.
+    // A variable is named by the scene rather than by a catalogue, and the
+    // name is the label: there is nothing else it could be called.
+    if (watch.objectName == Rule::variables()) {
+        const SceneVariable *variable = m_scene->variableNamed(watch.propertyKey);
+        return variable ? variable->name : watch.label;
+    }
+
     auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName());
     if (!engine)
         return watch.label;

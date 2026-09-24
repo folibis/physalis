@@ -11,6 +11,7 @@
 #include "PolygonItem.h"
 #include "EngineRegistry.h"
 #include "Rule.h"
+#include "SceneVariable.h"
 
 #include <QFile>
 #include <QHash>
@@ -376,6 +377,17 @@ QJsonObject save(const CanvasScene *scene)
     if (!rays.isEmpty())
         document.insert("rays", rays);
 
+    QJsonArray variables;
+    for (const SceneVariable &variable : scene->variables()) {
+        QJsonObject o;
+        o.insert("name", variable.name);
+        o.insert("type", SceneVariable::typeName(variable.type));
+        o.insert("value", QJsonValue::fromVariant(variable.value()));
+        variables.append(o);
+    }
+    if (!variables.isEmpty())
+        document.insert("variables", variables);
+
     // One condition and one action are written straight onto the rule, the way
     // they always were, so a plain rule makes the same file it used to and an
     // older reader still understands it. Anything more goes into the two arrays
@@ -663,6 +675,18 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
         joint->setAxisScene(pointFromJson(o.value("axis").toObject(), QPointF(1.0, 0.0)));
         joint->setCollideConnected(o.value("collideConnected").toBool());
     }
+
+    QVector<SceneVariable> variables;
+    for (const QJsonValue &v : document.value("variables").toArray()) {
+        const QJsonObject o = v.toObject();
+        SceneVariable variable;
+        variable.name = o.value("name").toString();
+        variable.type = SceneVariable::typeFromName(o.value("type").toString());
+        variable.initial = SceneVariable::coerce(variable.type, o.value("value").toVariant());
+        if (!variable.name.isEmpty())
+            variables.append(variable);
+    }
+    scene->setVariables(variables);
 
     // A condition and an action read the same whether they came off the rule
     // itself or out of one of the arrays, which is what lets a file written

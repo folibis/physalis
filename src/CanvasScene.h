@@ -13,6 +13,7 @@
 
 #include <functional>
 #include "Rule.h"
+#include "SceneVariable.h"
 #include "PhysicsTypes.h"
 #include "JointTypes.h"
 
@@ -90,8 +91,9 @@ public:
 
     ExplosionItem *selectedExplosion() const { return m_selectedExplosion; }
 
-    // Every name in use, across shapes, bodies and joints alike -- they share
-    // one namespace because a rule can name any of them in the same field.
+    // Every name in use, across shapes, bodies, joints, rays and explosions
+    // alike -- they share one namespace because a rule can name any of them in
+    // the same field.
     QSet<QString> takenNames(const QObject *except = nullptr) const;
     QString uniqueName(const QString &desired, const QObject *except = nullptr) const;
 
@@ -148,6 +150,21 @@ public:
 
     // --- rules ------------------------------------------------------------
     // What the scene does while it runs, as data.
+    // --- variables --------------------------------------------------------
+    // Values the scene carries that no engine knows about. See SceneVariable.
+    const QVector<SceneVariable> &variables() const { return m_variables; }
+    void setVariables(const QVector<SceneVariable> &variables);
+    // The same, without announcing it: for an editor writing back the value it
+    // is itself showing, where a rebuild would delete the control mid-edit.
+    void replaceVariables(const QVector<SceneVariable> &variables) { m_variables = variables; }
+    // A variable renamed is a property key in every rule that reads or writes
+    // it, and in every row of the log. They follow, the way they follow any
+    // other rename.
+    void renameVariableInRules(const QString &previous, const QString &current);
+    const SceneVariable *variableNamed(const QString &name) const;
+    // A name not already taken by another variable, from the one asked for.
+    QString uniqueVariableName(const QString &desired, int except = -1) const;
+
     const QVector<Rule> &rules() const { return m_rules; }
     QVector<Rule> &rules() { return m_rules; }
     void setRules(const QVector<Rule> &rules);
@@ -540,6 +557,7 @@ signals:
     void simulationRunningChanged(bool running);
     void watchesChanged();
     void rulesChanged();
+    void variablesChanged();
 
     // See notifyEdit(). The undo stack is the only thing that listens.
     void editCommitted(const QString &label, const QString &mergeKey);
@@ -633,6 +651,7 @@ private:
     // Set between a shape leaving a body and the queued prune that follows.
     bool m_prunePending = false;
     QVector<Rule> m_rules;
+    QVector<SceneVariable> m_variables;
     // Owned; bodies and joints are deleted with the scene.
     QVector<PhysicsBody *> m_bodies;
     QVector<Joint *> m_joints;

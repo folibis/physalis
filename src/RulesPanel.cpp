@@ -244,6 +244,8 @@ void RulesPanel::connectScene()
 {
     if (m_scene) {
         connect(m_scene, &CanvasScene::rulesChanged, this, &RulesPanel::rebuild);
+        // A variable added, removed or renamed changes what a rule can name.
+        connect(m_scene, &CanvasScene::variablesChanged, this, &RulesPanel::rebuild);
         connect(m_scene, &CanvasScene::bodiesChanged, this, &RulesPanel::rebuild);
         connect(m_scene, &CanvasScene::jointsChanged, this, &RulesPanel::rebuild);
         // Editing rules mid-run would change the thing being watched.
@@ -507,13 +509,20 @@ QWidget *RulesPanel::buildJoiner(int index, QWidget *parent)
             [this, index, combo](int) {
         if (m_building)
             return;
-        Rule updated = m_scene->rules().at(index);
+        // Read here, acted on later: every other gap shows the same word and
+        // has to follow, which means rebuilding the card -- and that deletes
+        // this very box while its own signal is still being delivered. The
+        // crash at the top of CLAUDE.md, arrived at by a new route.
         const Rule::Join picked = Rule::joinFromName(combo->currentData().toString());
-        if (updated.join == picked)
-            return;
-        updated.join = picked;
-        // Every other gap shows the same word and has to follow.
-        commitAndRebuild(index, updated, tr("Edit rule"));
+        QMetaObject::invokeMethod(this, [this, index, picked] {
+            if (!m_scene || index >= m_scene->rules().size())
+                return;
+            Rule updated = m_scene->rules().at(index);
+            if (updated.join == picked)
+                return;
+            updated.join = picked;
+            commitAndRebuild(index, updated, tr("Edit rule"));
+        }, Qt::QueuedConnection);
     });
 
     layout->addWidget(combo, 0);
@@ -880,6 +889,10 @@ QVector<RuleChoice> RulesPanel::sourceChoices() const
         return choices;
     // The world itself, so a rule can fire on how long it has been running.
     choices.append({Rule::world(), tr("World"), Icons::world()});
+    // And the scene's own variables, as one object carrying all of them. Left
+    // out where there are none, so a scene that uses none never sees it.
+    if (!m_scene->variables().isEmpty())
+        choices.append({Rule::variables(), tr("Variables"), Icons::variable()});
     for (RayItem *ray : m_scene->rays())
         choices.append({ray->name(), ray->name(), Icons::ray()});
     for (Joint *joint : m_scene->joints())
@@ -900,6 +913,8 @@ QVector<RuleChoice> RulesPanel::sourceObjectChoices() const
         return choices;
 
     choices.append({Rule::world(), tr("World"), Icons::world()});
+    if (!m_scene->variables().isEmpty())
+        choices.append({Rule::variables(), tr("Variables"), Icons::variable()});
     for (RayItem *ray : m_scene->rays())
         choices.append({ray->name(), ray->name(), Icons::ray()});
     for (Joint *joint : m_scene->joints())
@@ -935,6 +950,8 @@ QVector<RuleChoice> RulesPanel::targetChoices() const
     // The world is a target as well as a subject: gravity and the solver's own
     // thresholds can be changed while it runs.
     choices.append({Rule::world(), tr("World"), Icons::world()});
+    if (!m_scene->variables().isEmpty())
+        choices.append({Rule::variables(), tr("Variables"), Icons::variable()});
     for (Joint *joint : m_scene->joints())
         choices.append({joint->name(), joint->name(),
                         ObjectIcons::forJoint(m_scene->jointTypeColor(joint->typeId()))});
@@ -1065,6 +1082,14 @@ QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
         choices.append({QStringLiteral("hit"), tr("Hit")});
         choices.append({QStringLiteral("hitX"), tr("Hit X")});
         choices.append({QStringLiteral("hitY"), tr("Hit Y")});
+        return choices;
+    }
+
+    // Each variable is a property of the one object holding them. They raise
+    // no events: a rule watching one for a change says so with "changed to".
+    if (name == Rule::variables()) {
+        for (const SceneVariable &variable : m_scene->variables())
+            choices.append({variable.name, variable.name});
         return choices;
     }
 
@@ -1267,6 +1292,12 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
                                : p.label});
         }
     };
+
+    if (name == Rule::variables()) {
+        for (const SceneVariable &variable : m_scene->variables())
+            result.append({variable.name, variable.name});
+        return result;
+    }
 
     if (name == Rule::world()) {
         addSettable(engine->worldProperties(), false);
@@ -1885,6 +1916,16 @@ const physics::JointParam *RulesPanel::describe(const QString &objectName,
     auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName());
     if (!engine)
         return nullptr;
+
+    // A variable describes itself: the rule cards ask what a property is and
+    // render it, and have no idea this one belongs to no engine.
+    if (objectName == Rule::variables()) {
+        const SceneVariable *variable = m_scene->variableNamed(key);
+        if (!variable)
+            return nullptr;
+        found = variable->describe();
+        return &found;
+    }
 
     physics::PropertyList candidates;
     bool matched = false;

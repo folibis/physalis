@@ -198,6 +198,11 @@
          <string>Rules</string>
         </attribute>
        </widget>
+       <widget class="VariablesPanel" name="variablesPanel">
+        <attribute name="title">
+         <string>Variables</string>
+        </attribute>
+       </widget>
       </widget>
      </item>
     </layout>
@@ -567,6 +572,12 @@
    <class>RulesPanel</class>
    <extends>QWidget</extends>
    <header>RulesPanel.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>VariablesPanel</class>
+   <extends>QWidget</extends>
+   <header>VariablesPanel.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

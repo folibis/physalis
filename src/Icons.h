@@ -37,5 +37,9 @@ QIcon world();
 QIcon ray();
 // An incomplete rule: the card wears it, and so does the Rules tab.
 QIcon warning();
+// The scene's own variables, as one object in the rule lists.
+QIcon variable();
+// The readout of watched values, pinned to the canvas during a run.
+QIcon log();
 
 } // namespace Icons

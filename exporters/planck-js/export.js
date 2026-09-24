@@ -117,6 +117,7 @@ function exportScene(scene, io) {
     CHANGES = 0;
     CHANGE_READS = [];
     CHANGE_SAVES = [];
+    declareVariables(scene);
     COUNTERS = { time: false, frame: false };
     STREAMS = { begun: false, ended: false, hits: false, about: false };
     HITS = null;
@@ -1246,11 +1247,51 @@ function rayDrawing(scene) {
 
 // --- what a name refers to, and what can be read or written on it ----------
 
+// --- the scene's own variables ---------------------------------------------
+//
+// A score, a count of lives, a flag saying which way a lift is going: values
+// the scene carries that no engine has heard of. Each becomes a global the
+// step code reads and writes, set back to what the scene declares whenever the
+// world is built -- which is what the editor does when a run starts.
+var VARIABLES = null;
+
+function declareVariables(scene) {
+    VARIABLES = {};
+    var variables = scene.variables || [];
+    for (var i = 0; i < variables.length; ++i) {
+        var variable = variables[i];
+        if (!variable.name)
+            continue;
+    var start = variable.type === "bool" ? (variable.value ? "true" : "false")
+                  : variable.type === "int" ? String(Math.round(Number(variable.value) || 0))
+                  : short(Number(variable.value) || 0);
+        var ident = identifier(variable.name, "variable");
+        TAKEN[ident] = true;
+        remember("var", ident, start);
+        VARIABLES[variable.name] = { handle: ident, type: variable.type };
+    }
+}
+
+// A variable as a property, which is all the rule machinery needs it to be:
+// something to read and something to write. The unit is the plain one, since a
+// variable is a number the scene made up rather than a length or an angle.
+function variableProperty(key) {
+    var variable = VARIABLES ? VARIABLES[key] : null;
+    if (!variable)
+        return null;
+    var unit = variable.type === "bool" ? "bool" : variable.type === "int" ? "int" : "num";
+    return prop(unit, variable.handle, function (value) {
+        return [variable.handle + " = " + value + ";"];
+    });
+}
+
 function resolve(scene, name) {
     if (!name)
         return null;
     if (name === "@world")
         return { kind: "world" };
+    if (name === "@variables")
+        return { kind: "variables" };
     var rays = scene.rays || [];
     for (var r = 0; r < rays.length; ++r) {
         if (rays[r].name === name)
@@ -1308,6 +1349,7 @@ function prop(unit, read, write) { return { unit: unit, read: read, write: write
 
 function property(place, key) {
     if (place.kind === "world") return worldProperty(key);
+    if (place.kind === "variables") return variableProperty(key);
     if (place.kind === "body")  return bodyProperty(place.handle, key);
     if (place.kind === "shape") return place.outline ? null : shapeProperty(place, key);
     if (place.kind === "joint") return jointProperty(place, key);

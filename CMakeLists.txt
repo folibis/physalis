@@ -209,8 +209,11 @@ add_library(PhysalisCore OBJECT
     src/SceneTree.h
     src/SceneTree.cpp
     src/Rule.h
+    src/SceneVariable.h
     src/RulesPanel.h
     src/RulesPanel.cpp
+    src/VariablesPanel.h
+    src/VariablesPanel.cpp
     src/UndoStack.h
     src/UndoStack.cpp
     src/PropertyPane/PropertyPane.h

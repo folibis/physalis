@@ -110,6 +110,11 @@ struct Rule {
     // going and how many steps it has taken.
     static QString world() { return QStringLiteral("@world"); }
 
+    // The scene's own variables, addressed as properties of one object the way
+    // time and the frame count are properties of the world -- so a scene with
+    // twenty of them still puts one entry in the object lists.
+    static QString variables() { return QStringLiteral("@variables"); }
+
     // Two actions the *application* performs, not the engine: no physics
     // engine knows a run is being watched, let alone how to end one. They are
     // offered on the world because that is what a rule names when it means the

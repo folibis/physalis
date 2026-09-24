@@ -183,6 +183,10 @@ void SimulationController::start()
     m_skippedJoints.clear();
 
     m_ruleState.clear();
+    // Each run starts them where the scene says, whatever the last one left.
+    m_variables.clear();
+    for (const SceneVariable &variable : m_scene->variables())
+        m_variables.insert(variable.name, variable.value());
     // No step before the first one, so nothing has changed yet.
     m_watchedNow.clear();
     m_watchedBefore.clear();
@@ -337,6 +341,12 @@ QVariant SimulationController::initialValue(const QString &name, const QString &
     if (isActive())
         return readValue(name, key);
 
+    // A variable is the scene's, not a world's: what it starts at is the whole
+    // answer, and building a world to ask would find nothing.
+    if (name == Rule::variables()) {
+        const SceneVariable *variable = m_scene->variableNamed(key);
+        return variable ? variable->value() : QVariant();
+    }
     if (name == Rule::world()) {
         if (key == QLatin1String("time") || key == QLatin1String("frame"))
             return 0.0;
@@ -1006,6 +1016,16 @@ QVariant SimulationController::readValue(const QString &name, const QString &key
         return {};
     }
 
+    if (name == Rule::variables()) {
+        const auto it = m_variables.constFind(key);
+        // One declared after the run started is not in the world yet; what it
+        // says it starts at is the honest answer.
+        if (it != m_variables.constEnd())
+            return *it;
+        const SceneVariable *declared = m_scene->variableNamed(key);
+        return declared ? declared->value() : QVariant();
+    }
+
     if (name == Rule::world()) {
         if (key == QLatin1String("time"))
             return m_elapsedSeconds;
@@ -1260,6 +1280,20 @@ void SimulationController::applyAction(const RuleAction &action,
         }
         return applied;
     };
+
+    // The scene's own variables, which no engine has heard of. Kept to the
+    // type the variable was declared with, so a whole number counted by a
+    // half stays a whole number.
+    if (target == Rule::variables()) {
+        const SceneVariable *declared = m_scene->variableNamed(action.propertyKey);
+        if (!declared)
+            return;
+        const QVariant updated = compute(m_variables.value(action.propertyKey,
+                                                           declared->value()));
+        m_variables.insert(action.propertyKey,
+                           SceneVariable::coerce(declared->type, updated));
+        return;
+    }
 
     // The world is not in the scene, so it is answered before anything is
     // looked up by name. Nothing of it is stored in the document: the change

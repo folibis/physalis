@@ -95,6 +95,23 @@ QSet<QString> CanvasScene::takenNames(const QObject *except) const
             taken.insert(joint->name());
         }
     }
+    // Rays and explosions too: a rule names them in the same field it names a
+    // body in, so a second ray called what the first one is makes that rule
+    // ambiguous -- and left out of here, every ray was called ray_1.
+    for (RayItem *ray : m_rays)
+    {
+        if (ray != except)
+        {
+            taken.insert(ray->name());
+        }
+    }
+    for (ExplosionItem *explosion : m_explosions)
+    {
+        if (explosion != except)
+        {
+            taken.insert(explosion->name());
+        }
+    }
     return taken;
 }
 
@@ -229,7 +246,7 @@ ExplosionItem *CanvasScene::addExplosion(const QPointF &scenePos)
     auto *explosion = new ExplosionItem();
     explosion->setPos(scenePos);
     addItem(explosion);
-    explosion->setName(uniqueName(Naming::nextName(ExplosionItem::typeName()), nullptr));
+    explosion->setName(Naming::nextName(ExplosionItem::typeName(), takenNames(explosion)));
     explosion->setVisible(m_editorMode != EditorMode::Edit);
     m_explosions.append(explosion);
     emit explosionsChanged();
@@ -252,7 +269,7 @@ RayItem *CanvasScene::addRay(const QPointF &scenePos)
     auto *ray = new RayItem();
     ray->setPos(scenePos);
     addItem(ray);
-    ray->setName(uniqueName(Naming::nextName(RayItem::typeName()), nullptr));
+    ray->setName(Naming::nextName(RayItem::typeName(), takenNames(ray)));
     ray->setVisible(m_editorMode != EditorMode::Edit);
     m_rays.append(ray);
     emit raysChanged();
@@ -1445,8 +1462,107 @@ void CanvasScene::setWatches(const QVector<Watch> &watches)
     emit watchesChanged();
 }
 
+void CanvasScene::setVariables(const QVector<SceneVariable> &variables)
+{
+    m_variables = variables;
+    emit variablesChanged();
+}
+
+void CanvasScene::renameVariableInRules(const QString &previous, const QString &current)
+{
+    if (previous == current)
+    {
+        return;
+    }
+
+    bool touched = false;
+    for (Rule &rule : m_rules)
+    {
+        for (RuleCondition &condition : rule.conditions)
+        {
+            if (condition.subjectName == Rule::variables() && condition.conditionKey == previous)
+            {
+                condition.conditionKey = current;
+                touched = true;
+            }
+        }
+        for (RuleAction &action : rule.actions)
+        {
+            if (action.targetName == Rule::variables() && action.propertyKey == previous)
+            {
+                action.propertyKey = current;
+                touched = true;
+            }
+            if (action.sourceObject == Rule::variables() && action.sourceProperty == previous)
+            {
+                action.sourceProperty = current;
+                touched = true;
+            }
+        }
+    }
+    if (touched)
+    {
+        emit rulesChanged();
+    }
+
+    for (Watch &watch : m_watches)
+    {
+        if (watch.objectName == Rule::variables() && watch.propertyKey == previous)
+        {
+            watch.propertyKey = current;
+            if (watch.label == previous)
+            {
+                watch.label = current;
+            }
+            emit watchesChanged();
+        }
+    }
+}
+
+const SceneVariable *CanvasScene::variableNamed(const QString &name) const
+{
+    for (const SceneVariable &variable : m_variables)
+    {
+        if (variable.name == name)
+        {
+            return &variable;
+        }
+    }
+    return nullptr;
+}
+
+QString CanvasScene::uniqueVariableName(const QString &desired, int except) const
+{
+    const QString base = desired.isEmpty() ? QStringLiteral("variable") : desired;
+    QString name = base;
+    int suffix = 1;
+    const auto taken = [this, except](const QString &candidate) {
+        for (int i = 0; i < m_variables.size(); ++i)
+        {
+            if (i != except && m_variables.at(i).name == candidate)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+    while (taken(name))
+    {
+        name = base + QString::number(++suffix);
+    }
+    return name;
+}
+
 QVariant CanvasScene::readSceneValue(const QString &objectName, const QString &key) const
 {
+    // Before a run, a variable reads as whatever it starts at. During one the
+    // simulation answers instead, since that is where it has been counting.
+    if (objectName == Rule::variables())
+    {
+        const SceneVariable *variable = variableNamed(key);
+        return variable ? variable->value() : QVariant();
+    }
+
     // A key may be namespaced ("shape.rotation") or bare ("motorSpeed", as the
     // engine names it). Bare keys are resolved against whichever object bears
     // the name, so the log does not care which table a row came from.

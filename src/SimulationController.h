@@ -161,6 +161,10 @@ private:
     bool evaluate(const Rule &rule,
                   const QHash<QString, QHash<QString, QStringList>> &raised,
                   QString *other) const;
+    // The scene's variables while a run is going: started from what each one
+    // declares and gone when it stops, like every position on the canvas.
+    QVariantMap m_variables;
+
     // What a "changed to" or "changed from" condition reads, this step and the
     // step before. Keyed by the property rather than by the rule, since the
     // value it had belongs to the property.

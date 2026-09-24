@@ -8,6 +8,7 @@
 #include "PhysicsBody.h"
 #include "RectangleItem.h"
 #include "Rule.h"
+#include "SceneVariable.h"
 #include "SceneExporter.h"
 #include "ShapeItem.h"
 
@@ -110,6 +111,30 @@ void buildEverything(CanvasScene *scene)
     touch.actions[0].targetName = wheelBody->name();
     touch.actions[0].actionId = Rule::initStateAction();
 
+    // A variable, counted by one rule and read by another, so the generated
+    // code has to declare it, reset it and both read and write it.
+    SceneVariable score;
+    score.name = QStringLiteral("score");
+    score.type = SceneVariable::Type::Integer;
+    score.initial = 4;
+    scene->setVariables({ score });
+
+    Rule counts;
+    counts.conditions[0].subjectName = crate->name();
+    counts.conditions[0].eventId = QStringLiteral("contactBegin");
+    counts.actions[0].targetName = Rule::variables();
+    counts.actions[0].propertyKey = QStringLiteral("score");
+    counts.actions[0].op = Rule::Op::Add;
+    counts.actions[0].value = 1;
+
+    Rule reads;
+    reads.conditions[0].subjectName = Rule::variables();
+    reads.conditions[0].conditionKey = QStringLiteral("score");
+    reads.conditions[0].compare = Rule::Compare::Greater;
+    reads.conditions[0].conditionValue = 9;
+    reads.actions[0].targetName = crateBody->name();
+    reads.actions[0].actionId = Rule::initStateAction();
+
     // And one watching a reading change rather than compare, since that is the
     // only condition the generated code has to keep state of its own for.
     Rule changed;
@@ -122,7 +147,7 @@ void buildEverything(CanvasScene *scene)
     changed.actions[0].op = Rule::Op::Subtract;
     changed.actions[0].value = 0.125;
 
-    scene->setRules({ rule, hit, touch, changed });
+    scene->setRules({ rule, hit, touch, changed, counts, reads });
 }
 
 // A world setting a format has no answer for. Each is named with the reason,

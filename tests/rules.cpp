@@ -6,7 +6,10 @@
 #include "IPhysicsEngine.h"
 #include "PhysicsBody.h"
 #include "RectangleItem.h"
+#include "ExplosionItem.h"
+#include "RayItem.h"
 #include "Rule.h"
+#include "SceneVariable.h"
 #include "SceneSerializer.h"
 #include "ShapeItem.h"
 #include "SimulationController.h"
@@ -648,6 +651,121 @@ TEST(Rules, IncrementAndDecrementMoveTheValueFromWhereItStands)
     }
 }
 
+// The scene's own variables: rules count with them, they start each run where
+// the scene says, and they are gone again when it stops.
+TEST(Rules, VariablesAreCountedWithAndResetByEachRun)
+{
+    Bench bench(QStringLiteral("Box2D"), 0.0);
+
+    SceneVariable score;
+    score.name = QStringLiteral("score");
+    score.type = SceneVariable::Type::Integer;
+    score.initial = 10;
+
+    SceneVariable running;
+    running.name = QStringLiteral("running");
+    running.type = SceneVariable::Type::Bool;
+    running.initial = false;
+    bench.scene.setVariables({ score, running });
+
+    // Every fifth frame, count the score on by three and set the flag.
+    Rule count;
+    count.conditions[0].subjectName = Rule::world();
+    count.conditions[0].conditionKey = QStringLiteral("frame");
+    count.conditions[0].compare = Rule::Compare::Multiple;
+    count.conditions[0].conditionValue = 5;
+    count.actions.resize(2);
+    count.actions[0].targetName = Rule::variables();
+    count.actions[0].propertyKey = QStringLiteral("score");
+    count.actions[0].op = Rule::Op::Add;
+    count.actions[0].value = 3;
+    count.actions[1].targetName = Rule::variables();
+    count.actions[1].propertyKey = QStringLiteral("running");
+    count.actions[1].op = Rule::Op::Set;
+    count.actions[1].value = true;
+
+    // And a rule reading one back: once the score passes 15, clone the box.
+    Rule reward;
+    reward.conditions[0].subjectName = Rule::variables();
+    reward.conditions[0].conditionKey = QStringLiteral("score");
+    reward.conditions[0].compare = Rule::Compare::Greater;
+    reward.conditions[0].conditionValue = 15;
+    reward.actions[0].targetName = bench.box->name();
+    reward.actions[0].actionId = Rule::cloneAction();
+    reward.actions[0].actionParams.insert(Rule::cloneXParam(), 300.0);
+    reward.actions[0].actionParams.insert(Rule::cloneYParam(), 0.0);
+
+    bench.scene.setRules({ count, reward });
+
+    // Before a run, a variable reads as what it starts at.
+    EXPECT_EQ(bench.sim.initialValue(Rule::variables(), QStringLiteral("score")).toInt(), 10);
+
+    bench.run(6); // frame 5 counted once
+    EXPECT_EQ(bench.sim.readValue(Rule::variables(), QStringLiteral("score")).toInt(), 13);
+    EXPECT_TRUE(bench.sim.readValue(Rule::variables(), QStringLiteral("running")).toBool());
+    EXPECT_EQ(bench.scene.bodies().size(), 2) << "the reward fired before the score passed 15";
+
+    bench.run(5); // frame 10
+    EXPECT_EQ(bench.sim.readValue(Rule::variables(), QStringLiteral("score")).toInt(), 16);
+    EXPECT_EQ(bench.scene.bodies().size(), 3) << "a rule reading a variable did not fire";
+
+    // Renaming one carries every rule and log row that named it along, the way
+    // renaming a body does -- otherwise each of them would quietly go
+    // unfinished the moment the name changed.
+    bench.scene.addWatch({ Rule::variables(), QStringLiteral("score"),
+                           QStringLiteral("score") });
+    QVector<SceneVariable> renamed = bench.scene.variables();
+    renamed[0].name = QStringLiteral("points");
+    bench.scene.replaceVariables(renamed);
+    bench.scene.renameVariableInRules(QStringLiteral("score"), QStringLiteral("points"));
+
+    EXPECT_EQ(bench.scene.rules().at(0).actions[0].propertyKey, QStringLiteral("points"))
+        << "a rule writing the variable kept the old name";
+    EXPECT_EQ(bench.scene.rules().at(1).conditions[0].conditionKey, QStringLiteral("points"))
+        << "a rule reading the variable kept the old name";
+    ASSERT_EQ(bench.scene.watches().size(), 1);
+    EXPECT_EQ(bench.scene.watches().first().propertyKey, QStringLiteral("points"))
+        << "the log row kept the old name";
+
+    // Stopping puts them back, the way it puts every shape back.
+    bench.sim.stop();
+    EXPECT_EQ(bench.sim.initialValue(Rule::variables(), QStringLiteral("points")).toInt(), 10);
+
+    bench.run(6);
+    EXPECT_EQ(bench.sim.readValue(Rule::variables(), QStringLiteral("points")).toInt(), 13)
+        << "a second run carried on from where the first left off";
+    bench.sim.stop();
+}
+
+// Rules address objects by name, so two objects sharing one makes a rule
+// ambiguous -- it acts on whichever comes first. Everything a rule can name is
+// therefore in one namespace, rays and explosions included.
+TEST(Rules, EverythingARuleCanNameGetsANameOfItsOwn)
+{
+    CanvasScene scene;
+
+    QSet<QString> seen;
+    const auto fresh = [&seen](const QString &name, const char *what) {
+        EXPECT_FALSE(name.isEmpty()) << what << " was given no name at all";
+        EXPECT_FALSE(seen.contains(name))
+            << what << " was called " << name.toStdString() << ", which was taken";
+        seen.insert(name);
+    };
+
+    for (int i = 0; i < 3; ++i) {
+        fresh(scene.addRay(QPointF(i * 50, 0))->name(), "a ray");
+        fresh(scene.addExplosion(QPointF(i * 50, 100))->name(), "an explosion");
+        fresh(scene.addRectangle(QPointF(i * 50, 200))->name(), "a rectangle");
+        fresh(scene.addCircle(QPointF(i * 50, 300))->name(), "a circle");
+    }
+
+    // And the scene agrees: every one of them is in the namespace, which is
+    // what stops the next one being given a name already in use.
+    const QSet<QString> taken = scene.takenNames();
+    for (const QString &name : seen)
+        EXPECT_TRUE(taken.contains(name)) << name.toStdString() << " is not in the namespace";
+}
+
 // A rule survives the file exactly as written -- every field of it.
 TEST(Rules, RulesSurviveTheFile)
 {
@@ -688,6 +806,12 @@ TEST(Rules, RulesSurviveTheFile)
     compound.actions = { written.actions[0], written.actions[0] };
     compound.actions[1].actionParams.insert(Rule::cloneXParam(), 999.0);
 
+    SceneVariable tally;
+    tally.name = QStringLiteral("tally");
+    tally.type = SceneVariable::Type::Integer;
+    tally.initial = 7;
+    bench.scene.setVariables({ tally });
+
     bench.scene.setRules({ written, valued, compound });
 
     const QJsonObject document = SceneSerializer::save(&bench.scene);
@@ -716,6 +840,11 @@ TEST(Rules, RulesSurviveTheFile)
     EXPECT_EQ(b.actions[0].sourceProperty, valued.actions[0].sourceProperty);
     EXPECT_DOUBLE_EQ(b.actions[0].sourceOffset, valued.actions[0].sourceOffset);
     EXPECT_EQ(b.enabled, valued.enabled);
+
+    ASSERT_EQ(reopened.variables().size(), 1) << "a variable was dropped by the file";
+    EXPECT_EQ(reopened.variables().first().name, QStringLiteral("tally"));
+    EXPECT_EQ(int(reopened.variables().first().type), int(SceneVariable::Type::Integer));
+    EXPECT_EQ(reopened.variables().first().value().toInt(), 7);
 
     const Rule &c = reopened.rules().at(2);
     EXPECT_EQ(int(c.join), int(Rule::Join::Any));
