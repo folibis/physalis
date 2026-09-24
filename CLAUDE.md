@@ -40,6 +40,17 @@ that drops or renames a property leaves nothing stale behind. `*.phys` files
 write those maps out under the engine's names, in a `physics` block per body,
 per shape and on the world.
 
+**The scene's own variables are the one value it carries that no engine
+named.** A `SceneVariable` is a name, a type (bool, int, double) and the value
+it starts a run at; rules read and write them, and the log shows them. They are
+addressed as properties of one pseudo-object, `Rule::variables()`, the way
+elapsed time and the frame count are properties of the world -- so a scene with
+twenty of them still puts one entry in the object lists. `RulesPanel::describe`
+hands back a synthesised `physics::JointParam` for each, which is how the rule
+cards build an editor for something the catalogue never mentioned. They are run
+state: started from what the scene declares and gone when the run stops, like
+every position on the canvas.
+
 Two properties the *editor* also has to recognise, because it draws with them:
 whatever the engine tags `PropertyRole::Sensor` (hatched rather than filled) and
 `PropertyRole::Density` (where a body balances). It asks for the key by role --
@@ -60,8 +71,11 @@ src/              the application (Qt widgets, canvas, panels, serialization)
     FullScreenView    a second view onto the scene, for a run on its own screen
     ShapeItem + RectangleItem/CircleItem/PolygonItem   the drawable shapes
     PhysicsBody, Joint, RayItem, ExplosionItem
-    Rule.h            one rule: condition, action, value source
+    Rule.h            one rule: a list of conditions joined all-of or any-of,
+                      and a list of actions carried out in order
+    SceneVariable.h   a named value the scene carries and no engine knows
     RulesPanel        the rule cards
+    VariablesPanel    the Variables tab beside them
     PropertyPanel + PropertyPane/*   property tables, one pane per selection kind
     SimulationController   drives the engine, polls events, applies rules
     SceneSerializer   *.phys read/write
@@ -204,6 +218,39 @@ dragged or double-clicked into a body (Ctrl+double-click makes that body
 static). The slingshot looks through shapes that
 cannot be shot to the topmost one that can.
 
+**A rule is a list of conditions and a list of actions.** `Rule` holds
+`QVector<RuleCondition>` and `QVector<RuleAction>`, joined by one `Rule::Join`
+-- all of these, or any of these -- for the whole card. One joiner rather than
+brackets, drawn in every gap and kept in sync: `a and b or c` reads two ways
+without them, and a card that can be written ambiguously is worse than one that
+cannot. The rule fires as the *combination* becomes true, once, not per
+condition; then every action runs in the order listed. An action that names the
+other object and finds none is passed over on its own and the rest still happen.
+
+A file writes the first condition and the first action flat on the rule, as it
+always did, and puts the rest in `conditions` / `actions` arrays beside them.
+A reader prefers the arrays where they are there, so a scene written before
+either existed loads with no second path through the reader.
+
+**An unfinished rule is kept, marked and passed over.** It used to be dropped
+the moment the scene was saved, which took however much of it had been written.
+`Rule::problem()` names the first blank in card order; the panel turns the card
+red, marks the row it came from, and puts a count on the Rules tab. The file
+carries `"incomplete": true`, worked out again from the fields on the way back
+in rather than trusted. `SceneExporter` filters them out before handing the
+document over: a converter turns each rule into code and has no business
+deciding whether one is finished.
+
+**Two comparisons look at the step before:** `changed to` and `changed from`.
+No engine keeps a previous value, so `SimulationController` does -- one
+snapshot of every watched reading taken before any rule fires, so each condition
+on a step sees the same answer however far down the list it sits. Keyed by the
+property rather than by the rule, since the value it had belongs to the
+property. Neither fires on the first step: there is no step before it. They
+compare exactly, which makes them worth using on readings that step between
+settled values and wrong on a position, which can pass through a number without
+landing on it.
+
 **A removal can be answered.** Before a rule's action takes a body away -- an
 engine marks such actions `ActionType::removesBody` -- `SimulationController`
 looks for rules on that body (or its shapes) watching the application's own
@@ -284,7 +331,21 @@ so `SimulationController` remembers one and acts on it once the step is over.
   and the property panes both rebuild controls in response to a combo box
   changing — that deletes the sender mid-signal. Queue it:
   `QMetaObject::invokeMethod(this, [...]{...}, Qt::QueuedConnection)`.
-  See `RulesPanel::scheduleValueEditorRefresh`.
+  See `RulesPanel::scheduleValueEditorRefresh`. This keeps finding new routes:
+  the and/or box between two conditions rebuilds the card so every gap shows
+  the same word, and took the application down until it was queued too. Read
+  what the control says synchronously, act on it afterwards.
+- **A cell widget swallows the clicks the table would have had.** Every cell of
+  the Variables tab holds a widget, so right-clicking one never reached the
+  table's viewport and the Add to Log menu could not be opened at all; clicking
+  a row never moved the selection either, so Remove stayed greyed out. The
+  widgets carry their row as a property and forward both. It is also why the
+  name is a caption that opens an editor on double-click rather than a box
+  always in edit mode.
+- **Everything a rule can name shares one namespace.** `takenNames()` once
+  collected shapes, bodies and joints but not rays or explosions -- so every ray
+  was called `ray_1`, and any rule naming one was ambiguous. A rule addresses
+  objects by name, so anything a rule can name has to be in there.
 - **Setting a body's position teleports it.** `b2Body_SetTransform` bypasses the
   solver: no velocity, no contacts on the way, overlapping shapes left behind.
   To move something smoothly use *Glide To X/Y* (`b2Body_SetTargetTransform`,

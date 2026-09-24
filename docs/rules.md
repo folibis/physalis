@@ -66,6 +66,32 @@ there again when the scene is reopened, so a rule half written at the end of one
 session can be finished in the next. It is simply passed over while the scene
 runs, and it is left out of an export.
 
+## Variables
+
+The **Variables** tab, next to Rules, holds values the scene carries that no
+physics engine knows about: a score, a count of lives, a flag saying which way
+a lift is going. Each has a name, a type -- **Boolean**, **Integer** or
+**Double** -- and the value it starts every run at.
+
+Rules reach them through a single object called **Variables**: pick it as the
+thing watched or the thing acted on, and the variable itself is the property.
+So *when Variables.score is greater than 100, stop the simulation* is written
+the same way as any other rule.
+
+A variable is run state. It starts each run at the value in the tab and goes
+back there when the run stops, the way every shape goes back to where it
+started.
+
+**Add to Log** on the tab's toolbar shows the selected variable in the readout
+pinned to the canvas, so you can watch it count while the scene runs; the same
+offer is on the right-click menu, and the button says **Remove from Log** once
+it is there.
+
+Double-click a name to rename it, the way a rule card's title is renamed.
+Renaming carries every rule and log row that named it along with it. Removing a
+variable leaves the rules that used it marked unfinished, so nothing goes wrong
+quietly.
+
 ## When: the condition
 
 First choose the object the rule watches: a shape, a body, a joint, a ray,
@@ -152,7 +178,8 @@ Choose either a property to change or an action to perform.
 Choose the property, then the operation:
 
 - **Set to** gives the property a new value.
-- **Add** adds to its current value; a negative number subtracts.
+- **Increment by** counts it on from the value it already has.
+- **Decrement by** counts it back down.
 - **Negate** reverses its sign. This is the usual way to send a motor back
   the other way.
 - **Toggle** switches an on/off property to the opposite state.
@@ -234,7 +261,8 @@ rule.
   names, and `ball` is easier to recognise than `circle_7`.
 - To see why a rule does or does not fire, add the watched property to the log
   (right-click it in the Properties tab and choose **Add to Log**) and watch it
-  during the run.
+  during the run. A variable goes in the log from the Variables tab the same
+  way.
 - Untick a rule to switch it off for a moment instead of deleting it.
 - A red card means the rule is unfinished, not that it is wrong: hover the
   warning mark to see which field is still empty.

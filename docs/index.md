@@ -13,7 +13,9 @@ hinges, sliders, springs, ropes and motors. During a run the application
 applies **forces and impulses** to bodies, measures distances with **rays**,
 sets off **explosions**, and carries out **rules** that describe how the scene
 answers events, for example *when the ball enters the pocket, return it to the
-start*.
+start*. A rule can watch several things at once and do several things when it
+fires, and it can count with **variables** the scene carries -- a score, a
+number of lives -- that belong to no object.
 
 ![The Physalis window: a scene in Physics mode, with a body selected and its properties on the right](images/overview.png)
 
@@ -41,7 +43,7 @@ simulation controls and the zoom. On its right is the **Edit / Physics**
 switch, which chooses the mode you are working in. The toolbar only shows the
 tools that make sense in that mode.
 
-**The side panel** on the right has three tabs:
+**The side panel** on the right has four tabs:
 
 - **Properties** is where you inspect and change whatever is selected. Its
   contents follow the selection: a shape shows its size, position and
@@ -56,6 +58,10 @@ tools that make sense in that mode.
   another shape or outside the visible area. Right-click the tree to expand or
   collapse its groups.
 - **Rules** holds the rules that run during a simulation. See [Rules](rules.md).
+- **Variables** holds the values the scene carries that belong to no object: a
+  score, a count of lives, a flag saying which way a lift is going. Rules read
+  and write them, and they can be watched in the log. See
+  [Variables](rules.md#variables).
 
 **The status bar** at the bottom always describes the current selection and
 what can be done with it next. When you are unsure what to do, look there.

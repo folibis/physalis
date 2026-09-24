@@ -131,6 +131,13 @@ while you develop the exporter.
   engine settings such as gravity.
 - `scene.shapes`, `scene.bodies`, `scene.joints`, `scene.rules`,
   `scene.rays` and `scene.explosions`: the objects as saved in the file.
+  A rule carries its first condition and first action on itself, and any
+  further ones in `conditions` and `actions` beside them, with `join` saying
+  whether they are read as all-of or any-of. Unfinished rules are left out
+  before the converter ever sees them.
+- `scene.variables`: the scene's own variables, each with a `name`, a `type`
+  (`"bool"`, `"int"` or `"double"`) and the `value` it starts a run at. Rules
+  read and write them under the object name `@variables`.
 - `scene.simulation`: the bodies and joints **exactly as the physics engine
   receives them**. This is usually the easier part to work from:
   - `simulation.bodies[]`: `name`, `type` (`"static"`, `"kinematic"` or

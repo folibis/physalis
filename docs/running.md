@@ -68,6 +68,10 @@ the canvas while the simulation runs, each with the name of its object, and
 they update every frame. Right-click a logged property again and choose
 **Remove from Log** to stop watching it, or **Clear Log** to remove them all.
 
+A scene's own [variables](rules.md#variables) go in the log the same way: select
+one on the **Variables** tab and use **Add to Log** on its toolbar, or its
+right-click menu. That is how to watch a score count up while the scene runs.
+
 The log is also the quickest way to find out why a [rule](rules.md) does or
 does not fire: watch the value the rule compares.
 
