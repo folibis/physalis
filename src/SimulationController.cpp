@@ -183,6 +183,9 @@ void SimulationController::start()
     m_skippedJoints.clear();
 
     m_ruleState.clear();
+    // No step before the first one, so nothing has changed yet.
+    m_watchedNow.clear();
+    m_watchedBefore.clear();
     m_problems.clear();
     m_pendingRunAction.clear();
     m_elapsedSeconds = 0.0;
@@ -779,6 +782,23 @@ void SimulationController::applyRules()
             raised[ray->name()][QStringLiteral("rayDetects")] << ray->hitName();
     }
 
+    // What every "changed to" and "changed from" condition is looking at, read
+    // once before any rule fires. One snapshot for the whole step, so every
+    // condition sees the same value however far down the list it sits and
+    // whatever the rules above it have already done.
+    m_watchedNow.clear();
+    for (const Rule &rule : rules) {
+        if (!rule.enabled || !rule.isValid())
+            continue;
+        for (const RuleCondition &condition : rule.conditions) {
+            if (!condition.watchesChange())
+                continue;
+            const QString key = changeKey(condition);
+            if (!m_watchedNow.contains(key))
+                m_watchedNow.insert(key, readValue(condition.subjectName, condition.conditionKey));
+        }
+    }
+
     m_ruleState.resize(rules.size());
 
     for (int i = 0; i < rules.size(); ++i) {
@@ -812,6 +832,27 @@ void SimulationController::applyRules()
         if (carried)
             m_ruleState[i].fired = true;
     }
+
+    // This step's readings are the step before's from here on. Anything no
+    // longer watched drops out with them.
+    m_watchedBefore = m_watchedNow;
+}
+
+QString SimulationController::changeKey(const RuleCondition &condition)
+{
+    // The previous value belongs to the property, not to the rule reading it,
+    // so two rules watching the same thing share one.
+    return condition.subjectName + QLatin1Char('\n') + condition.conditionKey;
+}
+
+// Equality as the conditions mean it: a flag against a flag, anything else as
+// a number. The same test "equals" uses, so "changed to true" and "equals
+// true" agree about what true is.
+bool SimulationController::sameValue(const QVariant &a, const QVariant &b)
+{
+    if (a.userType() == QMetaType::Bool || b.userType() == QMetaType::Bool)
+        return a.toBool() == b.toBool();
+    return qFuzzyCompare(a.toDouble() + 1.0, b.toDouble() + 1.0);
 }
 
 // The name a rule's actions answer to when one of them removes a body: the
@@ -895,6 +936,23 @@ bool SimulationController::evaluateOne(
         return false;
     }
 
+    if (condition.watchesChange()) {
+        const QString key = changeKey(condition);
+        const auto before = m_watchedBefore.constFind(key);
+        // No step before this one, so nothing has changed yet. A run does not
+        // begin by firing every rule that watches a change.
+        if (before == m_watchedBefore.constEnd())
+            return false;
+
+        const QVariant now = m_watchedNow.value(key);
+        if (!now.isValid() || sameValue(*before, now))
+            return false;
+
+        return condition.compare == Rule::Compare::ChangedTo
+                   ? sameValue(now, condition.conditionValue)
+                   : sameValue(*before, condition.conditionValue);
+    }
+
     const QVariant current = readValue(condition.subjectName, condition.conditionKey);
     if (!current.isValid())
         return false; // nothing by that name, or nothing readable by that key
@@ -923,6 +981,9 @@ bool SimulationController::evaluateOne(
         const qint64 whole = qRound64(a);
         return step != 0 && whole != 0 && whole % step == 0;
     }
+    case Rule::Compare::ChangedTo:
+    case Rule::Compare::ChangedFrom:
+        break; // answered above, where the step before is in reach
     }
     return false;
 }
@@ -1194,6 +1255,8 @@ void SimulationController::applyAction(const RuleAction &action,
         case Rule::Op::Toggle: return QVariant(!current.toBool());
         case Rule::Op::Negate: return QVariant(-current.toDouble());
         case Rule::Op::Add:    return QVariant(current.toDouble() + applied.toDouble());
+        case Rule::Op::Subtract:
+            return QVariant(current.toDouble() - applied.toDouble());
         }
         return applied;
     };

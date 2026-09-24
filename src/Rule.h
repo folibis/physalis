@@ -13,10 +13,21 @@ enum class RuleCompare {
     // Rounded to a whole number, a non-zero multiple of the value: with 5,
     // true at 5, 10, 15... -- so a rule on the frame fires every fifth one.
     Multiple,
+    // The two that look at the step before as well: true only on the step the
+    // reading became the value, or stopped being it. Both need the reading to
+    // have actually moved, so a value sitting on the target goes on being
+    // ignored. They compare exactly, which makes them worth using on things
+    // that step between settled values -- awake, sleeping, a body type, a
+    // count of what is in a sensor -- rather than on a position, which can
+    // pass through a number without ever landing on it.
+    ChangedTo,
+    ChangedFrom,
 };
 
-// What an action does to the property it names.
-enum class RuleOp { Set, Toggle, Negate, Add };
+// What an action does to the property it names. Add and Subtract move the
+// value the property already has, rather than replacing it -- a score counted
+// up, a life taken away, a motor wound on a notch at a time.
+enum class RuleOp { Set, Toggle, Negate, Add, Subtract };
 
 // One thing that has to be so. A rule holds a list of them: either an event
 // somebody raised this step, or a reading measured against a value.
@@ -32,6 +43,13 @@ struct RuleCondition {
     QString eventId;
 
     bool isEvent() const { return !eventId.isEmpty(); }
+
+    // True for the two comparisons that need the step before to answer.
+    bool watchesChange() const
+    {
+        return !isEvent()
+               && (compare == RuleCompare::ChangedTo || compare == RuleCompare::ChangedFrom);
+    }
 };
 
 // One thing the rule does when it fires. A rule holds a list of them, carried
@@ -140,7 +158,10 @@ struct Rule {
         return false;
     }
 
-    static bool usesValue(Op op) { return op == Op::Set || op == Op::Add; }
+    static bool usesValue(Op op)
+    {
+        return op == Op::Set || op == Op::Add || op == Op::Subtract;
+    }
 
     static QString joinName(Join join)
     {
@@ -162,6 +183,8 @@ struct Rule {
         case Compare::GreaterEqual:    return QStringLiteral(">=");
         case Compare::LessEqual:       return QStringLiteral("<=");
         case Compare::Multiple:        return QStringLiteral("%");
+        case Compare::ChangedTo:       return QStringLiteral("->");
+        case Compare::ChangedFrom:     return QStringLiteral("<-");
         }
         return QStringLiteral(">");
     }
@@ -174,6 +197,8 @@ struct Rule {
         if (name == QLatin1String(">="))               return Compare::GreaterEqual;
         if (name == QLatin1String("<="))               return Compare::LessEqual;
         if (name == QLatin1String("%"))                return Compare::Multiple;
+        if (name == QLatin1String("->"))               return Compare::ChangedTo;
+        if (name == QLatin1String("<-"))               return Compare::ChangedFrom;
         return Compare::Greater;
     }
 
@@ -184,6 +209,7 @@ struct Rule {
         case Op::Toggle: return QStringLiteral("toggle");
         case Op::Negate: return QStringLiteral("negate");
         case Op::Add:    return QStringLiteral("add");
+        case Op::Subtract: return QStringLiteral("subtract");
         }
         return QStringLiteral("set");
     }
@@ -193,6 +219,7 @@ struct Rule {
         if (name == QLatin1String("toggle")) return Op::Toggle;
         if (name == QLatin1String("negate")) return Op::Negate;
         if (name == QLatin1String("add"))    return Op::Add;
+        if (name == QLatin1String("subtract")) return Op::Subtract;
         return Op::Set;
     }
 

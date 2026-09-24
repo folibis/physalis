@@ -161,6 +161,14 @@ private:
     bool evaluate(const Rule &rule,
                   const QHash<QString, QHash<QString, QStringList>> &raised,
                   QString *other) const;
+    // What a "changed to" or "changed from" condition reads, this step and the
+    // step before. Keyed by the property rather than by the rule, since the
+    // value it had belongs to the property.
+    static QString changeKey(const RuleCondition &condition);
+    static bool sameValue(const QVariant &a, const QVariant &b);
+    QHash<QString, QVariant> m_watchedNow;
+    QHash<QString, QVariant> m_watchedBefore;
+
     bool evaluateOne(const RuleCondition &condition,
                      const QHash<QString, QHash<QString, QStringList>> &raised,
                      QString *other) const;

@@ -544,6 +544,110 @@ TEST(Rules, AnUnfinishedRuleIsKeptAndPassedOver)
         << "the mark is worked out again from the fields, not read from the file";
 }
 
+// "Changed to" and "changed from" look at the step before as well: true only
+// where the reading moved, and moved onto or off the value. A rule counting
+// with them is the pairing they exist for -- something happens, a tally goes
+// up by one.
+TEST(Rules, ChangedToAndChangedFromWatchTheStepBefore)
+{
+    Bench bench(QStringLiteral("Box2D"), 0.0);
+
+    // A flag on the body that a rule can move about, and two rules watching it
+    // change in either direction. Counting is done by cloning, so how many
+    // bodies exist says how many times each fired.
+    const auto onChange = [&](Rule::Compare compare, bool value, qreal cloneX) {
+        Rule rule;
+        rule.conditions[0].subjectName = bench.box->name();
+        rule.conditions[0].conditionKey = QStringLiteral("isBullet");
+        rule.conditions[0].compare = compare;
+        rule.conditions[0].conditionValue = value;
+        rule.actions[0].targetName = bench.box->name();
+        rule.actions[0].actionId = Rule::cloneAction();
+        rule.actions[0].actionParams.insert(Rule::cloneXParam(), cloneX);
+        rule.actions[0].actionParams.insert(Rule::cloneYParam(), 0.0);
+        return rule;
+    };
+
+    // Something to move the flag: on at frame 5, off again at frame 15.
+    const auto setFlagAt = [&](int frame, bool value) {
+        Rule rule;
+        rule.conditions[0].subjectName = Rule::world();
+        rule.conditions[0].conditionKey = QStringLiteral("frame");
+        rule.conditions[0].compare = Rule::Compare::Greater;
+        rule.conditions[0].conditionValue = frame;
+        rule.actions[0].targetName = bench.box->name();
+        rule.actions[0].propertyKey = QStringLiteral("isBullet");
+        rule.actions[0].op = Rule::Op::Set;
+        rule.actions[0].value = value;
+        rule.once = true;
+        return rule;
+    };
+
+    bench.scene.setRules({ setFlagAt(5, true), setFlagAt(15, false),
+                           onChange(Rule::Compare::ChangedTo, true, 300.0),
+                           onChange(Rule::Compare::ChangedFrom, true, 500.0) });
+
+    // The flag starts false and stays false: nothing has changed, and a run
+    // does not begin by firing every rule that watches a change.
+    bench.run(4);
+    EXPECT_EQ(bench.scene.bodies().size(), 2) << "a change rule fired before anything changed";
+
+    bench.run(6); // past frame 5, so the flag goes true
+    EXPECT_EQ(bench.scene.bodies().size(), 3) << "changed-to-true did not fire when it went true";
+
+    // It stays true for the next ten frames, and staying is not changing.
+    bench.run(5);
+    EXPECT_EQ(bench.scene.bodies().size(), 3)
+        << "changed-to fired again while the value merely stayed there";
+
+    bench.run(6); // past frame 15, so the flag goes false again
+    EXPECT_EQ(bench.scene.bodies().size(), 4)
+        << "changed-from-true did not fire when it stopped being true";
+
+    bench.run(20);
+    EXPECT_EQ(bench.scene.bodies().size(), 4) << "a change rule fired with nothing changing";
+    bench.sim.stop();
+}
+
+// Increment and decrement move the value the property already has, rather than
+// replacing it.
+TEST(Rules, IncrementAndDecrementMoveTheValueFromWhereItStands)
+{
+    const auto countBy = [](Bench &bench, Rule::Op op, qreal by) {
+        Rule rule;
+        rule.conditions[0].subjectName = Rule::world();
+        rule.conditions[0].conditionKey = QStringLiteral("frame");
+        rule.conditions[0].compare = Rule::Compare::Multiple;
+        rule.conditions[0].conditionValue = 5;
+        rule.actions[0].targetName = bench.box->name();
+        rule.actions[0].propertyKey = QStringLiteral("gravityScale");
+        rule.actions[0].op = op;
+        rule.actions[0].value = by;
+        bench.scene.setRules({ rule });
+    };
+
+    {
+        Bench bench(QStringLiteral("Box2D"), 0.0);
+        countBy(bench, Rule::Op::Add, 0.5);
+        bench.run(16); // frames 5, 10 and 15
+        EXPECT_NEAR(bench.sim.readValue(bench.box->name(),
+                                        QStringLiteral("gravityScale")).toDouble(),
+                    2.5, 1e-4)
+            << "three increments of 0.5 did not count on from 1";
+        bench.sim.stop();
+    }
+    {
+        Bench bench(QStringLiteral("Box2D"), 0.0);
+        countBy(bench, Rule::Op::Subtract, 0.25);
+        bench.run(16);
+        EXPECT_NEAR(bench.sim.readValue(bench.box->name(),
+                                        QStringLiteral("gravityScale")).toDouble(),
+                    0.25, 1e-4)
+            << "three decrements of 0.25 did not count down from 1";
+        bench.sim.stop();
+    }
+}
+
 // A rule survives the file exactly as written -- every field of it.
 TEST(Rules, RulesSurviveTheFile)
 {

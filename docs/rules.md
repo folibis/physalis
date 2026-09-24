@@ -116,6 +116,23 @@ depends on the object and on the [physics engine](engines.md):
 Events that involve a second object, such as *begins contact*, have one more
 box: which object it has to be. Choose *anything*, or name one in particular.
 
+### Watching a value change
+
+Two of the comparisons look at the step before as well:
+
+- **changed to** fires on the step the reading *became* the value.
+- **changed from** fires on the step it *stopped being* the value.
+
+Both need the reading to have actually moved, so a value already sitting on the
+target goes on being ignored, and neither fires on the first step of a run --
+there is no step before it for anything to have changed from.
+
+They compare exactly, which makes them worth using on readings that step
+between settled values -- awake or asleep, a body type, how many things are in
+a sensor, whether a ray is hitting anything. A position or a speed can pass
+straight through a number between one step and the next without ever landing on
+it, so **is greater than** is usually what is wanted there instead.
+
 ## Then: the target
 
 Choose what the rule acts on:
@@ -165,6 +182,16 @@ engine are:
 
 Engines add their own actions, such as a push or a force at a point on a body,
 or working out a body's mass again after its shapes have changed.
+
+### Counting up and down
+
+**Increment by** and **Decrement by** move the value the property already has
+rather than replacing it, so a rule can count: a score going up by one each
+time something is scored, a fuel level going down while a motor runs. Paired
+with **changed to** on the thing being counted, that is a tally.
+
+(**Increment by** is what used to be called **Add**; it is the same operation
+under a name that says what it does. Files written either way still load.)
 
 ## Answering a removal: "to be removed"
 

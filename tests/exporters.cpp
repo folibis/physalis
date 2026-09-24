@@ -110,7 +110,19 @@ void buildEverything(CanvasScene *scene)
     touch.actions[0].targetName = wheelBody->name();
     touch.actions[0].actionId = Rule::initStateAction();
 
-    scene->setRules({ rule, hit, touch });
+    // And one watching a reading change rather than compare, since that is the
+    // only condition the generated code has to keep state of its own for.
+    Rule changed;
+    changed.conditions[0].subjectName = crateBody->name();
+    changed.conditions[0].conditionKey = QStringLiteral("isAwake");
+    changed.conditions[0].compare = Rule::Compare::ChangedTo;
+    changed.conditions[0].conditionValue = false;
+    changed.actions[0].targetName = crateBody->name();
+    changed.actions[0].propertyKey = QStringLiteral("gravityScale");
+    changed.actions[0].op = Rule::Op::Subtract;
+    changed.actions[0].value = 0.125;
+
+    scene->setRules({ rule, hit, touch, changed });
 }
 
 // A world setting a format has no answer for. Each is named with the reason,

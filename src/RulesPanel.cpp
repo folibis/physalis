@@ -646,6 +646,8 @@ QWidget *RulesPanel::buildConditionBlock(int index, int slot)
     cond.compare->addItem(tr("equals"), Rule::compareName(Rule::Compare::Equal));
     cond.compare->addItem(tr("differs from"), Rule::compareName(Rule::Compare::NotEqual));
     cond.compare->addItem(tr("is a multiple of"), Rule::compareName(Rule::Compare::Multiple));
+    cond.compare->addItem(tr("changed to"), Rule::compareName(Rule::Compare::ChangedTo));
+    cond.compare->addItem(tr("changed from"), Rule::compareName(Rule::Compare::ChangedFrom));
     cond.compare->setCurrentIndex(cond.compare->findData(Rule::compareName(condition.compare)));
     cond.compare->setToolTip(tr("The actions run when the rule becomes true, not for as"
                                 " long as it stays true."));
@@ -781,7 +783,10 @@ QWidget *RulesPanel::buildActionBlock(int index, int slot)
     act.op->addItem(tr("Set to"), static_cast<int>(Rule::Op::Set));
     act.op->addItem(tr("Toggle"), static_cast<int>(Rule::Op::Toggle));
     act.op->addItem(tr("Negate"), static_cast<int>(Rule::Op::Negate));
-    act.op->addItem(tr("Add"), static_cast<int>(Rule::Op::Add));
+    // "Add" is what this was called; it counts the value on from where it
+    // stands, which is what increment means, so the name says so now.
+    act.op->addItem(tr("Increment by"), static_cast<int>(Rule::Op::Add));
+    act.op->addItem(tr("Decrement by"), static_cast<int>(Rule::Op::Subtract));
     act.op->setCurrentIndex(act.op->findData(static_cast<int>(action.op)));
     act.op->setToolTip(tr("Negate flips the sign, which is how a motor reverses at a limit."));
     connect(act.op, qOverload<int>(&QComboBox::currentIndexChanged), this,
@@ -1136,6 +1141,11 @@ void RulesPanel::refreshConditionEditor(int index, int slot)
             row.compare->addItem(tr("is"), Rule::compareName(Rule::Compare::Equal));
             row.compare->addItem(tr("is not"), Rule::compareName(Rule::Compare::NotEqual));
         }
+        // Both kinds can be watched for the moment they change: a flag going
+        // true, a body type becoming static, a count reaching one.
+        row.compare->addItem(tr("changed to"), Rule::compareName(Rule::Compare::ChangedTo));
+        row.compare->addItem(tr("changed from"),
+                             Rule::compareName(Rule::Compare::ChangedFrom));
         int at = row.compare->findData(Rule::compareName(condition.compare));
         if (at < 0) {
             // The test it carried is not one that can be asked any more --

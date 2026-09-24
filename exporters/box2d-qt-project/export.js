@@ -80,6 +80,9 @@ function exportScene(scene, io) {
     USED = {};
     STATE = [];
     RESETS = [];
+    CHANGES = 0;
+    CHANGE_READS = [];
+    CHANGE_SAVES = [];
     COUNTERS = { time: false, frame: false, contact: false };
     HITS = null;
     WORLD_SETTINGS = world;
@@ -721,9 +724,20 @@ function stepBody(scene, io) {
         out.push("}");
     }
 
+    if (CHANGE_READS.length) {
+        // Before any rule is judged, so they all see the same readings.
+        out = CHANGE_READS.concat([""]).concat(out);
+    }
+
     for (var c = 0; c < checks.length; ++c) {
         out.push("");
         out = out.concat(checks[c]);
+    }
+
+    if (CHANGE_SAVES.length) {
+        // After every rule, so this step's readings become the step before's.
+        out.push("");
+        out = out.concat(CHANGE_SAVES);
     }
     return wrapLong(out.join(NEWLINE), 88);
 }
@@ -1689,11 +1703,54 @@ function outOfBox2D(unit, expr) {
     return expr;
 }
 
+// --- "changed to" and "changed from" ---------------------------------------
+//
+// Both ask what the reading was on the step before, which no engine keeps, so
+// the generated code keeps it: a flag per condition saying whether the reading
+// equalled the value, read once at the top of the step and saved again at the
+// bottom. Reading it once is what the editor does too, so every condition on a
+// step sees the same answer however far down the list it sits and whatever the
+// rules above it have already done.
+//
+// CHANGE_READS are the lines at the top of the step, CHANGE_SAVES the ones at
+// the bottom, and CHANGE_STARTED is the flag that keeps the first step quiet:
+// there is no step before it, so nothing has changed yet.
+var CHANGES = 0;
+var CHANGE_READS = null;
+var CHANGE_SAVES = null;
+var CHANGE_STARTED = "rulesStarted";
+
+function changeFlag(scene, rule) {
+    // The equality this condition turns on, built by the ordinary machinery
+    // below so units, flags and rays are all handled the one way.
+    var eq = valueCondition(scene, { subject: rule.subject, watch: rule.watch,
+                                     when: rule.when, compare: "=" });
+    if (!eq)
+        return null;
+
+    if (CHANGES === 0) {
+        remember("bool", CHANGE_STARTED, "false");
+        CHANGE_SAVES.push(CHANGE_STARTED + " = true;");
+    }
+    var n = ++CHANGES;
+    var now = "nowEq" + n;
+    var was = "wasEq" + n;
+    remember("bool", was, "false");
+    CHANGE_READS.push("bool " + now + " = " + eq + ";");
+    CHANGE_SAVES.push(was + " = " + now + ";");
+
+    var became = "(" + now + " && !" + was + ")";
+    var ceased = "(!" + now + " && " + was + ")";
+    return CHANGE_STARTED + " && " + (rule.compare === "->" ? became : ceased);
+}
+
 function valueCondition(scene, rule) {
     var subject = resolve(scene, rule.subject);
     if (!subject)
         return null;
     var compare = rule.compare || ">";
+    if (compare === "->" || compare === "<-")
+        return changeFlag(scene, rule);
 
     // "the ray sees the wall" compares ids, not names.
     if (subject.kind === "ray" && rule.watch === "hitName") {
@@ -1789,12 +1846,12 @@ function writeLines(scene, rule, target) {
             value = intoBox2D(p.unit, outOfBox2D(from.unit, from.read)
                               + (rule.sourceOffset ? (" + " + short(rule.sourceOffset)) : ""));
         }
-        if (op === "add" && p.read)
-            value = p.read + " + " + value;
-    } else if (op === "add") {
+        if ((op === "add" || op === "subtract") && p.read)
+            value = p.read + (op === "add" ? " + " : " - ") + value;
+    } else if (op === "add" || op === "subtract") {
         if (!p.read || p.unit === "bool")
             return null;
-        value = p.read + " + " + literal(p.unit, rule.value);
+        value = p.read + (op === "add" ? " + " : " - ") + literal(p.unit, rule.value);
     } else {
         value = literal(p.unit, rule.value);
     }
