@@ -33,6 +33,7 @@
         <file alias="explosion.svg">icons/explosion.svg</file>
         <file alias="world.svg">icons/world.svg</file>
         <file alias="ray.svg">icons/ray.svg</file>
+        <file alias="warning.svg">icons/warning.svg</file>
     </qresource>
     <qresource prefix="/app">
         <file alias="icon.svg">physalis.svg</file>

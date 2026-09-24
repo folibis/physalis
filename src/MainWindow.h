@@ -153,6 +153,11 @@ private:
     void updateFullScreenView();
     // How fast a run plays, next to the transport buttons it belongs with.
     QComboBox *m_speedCombo = nullptr;
+    // The Rules tab's own caption, which grows a count and a mark while any
+    // rule is unfinished -- the cards say so themselves, but the tab may not be
+    // the one on top.
+    void showIncompleteRules(int count);
+
     // The log readout, pinned to the canvas corner.
     QLabel *m_logOverlay = nullptr;
     void updateLogOverlay();

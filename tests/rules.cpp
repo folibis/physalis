@@ -11,6 +11,7 @@
 #include "ShapeItem.h"
 #include "SimulationController.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QSet>
 #include <cmath>
@@ -153,16 +154,16 @@ void everyActionDoesSomething(const QString &engineName)
         // the body is asleep again before it shows. Everything else -- an
         // impulse, a teleport, a clone -- shows up under the same rule.
         Rule rule;
-        rule.subjectName = Rule::world();
-        rule.conditionKey = QStringLiteral("frame");
-        rule.compare = Rule::Compare::Multiple;
-        rule.conditionValue = 1;
-        rule.targetName = bench.box->name();
-        rule.actionId = action.id;
+        rule.conditions[0].subjectName = Rule::world();
+        rule.conditions[0].conditionKey = QStringLiteral("frame");
+        rule.conditions[0].compare = Rule::Compare::Multiple;
+        rule.conditions[0].conditionValue = 1;
+        rule.actions[0].targetName = bench.box->name();
+        rule.actions[0].actionId = action.id;
         for (const physics::JointParam &param : action.params) {
             const QVariant value = somethingElse(param);
             if (value.isValid())
-                rule.actionParams.insert(param.key, value);
+                rule.actions[0].actionParams.insert(param.key, value);
         }
         // A force is quoted in scene units and divided by the scene's scale on
         // the way in, and it acts for the one step it is applied in -- so the
@@ -171,8 +172,8 @@ void everyActionDoesSomething(const QString &engineName)
         // fault in the action, so the test uses a figure that does something
         // at this scale rather than one that reads well.
         if (action.id == QLatin1String("pushForceAt")) {
-            rule.actionParams.insert(QStringLiteral("impulseX"), 100000.0);
-            rule.actionParams.insert(QStringLiteral("impulseY"), 0.0);
+            rule.actions[0].actionParams.insert(QStringLiteral("impulseX"), 100000.0);
+            rule.actions[0].actionParams.insert(QStringLiteral("impulseY"), 0.0);
         }
         bench.scene.setRules({ rule });
 
@@ -224,12 +225,12 @@ TEST(Rules, InitStatePutsABodyBackWhereItStarted)
 
         // Fall for a while, then a rule puts it back on the sixtieth frame.
         Rule rule;
-        rule.subjectName = Rule::world();
-        rule.conditionKey = QStringLiteral("frame");
-        rule.compare = Rule::Compare::Multiple;
-        rule.conditionValue = 60;
-        rule.targetName = bench.box->name();
-        rule.actionId = Rule::initStateAction();
+        rule.conditions[0].subjectName = Rule::world();
+        rule.conditions[0].conditionKey = QStringLiteral("frame");
+        rule.conditions[0].compare = Rule::Compare::Multiple;
+        rule.conditions[0].conditionValue = 60;
+        rule.actions[0].targetName = bench.box->name();
+        rule.actions[0].actionId = Rule::initStateAction();
         bench.scene.setRules({ rule });
 
         bench.run(59);
@@ -248,12 +249,12 @@ TEST(Rules, CloneMakesAnotherBodyAndStopEndsTheRun)
         {
             Bench bench(QString::fromLatin1(engineName));
             Rule clone;
-            clone.subjectName = Rule::world();
-            clone.eventId = Rule::runStartedEvent();
-            clone.targetName = bench.box->name();
-            clone.actionId = Rule::cloneAction();
-            clone.actionParams.insert(Rule::cloneXParam(), 200.0);
-            clone.actionParams.insert(Rule::cloneYParam(), -100.0);
+            clone.conditions[0].subjectName = Rule::world();
+            clone.conditions[0].eventId = Rule::runStartedEvent();
+            clone.actions[0].targetName = bench.box->name();
+            clone.actions[0].actionId = Rule::cloneAction();
+            clone.actions[0].actionParams.insert(Rule::cloneXParam(), 200.0);
+            clone.actions[0].actionParams.insert(Rule::cloneYParam(), -100.0);
             bench.scene.setRules({ clone });
 
             bench.run(5);
@@ -266,12 +267,12 @@ TEST(Rules, CloneMakesAnotherBodyAndStopEndsTheRun)
         {
             Bench bench(QString::fromLatin1(engineName));
             Rule stop;
-            stop.subjectName = Rule::world();
-            stop.conditionKey = QStringLiteral("frame");
-            stop.compare = Rule::Compare::Multiple;
-            stop.conditionValue = 30;
-            stop.targetName = Rule::world();
-            stop.actionId = Rule::stopRunAction();
+            stop.conditions[0].subjectName = Rule::world();
+            stop.conditions[0].conditionKey = QStringLiteral("frame");
+            stop.conditions[0].compare = Rule::Compare::Multiple;
+            stop.conditions[0].conditionValue = 30;
+            stop.actions[0].targetName = Rule::world();
+            stop.actions[0].actionId = Rule::stopRunAction();
             bench.scene.setRules({ stop });
 
             // Stepped one at a time and stopped at: stepFrame() on a run that
@@ -301,12 +302,12 @@ TEST(Rules, ConditionsFireWhenTheyShould)
         // the rule fires once it is past the line -- not before.
         Bench bench(QString::fromLatin1(engineName));
         Rule rule;
-        rule.subjectName = bench.box->name();
-        rule.conditionKey = QStringLiteral("positionY");
-        rule.compare = Rule::Compare::Greater;
-        rule.conditionValue = 100.0;
-        rule.targetName = bench.box->name();
-        rule.actionId = Rule::initStateAction();
+        rule.conditions[0].subjectName = bench.box->name();
+        rule.conditions[0].conditionKey = QStringLiteral("positionY");
+        rule.conditions[0].compare = Rule::Compare::Greater;
+        rule.conditions[0].conditionValue = 100.0;
+        rule.actions[0].targetName = bench.box->name();
+        rule.actions[0].actionId = Rule::initStateAction();
         bench.scene.setRules({ rule });
 
         bench.run(20);
@@ -327,14 +328,14 @@ TEST(Rules, EveryNthFrameFiresEveryNthFrame)
 {
     Bench bench(QStringLiteral("Box2D"), 0.0);
     Rule rule;
-    rule.subjectName = Rule::world();
-    rule.conditionKey = QStringLiteral("frame");
-    rule.compare = Rule::Compare::Multiple;
-    rule.conditionValue = 10;
-    rule.targetName = bench.box->name();
-    rule.actionId = Rule::cloneAction();
-    rule.actionParams.insert(Rule::cloneXParam(), 300.0);
-    rule.actionParams.insert(Rule::cloneYParam(), 0.0);
+    rule.conditions[0].subjectName = Rule::world();
+    rule.conditions[0].conditionKey = QStringLiteral("frame");
+    rule.conditions[0].compare = Rule::Compare::Multiple;
+    rule.conditions[0].conditionValue = 10;
+    rule.actions[0].targetName = bench.box->name();
+    rule.actions[0].actionId = Rule::cloneAction();
+    rule.actions[0].actionParams.insert(Rule::cloneXParam(), 300.0);
+    rule.actions[0].actionParams.insert(Rule::cloneYParam(), 0.0);
     bench.scene.setRules({ rule });
 
     bench.run(9);
@@ -352,14 +353,14 @@ TEST(Rules, DisabledRulesAreSkippedAndOnceMeansOnce)
     {
         Bench bench(QStringLiteral("Box2D"), 0.0);
         Rule rule;
-        rule.subjectName = Rule::world();
-        rule.conditionKey = QStringLiteral("frame");
-        rule.compare = Rule::Compare::Multiple;
-        rule.conditionValue = 5;
-        rule.targetName = bench.box->name();
-        rule.actionId = Rule::cloneAction();
-        rule.actionParams.insert(Rule::cloneXParam(), 300.0);
-        rule.actionParams.insert(Rule::cloneYParam(), 0.0);
+        rule.conditions[0].subjectName = Rule::world();
+        rule.conditions[0].conditionKey = QStringLiteral("frame");
+        rule.conditions[0].compare = Rule::Compare::Multiple;
+        rule.conditions[0].conditionValue = 5;
+        rule.actions[0].targetName = bench.box->name();
+        rule.actions[0].actionId = Rule::cloneAction();
+        rule.actions[0].actionParams.insert(Rule::cloneXParam(), 300.0);
+        rule.actions[0].actionParams.insert(Rule::cloneYParam(), 0.0);
         rule.enabled = false;
         bench.scene.setRules({ rule });
 
@@ -370,14 +371,14 @@ TEST(Rules, DisabledRulesAreSkippedAndOnceMeansOnce)
     {
         Bench bench(QStringLiteral("Box2D"), 0.0);
         Rule rule;
-        rule.subjectName = Rule::world();
-        rule.conditionKey = QStringLiteral("frame");
-        rule.compare = Rule::Compare::Multiple;
-        rule.conditionValue = 5;
-        rule.targetName = bench.box->name();
-        rule.actionId = Rule::cloneAction();
-        rule.actionParams.insert(Rule::cloneXParam(), 300.0);
-        rule.actionParams.insert(Rule::cloneYParam(), 0.0);
+        rule.conditions[0].subjectName = Rule::world();
+        rule.conditions[0].conditionKey = QStringLiteral("frame");
+        rule.conditions[0].compare = Rule::Compare::Multiple;
+        rule.conditions[0].conditionValue = 5;
+        rule.actions[0].targetName = bench.box->name();
+        rule.actions[0].actionId = Rule::cloneAction();
+        rule.actions[0].actionParams.insert(Rule::cloneXParam(), 300.0);
+        rule.actions[0].actionParams.insert(Rule::cloneYParam(), 0.0);
         rule.once = true;
         bench.scene.setRules({ rule });
 
@@ -399,10 +400,10 @@ TEST(Rules, ContactFiresWhenTwoShapesTouch)
 
         Bench bench(QString::fromLatin1(engineName));
         Rule rule;
-        rule.subjectName = bench.boxShape->name();
-        rule.eventId = contactBegin;
-        rule.targetName = bench.box->name();
-        rule.actionId = Rule::initStateAction();
+        rule.conditions[0].subjectName = bench.boxShape->name();
+        rule.conditions[0].eventId = contactBegin;
+        rule.actions[0].targetName = bench.box->name();
+        rule.actions[0].actionId = Rule::initStateAction();
         bench.scene.setRules({ rule });
 
         // It falls to the ground, touches, and the rule puts it back up.
@@ -417,6 +418,132 @@ TEST(Rules, ContactFiresWhenTwoShapesTouch)
     }
 }
 
+// A card can watch more than one thing, and the join says how they are read
+// together. Frames are what these count on: true from a given step onward, and
+// settled by nothing else in the scene.
+TEST(Rules, ConditionsJoinWithAllOfOrAnyOf)
+{
+    const auto pastFrame = [](int n) {
+        RuleCondition condition;
+        condition.subjectName = Rule::world();
+        condition.conditionKey = QStringLiteral("frame");
+        condition.compare = Rule::Compare::Greater;
+        condition.conditionValue = n;
+        return condition;
+    };
+    const auto cloneRule = [&](Rule::Join join, const RuleCondition &a, const RuleCondition &b,
+                               const QString &target) {
+        Rule rule;
+        rule.join = join;
+        rule.conditions = { a, b };
+        rule.actions[0].targetName = target;
+        rule.actions[0].actionId = Rule::cloneAction();
+        rule.actions[0].actionParams.insert(Rule::cloneXParam(), 300.0);
+        rule.actions[0].actionParams.insert(Rule::cloneYParam(), 0.0);
+        return rule;
+    };
+
+    {
+        Bench bench(QStringLiteral("Box2D"), 0.0);
+        bench.scene.setRules({ cloneRule(Rule::Join::All, pastFrame(5), pastFrame(10),
+                                         bench.box->name()) });
+        bench.run(8);
+        EXPECT_EQ(bench.scene.bodies().size(), 2)
+            << "all-of fired on the first condition alone";
+        bench.run(4);
+        EXPECT_EQ(bench.scene.bodies().size(), 3) << "all-of did not fire once both were true";
+        // The rule fires as the card becomes true, not for as long as it stays
+        // true -- the same edge every other condition is read on.
+        bench.run(30);
+        EXPECT_EQ(bench.scene.bodies().size(), 3) << "all-of fired again while it stayed true";
+        bench.sim.stop();
+    }
+    {
+        Bench bench(QStringLiteral("Box2D"), 0.0);
+        bench.scene.setRules({ cloneRule(Rule::Join::Any, pastFrame(5), pastFrame(10),
+                                         bench.box->name()) });
+        bench.run(8);
+        EXPECT_EQ(bench.scene.bodies().size(), 3) << "any-of did not fire on the first one";
+        bench.run(30);
+        EXPECT_EQ(bench.scene.bodies().size(), 3)
+            << "the second condition coming true fired any-of a second time";
+        bench.sim.stop();
+    }
+}
+
+// Every action on the card, in the order listed, each with its own settings.
+TEST(Rules, EveryActionOnACardIsCarriedOut)
+{
+    Bench bench(QStringLiteral("Box2D"), 0.0);
+
+    const auto cloneAt = [&](qreal x) {
+        RuleAction action;
+        action.targetName = bench.box->name();
+        action.actionId = Rule::cloneAction();
+        action.actionParams.insert(Rule::cloneXParam(), x);
+        action.actionParams.insert(Rule::cloneYParam(), 0.0);
+        return action;
+    };
+
+    Rule rule;
+    rule.conditions[0].subjectName = Rule::world();
+    rule.conditions[0].conditionKey = QStringLiteral("frame");
+    rule.conditions[0].compare = Rule::Compare::Greater;
+    rule.conditions[0].conditionValue = 5;
+    rule.actions = { cloneAt(300.0), cloneAt(500.0), cloneAt(700.0) };
+    rule.once = true;
+    bench.scene.setRules({ rule });
+
+    bench.run(10);
+    ASSERT_EQ(bench.scene.bodies().size(), 5) << "not every action on the card happened";
+
+    QVector<qreal> xs;
+    for (PhysicsBody *body : bench.scene.bodies()) {
+        if (body != bench.box && body != bench.ground)
+            xs.append(body->shapes().isEmpty() ? 0.0 : body->shapes().first()->pos().x());
+    }
+    std::sort(xs.begin(), xs.end());
+    ASSERT_EQ(xs.size(), 3);
+    EXPECT_NEAR(xs[0], 300.0, 1.0);
+    EXPECT_NEAR(xs[1], 500.0, 1.0);
+    EXPECT_NEAR(xs[2], 700.0, 1.0);
+    bench.sim.stop();
+}
+
+// An unfinished rule is kept rather than thrown away -- it used to vanish on
+// save, taking however much of it had been written -- and is passed over by
+// the run instead.
+TEST(Rules, AnUnfinishedRuleIsKeptAndPassedOver)
+{
+    Bench bench(QStringLiteral("Box2D"), 0.0);
+
+    Rule half;
+    half.name = QStringLiteral("half written");
+    half.conditions[0].subjectName = Rule::world();
+    half.conditions[0].conditionKey = QStringLiteral("frame");
+    half.conditions[0].compare = Rule::Compare::Greater;
+    half.conditions[0].conditionValue = 1;
+    half.actions[0].targetName = bench.box->name();
+    // No property and no action: there is nothing for it to do.
+    ASSERT_EQ(half.problem(), Rule::Problem::NoProperty);
+    bench.scene.setRules({ half });
+
+    bench.run(20);
+    EXPECT_EQ(bench.scene.bodies().size(), 2) << "an unfinished rule did something";
+    EXPECT_TRUE(bench.sim.problems().isEmpty())
+        << bench.sim.problems().join(QStringLiteral("; ")).toStdString();
+    bench.sim.stop();
+
+    const QJsonObject document = SceneSerializer::save(&bench.scene);
+    CanvasScene reopened;
+    QString error;
+    ASSERT_TRUE(SceneSerializer::load(&reopened, document, &error)) << error.toStdString();
+    ASSERT_EQ(reopened.rules().size(), 1) << "an unfinished rule was dropped by the file";
+    EXPECT_EQ(reopened.rules().first().name, half.name);
+    EXPECT_EQ(reopened.rules().first().problem(), Rule::Problem::NoProperty)
+        << "the mark is worked out again from the fields, not read from the file";
+}
+
 // A rule survives the file exactly as written -- every field of it.
 TEST(Rules, RulesSurviveTheFile)
 {
@@ -424,55 +551,95 @@ TEST(Rules, RulesSurviveTheFile)
 
     Rule written;
     written.name = QStringLiteral("put it back");
-    written.subjectName = bench.boxShape->name();
-    written.eventId = QStringLiteral("beginContact");
-    written.targetName = bench.box->name();
-    written.actionId = Rule::cloneAction();
-    written.actionParams.insert(Rule::cloneXParam(), 120.0);
-    written.actionParams.insert(Rule::cloneYParam(), -80.0);
+    written.conditions[0].subjectName = bench.boxShape->name();
+    written.conditions[0].eventId = QStringLiteral("beginContact");
+    written.actions[0].targetName = bench.box->name();
+    written.actions[0].actionId = Rule::cloneAction();
+    written.actions[0].actionParams.insert(Rule::cloneXParam(), 120.0);
+    written.actions[0].actionParams.insert(Rule::cloneYParam(), -80.0);
     written.once = true;
 
     Rule valued;
-    valued.subjectName = Rule::world();
-    valued.conditionKey = QStringLiteral("frame");
-    valued.compare = Rule::Compare::Multiple;
-    valued.conditionValue = 25;
-    valued.targetName = bench.box->name();
-    valued.propertyKey = QStringLiteral("gravityScale");
-    valued.op = Rule::Op::Add;
-    valued.value = 0.5;
-    valued.sourceObject = bench.box->name();
-    valued.sourceProperty = QStringLiteral("positionY");
-    valued.sourceOffset = 12.5;
+    valued.conditions[0].subjectName = Rule::world();
+    valued.conditions[0].conditionKey = QStringLiteral("frame");
+    valued.conditions[0].compare = Rule::Compare::Multiple;
+    valued.conditions[0].conditionValue = 25;
+    valued.actions[0].targetName = bench.box->name();
+    valued.actions[0].propertyKey = QStringLiteral("gravityScale");
+    valued.actions[0].op = Rule::Op::Add;
+    valued.actions[0].value = 0.5;
+    valued.actions[0].sourceObject = bench.box->name();
+    valued.actions[0].sourceProperty = QStringLiteral("positionY");
+    valued.actions[0].sourceOffset = 12.5;
     valued.enabled = false;
 
-    bench.scene.setRules({ written, valued });
+    // A third with more than one of each, so the arrays go through the file
+    // alongside the flat form the first two use.
+    Rule compound;
+    compound.name = QStringLiteral("compound");
+    compound.join = Rule::Join::Any;
+    compound.conditions = { valued.conditions[0], valued.conditions[0] };
+    compound.conditions[1].conditionKey = QStringLiteral("time");
+    compound.conditions[1].compare = Rule::Compare::LessEqual;
+    compound.actions = { written.actions[0], written.actions[0] };
+    compound.actions[1].actionParams.insert(Rule::cloneXParam(), 999.0);
+
+    bench.scene.setRules({ written, valued, compound });
 
     const QJsonObject document = SceneSerializer::save(&bench.scene);
     CanvasScene reopened;
     QString error;
     ASSERT_TRUE(SceneSerializer::load(&reopened, document, &error)) << error.toStdString();
-    ASSERT_EQ(reopened.rules().size(), 2);
+    ASSERT_EQ(reopened.rules().size(), 3);
 
     const Rule &a = reopened.rules().at(0);
     EXPECT_EQ(a.name, written.name);
-    EXPECT_EQ(a.subjectName, written.subjectName);
-    EXPECT_EQ(a.eventId, written.eventId);
-    EXPECT_EQ(a.targetName, written.targetName);
-    EXPECT_EQ(a.actionId, written.actionId);
-    EXPECT_EQ(a.actionParams, written.actionParams);
+    EXPECT_EQ(a.conditions[0].subjectName, written.conditions[0].subjectName);
+    EXPECT_EQ(a.conditions[0].eventId, written.conditions[0].eventId);
+    EXPECT_EQ(a.actions[0].targetName, written.actions[0].targetName);
+    EXPECT_EQ(a.actions[0].actionId, written.actions[0].actionId);
+    EXPECT_EQ(a.actions[0].actionParams, written.actions[0].actionParams);
     EXPECT_EQ(a.once, written.once);
 
     const Rule &b = reopened.rules().at(1);
-    EXPECT_EQ(b.conditionKey, valued.conditionKey);
-    EXPECT_EQ(int(b.compare), int(valued.compare));
-    EXPECT_EQ(b.conditionValue.toInt(), valued.conditionValue.toInt());
-    EXPECT_EQ(b.propertyKey, valued.propertyKey);
-    EXPECT_EQ(int(b.op), int(valued.op));
-    EXPECT_EQ(b.value.toDouble(), valued.value.toDouble());
-    EXPECT_EQ(b.sourceObject, valued.sourceObject);
-    EXPECT_EQ(b.sourceProperty, valued.sourceProperty);
-    EXPECT_DOUBLE_EQ(b.sourceOffset, valued.sourceOffset);
+    EXPECT_EQ(b.conditions[0].conditionKey, valued.conditions[0].conditionKey);
+    EXPECT_EQ(int(b.conditions[0].compare), int(valued.conditions[0].compare));
+    EXPECT_EQ(b.conditions[0].conditionValue.toInt(), valued.conditions[0].conditionValue.toInt());
+    EXPECT_EQ(b.actions[0].propertyKey, valued.actions[0].propertyKey);
+    EXPECT_EQ(int(b.actions[0].op), int(valued.actions[0].op));
+    EXPECT_EQ(b.actions[0].value.toDouble(), valued.actions[0].value.toDouble());
+    EXPECT_EQ(b.actions[0].sourceObject, valued.actions[0].sourceObject);
+    EXPECT_EQ(b.actions[0].sourceProperty, valued.actions[0].sourceProperty);
+    EXPECT_DOUBLE_EQ(b.actions[0].sourceOffset, valued.actions[0].sourceOffset);
     EXPECT_EQ(b.enabled, valued.enabled);
+
+    const Rule &c = reopened.rules().at(2);
+    EXPECT_EQ(int(c.join), int(Rule::Join::Any));
+    ASSERT_EQ(c.conditions.size(), 2);
+    ASSERT_EQ(c.actions.size(), 2);
+    EXPECT_EQ(c.conditions[1].conditionKey, QStringLiteral("time"));
+    EXPECT_EQ(int(c.conditions[1].compare), int(Rule::Compare::LessEqual));
+    EXPECT_NEAR(c.actions[1].actionParams.value(Rule::cloneXParam()).toDouble(), 999.0, 1e-9);
+
+    // A file written before a rule could hold more than one of either carries
+    // the single condition and action on the rule itself, with no arrays. It
+    // has to load as a card with one of each.
+    QJsonObject older = document;
+    QJsonArray rules = older.value(QStringLiteral("rules")).toArray();
+    QJsonObject flat = rules.at(2).toObject();
+    ASSERT_TRUE(flat.contains(QStringLiteral("conditions")))
+        << "a compound rule was not written with its arrays";
+    flat.remove(QStringLiteral("conditions"));
+    flat.remove(QStringLiteral("actions"));
+    flat.remove(QStringLiteral("join"));
+    rules.replace(2, flat);
+    older.insert(QStringLiteral("rules"), rules);
+
+    CanvasScene old;
+    ASSERT_TRUE(SceneSerializer::load(&old, older, &error)) << error.toStdString();
+    ASSERT_EQ(old.rules().size(), 3);
+    EXPECT_EQ(old.rules().at(2).conditions.size(), 1);
+    EXPECT_EQ(old.rules().at(2).actions.size(), 1);
+    EXPECT_EQ(int(old.rules().at(2).join), int(Rule::Join::All)); // nothing said, the default
 }
 

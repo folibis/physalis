@@ -1173,27 +1173,35 @@ void CanvasScene::objectRenamed(const QString &previous, const QString &current)
     bool inRules = false;
     for (Rule &rule : m_rules)
     {
-        if (rule.subjectName == previous)
+        for (RuleCondition &condition : rule.conditions)
         {
-            rule.subjectName = current;
-            inRules = true;
+            if (condition.subjectName == previous)
+            {
+                condition.subjectName = current;
+                inRules = true;
+            }
+            // An event's value is the other object it has to have happened
+            // with, so it is a name too.
+            if (condition.isEvent() && condition.conditionValue.toString() == previous)
+            {
+                condition.conditionValue = current;
+                inRules = true;
+            }
         }
-        if (rule.isEvent() && rule.conditionValue.toString() == previous)
+        for (RuleAction &action : rule.actions)
         {
-            rule.conditionValue = current;
-            inRules = true;
-        }
-        if (rule.targetName == previous)
-        {
-            rule.targetName = current;
-            inRules = true;
-        }
-        // Where the value comes from, for a rule reading one object onto
-        // another.
-        if (rule.sourceObject == previous)
-        {
-            rule.sourceObject = current;
-            inRules = true;
+            if (action.targetName == previous)
+            {
+                action.targetName = current;
+                inRules = true;
+            }
+            // Where the value comes from, for a rule reading one object onto
+            // another.
+            if (action.sourceObject == previous)
+            {
+                action.sourceObject = current;
+                inRules = true;
+            }
         }
     }
     if (inRules)

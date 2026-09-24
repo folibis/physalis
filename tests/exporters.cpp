@@ -87,28 +87,28 @@ void buildEverything(CanvasScene *scene)
     scene->createJoint(QStringLiteral("revolute"), crateBody, wheelBody, 1, {});
 
     Rule rule;
-    rule.subjectName = Rule::world();
-    rule.conditionKey = QStringLiteral("frame");
-    rule.compare = Rule::Compare::Multiple;
-    rule.conditionValue = 30;
-    rule.targetName = crateBody->name();
-    rule.actionId = QStringLiteral("pushAt");
-    rule.actionParams.insert(QStringLiteral("impulseX"), 5.0);
+    rule.conditions[0].subjectName = Rule::world();
+    rule.conditions[0].conditionKey = QStringLiteral("frame");
+    rule.conditions[0].compare = Rule::Compare::Multiple;
+    rule.conditions[0].conditionValue = 30;
+    rule.actions[0].targetName = crateBody->name();
+    rule.actions[0].actionId = QStringLiteral("pushAt");
+    rule.actions[0].actionParams.insert(QStringLiteral("impulseX"), 5.0);
 
     // A rule on being hit, so that the world's hit threshold is a setting this
     // scene can be affected by rather than one no converter has any use for.
     Rule hit;
-    hit.subjectName = crate->name();
-    hit.eventId = QStringLiteral("contactHit");
-    hit.targetName = crateBody->name();
-    hit.actionId = Rule::initStateAction();
+    hit.conditions[0].subjectName = crate->name();
+    hit.conditions[0].eventId = QStringLiteral("contactHit");
+    hit.actions[0].targetName = crateBody->name();
+    hit.actions[0].actionId = Rule::initStateAction();
 
     // And one on touching, so contact tuning matters too.
     Rule touch;
-    touch.subjectName = wheel->name();
-    touch.eventId = QStringLiteral("contactBegin");
-    touch.targetName = wheelBody->name();
-    touch.actionId = Rule::initStateAction();
+    touch.conditions[0].subjectName = wheel->name();
+    touch.conditions[0].eventId = QStringLiteral("contactBegin");
+    touch.actions[0].targetName = wheelBody->name();
+    touch.actions[0].actionId = Rule::initStateAction();
 
     scene->setRules({ rule, hit, touch });
 }
@@ -423,5 +423,89 @@ TEST(Exporters, EveryPropertyIsExportedWithTheValueTheAppUses)
                     << " in scene units), and never said it could not write it";
             }
         }
+    }
+}
+
+// A rule is code in every export, so both of its lists have to reach all three
+// converters -- and what a converter cannot express it has to say, rather than
+// writing half a rule. A scene that runs one way here and another way there is
+// the failure this guards against.
+TEST(Exporters, CompoundRulesAreWrittenOrReported)
+{
+    const QVector<SceneExporter::Converter> converters = shipped();
+    ASSERT_GE(converters.size(), 3);
+
+    const auto pastFrame = [](int n) {
+        RuleCondition condition;
+        condition.subjectName = Rule::world();
+        condition.conditionKey = QStringLiteral("frame");
+        condition.compare = Rule::Compare::Greater;
+        condition.conditionValue = n;
+        return condition;
+    };
+
+    CanvasScene scene;
+    buildEverything(&scene);
+
+    // Two readings joined, and two actions: ordinary boolean logic and two
+    // statements, which every converter can write.
+    Rule writable;
+    writable.name = QStringLiteral("compound");
+    writable.join = Rule::Join::All;
+    writable.conditions = { pastFrame(5), pastFrame(10) };
+    writable.actions.resize(2);
+    writable.actions[0].targetName = QStringLiteral("crateBody");
+    writable.actions[0].propertyKey = QStringLiteral("gravityScale");
+    writable.actions[0].value = 0.25;
+    writable.actions[1].targetName = QStringLiteral("crateBody");
+    writable.actions[1].propertyKey = QStringLiteral("linearDamping");
+    writable.actions[1].value = 0.75;
+
+    // An unfinished rule never reaches a converter at all.
+    Rule unfinished;
+    unfinished.name = QStringLiteral("unfinishedRuleMarker");
+    unfinished.conditions[0] = pastFrame(5);
+    unfinished.conditions[0].subjectName.clear();
+
+    scene.setRules({ writable, unfinished });
+
+    for (const SceneExporter::Converter &converter : converters) {
+        const Output out = exportWith(converter, &scene);
+        ASSERT_TRUE(out.ok) << converter.id.toStdString() << ": " << out.error.toStdString();
+
+        EXPECT_TRUE(out.text.contains(QStringLiteral("0.25")))
+            << converter.id.toStdString() << " left the first action out";
+        EXPECT_TRUE(out.text.contains(QStringLiteral("0.75")))
+            << converter.id.toStdString() << " left the second action out";
+        EXPECT_FALSE(out.text.contains(unfinished.name))
+            << converter.id.toStdString() << " wrote an unfinished rule";
+        for (const QString &line : std::as_const(out.log)) {
+            EXPECT_FALSE(line.contains(QStringLiteral("was not exported")))
+                << converter.id.toStdString() << ": " << line.toStdString();
+        }
+    }
+
+    // Two events in one rule have no single loop to live in. That is allowed
+    // to be unsupported; it is not allowed to be silent.
+    Rule twoEvents;
+    twoEvents.name = QStringLiteral("twoEvents");
+    twoEvents.conditions.resize(2);
+    twoEvents.conditions[0].subjectName = QStringLiteral("crate");
+    twoEvents.conditions[0].eventId = QStringLiteral("contactBegin");
+    twoEvents.conditions[1].subjectName = QStringLiteral("crate");
+    twoEvents.conditions[1].eventId = QStringLiteral("contactEnd");
+    twoEvents.actions[0].targetName = QStringLiteral("crateBody");
+    twoEvents.actions[0].propertyKey = QStringLiteral("gravityScale");
+    twoEvents.actions[0].value = 0.5;
+    scene.setRules({ twoEvents });
+
+    for (const SceneExporter::Converter &converter : converters) {
+        const Output out = exportWith(converter, &scene);
+        ASSERT_TRUE(out.ok) << converter.id.toStdString() << ": " << out.error.toStdString();
+        bool said = false;
+        for (const QString &line : std::as_const(out.log))
+            said = said || line.contains(QStringLiteral("was not exported"));
+        EXPECT_TRUE(said) << converter.id.toStdString()
+                          << " wrote a rule it cannot express without saying so";
     }
 }

@@ -237,14 +237,14 @@ TEST(Simulation, ARuleChangingAJointDoesNotOutliveTheRun)
     const QVariantMap before = joint->params();
 
     Rule rule;
-    rule.subjectName = Rule::world();
-    rule.conditionKey = QStringLiteral("frame");
-    rule.compare = Rule::Compare::Multiple;
-    rule.conditionValue = 5;
-    rule.targetName = joint->name();
-    rule.propertyKey = QStringLiteral("motorSpeed");
-    rule.op = Rule::Op::Set;
-    rule.value = 90.0;
+    rule.conditions[0].subjectName = Rule::world();
+    rule.conditions[0].conditionKey = QStringLiteral("frame");
+    rule.conditions[0].compare = Rule::Compare::Multiple;
+    rule.conditions[0].conditionValue = 5;
+    rule.actions[0].targetName = joint->name();
+    rule.actions[0].propertyKey = QStringLiteral("motorSpeed");
+    rule.actions[0].op = Rule::Op::Set;
+    rule.actions[0].value = 90.0;
     scene.setRules({ rule });
 
     SimulationController sim(&scene, nullptr);

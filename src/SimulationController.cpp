@@ -190,8 +190,10 @@ void SimulationController::start()
 
     QSet<QString> contactSources;
     for (const Rule &rule : m_scene->rules()) {
-        if (rule.isEvent())
-            contactSources.insert(rule.subjectName);
+        for (const RuleCondition &condition : rule.conditions) {
+            if (condition.isEvent())
+                contactSources.insert(condition.subjectName);
+        }
     }
     if (!contactSources.isEmpty()) {
         for (PhysicsBody *body : m_scene->bodies()) {
@@ -517,13 +519,38 @@ void SimulationController::applyStartRules()
 {
     const QVector<Rule> &rules = m_scene->rules();
     m_ruleState.resize(rules.size());
+
+    // The one event the application raises here, phrased the way the engine's
+    // own events are, so a rule joining it to a reading -- "at the start, if the
+    // ball is above the line" -- is judged by the same code as any other.
+    QHash<QString, QHash<QString, QStringList>> raised;
+    raised[Rule::world()][Rule::runStartedEvent()] << QString();
+
     bool carried = false;
     for (int i = 0; i < rules.size(); ++i) {
         const Rule &rule = rules.at(i);
-        if (!rule.enabled || !rule.isValid() || rule.subjectName != Rule::world()
-            || rule.eventId != Rule::runStartedEvent())
+        if (!rule.enabled || !rule.isValid())
             continue;
-        applyAction(rule);
+        // Only rules that actually name the start. Anything else whose
+        // conditions happen to be true as the run begins waits for a step, the
+        // way it always has.
+        bool namesStart = false;
+        for (const RuleCondition &condition : rule.conditions) {
+            namesStart = namesStart || (condition.subjectName == Rule::world()
+                                        && condition.eventId == Rule::runStartedEvent());
+        }
+        if (!namesStart)
+            continue;
+
+        QString other;
+        if (!evaluate(rule, raised, &other))
+            continue;
+
+        // True now, so it does not fire again on the first step for having
+        // become true between here and there.
+        m_ruleState[i].wasTrue = true;
+        for (const RuleAction &action : rule.actions)
+            applyAction(action, firstSubject(rule));
         m_ruleState[i].fired = true;
         carried = true;
     }
@@ -764,45 +791,101 @@ void SimulationController::applyRules()
         QString other;
         const bool nowTrue = evaluate(rule, raised, &other);
 
+        // One verdict for the whole card, so a rule with several conditions
+        // fires as the combination becomes true rather than once per condition.
         const bool rising = nowTrue && !m_ruleState[i].wasTrue;
         m_ruleState[i].wasTrue = nowTrue;
         if (!rising)
             continue;
 
-        Rule resolved = rule;
-        if (resolved.targetName == Rule::otherObject()
-            || resolved.targetName == Rule::otherObjectBody()) {
-            if (other.isEmpty())
-                continue; // nothing on the other side to act on
+        // Every action, in the order they are listed. One that cannot be
+        // resolved -- it names the other object and there was none -- is passed
+        // over on its own; the rest still happen.
+        bool carried = false;
+        for (const RuleAction &action : rule.actions) {
+            RuleAction resolved = action;
+            if (!resolveOther(&resolved, other))
+                continue;
+            applyAction(resolved, firstSubject(rule));
+            carried = true;
+        }
+        if (carried)
+            m_ruleState[i].fired = true;
+    }
+}
 
-            resolved.targetName = other;
-            if (rule.targetName == Rule::otherObjectBody()) {
-                for (ShapeItem *shape : m_scene->shapes()) {
-                    if (shape->name() == other && shape->body()) {
-                        resolved.targetName = shape->body()->name();
-                        break;
-                    }
-                }
+// The name a rule's actions answer to when one of them removes a body: the
+// first thing the rule watches, which is what "the other object" means to
+// whatever is being taken away.
+QString SimulationController::firstSubject(const Rule &rule)
+{
+    return rule.conditions.isEmpty() ? QString() : rule.conditions.first().subjectName;
+}
+
+// Turns "@other" into the name the conditions actually found. False when the
+// action wanted one and there is none, which is not an error -- an event that
+// names nobody simply cannot drive an action aimed at somebody.
+bool SimulationController::resolveOther(RuleAction *action, const QString &other) const
+{
+    if (action->targetName != Rule::otherObject()
+        && action->targetName != Rule::otherObjectBody()) {
+        return true;
+    }
+    if (other.isEmpty())
+        return false;
+
+    const bool wantsBody = action->targetName == Rule::otherObjectBody();
+    action->targetName = other;
+    if (wantsBody) {
+        for (ShapeItem *shape : m_scene->shapes()) {
+            if (shape->name() == other && shape->body()) {
+                action->targetName = shape->body()->name();
+                break;
             }
         }
-        applyAction(resolved);
-        m_ruleState[i].fired = true;
     }
+    return true;
 }
 
 bool SimulationController::evaluate(
     const Rule &rule, const QHash<QString, QHash<QString, QStringList>> &raised,
     QString *other) const
 {
-    if (rule.isEvent()) {
-        const auto subject = raised.constFind(rule.subjectName);
+    if (rule.conditions.isEmpty())
+        return false;
+
+    // Every condition is judged, none skipped, even once the answer is settled:
+    // the object an action calls "the other" comes from whichever condition
+    // found one, and short-circuiting past a true event would lose it.
+    bool anyTrue = false;
+    bool allTrue = true;
+    for (const RuleCondition &condition : rule.conditions) {
+        QString partner;
+        const bool met = evaluateOne(condition, raised, &partner);
+        anyTrue = anyTrue || met;
+        allTrue = allTrue && met;
+        // The first event that both happened and named somebody. A reading
+        // names nobody, so it never claims the slot.
+        if (met && other->isEmpty() && !partner.isEmpty())
+            *other = partner;
+    }
+
+    return rule.join == Rule::Join::Any ? anyTrue : allTrue;
+}
+
+bool SimulationController::evaluateOne(
+    const RuleCondition &condition, const QHash<QString, QHash<QString, QStringList>> &raised,
+    QString *other) const
+{
+    if (condition.isEvent()) {
+        const auto subject = raised.constFind(condition.subjectName);
         if (subject == raised.constEnd())
             return false;
-        const auto ids = subject->constFind(rule.eventId);
+        const auto ids = subject->constFind(condition.eventId);
         if (ids == subject->constEnd())
             return false;
 
-        const QString wanted = rule.conditionValue.toString();
+        const QString wanted = condition.conditionValue.toString();
         for (const QString &partner : *ids) {
             if (wanted.isEmpty() || partner == wanted) {
                 *other = partner;
@@ -812,14 +895,14 @@ bool SimulationController::evaluate(
         return false;
     }
 
-    const QVariant current = readValue(rule.subjectName, rule.conditionKey);
+    const QVariant current = readValue(condition.subjectName, condition.conditionKey);
     if (!current.isValid())
         return false; // nothing by that name, or nothing readable by that key
 
     if (current.userType() == QMetaType::Bool) {
         const bool a = current.toBool();
-        const bool b = rule.conditionValue.toBool();
-        switch (rule.compare) {
+        const bool b = condition.conditionValue.toBool();
+        switch (condition.compare) {
         case Rule::Compare::Equal:    return a == b;
         case Rule::Compare::NotEqual: return a != b;
         default:                      return false;
@@ -827,8 +910,8 @@ bool SimulationController::evaluate(
     }
 
     const double a = current.toDouble();
-    const double b = rule.conditionValue.toDouble();
-    switch (rule.compare) {
+    const double b = condition.conditionValue.toDouble();
+    switch (condition.compare) {
     case Rule::Compare::Equal:        return qFuzzyCompare(a + 1.0, b + 1.0);
     case Rule::Compare::NotEqual:     return !qFuzzyCompare(a + 1.0, b + 1.0);
     case Rule::Compare::Greater:      return a > b;
@@ -932,64 +1015,77 @@ bool SimulationController::removalHandled(PhysicsBody *body, const QString &remo
     QVector<int> answers;
     for (int i = 0; i < rules.size(); ++i) {
         const Rule &rule = rules.at(i);
-        if (!rule.enabled || !rule.isValid() || rule.eventId != Rule::aboutToBeRemovedEvent())
+        if (!rule.enabled || !rule.isValid())
             continue;
-        if (!names.contains(rule.subjectName) || (rule.once && m_ruleState[i].fired))
+        if (rule.once && m_ruleState[i].fired)
             continue;
-        answers.append(i);
+        // Any condition watching one of these names for the removal is an
+        // answer. The other conditions are not weighed: a body is being taken
+        // away this instant, and there is no step in which to judge a reading.
+        bool answers_ = false;
+        for (const RuleCondition &condition : rule.conditions) {
+            answers_ = answers_ || (condition.eventId == Rule::aboutToBeRemovedEvent()
+                                    && names.contains(condition.subjectName));
+        }
+        if (answers_)
+            answers.append(i);
     }
     if (answers.isEmpty())
         return false;
 
     m_handlingRemoval = true;
     for (int i : answers) {
-        Rule resolved = rules.at(i);
-        if (resolved.targetName == Rule::otherObject())
-            resolved.targetName = remover;
-        else if (resolved.targetName == Rule::otherObjectBody())
-            resolved.targetName = removerBody;
-        applyAction(resolved);
+        const Rule &rule = rules.at(i);
+        for (const RuleAction &action : rule.actions) {
+            RuleAction resolved = action;
+            if (resolved.targetName == Rule::otherObject())
+                resolved.targetName = remover;
+            else if (resolved.targetName == Rule::otherObjectBody())
+                resolved.targetName = removerBody;
+            applyAction(resolved, firstSubject(rule));
+        }
         m_ruleState[i].fired = true;
     }
     m_handlingRemoval = false;
     return true;
 }
 
-void SimulationController::applyAction(const Rule &rule)
+void SimulationController::applyAction(const RuleAction &action,
+                                       const QString &subjectName)
 {
     // Ending or holding the run is not something the engine can do -- and it
     // cannot be done here either, in the middle of a step, with the solver on
     // the stack. It is remembered and carried out once the step is finished.
-    if (rule.isRunAction()) {
-        m_pendingRunAction = rule.actionId;
+    if (Rule::isRunAction(action)) {
+        m_pendingRunAction = action.actionId;
         return;
     }
 
     // So is "Clone": no engine knows the canvas the copy has to appear on.
-    if (rule.actionId == Rule::cloneAction()) {
+    if (action.actionId == Rule::cloneAction()) {
         PhysicsBody *parent = nullptr;
         for (PhysicsBody *body : m_scene->bodies()) {
-            if (body->name() == rule.targetName)
+            if (body->name() == action.targetName)
                 parent = body;
         }
         for (ShapeItem *shape : m_scene->shapes()) {
-            if (!parent && shape->name() == rule.targetName)
+            if (!parent && shape->name() == action.targetName)
                 parent = shape->body();
         }
-        cloneBody(parent, QPointF(rule.actionParams.value(Rule::cloneXParam()).toDouble(),
-                                  rule.actionParams.value(Rule::cloneYParam()).toDouble()));
+        cloneBody(parent, QPointF(action.actionParams.value(Rule::cloneXParam()).toDouble(),
+                                  action.actionParams.value(Rule::cloneYParam()).toDouble()));
         return;
     }
 
     // "Init state" is the application's: it knows where the run started.
-    if (rule.actionId == Rule::initStateAction()) {
+    if (action.actionId == Rule::initStateAction()) {
         PhysicsBody *target = nullptr;
         for (PhysicsBody *body : m_scene->bodies()) {
-            if (body->name() == rule.targetName)
+            if (body->name() == action.targetName)
                 target = body;
         }
         for (ShapeItem *shape : m_scene->shapes()) {
-            if (!target && shape->name() == rule.targetName)
+            if (!target && shape->name() == action.targetName)
                 target = shape->body();
         }
         initState(target);
@@ -997,7 +1093,7 @@ void SimulationController::applyAction(const Rule &rule)
     }
 
     // An action is performed on the named body rather than written to it.
-    if (rule.isAction()) {
+    if (action.isAction()) {
         if (!m_engine)
             return;
 
@@ -1005,31 +1101,31 @@ void SimulationController::applyAction(const Rule &rule)
         // action starts at. A rule written before the card could edit these
         // carried none at all, and performing a blast of radius zero looks
         // exactly like the rule not firing.
-        QVariantMap params = defaultsFor(rule.actionId);
-        for (auto it = rule.actionParams.constBegin();
-             it != rule.actionParams.constEnd(); ++it)
+        QVariantMap params = defaultsFor(action.actionId);
+        for (auto it = action.actionParams.constBegin();
+             it != action.actionParams.constEnd(); ++it)
             params.insert(it.key(), it.value());
 
         // A explosion is a bare coordinate -- it has no body to name.
         // An explosion carries its own settings; the rule only says when.
-        if (ExplosionItem *explosion = m_scene->explosionNamed(rule.targetName)) {
+        if (ExplosionItem *explosion = m_scene->explosionNamed(action.targetName)) {
             for (auto it = explosion->params().constBegin();
                  it != explosion->params().constEnd(); ++it)
                 params.insert(it.key(), it.value());
-            m_engine->performActionAt(rule.actionId, explosion->pos(), params);
+            m_engine->performActionAt(action.actionId, explosion->pos(), params);
             return;
         }
         // A joint has its own actions -- breaking is not something that can be
         // done to a body, and removing is not something that can be done to a
         // joint, so which list the id came from follows from what was named.
-        const auto joint = m_jointByName.constFind(rule.targetName);
+        const auto joint = m_jointByName.constFind(action.targetName);
         if (joint != m_jointByName.constEnd()) {
-            m_engine->performJointAction(rule.actionId, *joint, params);
+            m_engine->performJointAction(action.actionId, *joint, params);
             // The scene still holds the joint -- the document is not touched by
             // a run -- so it is marked instead, and stops being drawn until the
             // run ends.
             for (Joint *item : m_scene->joints()) {
-                if (item->name() == rule.targetName)
+                if (item->name() == action.targetName)
                     item->setBroken(true);
             }
             return;
@@ -1038,36 +1134,36 @@ void SimulationController::applyAction(const Rule &rule)
         // is carried out instead, and the body stays. Which actions remove a
         // body is the engine's to say.
         bool removes = false;
-        for (const physics::ActionType &action : m_engine->bodyActions())
-            removes = removes || (action.id == rule.actionId && action.removesBody);
+        for (const physics::ActionType &candidate : m_engine->bodyActions())
+            removes = removes || (candidate.id == action.actionId && candidate.removesBody);
         if (removes) {
             PhysicsBody *victim = nullptr;
             for (PhysicsBody *body : m_scene->bodies()) {
-                if (body->name() == rule.targetName)
+                if (body->name() == action.targetName)
                     victim = body;
             }
             for (ShapeItem *shape : m_scene->shapes()) {
-                if (!victim && shape->name() == rule.targetName)
+                if (!victim && shape->name() == action.targetName)
                     victim = shape->body();
             }
-            if (victim && removalHandled(victim, rule.subjectName))
+            if (victim && removalHandled(victim, subjectName))
                 return;
         }
 
         for (int i = 0; i < m_bodyNames.size(); ++i) {
-            if (m_bodyNames[i] != rule.targetName)
+            if (m_bodyNames[i] != action.targetName)
                 continue;
-            m_engine->performAction(rule.actionId, static_cast<physics::BodyHandle>(i),
+            m_engine->performAction(action.actionId, static_cast<physics::BodyHandle>(i),
                                     params);
             return;
         }
         // A shape was named: the action lands on the body that owns it.
         for (ShapeItem *shape : m_scene->shapes()) {
-            if (shape->name() != rule.targetName || !shape->body())
+            if (shape->name() != action.targetName || !shape->body())
                 continue;
             const int index = m_bodyNames.indexOf(shape->body()->name());
             if (index >= 0)
-                m_engine->performAction(rule.actionId,
+                m_engine->performAction(action.actionId,
                                         static_cast<physics::BodyHandle>(index),
                                         params);
             return;
@@ -1078,22 +1174,22 @@ void SimulationController::applyAction(const Rule &rule)
     bool isShapeProperty = false;
     if (m_engine) {
         for (const physics::JointParam &p : m_engine->shapeProperties())
-            isShapeProperty = isShapeProperty || p.key == rule.propertyKey;
+            isShapeProperty = isShapeProperty || p.key == action.propertyKey;
     }
 
-    const QString target = rule.targetName;
+    const QString target = action.targetName;
     Q_UNUSED(isShapeProperty);
 
     // A literal, or whatever the named property reads right now plus an
     // offset. Read once per firing, so every branch below sees the same value.
     const QVariant applied =
-        rule.usesSource()
-            ? QVariant(readValue(rule.sourceObject, rule.sourceProperty).toDouble()
-                       + rule.sourceOffset)
-            : rule.value;
+        action.usesSource()
+            ? QVariant(readValue(action.sourceObject, action.sourceProperty).toDouble()
+                       + action.sourceOffset)
+            : action.value;
 
-    const auto compute = [&rule, applied](const QVariant &current) {
-        switch (rule.op) {
+    const auto compute = [&action, applied](const QVariant &current) {
+        switch (action.op) {
         case Rule::Op::Set:    return applied;
         case Rule::Op::Toggle: return QVariant(!current.toBool());
         case Rule::Op::Negate: return QVariant(-current.toDouble());
@@ -1106,8 +1202,8 @@ void SimulationController::applyAction(const Rule &rule)
     // looked up by name. Nothing of it is stored in the document: the change
     // lasts as long as the run does.
     if (target == Rule::world()) {
-        m_engine->setWorldParam(rule.propertyKey,
-                                compute(m_engine->worldValue(rule.propertyKey)));
+        m_engine->setWorldParam(action.propertyKey,
+                                compute(m_engine->worldValue(action.propertyKey)));
         return;
     }
 
@@ -1118,9 +1214,9 @@ void SimulationController::applyAction(const Rule &rule)
         if (it == m_jointByName.constEnd())
             return; // the joint exists but this run skipped it
 
-        const QVariant updated = compute(joint->params().value(rule.propertyKey));
-        joint->params().insert(rule.propertyKey, updated);
-        m_engine->setJointParam(*it, rule.propertyKey, updated);
+        const QVariant updated = compute(joint->params().value(action.propertyKey));
+        joint->params().insert(action.propertyKey, updated);
+        m_engine->setJointParam(*it, action.propertyKey, updated);
         return;
     }
 
@@ -1131,16 +1227,16 @@ void SimulationController::applyAction(const Rule &rule)
         if (it == m_bodyByName.constEnd())
             return;
 
-        const QVariant updated = compute(m_engine->bodyValue(*it, rule.propertyKey));
-        m_engine->setBodyParam(*it, rule.propertyKey, updated);
+        const QVariant updated = compute(m_engine->bodyValue(*it, action.propertyKey));
+        m_engine->setBodyParam(*it, action.propertyKey, updated);
         return;
     }
 
     for (ShapeItem *shape : m_scene->shapes()) {
         if (shape->name() != target)
             continue;
-        const QVariant updated = compute(m_engine->shapeValue(shape->name(), rule.propertyKey));
-        m_engine->setShapeParam(shape->name(), rule.propertyKey, updated);
+        const QVariant updated = compute(m_engine->shapeValue(shape->name(), action.propertyKey));
+        m_engine->setShapeParam(shape->name(), action.propertyKey, updated);
         return;
     }
 }

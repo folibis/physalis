@@ -419,6 +419,20 @@ bool run(const Converter &converter, const CanvasScene *scene,
     // The whole scene, exactly as it would be saved, plus what the engine says
     // about itself. One argument, and everything is in it.
     QJsonObject document = SceneSerializer::save(scene);
+    // Bar the rules that do not run. A converter turns each rule into code and
+    // has no business deciding whether one is finished -- and a half-written
+    // rule would come out as a statement with a hole in it, or as an error
+    // naming a template, neither of which is the converter's fault.
+    const QJsonArray saved = document.value(QStringLiteral("rules")).toArray();
+    QJsonArray complete;
+    for (const QJsonValue &rule : saved) {
+        if (!rule.toObject().value(QStringLiteral("incomplete")).toBool())
+            complete.append(rule);
+    }
+    if (complete.isEmpty())
+        document.remove(QStringLiteral("rules"));
+    else
+        document.insert(QStringLiteral("rules"), complete);
     document.insert(QStringLiteral("engine"),
                     engineCatalogue(scene->simulationEngineName()));
     document.insert(QStringLiteral("simulation"), simulationView(scene));

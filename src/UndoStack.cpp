@@ -48,10 +48,10 @@ void UndoStack::push(const QString &label, const QString &mergeKey)
     // Nothing actually changed. Recording it would put a do-nothing step in
     // the history that has to be undone twice to get past.
     //
-    // It is still an edit, though. A rule is left out of the saved document
-    // until it is complete, so every step of filling one in lands here -- and
-    // if that left the stack looking clean, Save would be greyed out for the
-    // whole time the rule was being written.
+    // It is still an edit, though: the editor has changed even where the
+    // document has not, and leaving the stack clean would grey Save out over
+    // work that is not on disk. (Unfinished rules used to be the case this was
+    // written for, before they were saved like any other.)
     if (document == m_states[m_index].document) {
         if (!m_touched) {
             m_touched = true;

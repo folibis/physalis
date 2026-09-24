@@ -975,9 +975,28 @@ function stepBody(scene, io) {
 }
 
 function describe(rule) {
-    var when = rule.event
+    var conditions = conditionsOf(rule);
+    var actions = actionsOf(rule);
+    if (conditions.length > 1 || actions.length > 1) {
+        var whens = [];
+        for (var c = 0; c < conditions.length; ++c)
+            whens.push(describeCondition(conditions[c]));
+        var thens = [];
+        for (var a = 0; a < actions.length; ++a)
+            thens.push(describeAction(actions[a]));
+        return "when " + whens.join(rule.join === "any" ? " or " : " and ")
+               + ", " + thens.join("; ");
+    }
+    return "when " + describeCondition(conditions[0]) + ", " + describeAction(actions[0]);
+}
+
+function describeCondition(rule) {
+    return rule.event
         ? (rule.subject + " " + rule.event + (rule.when ? (" " + rule.when) : ""))
         : (rule.subject + "." + rule.watch + " " + (rule.compare || ">") + " " + String(rule.when));
+}
+
+function describeAction(rule) {
     var then;
     if (rule.action)
         then = rule.action + " " + rule.target;
@@ -987,7 +1006,88 @@ function describe(rule) {
     else
         then = rule.target + "." + rule.property + " " + (rule.op || "set")
                + (rule.value === null || rule.value === undefined ? "" : (" " + String(rule.value)));
-    return "when " + when + ", " + then;
+    return then;
+}
+
+// --- a rule's conditions and actions ---------------------------------------
+//
+// Both are lists. A rule written before they were carries its one condition and
+// its one action on itself, so the rule doubles as the single entry -- every
+// helper below reads the same field names either way.
+
+function conditionsOf(rule) {
+    return (rule.conditions && rule.conditions.length) ? rule.conditions : [rule];
+}
+
+function actionsOf(rule) {
+    return (rule.actions && rule.actions.length) ? rule.actions : [rule];
+}
+
+function isEventCondition(condition) {
+    return !!condition.event;
+}
+
+// The conditions that are readings rather than events, as one expression.
+// Joined the way the card says, and bracketed, since it may be dropped inside
+// an event's own test.
+function valueConditions(scene, conditions, join) {
+    var parts = [];
+    for (var i = 0; i < conditions.length; ++i) {
+        var made = valueCondition(scene, conditions[i]);
+        if (!made)
+            return null;
+        parts.push("(" + made + ")");
+    }
+    if (parts.length === 0)
+        return null;
+    return parts.length === 1 ? parts[0] : ("(" + parts.join(join) + ")");
+}
+
+// Every action of one rule, run together. A rule whose actions cannot all be
+// written is not written at all: half of what the card says is worse than a
+// note saying it was left out.
+function allEffectLines(scene, rule, other) {
+    var actions = actionsOf(rule);
+    var lines = [];
+    for (var i = 0; i < actions.length; ++i) {
+        var made = effectLines(scene, actions[i], other);
+        if (!made)
+            return null;
+        lines = lines.concat(made);
+    }
+    return lines.length ? lines : null;
+}
+
+// What this converter can and cannot write. Several readings joined are
+// ordinary boolean logic; an event is not, because it exists only inside the
+// loop over the step's events. One event with readings to narrow it is still
+// one loop, so that works; two events would need both to be raised on the same
+// step and the second is not in scope inside the first's loop.
+function ruleShape(rule) {
+    var conditions = conditionsOf(rule);
+    var events = [];
+    var values = [];
+    for (var i = 0; i < conditions.length; ++i)
+        (isEventCondition(conditions[i]) ? events : values).push(conditions[i]);
+
+    var any = rule.join === "any";
+    if (events.length > 1)
+        return { error: "it watches more than one event, which this converter cannot join" };
+    if (events.length === 1 && values.length > 0 && any) {
+        return { error: "it joins an event with a reading using \"or\", which this"
+                        + " converter cannot write" };
+    }
+    return { events: events, values: values, any: any,
+             join: any ? " || " : " && " };
+}
+
+// An event with readings beside it: the loop over the step's events is what
+// finds the event, and the readings narrow it from inside. Joined with "and",
+// so everything has to hold at once.
+function guarded(lines, guard) {
+    if (!lines || !guard)
+        return lines;
+    return ["if (" + guard + ") {"].concat(indentLines("    ", lines)).concat(["}"]);
 }
 
 function ruleVariable(rule, n) {
@@ -1009,6 +1109,16 @@ function remember(name, initial) {
 
 function needsOther(rule) { return rule.target === "@other" || rule.target === "@otherBody"; }
 
+// The same question of a whole rule: any one of its actions is enough.
+function ruleNeedsOther(rule) {
+    var actions = actionsOf(rule);
+    for (var i = 0; i < actions.length; ++i) {
+        if (needsOther(actions[i]))
+            return true;
+    }
+    return false;
+}
+
 // Every fixture of whatever a rule watches reports its contacts.
 function watch(scene, place, stream) {
     var bodies = scene.simulation.bodies;
@@ -1029,7 +1139,19 @@ function ruleCode(scene, rule, n, caption, loops, polls) {
         remember(done, "false");
         once = { test: " && !" + done, set: [done + " = true;"] };
     }
-    var event = rule.event;
+    // What the card asks for, and whether it can be written here at all.
+    var shape = ruleShape(rule);
+    if (shape.error)
+        return { error: shape.error };
+    // The event drives the code where there is one; otherwise the readings do.
+    var primary = shape.events.length ? shape.events[0] : conditionsOf(rule)[0];
+    // Readings alongside an event become a test inside its loop.
+    var guard = shape.events.length && shape.values.length
+                    ? valueConditions(scene, shape.values, " && ")
+                    : null;
+    if (shape.events.length && shape.values.length && !guard)
+        return { error: "one of its readings cannot be read here" };
+    var event = primary.event;
     var streams = { contactBegin: "begun", sensorBegin: "begun", contactEnd: "ended", sensorEnd: "ended",
                     contactHit: "begun", preSolve: "about" };
 
@@ -1038,16 +1160,16 @@ function ruleCode(scene, rule, n, caption, loops, polls) {
         return {};
 
     if (streams[event]) {
-        var place = resolve(scene, rule.subject);
+        var place = resolve(scene, primary.subject);
         if (place && place.kind === "shape" && !place.part.name)
             place = null;
         if (!place || (place.kind !== "shape" && place.kind !== "body"))
-            return { error: "cannot tell which shape " + rule.subject + " is" };
-        var subject = side(scene, rule.subject);
-        var partner = rule.when ? side(scene, String(rule.when)) : null;
-        if (rule.when && !partner)
-            return { error: "cannot tell which shape " + rule.when + " is" };
-        var effect = effectLines(scene, rule, "b");
+            return { error: "cannot tell which shape " + primary.subject + " is" };
+        var subject = side(scene, primary.subject);
+        var partner = primary.when ? side(scene, String(primary.when)) : null;
+        if (primary.when && !partner)
+            return { error: "cannot tell which shape " + primary.when + " is" };
+        var effect = guarded(allEffectLines(scene, rule, "b"), guard);
         if (!effect)
             return { error: "nothing in qml-box2d does " + describe(rule).split(", ")[1] };
         if (event === "preSolve")
@@ -1073,11 +1195,11 @@ function ruleCode(scene, rule, n, caption, loops, polls) {
         // Carried out once, after the first step.
         condition = "true";
     } else if (event === "bodyMoved" || event === "bodyFellAsleep") {
-        var body = resolve(scene, rule.subject);
+        var body = resolve(scene, primary.subject);
         if (body && body.kind === "shape")
             body = { kind: "body", handle: body.bodyHandle, index: body.body };
         if (!body || body.kind !== "body")
-            return { error: rule.subject + " is not a body" };
+            return { error: primary.subject + " is not a body" };
         // qml-box2d reports neither, so whether the body is awake is watched.
         var was = body.handle + "WasAwake";
         if (!TAKEN[was]) {
@@ -1087,29 +1209,29 @@ function ruleCode(scene, rule, n, caption, loops, polls) {
         }
         var awake = body.handle + "Awake";
         condition = event === "bodyMoved" ? awake : ("!" + awake + " && " + was);
-        var actions0 = effectLines(scene, rule, null);
+        var actions0 = guarded(allEffectLines(scene, rule, null), guard);
         if (!actions0)
             return { error: "nothing in qml-box2d does " + describe(rule).split(", ")[1] };
         // Checked between reading the state and remembering it.
         polls.splice(polls.length - 1, 0, edgeBlock(caption, base, condition, actions0, once, "false"));
         return {};
     } else if (event === "rayDetects") {
-        var ray = resolve(scene, rule.subject);
+        var ray = resolve(scene, primary.subject);
         if (!ray || ray.kind !== "ray")
-            return { error: rule.subject + " is not a ray" };
+            return { error: primary.subject + " is not a ray" };
         condition = ray.handle + ".hit";
-        if (rule.when) {
-            var seen = side(scene, String(rule.when));
+        if (primary.when) {
+            var seen = side(scene, String(primary.when));
             if (!seen)
-                return { error: "cannot tell which shape " + rule.when + " is" };
+                return { error: "cannot tell which shape " + primary.when + " is" };
             condition += " && " + seen.test(ray.handle + ".fixture");
         }
         effectOther = ray.handle + ".fixture";
     } else if (event === "limitLower" || event === "limitUpper" || event === "limitEither") {
-        var joint = resolve(scene, rule.subject);
+        var joint = resolve(scene, primary.subject);
         var reading = joint && joint.kind === "joint" ? LIMITS[joint.type] : null;
         if (!reading)
-            return { error: rule.subject + " has no limit qml-box2d reports" };
+            return { error: primary.subject + " has no limit qml-box2d reports" };
         var now = jointProperty(joint, reading.value).read;
         var lowEnd = jointProperty(joint, reading.lower).read;
         var highEnd = jointProperty(joint, reading.upper).read;
@@ -1124,12 +1246,12 @@ function ruleCode(scene, rule, n, caption, loops, polls) {
     } else if (event) {
         return { error: "qml-box2d has no " + event + " event to read" };
     } else {
-        condition = valueCondition(scene, rule);
+        condition = valueConditions(scene, shape.values, shape.join);
         if (!condition)
-            return { error: "cannot read " + rule.subject + "." + rule.watch };
+            return { error: "one of its readings cannot be read here" };
     }
 
-    var actions = effectLines(scene, rule, effectOther);
+    var actions = guarded(allEffectLines(scene, rule, effectOther), guard);
     if (!actions)
         return { error: "nothing in qml-box2d does " + describe(rule).split(", ")[1] };
     return { check: edgeBlock(caption, base, condition, actions, once, startsTrue) };
@@ -1692,13 +1814,23 @@ function answersByBody(scene) {
     var bodies = scene.simulation.bodies;
     for (var i = 0; i < rules.length; ++i) {
         var rule = rules[i];
-        if (rule.enabled === false || rule.event !== "@aboutToBeRemoved")
+        if (rule.enabled === false)
+            continue;
+        // Any condition watching the removal makes the rule an answer; the
+        // others are not weighed, since there is no step in which to read one.
+        var conditions = conditionsOf(rule);
+        var watching = null;
+        for (var w = 0; w < conditions.length; ++w) {
+            if (conditions[w].event === "@aboutToBeRemoved")
+                watching = conditions[w];
+        }
+        if (!watching)
             continue;
         for (var b = 0; b < bodies.length; ++b) {
-            var named = bodies[b].name === rule.subject;
+            var named = bodies[b].name === watching.subject;
             var parts = bodies[b].parts || [];
             for (var p = 0; p < parts.length && !named; ++p)
-                named = parts[p].name === rule.subject;
+                named = parts[p].name === watching.subject;
             if (named)
                 (byBody[b] = byBody[b] || []).push(rule);
         }
@@ -1708,7 +1840,7 @@ function answersByBody(scene) {
 
 function removal(scene, rule, target, body, remove) {
     var answers = ANSWERING ? {} : answersByBody(scene);
-    var remover = resolve(scene, rule.subject);
+    var remover = resolve(scene, conditionsOf(rule)[0].subject);
     var other = null;
     if (remover && remover.kind === "shape" && !remover.outline && remover.part.name) {
         USED[remover.part.name] = true;
@@ -1718,7 +1850,7 @@ function removal(scene, rule, target, body, remove) {
         ANSWERING = true;
         var lines = [];
         for (var i = 0; i < rules.length; ++i) {
-            var made = effectLines(scene, rules[i], other);
+            var made = allEffectLines(scene, rules[i], other);
             lines = lines.concat(made || ["// (" + (rules[i].name || "an answer") + " could not be exported)"]);
         }
         ANSWERING = false;
@@ -1764,7 +1896,12 @@ function clonesCode(scene, colours) {
 function destroys(scene) {
     var rules = scene.rules || [];
     for (var i = 0; i < rules.length; ++i) {
-        if (rules[i].action === "removeBody" || rules[i].action === "breakJoint")
+        var acts = actionsOf(rules[i]);
+        var destroying = false;
+        for (var a = 0; a < acts.length; ++a)
+            destroying = destroying || acts[a].action === "removeBody"
+                         || acts[a].action === "breakJoint";
+        if (destroying)
             return true;
     }
     return false;

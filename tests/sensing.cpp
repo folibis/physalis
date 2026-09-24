@@ -143,10 +143,10 @@ TEST(Sensing, ARuleCanActOnWhatARaySees)
         ray->setLength(400);
 
         Rule rule;
-        rule.subjectName = ray->name();
-        rule.eventId = QStringLiteral("rayDetects");
-        rule.targetName = QStringLiteral("@otherBody");
-        rule.actionId = QStringLiteral("removeBody");
+        rule.conditions[0].subjectName = ray->name();
+        rule.conditions[0].eventId = QStringLiteral("rayDetects");
+        rule.actions[0].targetName = QStringLiteral("@otherBody");
+        rule.actions[0].actionId = QStringLiteral("removeBody");
         w.scene.setRules({ rule });
 
         w.run(120);
@@ -179,10 +179,10 @@ TEST(Sensing, ASensorNoticesWhatEntersAndLetsItThrough)
         // A rule on the sensor being entered, so the engine switches sensor
         // events on for everything -- which is what the application relies on.
         Rule rule;
-        rule.subjectName = pocket->name();
-        rule.eventId = QStringLiteral("sensorBegin");
-        rule.targetName = ballBody->name();
-        rule.actionId = Rule::initStateAction();
+        rule.conditions[0].subjectName = pocket->name();
+        rule.conditions[0].eventId = QStringLiteral("sensorBegin");
+        rule.actions[0].targetName = ballBody->name();
+        rule.actions[0].actionId = Rule::initStateAction();
         w.scene.setRules({ rule });
 
         // It falls, enters the sensor, and the rule sends it back to the top.
@@ -227,10 +227,10 @@ TEST(Sensing, AnExplosionPushesWhatIsNearestHardest)
         blast->setParam(QStringLiteral("impulsePerLength"), 50.0);
 
         Rule rule;
-        rule.subjectName = Rule::world();
-        rule.eventId = Rule::runStartedEvent();
-        rule.targetName = blast->name();
-        rule.actionId = QStringLiteral("explode");
+        rule.conditions[0].subjectName = Rule::world();
+        rule.conditions[0].eventId = Rule::runStartedEvent();
+        rule.actions[0].targetName = blast->name();
+        rule.actions[0].actionId = QStringLiteral("explode");
         w.scene.setRules({ rule });
 
         const qreal nearFrom = near_->pos().x();

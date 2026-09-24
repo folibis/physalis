@@ -376,36 +376,81 @@ QJsonObject save(const CanvasScene *scene)
     if (!rays.isEmpty())
         document.insert("rays", rays);
 
+    // One condition and one action are written straight onto the rule, the way
+    // they always were, so a plain rule makes the same file it used to and an
+    // older reader still understands it. Anything more goes into the two arrays
+    // beside them, which a reader that knows about them prefers.
+    const auto writeCondition = [](const RuleCondition &condition) {
+        QJsonObject o;
+        o.insert("subject", condition.subjectName);
+        if (condition.isEvent()) {
+            o.insert("event", condition.eventId);
+        } else {
+            o.insert("compare", Rule::compareName(condition.compare));
+            o.insert("watch", condition.conditionKey);
+        }
+        if (condition.conditionValue.isValid())
+            o.insert("when", QJsonValue::fromVariant(condition.conditionValue));
+        return o;
+    };
+
+    const auto writeAction = [](const RuleAction &action) {
+        QJsonObject o;
+        o.insert("target", action.targetName);
+        if (action.isAction()) {
+            o.insert("action", action.actionId);
+            o.insert("actionParams", QJsonObject::fromVariantMap(action.actionParams));
+        }
+        if (action.usesSource()) {
+            o.insert("sourceObject", action.sourceObject);
+            o.insert("sourceProperty", action.sourceProperty);
+            o.insert("sourceOffset", action.sourceOffset);
+        }
+        o.insert("property", action.propertyKey);
+        o.insert("op", Rule::opName(action.op));
+        if (Rule::usesValue(action.op))
+            o.insert("value", QJsonValue::fromVariant(action.value));
+        return o;
+    };
+
     QJsonArray rules;
     for (const Rule &rule : scene->rules()) {
-        if (!rule.isValid())
-            continue; // a half-filled row in the editor is not worth saving
         QJsonObject o;
+        // A half-filled rule is written out like any other, marked so that
+        // whatever reads the file knows not to run it. Dropping it here is what
+        // used to make an unfinished rule disappear when the scene was saved,
+        // taking however much of it had been written with it.
+        if (!rule.isValid())
+            o.insert("incomplete", true);
         if (!rule.name.isEmpty())
             o.insert("name", rule.name);
-        o.insert("subject", rule.subjectName);
-        if (rule.isEvent()) {
-            o.insert("event", rule.eventId);
-        } else {
-            o.insert("compare", Rule::compareName(rule.compare));
-            o.insert("watch", rule.conditionKey);
+
+        if (!rule.conditions.isEmpty()) {
+            const QJsonObject first = writeCondition(rule.conditions.first());
+            for (auto it = first.constBegin(); it != first.constEnd(); ++it)
+                o.insert(it.key(), it.value());
         }
-        if (rule.conditionValue.isValid())
-            o.insert("when", QJsonValue::fromVariant(rule.conditionValue));
-        o.insert("target", rule.targetName);
-        if (rule.isAction()) {
-            o.insert("action", rule.actionId);
-            o.insert("actionParams", QJsonObject::fromVariantMap(rule.actionParams));
+        if (rule.conditions.size() > 1) {
+            QJsonArray conditions;
+            for (const RuleCondition &condition : rule.conditions)
+                conditions.append(writeCondition(condition));
+            o.insert("conditions", conditions);
+            // Only worth saying once there is more than one thing to join.
+            o.insert("join", Rule::joinName(rule.join));
         }
-        if (rule.usesSource()) {
-            o.insert("sourceObject", rule.sourceObject);
-            o.insert("sourceProperty", rule.sourceProperty);
-            o.insert("sourceOffset", rule.sourceOffset);
+
+        if (!rule.actions.isEmpty()) {
+            const QJsonObject first = writeAction(rule.actions.first());
+            for (auto it = first.constBegin(); it != first.constEnd(); ++it)
+                o.insert(it.key(), it.value());
         }
-        o.insert("property", rule.propertyKey);
-        o.insert("op", Rule::opName(rule.op));
-        if (Rule::usesValue(rule.op))
-            o.insert("value", QJsonValue::fromVariant(rule.value));
+        if (rule.actions.size() > 1) {
+            QJsonArray actions;
+            for (const RuleAction &action : rule.actions)
+                actions.append(writeAction(action));
+            o.insert("actions", actions);
+        }
+
         if (!rule.enabled)
             o.insert("enabled", false);
         if (rule.once)
@@ -619,29 +664,60 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
         joint->setCollideConnected(o.value("collideConnected").toBool());
     }
 
+    // A condition and an action read the same whether they came off the rule
+    // itself or out of one of the arrays, which is what lets a file written
+    // before either array existed load without a second path through here.
+    const auto readCondition = [](const QJsonObject &o) {
+        RuleCondition condition;
+        condition.subjectName = o.value("subject").toString();
+        condition.eventId = o.value("event").toString();
+        condition.compare = Rule::compareFromName(o.value("compare").toString());
+        condition.conditionKey = o.value("watch").toString();
+        condition.conditionValue = o.value("when").toVariant();
+        return condition;
+    };
+
+    const auto readAction = [](const QJsonObject &o) {
+        RuleAction action;
+        action.targetName = o.value("target").toString();
+        action.actionId = o.value("action").toString();
+        action.actionParams = o.value("actionParams").toObject().toVariantMap();
+        action.sourceObject = o.value("sourceObject").toString();
+        action.sourceProperty = o.value("sourceProperty").toString();
+        action.sourceOffset = o.value("sourceOffset").toDouble();
+        action.propertyKey = o.value("property").toString();
+        action.op = Rule::opFromName(o.value("op").toString());
+        action.value = o.value("value").toVariant();
+        return action;
+    };
+
     QVector<Rule> rules;
     for (const QJsonValue &v : document.value("rules").toArray()) {
         const QJsonObject o = v.toObject();
         Rule rule;
         rule.name = o.value("name").toString();
-        rule.subjectName = o.value("subject").toString();
-        rule.eventId = o.value("event").toString();
-        rule.compare = Rule::compareFromName(o.value("compare").toString());
-        rule.conditionKey = o.value("watch").toString();
-        rule.conditionValue = o.value("when").toVariant();
-        rule.targetName = o.value("target").toString();
-        rule.actionId = o.value("action").toString();
-        rule.actionParams = o.value("actionParams").toObject().toVariantMap();
-        rule.sourceObject = o.value("sourceObject").toString();
-        rule.sourceProperty = o.value("sourceProperty").toString();
-        rule.sourceOffset = o.value("sourceOffset").toDouble();
-        rule.propertyKey = o.value("property").toString();
-        rule.op = Rule::opFromName(o.value("op").toString());
-        rule.value = o.value("value").toVariant();
+        rule.join = Rule::joinFromName(o.value("join").toString());
+
+        // The arrays win where they are there; where they are not, the rule
+        // carries its one condition and one action itself.
+        rule.conditions.clear();
+        for (const QJsonValue &c : o.value("conditions").toArray())
+            rule.conditions.append(readCondition(c.toObject()));
+        if (rule.conditions.isEmpty())
+            rule.conditions.append(readCondition(o));
+
+        rule.actions.clear();
+        for (const QJsonValue &a : o.value("actions").toArray())
+            rule.actions.append(readAction(a.toObject()));
+        if (rule.actions.isEmpty())
+            rule.actions.append(readAction(o));
+
         rule.enabled = o.value("enabled").toBool(true);
         rule.once = o.value("once").toBool(false);
-        if (rule.isValid())
-            rules.append(rule);
+        // Unfinished rules are read back as they were written -- the "incomplete"
+        // marker is worked out again from the fields, not trusted from the file
+        // -- so reopening a scene finds the rule still there, and still marked.
+        rules.append(rule);
     }
     scene->setRules(rules);
 

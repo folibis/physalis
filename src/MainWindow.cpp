@@ -146,6 +146,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_ui->propertyPanel->setScene(m_scene);
     m_ui->sceneTree->setScene(m_scene);
     m_ui->rulesPanel->setScene(m_scene);
+    connect(m_ui->rulesPanel, &RulesPanel::incompleteCountChanged, this,
+            &MainWindow::showIncompleteRules);
+    showIncompleteRules(m_ui->rulesPanel->incompleteCount());
 
     // Kept, because the transport controls do not exist yet: they are built
     // with the toolbar further down, and what was saved for them is put on
@@ -1522,6 +1525,20 @@ void MainWindow::onSimulationStateChanged()
         if (m_scene->editorMode() == EditorMode::Edit)
             onActiveItemChanged(m_scene->activeItem());
     }
+}
+
+void MainWindow::showIncompleteRules(int count)
+{
+    const int tab = m_ui->sidePanel->indexOf(m_ui->rulesPanel);
+    if (tab < 0)
+        return;
+
+    m_ui->sidePanel->setTabText(tab, count > 0 ? tr("Rules (%1)").arg(count) : tr("Rules"));
+    m_ui->sidePanel->setTabIcon(tab, count > 0 ? Icons::warning() : QIcon());
+    m_ui->sidePanel->setTabToolTip(
+        tab,
+        count > 0 ? tr("%n rule(s) are unfinished and will not run.", nullptr, count)
+                  : QString());
 }
 
 void MainWindow::onEditorModeChanged(EditorMode mode)

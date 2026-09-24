@@ -35,5 +35,7 @@ QIcon joint();
 QIcon explosion();
 QIcon world();
 QIcon ray();
+// An incomplete rule: the card wears it, and so does the Rules tab.
+QIcon warning();
 
 } // namespace Icons

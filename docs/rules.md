@@ -27,6 +27,45 @@ are carried out in the order they are listed.
 
 Below that, the card has three parts: **When**, **Then** and **Do**.
 
+## More than one condition, more than one action
+
+The **+** beside the **When** row adds another condition, and a small **and**
+box appears between the two. Change it to **or** and the rule fires when any
+one of them is true instead of when all of them are; it is one choice for the
+whole card, so every gap shows the same word. Each condition after the first
+has a button to take it away again.
+
+The **+** beside the **Then** row does the same for actions: another **Then**
+and **Do** pair, carried out in the order they are listed when the rule fires.
+That is how one condition can set a property, perform an action and stop the
+run without being written out three times.
+
+A rule fires as the whole card *becomes* true, not once per condition -- so two
+conditions joined with **and** fire once, when the second of them comes true.
+
+Bear in mind that an event -- a touch, a sensor entered -- happens on a single
+step and is gone. Joining a reading to an event with **and** is the useful case
+("when the ball touches the ground *and* it is moving faster than 5"); joining
+two events with **and** asks for both on the same step, which is rarely what
+was meant.
+
+The exporters write several readings and several actions without trouble. Two
+events in one rule, or an event joined to a reading with **or**, have no single
+place to live in the generated code, and the export says so in its report
+rather than writing half the rule.
+
+## Unfinished rules
+
+A rule that still has a blank in it cannot run, and the card says so: it turns
+red and a warning mark appears beside the name, with the missing piece named in
+its tooltip. The Rules tab carries the same mark and a count, so an unfinished
+rule is visible while you are working somewhere else.
+
+An unfinished rule is kept like any other. It is saved with the scene and is
+there again when the scene is reopened, so a rule half written at the end of one
+session can be finished in the next. It is simply passed over while the scene
+runs, and it is left out of an export.
+
 ## When: the condition
 
 First choose the object the rule watches: a shape, a body, a joint, a ray,
@@ -170,3 +209,5 @@ rule.
   (right-click it in the Properties tab and choose **Add to Log**) and watch it
   during the run.
 - Untick a rule to switch it off for a moment instead of deleting it.
+- A red card means the rule is unfinished, not that it is wrong: hover the
+  warning mark to see which field is still empty.

@@ -270,11 +270,21 @@ void RulesPanel::rebuild()
     m_building = false;
 
     for (int i = 0; i < m_rows.size(); ++i) {
-        refreshEvents(i);
-        refreshConditionEditor(i);
-        refreshProperties(i);
-        refreshValueEditor(i);
+        for (int slot = 0; slot < m_rows[i].conditions.size(); ++slot) {
+            refreshEvents(i, slot);
+            refreshConditionEditor(i, slot);
+        }
+        for (int slot = 0; slot < m_rows[i].actions.size(); ++slot) {
+            refreshProperties(i, slot);
+            refreshValueEditor(i, slot);
+        }
+        // Last, because the four above can settle a rule's own fields -- a
+        // watch that no longer exists, a value editor that fills in a default
+        // -- and the card has to show what it ended up as.
+        refreshCardLook(i);
     }
+
+    emit incompleteCountChanged(incompleteCount());
 }
 
 QWidget *RulesPanel::buildCard(int index)
@@ -288,7 +298,7 @@ QWidget *RulesPanel::buildCard(int index)
     // cards no top border at all, and the panel behind is the same grey.
     // Styled through the helper, so the switched-off look and the live one
     // are described in one place.
-    setCardEnabledLook(card, nullptr, rule.enabled);
+    setCardLook(card, nullptr, rule.enabled, rule.isValid());
     // No margins of its own: the header band has to reach the card's edges,
     // so the padding belongs to the header and the body separately.
     auto *outer = new QVBoxLayout(card);
@@ -331,6 +341,16 @@ QWidget *RulesPanel::buildCard(int index)
     titleRow->addWidget(remove);
 
     titleRow->addStretch();
+
+    // Sits immediately left of the caption while the rule is unfinished. Inside
+    // the stretches, so the caption and the mark centre as one and the header's
+    // balancing widget is unaffected.
+    auto *warning = new QLabel(card);
+    warning->setObjectName(QStringLiteral("ruleWarning"));
+    warning->setPixmap(Icons::warning().pixmap(14, 14));
+    warning->setVisible(false);
+    titleRow->addWidget(warning);
+
     auto *heading = new QLabel(card);
     heading->setStyleSheet(QStringLiteral("font-weight: bold; color: #6f6f6f;"));
     heading->setAlignment(Qt::AlignCenter);
@@ -407,6 +427,131 @@ QWidget *RulesPanel::buildCard(int index)
     titleRow->setContentsMargins(6, 3, 6, 3);
     outer->addWidget(headerBand);
 
+    // Now the caption exists, so the pale look can reach it too.
+    const Rule::Problem problem = rule.problem();
+    setCardLook(card, heading, rule.enabled, problem == Rule::Problem::None);
+    if (problem != Rule::Problem::None) {
+        warning->setVisible(true);
+        warning->setToolTip(problemText(problem));
+    }
+    connect(enabled, &QCheckBox::toggled, this, [this, index](bool on) {
+        if (m_building)
+            return;
+        Rule updated = m_scene->rules().at(index);
+        if (updated.enabled == on)
+            return;
+        updated.enabled = on;
+        // commit() repaints the card. Only the look changes, so there is
+        // nothing to rebuild -- and rebuilding here would delete the box while
+        // its own signal is still being delivered.
+        commit(index, updated);
+    });
+
+    Row row;
+    row.card = card;
+    row.warning = warning;
+    row.collapse = collapse;
+    row.heading = heading;
+    row.headingEdit = rename;
+
+    auto *body = new QWidget(card);
+    auto *stack = new QVBoxLayout(body);
+    stack->setContentsMargins(8, 6, 8, 8);
+    stack->setSpacing(6);
+    body->setVisible(!m_collapsed.contains(index));
+    outer->addWidget(body);
+    row.body = body;
+
+    // The row has to be in place before the blocks are built: each of them
+    // stores its own widgets into it as it goes.
+    m_rows.append(row);
+
+    for (int slot = 0; slot < rule.conditions.size(); ++slot) {
+        // The joiner is drawn in the gap it applies to, so the card reads down
+        // as a sentence: this, and this, and this.
+        if (slot > 0)
+            stack->addWidget(buildJoiner(index, body));
+        stack->addWidget(buildConditionBlock(index, slot));
+    }
+
+    for (int slot = 0; slot < rule.actions.size(); ++slot)
+        stack->addWidget(buildActionBlock(index, slot));
+
+    connect(collapse, &QToolButton::clicked, this,
+            [this, index] { setCollapsed(index, !m_collapsed.contains(index)); });
+    return card;
+}
+
+// The word between two conditions. One joiner belongs to the whole rule, not
+// to the gap it is drawn in: "a and b or c" without brackets reads two ways,
+// and a card that can be written ambiguously is worse than one that cannot.
+// Every gap therefore shows the same word, and setting one sets them all.
+QWidget *RulesPanel::buildJoiner(int index, QWidget *parent)
+{
+    const Rule rule = m_scene->rules().at(index);
+
+    auto *holder = new QWidget(parent);
+    auto *layout = new QHBoxLayout(holder);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+
+    auto *combo = new QComboBox(holder);
+    combo->addItem(tr("and"), Rule::joinName(Rule::Join::All));
+    combo->addItem(tr("or"), Rule::joinName(Rule::Join::Any));
+    combo->setCurrentIndex(combo->findData(Rule::joinName(rule.join)));
+    combo->setToolTip(tr("Whether every condition has to be true, or any one of"
+                         " them. It is the same choice all the way down the card."
+                         "\n\nAn event happens on a single step, so joining two"
+                         " events with \"and\" asks for both on the same step."));
+    connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, index, combo](int) {
+        if (m_building)
+            return;
+        Rule updated = m_scene->rules().at(index);
+        const Rule::Join picked = Rule::joinFromName(combo->currentData().toString());
+        if (updated.join == picked)
+            return;
+        updated.join = picked;
+        // Every other gap shows the same word and has to follow.
+        commitAndRebuild(index, updated, tr("Edit rule"));
+    });
+
+    layout->addWidget(combo, 0);
+    layout->addStretch(1);
+    return holder;
+}
+
+// The small button at the end of a When or Then row: one more of these, or
+// this one gone. Rebuilding deletes the button, which cannot happen while its
+// own click is still on the stack, so both are queued.
+QToolButton *RulesPanel::rowButton(QWidget *parent, const QIcon &icon, const QString &tip,
+                                   const std::function<void()> &onClick)
+{
+    auto *button = new QToolButton(parent);
+    button->setIcon(icon);
+    button->setIconSize(QSize(12, 12));
+    button->setAutoRaise(true);
+    button->setToolTip(tip);
+    button->setFixedWidth(20);
+    connect(button, &QToolButton::clicked, this, [this, onClick] {
+        QMetaObject::invokeMethod(this, [onClick] { onClick(); }, Qt::QueuedConnection);
+    });
+    return button;
+}
+
+QWidget *RulesPanel::buildConditionBlock(int index, int slot)
+{
+    const Rule rule = m_scene->rules().at(index);
+    const RuleCondition condition = rule.conditions.at(slot);
+
+    auto *block = new QWidget(m_rows[index].body);
+    auto *stack = new QVBoxLayout(block);
+    stack->setContentsMargins(0, 0, 0, 0);
+    stack->setSpacing(2);
+
+    ConditionRow cond;
+    cond.block = block;
+
     auto *form = new QFormLayout;
     form->setContentsMargins(0, 0, 0, 0);
     form->setSpacing(4);
@@ -416,255 +561,311 @@ QWidget *RulesPanel::buildCard(int index)
     // two separate things rather than one instruction -- so the captions are
     // kept short ("Then:", "Do:") and the controls give up width instead.
     form->setRowWrapPolicy(QFormLayout::DontWrapRows);
+    stack->addLayout(form);
 
-    // Now the caption exists, so the pale look can reach it too.
-    setCardEnabledLook(card, heading, rule.enabled);
-    connect(enabled, &QCheckBox::toggled, this, [this, index, card, heading](bool on) {
+    cond.source = new ObjectComboBox([this] { return sourceChoices(); }, block);
+    cond.source->setEmptyText(tr("(no objects yet)"));
+    cond.source->selectData(condition.subjectName);
+    connect(cond.source, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, index, slot](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
-        if (updated.enabled == on)
-            return;
-        updated.enabled = on;
+        RuleCondition &c = updated.conditions[slot];
+        c.subjectName = m_rows[index].conditions[slot].source->currentData().toString();
+        c.conditionKey.clear();
+        c.eventId.clear();
         commit(index, updated);
-        // Only the look changes, so there is nothing to rebuild -- and
-        // rebuilding here would delete the box while its signal is delivered.
-        setCardEnabledLook(card, heading, on);
+        refreshEvents(index, slot);
+        refreshConditionEditor(index, slot);
+        // The value editors offer to read from whatever the rule watches, so
+        // they follow a change of subject too.
+        for (int a = 0; a < m_rows[index].actions.size(); ++a) {
+            refreshProperties(index, a);
+            scheduleValueEditorRefresh(index, a);
+        }
     });
+    // The first one carries the caption and the button that adds another; the
+    // ones below it carry a button to take themselves away again. The mark for
+    // the row sits on the same line, so it is beside the field it is about.
+    auto *whenRow = new QHBoxLayout;
+    whenRow->setSpacing(4);
+    whenRow->addWidget(cond.source, 1);
 
-    Row row;
-    row.card = card;
+    cond.warning = new QLabel(block);
+    cond.warning->setPixmap(Icons::warning().pixmap(12, 12));
+    cond.warning->setVisible(false);
+    whenRow->addWidget(cond.warning);
 
-    // --- when: a condition over one object's properties -------------------
-    row.source = new ObjectComboBox([this] { return sourceChoices(); }, card);
-    row.source->setEmptyText(tr("(no objects yet)"));
-    row.source->selectData(rule.subjectName);
-    connect(row.source, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
-        if (m_building)
-            return;
-        Rule updated = m_scene->rules().at(index);
-        updated.subjectName = m_rows[index].source->currentData().toString();
-        updated.conditionKey.clear();
-        updated.eventId.clear();
-        commit(index, updated);
-        refreshEvents(index);
-        refreshConditionEditor(index);
-        refreshProperties(index);
-        scheduleValueEditorRefresh(index);
-    });
-    form->addRow(tr("When:"), row.source);
+    if (slot == 0) {
+        whenRow->addWidget(rowButton(block, Icons::add(), tr("Add another condition"),
+                                     [this, index] { addCondition(index); }));
+    } else {
+        whenRow->addWidget(rowButton(block, Icons::deleteShape(), tr("Remove this condition"),
+                                     [this, index, slot] { removeCondition(index, slot); }));
+    }
+    // Each block has its own form, and a form sizes its label column to what
+    // is in it -- so a block whose labels are all blank would start its fields
+    // hard against the left edge while the first block's began past "When:".
+    // The width is held the same across them by hand.
+    auto *whenLabel = new QLabel(slot == 0 ? tr("When:") : QString(), block);
+    whenLabel->setMinimumWidth(QFontMetrics(whenLabel->font()).horizontalAdvance(tr("When:")));
+    form->addRow(whenLabel, whenRow);
 
     // What to watch on it -- hidden for a touch, which is not a property.
-    row.event = new ObjectComboBox(
-        [this, index] {
-            return watchChoices(index < m_scene->rules().size()
-                                    ? m_scene->rules().at(index).subjectName
-                                    : QString());
+    cond.event = new ObjectComboBox(
+        [this, index, slot] {
+            const QVector<Rule> &rules = m_scene->rules();
+            if (index >= rules.size() || slot >= rules.at(index).conditions.size())
+                return watchChoices(QString());
+            return watchChoices(rules.at(index).conditions.at(slot).subjectName);
         },
-        card);
-    row.event->setEmptyText(tr("(nothing readable)"));
-    connect(row.event, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
+        block);
+    cond.event->setEmptyText(tr("(nothing readable)"));
+    connect(cond.event, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, index, slot](int) {
         if (m_building)
             return;
-        applyWatchChoice(index, m_rows[index].event->currentData().toString());
-        refreshEvents(index);
-        refreshConditionEditor(index);
+        applyWatchChoice(index, slot,
+                         m_rows[index].conditions[slot].event->currentData().toString());
+        refreshEvents(index, slot);
+        refreshConditionEditor(index, slot);
     });
-    form->addRow(QString(), row.event);
+    form->addRow(QString(), cond.event);
 
     auto *testRow = new QHBoxLayout;
     testRow->setSpacing(4);
 
-    row.compare = new QComboBox(card);
-    row.compare->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    row.compare->setMinimumContentsLength(8);
-    row.compare->addItem(tr("is greater than"), Rule::compareName(Rule::Compare::Greater));
-    row.compare->addItem(tr("is less than"), Rule::compareName(Rule::Compare::Less));
-    row.compare->addItem(tr("is at least"), Rule::compareName(Rule::Compare::GreaterEqual));
-    row.compare->addItem(tr("is at most"), Rule::compareName(Rule::Compare::LessEqual));
-    row.compare->addItem(tr("equals"), Rule::compareName(Rule::Compare::Equal));
-    row.compare->addItem(tr("differs from"), Rule::compareName(Rule::Compare::NotEqual));
-    row.compare->addItem(tr("is a multiple of"), Rule::compareName(Rule::Compare::Multiple));
-    row.compare->setCurrentIndex(row.compare->findData(Rule::compareName(rule.compare)));
-    row.compare->setToolTip(tr("The action runs when this becomes true, not for as long"
-                                 " as it stays true."));
-    connect(row.compare, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
+    cond.compare = new QComboBox(block);
+    cond.compare->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    cond.compare->setMinimumContentsLength(8);
+    cond.compare->addItem(tr("is greater than"), Rule::compareName(Rule::Compare::Greater));
+    cond.compare->addItem(tr("is less than"), Rule::compareName(Rule::Compare::Less));
+    cond.compare->addItem(tr("is at least"), Rule::compareName(Rule::Compare::GreaterEqual));
+    cond.compare->addItem(tr("is at most"), Rule::compareName(Rule::Compare::LessEqual));
+    cond.compare->addItem(tr("equals"), Rule::compareName(Rule::Compare::Equal));
+    cond.compare->addItem(tr("differs from"), Rule::compareName(Rule::Compare::NotEqual));
+    cond.compare->addItem(tr("is a multiple of"), Rule::compareName(Rule::Compare::Multiple));
+    cond.compare->setCurrentIndex(cond.compare->findData(Rule::compareName(condition.compare)));
+    cond.compare->setToolTip(tr("The actions run when the rule becomes true, not for as"
+                                " long as it stays true."));
+    connect(cond.compare, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, index, slot](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
-        updated.compare =
-            Rule::compareFromName(m_rows[index].compare->currentData().toString());
-        updated.conditionValue = QVariant();
+        RuleCondition &c = updated.conditions[slot];
+        c.compare = Rule::compareFromName(
+            m_rows[index].conditions[slot].compare->currentData().toString());
+        c.conditionValue = QVariant();
         commit(index, updated);
-        refreshEvents(index);
-        refreshConditionEditor(index);
+        refreshEvents(index, slot);
+        refreshConditionEditor(index, slot);
     });
-    testRow->addWidget(row.compare, 0);
+    testRow->addWidget(cond.compare, 0);
 
-    row.conditionHolder = new QWidget(card);
-    auto *condLayout = new QHBoxLayout(row.conditionHolder);
+    cond.conditionHolder = new QWidget(block);
+    auto *condLayout = new QHBoxLayout(cond.conditionHolder);
     condLayout->setContentsMargins(0, 0, 0, 0);
-    testRow->addWidget(row.conditionHolder, 1);
-    row.conditionHolder->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    testRow->addWidget(cond.conditionHolder, 1);
+    cond.conditionHolder->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     form->addRow(QString(), testRow);
 
-    // --- then ------------------------------------------------------------
-    row.target = new ObjectComboBox([this] { return targetChoices(); }, card);
-    row.target->selectData(rule.targetName);
-    connect(row.target, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
-        if (m_building)
-            return;
-        Rule updated = m_scene->rules().at(index);
-        const QString picked = m_rows[index].target->currentData().toString();
-        if (picked == updated.targetName)
-            return; // the list was rebuilt under it; the rule has not changed
-        updated.targetName = picked;
-        updated.propertyKey.clear(); // a different object has different properties
-        commit(index, updated);
-        refreshProperties(index);
-        scheduleValueEditorRefresh(index);
-    });
-    form->addRow(tr("Then:"), row.target);
+    m_rows[index].conditions.append(cond);
+    return block;
+}
 
-    row.property = new ObjectComboBox(
-        [this, index] {
-            return propertiesOf(index < m_scene->rules().size()
-                                    ? m_scene->rules().at(index).targetName
-                                    : QString());
-        },
-        card);
-    row.property->setEmptyText(tr("(nothing changeable)"));
-    connect(row.property, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
+QWidget *RulesPanel::buildActionBlock(int index, int slot)
+{
+    const Rule rule = m_scene->rules().at(index);
+    const RuleAction action = rule.actions.at(slot);
+
+    auto *block = new QWidget(m_rows[index].body);
+    auto *stack = new QVBoxLayout(block);
+    stack->setContentsMargins(0, 0, 0, 0);
+    stack->setSpacing(2);
+
+    ActionRow act;
+    act.block = block;
+
+    auto *form = new QFormLayout;
+    form->setContentsMargins(0, 0, 0, 0);
+    form->setSpacing(4);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    form->setRowWrapPolicy(QFormLayout::DontWrapRows);
+    stack->addLayout(form);
+
+    act.target = new ObjectComboBox([this] { return targetChoices(); }, block);
+    act.target->selectData(action.targetName);
+    connect(act.target, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, index, slot](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
-        const QString chosen = m_rows[index].property->currentData().toString();
+        const QString picked = m_rows[index].actions[slot].target->currentData().toString();
+        if (picked == updated.actions.at(slot).targetName)
+            return; // the list was rebuilt under it; the rule has not changed
+        updated.actions[slot].targetName = picked;
+        // a different object has different properties
+        updated.actions[slot].propertyKey.clear();
+        commit(index, updated);
+        refreshProperties(index, slot);
+        scheduleValueEditorRefresh(index, slot);
+    });
+    auto *thenRow = new QHBoxLayout;
+    thenRow->setSpacing(4);
+    thenRow->addWidget(act.target, 1);
+
+    act.warning = new QLabel(block);
+    act.warning->setPixmap(Icons::warning().pixmap(12, 12));
+    act.warning->setVisible(false);
+    thenRow->addWidget(act.warning);
+
+    if (slot == 0) {
+        thenRow->addWidget(rowButton(block, Icons::add(), tr("Add another action"),
+                                     [this, index] { addAction(index); }));
+    } else {
+        thenRow->addWidget(rowButton(block, Icons::deleteShape(), tr("Remove this action"),
+                                     [this, index, slot] { removeAction(index, slot); }));
+    }
+    form->addRow(tr("Then:"), thenRow);
+
+    act.property = new ObjectComboBox(
+        [this, index, slot] {
+            const QVector<Rule> &rules = m_scene->rules();
+            if (index >= rules.size() || slot >= rules.at(index).actions.size())
+                return propertiesOf(QString());
+            return propertiesOf(rules.at(index).actions.at(slot).targetName);
+        },
+        block);
+    act.property->setEmptyText(tr("(nothing changeable)"));
+    connect(act.property, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, index, slot](int) {
+        if (m_building)
+            return;
+        Rule updated = m_scene->rules().at(index);
+        const QString chosen = m_rows[index].actions[slot].property->currentData().toString();
 
         // The same dropdown offers properties and actions; which one it is
         // decides whether the rule writes a value or performs something.
-        const QString action = actionIdOf(chosen);
-        updated.actionId = action;
-        if (action.isEmpty()) {
-            updated.propertyKey = chosen;
-            updated.actionParams.clear();
+        const QString performed = actionIdOf(chosen);
+        RuleAction &a = updated.actions[slot];
+        a.actionId = performed;
+        if (performed.isEmpty()) {
+            a.propertyKey = chosen;
+            a.actionParams.clear();
         } else {
-            updated.propertyKey.clear();
+            a.propertyKey.clear();
             // An action's settings are its own, and a rule that carried none
             // performed it with every number at zero -- a blast of radius
             // nothing. Start them where the engine says they should start.
-            updated.actionParams = defaultActionParams(action);
+            a.actionParams = defaultActionParams(performed);
         }
         commit(index, updated);
-        m_rows[index].op->setVisible(action.isEmpty());
-        scheduleValueEditorRefresh(index);
+        m_rows[index].actions[slot].op->setVisible(performed.isEmpty());
+        scheduleValueEditorRefresh(index, slot);
     });
-    form->addRow(QString(), row.property);
+    form->addRow(QString(), act.property);
 
     // --- what to do -------------------------------------------------------
     auto *doRow = new QHBoxLayout;
     doRow->setSpacing(4);
 
-    row.op = new QComboBox(card);
-    row.op->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    row.op->setMinimumContentsLength(4);
+    act.op = new QComboBox(block);
+    act.op->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    act.op->setMinimumContentsLength(4);
     // Never Ignored: that lets the layout squeeze it to nothing, and then the
     // choice between Set, Toggle, Negate and Add is simply gone from the card.
     // It keeps the width its shortest entry needs; the number beside it is the
     // part that gives way.
-    row.op->addItem(tr("Set to"), static_cast<int>(Rule::Op::Set));
-    row.op->addItem(tr("Toggle"), static_cast<int>(Rule::Op::Toggle));
-    row.op->addItem(tr("Negate"), static_cast<int>(Rule::Op::Negate));
-    row.op->addItem(tr("Add"), static_cast<int>(Rule::Op::Add));
-    row.op->setCurrentIndex(row.op->findData(static_cast<int>(rule.op)));
-    row.op->setToolTip(tr("Negate flips the sign, which is how a motor reverses at a limit."));
-    connect(row.op, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
+    act.op->addItem(tr("Set to"), static_cast<int>(Rule::Op::Set));
+    act.op->addItem(tr("Toggle"), static_cast<int>(Rule::Op::Toggle));
+    act.op->addItem(tr("Negate"), static_cast<int>(Rule::Op::Negate));
+    act.op->addItem(tr("Add"), static_cast<int>(Rule::Op::Add));
+    act.op->setCurrentIndex(act.op->findData(static_cast<int>(action.op)));
+    act.op->setToolTip(tr("Negate flips the sign, which is how a motor reverses at a limit."));
+    connect(act.op, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, index, slot](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
-        updated.op = static_cast<Rule::Op>(m_rows[index].op->currentData().toInt());
+        updated.actions[slot].op =
+            static_cast<Rule::Op>(m_rows[index].actions[slot].op->currentData().toInt());
         commit(index, updated);
-        scheduleValueEditorRefresh(index);
+        scheduleValueEditorRefresh(index, slot);
     });
-    doRow->addWidget(row.op);
+    doRow->addWidget(act.op);
 
     // What the number is: typed here, or read off another object each time the
     // rule fires. Which of the two editors is shown follows from this.
-    row.valueMode = new QComboBox(card);
-    row.valueMode->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    row.valueMode->setMinimumContentsLength(4);
-    row.valueMode->addItem(tr("Value"), false);
-    row.valueMode->addItem(tr("Property"), true);
-    row.valueMode->setToolTip(tr("A number you type, or one taken from another "
+    act.valueMode = new QComboBox(block);
+    act.valueMode->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    act.valueMode->setMinimumContentsLength(4);
+    act.valueMode->addItem(tr("Value"), false);
+    act.valueMode->addItem(tr("Property"), true);
+    act.valueMode->setToolTip(tr("A number you type, or one taken from another "
                                  "object while the rule runs."));
-    connect(row.valueMode, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
+    connect(act.valueMode, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, index, slot](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
-        if (m_rows[index].valueMode->currentData().toBool()) {
+        RuleAction &a = updated.actions[slot];
+        if (m_rows[index].actions[slot].valueMode->currentData().toBool()) {
             // Property with nothing picked would leave the rule half-set and
             // silently skipped, so the first candidate is filled in at once.
-            if (updated.sourceObject.isEmpty()) {
+            if (a.sourceObject.isEmpty()) {
                 const QVector<RuleChoice> objects = sourceObjectChoices();
                 // The object the rule already watches is the likely one to read
                 // from -- "when the ray sees something, go to where it struck".
-                const auto watched =
+                const QString watched = updated.conditions.isEmpty()
+                                            ? QString()
+                                            : updated.conditions.first().subjectName;
+                const auto found =
                     std::find_if(objects.begin(), objects.end(),
-                                 [&](const RuleChoice &c) {
-                                     return c.data == updated.subjectName;
-                                 });
-                if (watched != objects.end())
-                    updated.sourceObject = watched->data;
+                                 [&](const RuleChoice &c) { return c.data == watched; });
+                if (found != objects.end())
+                    a.sourceObject = found->data;
                 else if (!objects.isEmpty())
-                    updated.sourceObject = objects.first().data;
+                    a.sourceObject = objects.first().data;
             }
-            const QVector<RuleChoice> properties = readablesOf(updated.sourceObject);
-            if (updated.sourceProperty.isEmpty() && !properties.isEmpty())
-                updated.sourceProperty = properties.first().data;
+            const QVector<RuleChoice> properties = readablesOf(a.sourceObject);
+            if (a.sourceProperty.isEmpty() && !properties.isEmpty())
+                a.sourceProperty = properties.first().data;
         } else {
-            updated.sourceObject.clear();
-            updated.sourceProperty.clear();
+            a.sourceObject.clear();
+            a.sourceProperty.clear();
         }
         commit(index, updated);
-        scheduleValueEditorRefresh(index);
+        scheduleValueEditorRefresh(index, slot);
     });
-    doRow->addWidget(row.valueMode);
+    doRow->addWidget(act.valueMode);
 
     // The number reads as part of the sentence -- "Set to 12.5" -- so it sits
     // on the same line as the operation it belongs to, and takes whatever
     // width is left over.
-    row.valueHolder = new QWidget(card);
-    auto *holderLayout = new QHBoxLayout(row.valueHolder);
+    act.valueHolder = new QWidget(block);
+    auto *holderLayout = new QHBoxLayout(act.valueHolder);
     holderLayout->setContentsMargins(0, 0, 0, 0);
-    doRow->addWidget(row.valueHolder, 1);
+    doRow->addWidget(act.valueHolder, 1);
     form->addRow(tr("Do:"), doRow);
 
     // Where the number comes from, on its own line. Four controls crammed into
     // the Do row left the picker 39 px wide and effectively invisible.
-    row.sourceHolder = new QWidget(card);
+    act.sourceHolder = new QWidget(block);
     // A form, not a row: three controls side by side leave each of them about
     // 38 px wide on a card this narrow.
-    auto *sourceLayout = new QFormLayout(row.sourceHolder);
+    auto *sourceLayout = new QFormLayout(act.sourceHolder);
     sourceLayout->setContentsMargins(0, 0, 0, 0);
     sourceLayout->setSpacing(4);
     sourceLayout->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     sourceLayout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-    form->addRow(tr("Value from:"), row.sourceHolder);
-    row.sourceRow = form->rowCount() - 1;
-    row.form = form;
+    form->addRow(tr("Value from:"), act.sourceHolder);
+    act.sourceRow = form->rowCount() - 1;
+    act.form = form;
 
-    auto *body = new QWidget(card);
-    body->setLayout(form);
-    body->setVisible(!m_collapsed.contains(index));
-    body->setContentsMargins(8, 6, 8, 8);
-    outer->addWidget(body);
-
-    row.body = body;
-    row.collapse = collapse;
-    row.heading = heading;
-    row.headingEdit = rename;
-    connect(collapse, &QToolButton::clicked, this, [this, index] { setCollapsed(index, !m_collapsed.contains(index)); });
-    m_rows.append(row);
-    return card;
+    m_rows[index].actions.append(act);
+    return block;
 }
 
 QVector<RuleChoice> RulesPanel::sourceChoices() const
@@ -742,22 +943,26 @@ QVector<RuleChoice> RulesPanel::targetChoices() const
     return choices;
 }
 
-void RulesPanel::refreshEvents(int index)
+void RulesPanel::refreshEvents(int index, int slot)
 {
-    if (index < 0 || index >= m_rows.size())
+    if (index < 0 || index >= m_rows.size() || slot < 0
+        || slot >= m_rows[index].conditions.size()
+        || slot >= m_scene->rules().at(index).conditions.size()) {
         return;
-    Rule rule = m_scene->rules().at(index);
-
-    const QString wanted = rule.isEvent() ? kEventPrefix + rule.eventId
-                                          : rule.conditionKey;
-    m_rows[index].event->selectData(wanted);
-
-    const QString shown = m_rows[index].event->currentData().toString();
-    if (shown != wanted && !shown.isEmpty()) {
-        applyWatchChoice(index, shown);
-        rule = m_scene->rules().at(index);
     }
-    m_rows[index].compare->setVisible(!rule.isEvent());
+    RuleCondition condition = m_scene->rules().at(index).conditions.at(slot);
+    ConditionRow &row = m_rows[index].conditions[slot];
+
+    const QString wanted = condition.isEvent() ? kEventPrefix + condition.eventId
+                                               : condition.conditionKey;
+    row.event->selectData(wanted);
+
+    const QString shown = row.event->currentData().toString();
+    if (shown != wanted && !shown.isEmpty()) {
+        applyWatchChoice(index, slot, shown);
+        condition = m_scene->rules().at(index).conditions.at(slot);
+    }
+    row.compare->setVisible(!condition.isEvent());
 }
 
 QVector<physics::EventType> RulesPanel::eventsFor(const QString &name) const
@@ -892,12 +1097,15 @@ QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
     return choices;
 }
 
-void RulesPanel::refreshConditionEditor(int index)
+void RulesPanel::refreshConditionEditor(int index, int slot)
 {
-    if (index < 0 || index >= m_rows.size())
+    if (index < 0 || index >= m_rows.size() || slot < 0
+        || slot >= m_rows[index].conditions.size()
+        || slot >= m_scene->rules().at(index).conditions.size()) {
         return;
-    Row &row = m_rows[index];
-    const Rule rule = m_scene->rules().at(index);
+    }
+    ConditionRow &row = m_rows[index].conditions[slot];
+    const RuleCondition condition = m_scene->rules().at(index).conditions.at(slot);
 
     delete row.condition;
     row.condition = nullptr;
@@ -909,7 +1117,7 @@ void RulesPanel::refreshConditionEditor(int index)
     // false: "is greater than 0.5" is not a question about it, and offering
     // the ordering tests is how a rule ends up written that way.
     const bool watchingFlag =
-        !rule.isEvent() && propertyIsFlag(rule.subjectName, rule.conditionKey);
+        !condition.isEvent() && propertyIsFlag(condition.subjectName, condition.conditionKey);
     if (row.compare) {
         row.compare->clear();
         if (!watchingFlag) {
@@ -928,24 +1136,24 @@ void RulesPanel::refreshConditionEditor(int index)
             row.compare->addItem(tr("is"), Rule::compareName(Rule::Compare::Equal));
             row.compare->addItem(tr("is not"), Rule::compareName(Rule::Compare::NotEqual));
         }
-        int at = row.compare->findData(Rule::compareName(rule.compare));
+        int at = row.compare->findData(Rule::compareName(condition.compare));
         if (at < 0) {
             // The test it carried is not one that can be asked any more --
             // switched from a number to a flag. Equals is the one that always
             // means something.
             at = row.compare->findData(Rule::compareName(Rule::Compare::Equal));
-            Rule updated = rule;
-            updated.compare = Rule::Compare::Equal;
+            Rule updated = m_scene->rules().at(index);
+            updated.conditions[slot].compare = Rule::Compare::Equal;
             commit(index, updated);
         }
         row.compare->setCurrentIndex(qMax(0, at));
     }
 
-    if (rule.isEvent() && !eventNamesOther(rule.subjectName, rule.eventId)) {
+    if (condition.isEvent() && !eventNamesOther(condition.subjectName, condition.eventId)) {
         // Nothing to choose. A joint arriving at its limit, a body coming to
         // rest -- these happen to one object, and offering "or anything" here
         // only invited the question of what the objects had to do with it.
-    } else if (rule.isEvent()) {
+    } else if (condition.isEvent()) {
         auto *combo = new ObjectComboBox(
             [this] {
                 QVector<RuleChoice> choices;
@@ -958,30 +1166,30 @@ void RulesPanel::refreshConditionEditor(int index)
             row.conditionHolder);
         combo->setObjectName(QStringLiteral("conditionOther"));
         combo->setToolTip(tr("Which object, or anything."));
-        combo->selectData(rule.conditionValue.toString());
-        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, combo](int) {
+        combo->selectData(condition.conditionValue.toString());
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, slot, combo](int) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
-            updated.conditionValue = combo->currentData().toString();
+            updated.conditions[slot].conditionValue = combo->currentData().toString();
             commit(index, updated);
         });
         row.condition = combo;
-    } else if (propertyIsChoice(rule.subjectName, rule.conditionKey)) {
+    } else if (propertyIsChoice(condition.subjectName, condition.conditionKey)) {
         // Compared as its index, so "is Dynamic" is a comparison the same way
         // any other is -- but chosen by name.
-        const physics::JointParam *param = describe(rule.subjectName, rule.conditionKey);
+        const physics::JointParam *param = describe(condition.subjectName, condition.conditionKey);
         auto *combo = new QComboBox(row.conditionHolder);
         combo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
         combo->addItems(param->choices);
         combo->setToolTip(param->tooltip);
-        combo->setCurrentIndex(qBound(0, rule.conditionValue.toInt(),
+        combo->setCurrentIndex(qBound(0, condition.conditionValue.toInt(),
                                       param->choices.size() - 1));
-        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int at) {
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, slot](int at) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
-            updated.conditionValue = at;
+            updated.conditions[slot].conditionValue = at;
             commit(index, updated);
         });
         row.condition = combo;
@@ -992,14 +1200,14 @@ void RulesPanel::refreshConditionEditor(int index)
         combo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
         combo->addItem(tr("true"), true);
         combo->addItem(tr("false"), false);
-        combo->setCurrentIndex(rule.conditionValue.toBool() ? 0 : 1);
-        if (const physics::JointParam *param = describe(rule.subjectName, rule.conditionKey))
+        combo->setCurrentIndex(condition.conditionValue.toBool() ? 0 : 1);
+        if (const physics::JointParam *param = describe(condition.subjectName, condition.conditionKey))
             combo->setToolTip(param->tooltip);
-        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, combo](int) {
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, slot, combo](int) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
-            updated.conditionValue = combo->currentData().toBool();
+            updated.conditions[slot].conditionValue = combo->currentData().toBool();
             commit(index, updated);
         });
         row.condition = combo;
@@ -1010,12 +1218,12 @@ void RulesPanel::refreshConditionEditor(int index)
         spin->setRange(-1e7, 1e7);
         spin->setDecimals(1);
         spin->setSingleStep(10.0);
-        spin->setValue(rule.conditionValue.toDouble());
-        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, index](double v) {
+        spin->setValue(condition.conditionValue.toDouble());
+        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, index, slot](double v) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
-            updated.conditionValue = v;
+            updated.conditions[slot].conditionValue = v;
             commit(index, updated);
         });
         row.condition = spin;
@@ -1167,19 +1375,19 @@ QVariantMap RulesPanel::defaultActionParams(const QString &id) const
     return params;
 }
 
-QWidget *RulesPanel::buildActionParamEditor(int index, const Rule &rule,
+QWidget *RulesPanel::buildActionParamEditor(int index, int slot, const RuleAction &ruleAction,
                                             QWidget *parent)
 {
     auto engine = physics::EngineRegistry::create(
         m_scene ? m_scene->simulationEngineName() : QString());
 
-    const physics::ActionType ownAction = applicationAction(rule.actionId);
+    const physics::ActionType ownAction = applicationAction(ruleAction.actionId);
     QVector<physics::JointParam> params = ownAction.params;
     QString description = ownAction.description;
     if (engine && params.isEmpty()) {
         for (const physics::ActionType &action :
              engine->bodyActions() + engine->jointActions()) {
-            if (action.id != rule.actionId)
+            if (action.id != ruleAction.actionId)
                 continue;
             params = action.params;
             description = action.description;
@@ -1204,17 +1412,17 @@ QWidget *RulesPanel::buildActionParamEditor(int index, const Rule &rule,
     holder->setToolTip(description);
 
     for (const physics::JointParam &param : params) {
-        const QVariant current = rule.actionParams.value(param.key, param.defaultValue);
+        const QVariant current = ruleAction.actionParams.value(param.key, param.defaultValue);
 
         if (param.type == physics::ParamType::Bool) {
             auto *check = new QCheckBox(holder);
             check->setChecked(current.toBool());
             check->setToolTip(param.tooltip);
-            connect(check, &QCheckBox::toggled, this, [this, index, key = param.key](bool on) {
+            connect(check, &QCheckBox::toggled, this, [this, index, slot, key = param.key](bool on) {
                 if (m_building)
                     return;
                 Rule updated = m_scene->rules().at(index);
-                updated.actionParams.insert(key, on);
+                updated.actions[slot].actionParams.insert(key, on);
                 commit(index, updated);
             });
             form->addRow(param.label, check);
@@ -1230,11 +1438,11 @@ QWidget *RulesPanel::buildActionParamEditor(int index, const Rule &rule,
         spin->setToolTip(param.tooltip);
         spin->setValue(current.toDouble());
         connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
-                [this, index, key = param.key](double v) {
+                [this, index, slot, key = param.key](double v) {
                     if (m_building)
                         return;
                     Rule updated = m_scene->rules().at(index);
-                    updated.actionParams.insert(key, v);
+                    updated.actions[slot].actionParams.insert(key, v);
                     commit(index, updated);
                 });
         form->addRow(param.label, spin);
@@ -1253,14 +1461,18 @@ QString RulesPanel::actionIdOf(const QString &key)
     return key.startsWith(prefix) ? key.mid(prefix.size()) : QString();
 }
 
-void RulesPanel::refreshProperties(int index)
+void RulesPanel::refreshProperties(int index, int slot)
 {
-    if (index < 0 || index >= m_rows.size())
+    if (index < 0 || index >= m_rows.size() || slot < 0
+        || slot >= m_rows[index].actions.size()
+        || slot >= m_scene->rules().at(index).actions.size()) {
         return;
+    }
 
-    const Rule rule = m_scene->rules().at(index);
-    const QString stored = rule.isAction() ? actionKey(rule.actionId) : rule.propertyKey;
-    m_rows[index].property->selectData(stored);
+    const RuleAction action = m_scene->rules().at(index).actions.at(slot);
+    ActionRow &row = m_rows[index].actions[slot];
+    const QString stored = action.isAction() ? actionKey(action.actionId) : action.propertyKey;
+    row.property->selectData(stored);
 
     // Same fallback problem as the watch list: what is shown has to be what
     // is stored, or the first click on the entry already displayed does
@@ -1272,42 +1484,47 @@ void RulesPanel::refreshProperties(int index)
     // to rewrite the rule to whatever happened to be on top and save it that
     // way. Silently, and permanently: "stop the motor" became "set the solver
     // damping" and nothing ever stopped.
-    const QString shown = m_rows[index].property->currentData().toString();
-    QString action = rule.actionId;
+    const QString shown = row.property->currentData().toString();
+    QString performed = action.actionId;
     if (shown != stored && !shown.isEmpty() && stored.isEmpty()) {
-        Rule updated = rule;
-        action = actionIdOf(shown);
-        updated.actionId = action;
-        updated.actionParams = action.isEmpty() ? QVariantMap()
-                                                : defaultActionParams(action);
-        updated.propertyKey = action.isEmpty() ? shown : QString();
+        Rule updated = m_scene->rules().at(index);
+        RuleAction &a = updated.actions[slot];
+        performed = actionIdOf(shown);
+        a.actionId = performed;
+        a.actionParams = performed.isEmpty() ? QVariantMap()
+                                             : defaultActionParams(performed);
+        a.propertyKey = performed.isEmpty() ? shown : QString();
         commit(index, updated);
     }
 
     // An action has no Set/Toggle/Negate/Add -- performing it is the whole
     // thing. Decided after the fallback above, or an action picked for the
     // rule on its behalf would leave the operation box behind.
-    m_rows[index].op->setVisible(action.isEmpty());
+    row.op->setVisible(performed.isEmpty());
 }
 
-void RulesPanel::applyWatchChoice(int index, const QString &chosen)
+void RulesPanel::applyWatchChoice(int index, int slot, const QString &chosen)
 {
     if (index < 0 || index >= m_scene->rules().size())
         return;
 
     Rule updated = m_scene->rules().at(index);
+    if (slot < 0 || slot >= updated.conditions.size())
+        return;
+
+    RuleCondition &condition = updated.conditions[slot];
     if (chosen.startsWith(kEventPrefix)) {
-        updated.eventId = chosen.mid(kEventPrefix.size());
-        updated.conditionKey.clear();
-        if (updated.conditionValue.userType() != QMetaType::QString
-            || !eventNamesOther(updated.subjectName, updated.eventId))
-            updated.conditionValue = QString();
+        condition.eventId = chosen.mid(kEventPrefix.size());
+        condition.conditionKey.clear();
+        if (condition.conditionValue.userType() != QMetaType::QString
+            || !eventNamesOther(condition.subjectName, condition.eventId))
+            condition.conditionValue = QString();
     } else {
-        updated.conditionKey = chosen;
-        if (updated.isEvent()) {
-            updated.eventId.clear();
-            updated.compare = Rule::Compare::Greater;
-            updated.conditionValue = 0.0;
+        condition.conditionKey = chosen;
+        if (condition.isEvent()) {
+            condition.eventId.clear();
+            condition.compare = Rule::Compare::Greater;
+            condition.conditionValue = 0.0;
         }
     }
     commit(index, updated);
@@ -1417,21 +1634,24 @@ void RulesPanel::moveRule(int from, int to)
     m_scene->notifyEdit(tr("Move %1").arg(name));
 }
 
-void RulesPanel::scheduleValueEditorRefresh(int index)
+void RulesPanel::scheduleValueEditorRefresh(int index, int slot)
 {
     // Rebuilding from inside a combo box's own currentIndexChanged deletes that
     // combo box while Qt is still delivering the signal, which took the whole
     // application down. Queued, the handler returns first.
     QMetaObject::invokeMethod(
-        this, [this, index] { refreshValueEditor(index); }, Qt::QueuedConnection);
+        this, [this, index, slot] { refreshValueEditor(index, slot); }, Qt::QueuedConnection);
 }
 
-void RulesPanel::refreshValueEditor(int index)
+void RulesPanel::refreshValueEditor(int index, int slot)
 {
-    if (index < 0 || index >= m_rows.size())
+    if (index < 0 || index >= m_rows.size() || slot < 0
+        || slot >= m_rows[index].actions.size()
+        || slot >= m_scene->rules().at(index).actions.size()) {
         return;
-    Row &row = m_rows[index];
-    const Rule rule = m_scene->rules().at(index);
+    }
+    ActionRow &row = m_rows[index].actions[slot];
+    const RuleAction action = m_scene->rules().at(index).actions.at(slot);
 
     delete row.value;
     row.value = nullptr;
@@ -1457,54 +1677,57 @@ void RulesPanel::refreshValueEditor(int index)
     // straight into the scene rather than through commit(): making a shown
     // default real is not an edit the user made, and it has no business in
     // the undo history as one.
-    const auto seedShownValue = [this, index](const QVariant &shown) {
-        if (index >= m_scene->rules().size() || m_scene->rules().at(index).value.isValid())
+    const auto seedShownValue = [this, index, slot](const QVariant &shown) {
+        if (index >= m_scene->rules().size()
+            || slot >= m_scene->rules().at(index).actions.size()
+            || m_scene->rules().at(index).actions.at(slot).value.isValid()) {
             return;
-        m_scene->rules()[index].value = shown;
+        }
+        m_scene->rules()[index].actions[slot].value = shown;
     };
 
-    if (rule.isAction() && m_scene->explosionNamed(rule.targetName)) {
+    if (action.isAction() && m_scene->explosionNamed(action.targetName)) {
         // Aimed at an explosion, the settings belong to that object -- it is
         // placed, sized and tuned on the canvas, and the rule only says when.
         auto *label = new QLabel(tr("(set on the object)"), row.valueHolder);
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
         label->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
         row.value = label;
-    } else if (rule.isAction()) {
+    } else if (action.isAction()) {
         // Aimed at anything else there is no object to carry them, so the
         // action's own parameters are edited here. Without this they stayed at
         // whatever they were seeded with and the rule could not be tuned.
-        row.value = buildActionParamEditor(index, rule, row.valueHolder);
-    } else if (!Rule::usesValue(rule.op)) {
+        row.value = buildActionParamEditor(index, slot, action, row.valueHolder);
+    } else if (!Rule::usesValue(action.op)) {
         auto *label = new QLabel(tr("(current value)"), row.valueHolder);
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
         label->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
         row.value = label;
-    } else if (propertyIsFlag(rule.targetName, rule.propertyKey)) {
+    } else if (propertyIsFlag(action.targetName, action.propertyKey)) {
         auto *check = new QCheckBox(row.valueHolder);
-        check->setChecked(rule.value.toBool());
+        check->setChecked(action.value.toBool());
         seedShownValue(check->isChecked());
-        connect(check, &QCheckBox::toggled, this, [this, index](bool on) {
+        connect(check, &QCheckBox::toggled, this, [this, index, slot](bool on) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
-            updated.value = on;
+            updated.actions[slot].value = on;
             commit(index, updated);
         });
         row.value = check;
-    } else if (propertyIsChoice(rule.targetName, rule.propertyKey)) {
+    } else if (propertyIsChoice(action.targetName, action.propertyKey)) {
         auto *combo = new QComboBox(row.valueHolder);
         combo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-        const physics::JointParam *param = describe(rule.targetName, rule.propertyKey);
+        const physics::JointParam *param = describe(action.targetName, action.propertyKey);
         combo->addItems(param->choices);
         combo->setToolTip(param->tooltip);
-        combo->setCurrentIndex(qBound(0, rule.value.toInt(), param->choices.size() - 1));
+        combo->setCurrentIndex(qBound(0, action.value.toInt(), param->choices.size() - 1));
         seedShownValue(combo->currentIndex());
-        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int at) {
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, slot](int at) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
-            updated.value = at;
+            updated.actions[slot].value = at;
             commit(index, updated);
         });
         row.value = combo;
@@ -1513,7 +1736,7 @@ void RulesPanel::refreshValueEditor(int index)
         spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
         spin->setMinimumWidth(48);
         // Range, precision and step as the engine declared them.
-        if (const physics::JointParam *p = describe(rule.targetName, rule.propertyKey)) {
+        if (const physics::JointParam *p = describe(action.targetName, action.propertyKey)) {
             spin->setRange(p->minValue, p->maxValue);
             spin->setDecimals(p->decimals);
             spin->setSingleStep(p->step);
@@ -1526,13 +1749,13 @@ void RulesPanel::refreshValueEditor(int index)
         auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName());
         if (engine) {
             for (Joint *joint : m_scene->joints()) {
-                if (joint->name() != rule.targetName)
+                if (joint->name() != action.targetName)
                     continue;
                 for (const physics::JointType &type : engine->jointTypes()) {
                     if (type.id != joint->typeId())
                         continue;
                     for (const physics::JointParam &param : type.params) {
-                        if (param.key != rule.propertyKey)
+                        if (param.key != action.propertyKey)
                             continue;
                         spin->setRange(param.minValue, param.maxValue);
                         spin->setDecimals(param.decimals);
@@ -1542,15 +1765,15 @@ void RulesPanel::refreshValueEditor(int index)
                 }
             }
         }
-        spin->setValue(rule.value.toDouble());
+        spin->setValue(action.value.toDouble());
         // Read back rather than assumed: the range the engine declared may not
         // reach zero, and the box has already clamped into it.
         seedShownValue(spin->value());
-        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, index](double v) {
+        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, index, slot](double v) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
-            updated.value = v;
+            updated.actions[slot].value = v;
             commit(index, updated);
         });
         row.value = spin;
@@ -1560,9 +1783,9 @@ void RulesPanel::refreshValueEditor(int index)
 
     // Only a number-valued rule can take its value from elsewhere, so the mode
     // picker is offered there and nowhere else.
-    const bool canSource = !rule.isAction() && Rule::usesValue(rule.op)
-                           && !propertyIsFlag(rule.targetName, rule.propertyKey);
-    const bool sourced = canSource && rule.usesSource();
+    const bool canSource = !action.isAction() && Rule::usesValue(action.op)
+                           && !propertyIsFlag(action.targetName, action.propertyKey);
+    const bool sourced = canSource && action.usesSource();
     if (row.valueMode) {
         row.valueMode->setVisible(canSource);
         row.valueMode->setCurrentIndex(row.valueMode->findData(sourced));
@@ -1578,39 +1801,41 @@ void RulesPanel::refreshValueEditor(int index)
         auto *from = new ObjectComboBox([this] { return sourceObjectChoices(); },
                                         row.sourceHolder);
         from->setMinimumContentsLength(10);
-        from->selectData(rule.sourceObject);
+        from->selectData(action.sourceObject);
         from->setToolTip(tr("Which object the value is read from."));
-        connect(from, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
+        connect(from, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, slot](int) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
-            updated.sourceObject = m_rows[index].source2->currentData().toString();
+            updated.actions[slot].sourceObject = m_rows[index].actions[slot].source2->currentData().toString();
             // Another object has other properties, so the old key cannot just
             // be carried across.
-            const QVector<RuleChoice> properties = readablesOf(updated.sourceObject);
-            updated.sourceProperty = properties.isEmpty() ? QString()
+            const QVector<RuleChoice> properties =
+                readablesOf(updated.actions[slot].sourceObject);
+            updated.actions[slot].sourceProperty = properties.isEmpty() ? QString()
                                                           : properties.first().data;
             commit(index, updated);
-            scheduleValueEditorRefresh(index);
+            scheduleValueEditorRefresh(index, slot);
         });
         row.source2 = from;
         layout->addRow(tr("object"), from);
 
         auto *what = new ObjectComboBox(
-            [this, index] {
-                return readablesOf(index < m_scene->rules().size()
-                                       ? m_scene->rules().at(index).sourceObject
-                                       : QString());
+            [this, index, slot] {
+                const QVector<Rule> &rules = m_scene->rules();
+                if (index >= rules.size() || slot >= rules.at(index).actions.size())
+                    return readablesOf(QString());
+                return readablesOf(rules.at(index).actions.at(slot).sourceObject);
             },
             row.sourceHolder);
         what->setMinimumContentsLength(10);
-        what->selectData(rule.sourceProperty);
+        what->selectData(action.sourceProperty);
         what->setToolTip(tr("Which of its properties to read."));
-        connect(what, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index](int) {
+        connect(what, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, slot](int) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
-            updated.sourceProperty = m_rows[index].sourceProperty->currentData().toString();
+            updated.actions[slot].sourceProperty = m_rows[index].actions[slot].sourceProperty->currentData().toString();
             commit(index, updated);
         });
         row.sourceProperty = what;
@@ -1621,14 +1846,14 @@ void RulesPanel::refreshValueEditor(int index)
         offset->setDecimals(1);
         offset->setSingleStep(10.0);
         offset->setMinimumWidth(70);
-        offset->setValue(rule.sourceOffset);
+        offset->setValue(action.sourceOffset);
         offset->setToolTip(tr("Added to whatever that property reads. Zero to "
                               "take it as it comes."));
-        connect(offset, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, index](double v) {
+        connect(offset, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, index, slot](double v) {
             if (m_building)
                 return;
             Rule updated = m_scene->rules().at(index);
-            updated.sourceOffset = v;
+            updated.actions[slot].sourceOffset = v;
             commit(index, updated);
         });
         row.sourceOffset = offset;
@@ -1722,6 +1947,10 @@ void RulesPanel::commit(int index, const Rule &rule)
     // One undo step per rule rather than per keystroke: the merge key names
     // the rule being edited, so a run of changes to it collapses into one.
     m_scene->notifyEdit(tr("Edit rule"), QStringLiteral("rule:%1").arg(index));
+    // No rebuild follows an edit, so the card has to be repainted here or a
+    // rule finished by the last field left would keep its warning.
+    refreshCardLook(index);
+    emit incompleteCountChanged(incompleteCount());
 }
 
 void RulesPanel::addRule()
@@ -1731,12 +1960,12 @@ void RulesPanel::addRule()
 
     Rule rule;
     if (!m_scene->bodies().isEmpty()) {
-        rule.subjectName = m_scene->bodies().first()->name();
-        rule.targetName = rule.subjectName;
+        rule.conditions[0].subjectName = m_scene->bodies().first()->name();
+        rule.actions[0].targetName = rule.conditions[0].subjectName;
     }
     if (!m_scene->joints().isEmpty()) {
-        rule.subjectName = m_scene->joints().first()->name();
-        rule.targetName = rule.subjectName;
+        rule.conditions[0].subjectName = m_scene->joints().first()->name();
+        rule.actions[0].targetName = rule.conditions[0].subjectName;
     }
 
     QVector<Rule> rules = m_scene->rules();
@@ -1745,29 +1974,193 @@ void RulesPanel::addRule()
     m_scene->notifyEdit(tr("Add rule"));
 }
 
-void RulesPanel::setCardEnabledLook(QWidget *card, QLabel *heading, bool enabled)
+// A second When, or a second Do. The new one is seeded from the one above it,
+// since a rule with two conditions is usually watching the same object twice
+// -- and an empty row would only mark the card unfinished the moment it
+// appeared.
+void RulesPanel::addCondition(int index)
 {
-    card->setStyleSheet(
-        enabled
-            ? QStringLiteral(
-                  "QFrame#ruleCard { border: 1px solid #c9c9c9; border-radius: 4px;"
-                  " background: #f4f4f4; }"
-                  // A band across the top, darker than the card, so where one
-                  // rule ends and the next begins is obvious down a column.
-                  "QWidget#ruleCardHeader { background: #dcdcdc;"
-                  " border-bottom: 1px solid #c9c9c9;"
-                  " border-top-left-radius: 3px; border-top-right-radius: 3px; }")
-            : QStringLiteral(
-                  "QFrame#ruleCard { border: 1px dashed #cfcfcf; border-radius: 4px;"
-                  " background: #fafafa; }"
-                  "QWidget#ruleCardHeader { background: #eeeeee;"
-                  " border-bottom: 1px solid #dcdcdc;"
-                  " border-top-left-radius: 3px; border-top-right-radius: 3px; }"));
-    if (heading) {
-        heading->setStyleSheet(enabled
-                                   ? QStringLiteral("font-weight: bold; color: #6f6f6f;")
-                                   : QStringLiteral("font-weight: bold; color: #b0b0b0;"));
+    if (!m_scene || index < 0 || index >= m_scene->rules().size())
+        return;
+
+    Rule updated = m_scene->rules().at(index);
+    RuleCondition seed;
+    if (!updated.conditions.isEmpty()) {
+        seed.subjectName = updated.conditions.last().subjectName;
+        seed.conditionKey = updated.conditions.last().conditionKey;
+        seed.compare = updated.conditions.last().compare;
     }
+    updated.conditions.append(seed);
+    commitAndRebuild(index, updated, tr("Add condition"));
+}
+
+void RulesPanel::removeCondition(int index, int slot)
+{
+    if (!m_scene || index < 0 || index >= m_scene->rules().size())
+        return;
+
+    Rule updated = m_scene->rules().at(index);
+    // Never down to nothing: a rule with no condition could not say when, and
+    // the card would have no When at all to fill back in.
+    if (slot < 0 || slot >= updated.conditions.size() || updated.conditions.size() <= 1)
+        return;
+
+    updated.conditions.remove(slot);
+    commitAndRebuild(index, updated, tr("Remove condition"));
+}
+
+void RulesPanel::addAction(int index)
+{
+    if (!m_scene || index < 0 || index >= m_scene->rules().size())
+        return;
+
+    Rule updated = m_scene->rules().at(index);
+    RuleAction seed;
+    if (!updated.actions.isEmpty())
+        seed.targetName = updated.actions.last().targetName;
+    else if (!updated.conditions.isEmpty())
+        seed.targetName = updated.conditions.first().subjectName;
+    updated.actions.append(seed);
+    commitAndRebuild(index, updated, tr("Add action"));
+}
+
+void RulesPanel::removeAction(int index, int slot)
+{
+    if (!m_scene || index < 0 || index >= m_scene->rules().size())
+        return;
+
+    Rule updated = m_scene->rules().at(index);
+    if (slot < 0 || slot >= updated.actions.size() || updated.actions.size() <= 1)
+        return;
+
+    updated.actions.remove(slot);
+    commitAndRebuild(index, updated, tr("Remove action"));
+}
+
+// Adding or taking away a row changes how many blocks the card has, so unlike
+// an ordinary edit this one has to rebuild the panel. Its own undo step, too:
+// merging it with the edits either side would make one step undo both the row
+// and whatever was typed into it.
+void RulesPanel::commitAndRebuild(int index, const Rule &rule, const QString &label)
+{
+    m_scene->rules()[index] = rule;
+    m_scene->notifyEdit(label);
+    m_scene->notifyRulesChanged();
+}
+
+QString RulesPanel::problemText(Rule::Problem problem)
+{
+    switch (problem) {
+    case Rule::Problem::None:
+        return QString();
+    case Rule::Problem::NoConditions:
+        return tr("This rule does not run: it has no condition left to fire on.");
+    case Rule::Problem::NoActions:
+        return tr("This rule does not run: it has nothing left to do.");
+    case Rule::Problem::NoSubject:
+        return tr("This rule does not run: nothing is being watched.");
+    case Rule::Problem::NoCondition:
+        return tr("This rule does not run: pick an event to watch for, or a"
+                  " property to compare.");
+    case Rule::Problem::NoTarget:
+        return tr("This rule does not run: nothing is being acted on.");
+    case Rule::Problem::NoProperty:
+        return tr("This rule does not run: pick what to change on the target.");
+    case Rule::Problem::NoValue:
+        return tr("This rule does not run: it has nothing to set. Type a value,"
+                  " or read one from another object.");
+    }
+    return QString();
+}
+
+void RulesPanel::setCardLook(QWidget *card, QLabel *heading, bool enabled, bool complete)
+{
+    // Four looks over two questions. Complete or not decides the colour, since
+    // an unfinished rule is the one that wants attention; switched on or off
+    // decides whether the border is solid, which is the weaker signal of the
+    // two and so the quieter mark.
+    QString border;
+    QString background;
+    QString band;
+    QString bandBorder;
+    QString captionColor;
+    if (complete) {
+        border = enabled ? QStringLiteral("1px solid #c9c9c9")
+                         : QStringLiteral("1px dashed #cfcfcf");
+        background = enabled ? QStringLiteral("#f4f4f4") : QStringLiteral("#fafafa");
+        // A band across the top, darker than the card, so where one rule ends
+        // and the next begins is obvious down a column.
+        band = enabled ? QStringLiteral("#dcdcdc") : QStringLiteral("#eeeeee");
+        bandBorder = enabled ? QStringLiteral("#c9c9c9") : QStringLiteral("#dcdcdc");
+        captionColor = enabled ? QStringLiteral("#6f6f6f") : QStringLiteral("#b0b0b0");
+    } else {
+        border = enabled ? QStringLiteral("1px solid #d9534f")
+                         : QStringLiteral("1px dashed #e0a3a0");
+        background = enabled ? QStringLiteral("#fdf5f5") : QStringLiteral("#fdf9f9");
+        band = enabled ? QStringLiteral("#f3c9c6") : QStringLiteral("#f6e2e0");
+        bandBorder = enabled ? QStringLiteral("#d9534f") : QStringLiteral("#e0a3a0");
+        captionColor = enabled ? QStringLiteral("#a33a35") : QStringLiteral("#c48f8c");
+    }
+
+    card->setStyleSheet(
+        QStringLiteral("QFrame#ruleCard { border: %1; border-radius: 4px;"
+                       " background: %2; }"
+                       "QWidget#ruleCardHeader { background: %3;"
+                       " border-bottom: 1px solid %4;"
+                       " border-top-left-radius: 3px; border-top-right-radius: 3px; }")
+            .arg(border, background, band, bandBorder));
+    if (heading) {
+        heading->setStyleSheet(
+            QStringLiteral("font-weight: bold; color: %1;").arg(captionColor));
+    }
+}
+
+void RulesPanel::refreshCardLook(int index)
+{
+    if (!m_scene || index < 0 || index >= m_rows.size()
+        || index >= m_scene->rules().size())
+        return;
+
+    const Row &row = m_rows.at(index);
+    if (!row.card)
+        return;
+
+    const Rule &rule = m_scene->rules().at(index);
+    const Rule::Problem problem = rule.problem();
+    setCardLook(row.card, row.heading, rule.enabled, problem == Rule::Problem::None);
+    if (row.warning) {
+        row.warning->setVisible(problem != Rule::Problem::None);
+        row.warning->setToolTip(problemText(problem));
+    }
+
+    // And the row it came from, so a card with several Whens says which of
+    // them is the one still to be filled in.
+    for (int slot = 0; slot < row.conditions.size() && slot < rule.conditions.size(); ++slot)
+        setRowWarning(row.conditions.at(slot).warning,
+                      Rule::conditionProblem(rule.conditions.at(slot)));
+    for (int slot = 0; slot < row.actions.size() && slot < rule.actions.size(); ++slot)
+        setRowWarning(row.actions.at(slot).warning,
+                      Rule::actionProblem(rule.actions.at(slot)));
+}
+
+void RulesPanel::setRowWarning(QLabel *warning, Rule::Problem problem)
+{
+    if (!warning)
+        return; // a card with one of each has no per-row heading to mark
+    warning->setVisible(problem != Rule::Problem::None);
+    warning->setToolTip(problemText(problem));
+}
+
+int RulesPanel::incompleteCount() const
+{
+    if (!m_scene)
+        return 0;
+    int count = 0;
+    for (const Rule &rule : m_scene->rules()) {
+        if (!rule.isValid())
+            ++count;
+    }
+    return count;
 }
 
 void RulesPanel::setHeadingText(QLabel *label, const QString &caption)
@@ -1859,12 +2252,20 @@ void RulesPanel::removeRule(int index)
 void RulesPanel::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
+    // Every block of every card: the lists are built from what the scene holds
+    // now, and it may have gained or lost objects while the tab was hidden.
     for (Row &row : m_rows) {
-        row.source->refill();
-        row.event->refill();
-        row.target->refill();
-        row.property->refill();
-        if (row.event->isVisible())
-            row.event->refill();
+        for (ConditionRow &condition : row.conditions) {
+            condition.source->refill();
+            condition.event->refill();
+        }
+        for (ActionRow &action : row.actions) {
+            action.target->refill();
+            action.property->refill();
+            if (action.source2)
+                action.source2->refill();
+            if (action.sourceProperty)
+                action.sourceProperty->refill();
+        }
     }
 }

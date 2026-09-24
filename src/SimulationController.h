@@ -156,11 +156,20 @@ private:
     QVector<RuleState> m_ruleState;
 
     void applyRules();
+    // One verdict for the whole card: every condition judged, then joined with
+    // all-of or any-of. `other` comes back as whichever condition named one.
     bool evaluate(const Rule &rule,
                   const QHash<QString, QHash<QString, QStringList>> &raised,
                   QString *other) const;
+    bool evaluateOne(const RuleCondition &condition,
+                     const QHash<QString, QHash<QString, QStringList>> &raised,
+                     QString *other) const;
 
-    void applyAction(const Rule &rule);
+    // `subjectName` is what the rule watches, which is what an answer to a
+    // removal means by "the other object".
+    void applyAction(const RuleAction &action, const QString &subjectName);
+    static QString firstSubject(const Rule &rule);
+    bool resolveOther(RuleAction *action, const QString &other) const;
     // A rule is about to remove this body. Carries out every rule answering
     // "is about to be removed" and says whether there were any -- if so, the
     // removal does not happen. `remover` is the subject of the removing rule.
