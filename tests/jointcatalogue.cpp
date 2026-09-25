@@ -5,11 +5,13 @@
 #include "IPhysicsEngine.h"
 #include "Joint.h"
 #include "PhysicsBody.h"
+#include "PropertyPane/JointPropertyPane.h"
 #include "RectangleItem.h"
 #include "SceneSerializer.h"
 #include "ShapeItem.h"
 #include "SimulationController.h"
 
+#include <QHash>
 #include <QJsonObject>
 #include <QSet>
 #include <cmath>
@@ -210,6 +212,50 @@ void everyReadingAnswers(const QString &engineName)
         }
         sim.stop();
     }
+}
+
+// The property table shows each of a joint's keys once. A motor's speed is
+// published twice on purpose -- as the setting and as a reading, so a rule can
+// ask what it is before negating it -- and the table has to pick one, or the
+// joint grows two "Motor Speed" rows that set each other.
+void noRowIsShownTwice(const QString &engineName)
+{
+    auto engine = physics::EngineRegistry::create(engineName);
+    ASSERT_TRUE(engine) << engineName.toStdString() << " is not installed";
+
+    for (const physics::JointType &type : engine->jointTypes()) {
+        TwoBodies bench(engineName);
+        Joint *joint = bench.join(type);
+        ASSERT_TRUE(joint);
+        bench.scene.selectJoint(joint);
+
+        JointPropertyPane pane;
+        pane.attach(&bench.scene);
+
+        QHash<QString, QStringList> shown;
+        for (const PropertyRow &row : pane.rows(EditorMode::Physics)) {
+            if (row.key.isEmpty())
+                continue; // a row the editor owns carries no engine key
+            shown[row.key] << (row.group + QLatin1Char('/') + row.label);
+        }
+
+        for (auto it = shown.constBegin(); it != shown.constEnd(); ++it) {
+            EXPECT_EQ(it.value().size(), 1)
+                << engineName.toStdString() << ": " << type.id.toStdString() << '.'
+                << it.key().toStdString() << " is in the table as "
+                << it.value().join(QLatin1String(" and ")).toStdString();
+        }
+    }
+}
+
+TEST(JointCatalogue, Box2DShowsEachJointRowOnce)
+{
+    noRowIsShownTwice(QStringLiteral("Box2D"));
+}
+
+TEST(JointCatalogue, ChipmunkShowsEachJointRowOnce)
+{
+    noRowIsShownTwice(QStringLiteral("Chipmunk2D"));
 }
 
 TEST(JointCatalogue, Box2DAnswersForEverythingItMeasures)

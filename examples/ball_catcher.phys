@@ -283,7 +283,7 @@
     "joints": [
         {
             "anchorA": {
-                "x": 351.9356718202533,
+                "x": 351.93567182025333,
                 "y": -139.99612964122676
             },
             "anchorB": {
@@ -357,22 +357,26 @@
     ],
     "rules": [
         {
+            "conditions": [
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_2",
+                    "when": "rectangle_4"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_1",
+                    "when": "rectangle_3"
+                }
+            ],
             "event": "contactBegin",
-            "name": "Right wall",
+            "join": "any",
+            "name": "walls",
             "op": "negate",
             "property": "motorSpeed",
             "subject": "rectangle_2",
             "target": "prismatic_1",
             "when": "rectangle_4"
-        },
-        {
-            "event": "contactBegin",
-            "name": "Left wall",
-            "op": "negate",
-            "property": "motorSpeed",
-            "subject": "rectangle_1",
-            "target": "prismatic_1",
-            "when": "rectangle_3"
         },
         {
             "event": "rayDetects",
@@ -388,8 +392,28 @@
             "when": ""
         },
         {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "positionX",
+                    "sourceObject": "body_12",
+                    "sourceOffset": 0,
+                    "sourceProperty": "positionX",
+                    "target": "@otherBody",
+                    "value": 800
+                },
+                {
+                    "op": "set",
+                    "property": "positionY",
+                    "sourceObject": "body_12",
+                    "sourceOffset": 50,
+                    "sourceProperty": "positionY",
+                    "target": "@otherBody",
+                    "value": 0
+                }
+            ],
             "event": "sensorBegin",
-            "name": "Move ball back X",
+            "name": "Move ball back",
             "op": "set",
             "property": "positionX",
             "sourceObject": "body_12",
@@ -398,19 +422,6 @@
             "subject": "can_mouth",
             "target": "@otherBody",
             "value": 800,
-            "when": ""
-        },
-        {
-            "event": "sensorBegin",
-            "name": "Move ball back Y",
-            "op": "set",
-            "property": "positionY",
-            "sourceObject": "body_12",
-            "sourceOffset": 50,
-            "sourceProperty": "positionY",
-            "subject": "can_mouth",
-            "target": "@otherBody",
-            "value": 260,
             "when": ""
         }
     ],

@@ -231,12 +231,69 @@
     "format": "shape-editor-scene",
     "joints": [
     ],
+    "log": [
+        {
+            "label": "balls",
+            "object": "@variables",
+            "property": "balls"
+        }
+    ],
     "rules": [
         {
             "action": "removeBody",
             "actionParams": {
             },
+            "actions": [
+                {
+                    "action": "removeBody",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@otherBody",
+                    "value": 0
+                },
+                {
+                    "op": "add",
+                    "property": "balls",
+                    "target": "@variables",
+                    "value": 1
+                }
+            ],
+            "conditions": [
+                {
+                    "event": "sensorBegin",
+                    "subject": "circle_1",
+                    "when": ""
+                },
+                {
+                    "event": "sensorBegin",
+                    "subject": "circle_2",
+                    "when": ""
+                },
+                {
+                    "event": "sensorBegin",
+                    "subject": "circle_3",
+                    "when": ""
+                },
+                {
+                    "event": "sensorBegin",
+                    "subject": "circle_4",
+                    "when": ""
+                },
+                {
+                    "event": "sensorBegin",
+                    "subject": "circle_5",
+                    "when": ""
+                },
+                {
+                    "event": "sensorBegin",
+                    "subject": "circle_6",
+                    "when": ""
+                }
+            ],
             "event": "sensorBegin",
+            "join": "any",
             "name": "pocket 1",
             "op": "set",
             "property": "",
@@ -246,74 +303,26 @@
             "when": ""
         },
         {
-            "action": "removeBody",
-            "actionParams": {
-            },
-            "event": "sensorBegin",
-            "name": "pocket 2",
-            "op": "set",
-            "property": "",
-            "subject": "circle_2",
-            "target": "@otherBody",
-            "value": 0,
-            "when": ""
-        },
-        {
-            "action": "removeBody",
-            "actionParams": {
-            },
-            "event": "sensorBegin",
-            "name": "pocket 3",
-            "op": "set",
-            "property": "",
-            "subject": "circle_3",
-            "target": "@otherBody",
-            "value": 0,
-            "when": ""
-        },
-        {
-            "action": "removeBody",
-            "actionParams": {
-            },
-            "event": "sensorBegin",
-            "name": "pocket 4",
-            "op": "set",
-            "property": "",
-            "subject": "circle_4",
-            "target": "@otherBody",
-            "value": 0,
-            "when": ""
-        },
-        {
-            "action": "removeBody",
-            "actionParams": {
-            },
-            "event": "sensorBegin",
-            "name": "pocket 5",
-            "op": "set",
-            "property": "",
-            "subject": "circle_5",
-            "target": "@otherBody",
-            "value": 0,
-            "when": ""
-        },
-        {
-            "action": "removeBody",
-            "actionParams": {
-            },
-            "event": "sensorBegin",
-            "name": "pocket 6",
-            "op": "set",
-            "property": "",
-            "subject": "circle_6",
-            "target": "@otherBody",
-            "value": 0,
-            "when": ""
-        },
-        {
             "action": "@initState",
             "actionParams": {
             },
+            "actions": [
+                {
+                    "action": "@initState",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "body_18",
+                    "value": -120
+                },
+                {
+                    "op": "add",
+                    "property": "fails",
+                    "target": "@variables",
+                    "value": 1
+                }
+            ],
             "event": "@aboutToBeRemoved",
             "name": "reinit",
             "op": "set",
@@ -1083,6 +1092,18 @@
             "rotation": 0,
             "smoothChain": false,
             "type": "circle"
+        }
+    ],
+    "variables": [
+        {
+            "name": "balls",
+            "type": "int",
+            "value": 0
+        },
+        {
+            "name": "fails",
+            "type": "int",
+            "value": 0
         }
     ],
     "version": 1,

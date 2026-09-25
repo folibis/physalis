@@ -283,22 +283,11 @@
         },
         {
             "isEnabled": true,
-            "name": "body_45",
-            "physics": {
-            },
-            "shapes": [
-                31
-            ],
-            "type": "dynamic"
-        },
-        {
-            "isEnabled": true,
             "name": "body_46",
             "physics": {
             },
             "shapes": [
-                2,
-                32
+                2
             ],
             "type": "dynamic"
         }
@@ -330,7 +319,7 @@
             "bodyA": "body_1",
             "bodyB": "body_15",
             "collideConnected": false,
-            "name": "revolute_15",
+            "name": "hatch",
             "params": {
                 "constraintDampingRatio": 2,
                 "constraintHertz": 60,
@@ -364,7 +353,7 @@
             },
             "bodyA": "body_21",
             "bodyB": "body_15",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_16",
             "params": {
                 "constraintDampingRatio": 2,
@@ -399,7 +388,7 @@
             },
             "bodyA": "body_22",
             "bodyB": "body_21",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_17",
             "params": {
                 "constraintDampingRatio": 2,
@@ -434,7 +423,7 @@
             },
             "bodyA": "body_23",
             "bodyB": "body_22",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_18",
             "params": {
                 "constraintDampingRatio": 2,
@@ -469,7 +458,7 @@
             },
             "bodyA": "body_24",
             "bodyB": "body_23",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_19",
             "params": {
                 "constraintDampingRatio": 2,
@@ -504,7 +493,7 @@
             },
             "bodyA": "body_25",
             "bodyB": "body_24",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_20",
             "params": {
                 "constraintDampingRatio": 2,
@@ -539,7 +528,7 @@
             },
             "bodyA": "body_26",
             "bodyB": "body_25",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_21",
             "params": {
                 "constraintDampingRatio": 2,
@@ -574,7 +563,7 @@
             },
             "bodyA": "body_27",
             "bodyB": "body_26",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_22",
             "params": {
                 "constraintDampingRatio": 2,
@@ -609,7 +598,7 @@
             },
             "bodyA": "body_28",
             "bodyB": "body_27",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_23",
             "params": {
                 "constraintDampingRatio": 2,
@@ -644,7 +633,7 @@
             },
             "bodyA": "body_29",
             "bodyB": "body_28",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_24",
             "params": {
                 "constraintDampingRatio": 2,
@@ -679,7 +668,7 @@
             },
             "bodyA": "body_30",
             "bodyB": "body_29",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_25",
             "params": {
                 "constraintDampingRatio": 2,
@@ -714,7 +703,7 @@
             },
             "bodyA": "body_31",
             "bodyB": "body_30",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_26",
             "params": {
                 "constraintDampingRatio": 2,
@@ -749,7 +738,7 @@
             },
             "bodyA": "body_32",
             "bodyB": "body_31",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_27",
             "params": {
                 "constraintDampingRatio": 2,
@@ -784,7 +773,7 @@
             },
             "bodyA": "body_33",
             "bodyB": "body_32",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_28",
             "params": {
                 "constraintDampingRatio": 2,
@@ -819,7 +808,7 @@
             },
             "bodyA": "body_34",
             "bodyB": "body_33",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_29",
             "params": {
                 "constraintDampingRatio": 2,
@@ -854,7 +843,7 @@
             },
             "bodyA": "body_35",
             "bodyB": "body_34",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_30",
             "params": {
                 "constraintDampingRatio": 2,
@@ -889,7 +878,7 @@
             },
             "bodyA": "body_36",
             "bodyB": "body_35",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_31",
             "params": {
                 "constraintDampingRatio": 2,
@@ -924,7 +913,7 @@
             },
             "bodyA": "body_37",
             "bodyB": "body_36",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_32",
             "params": {
                 "constraintDampingRatio": 2,
@@ -959,7 +948,7 @@
             },
             "bodyA": "body_38",
             "bodyB": "body_37",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_33",
             "params": {
                 "constraintDampingRatio": 2,
@@ -994,7 +983,7 @@
             },
             "bodyA": "body_39",
             "bodyB": "body_38",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_34",
             "params": {
                 "constraintDampingRatio": 2,
@@ -1017,11 +1006,11 @@
         {
             "anchorA": {
                 "x": 80,
-                "y": 319.6428571428571
+                "y": 320
             },
             "anchorB": {
                 "x": 80,
-                "y": 319.6428571428571
+                "y": 320
             },
             "axis": {
                 "x": -0.6945945136995673,
@@ -1029,7 +1018,7 @@
             },
             "bodyA": "body_40",
             "bodyB": "body_39",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_35",
             "params": {
                 "constraintDampingRatio": 2,
@@ -1064,7 +1053,7 @@
             },
             "bodyA": "body_41",
             "bodyB": "body_40",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_36",
             "params": {
                 "constraintDampingRatio": 2,
@@ -1099,7 +1088,7 @@
             },
             "bodyA": "body_42",
             "bodyB": "body_41",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_37",
             "params": {
                 "constraintDampingRatio": 2,
@@ -1134,7 +1123,7 @@
             },
             "bodyA": "body_43",
             "bodyB": "body_42",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_38",
             "params": {
                 "constraintDampingRatio": 2,
@@ -1170,19 +1159,19 @@
             "bodyA": "body_1",
             "bodyB": "body_44",
             "collideConnected": false,
-            "name": "revolute_40",
+            "name": "dumper",
             "params": {
                 "constraintDampingRatio": 2,
                 "constraintHertz": 60,
-                "dampingRatio": 0.5499999999999999,
+                "dampingRatio": 0.45,
                 "drawSize": 0.25,
                 "enableLimit": false,
                 "enableMotor": false,
                 "enableSpring": true,
                 "hertz": 2,
                 "lowerAngle": 0,
-                "maxMotorTorque": 0,
-                "motorSpeed": 0,
+                "maxMotorTorque": 10,
+                "motorSpeed": -15,
                 "referenceAngle": 0,
                 "targetAngle": 0,
                 "upperAngle": 0
@@ -1204,43 +1193,8 @@
             },
             "bodyA": "body_43",
             "bodyB": "body_46",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_41",
-            "params": {
-                "constraintDampingRatio": 2,
-                "constraintHertz": 60,
-                "dampingRatio": 0,
-                "drawSize": 0.25,
-                "enableLimit": false,
-                "enableMotor": false,
-                "enableSpring": false,
-                "hertz": 0,
-                "lowerAngle": 0,
-                "maxMotorTorque": 0,
-                "motorSpeed": 0,
-                "referenceAngle": 0,
-                "targetAngle": 0,
-                "upperAngle": 0
-            },
-            "type": "revolute"
-        },
-        {
-            "anchorA": {
-                "x": 90.47619047619047,
-                "y": 440
-            },
-            "anchorB": {
-                "x": 90.47619047619047,
-                "y": 440
-            },
-            "axis": {
-                "x": 0.6889380440742839,
-                "y": -0.7248202338698196
-            },
-            "bodyA": "body_45",
-            "bodyB": "body_46",
-            "collideConnected": false,
-            "name": "revolute_42",
             "params": {
                 "constraintDampingRatio": 2,
                 "constraintHertz": 60,
@@ -1274,7 +1228,7 @@
             },
             "bodyA": "body_20",
             "bodyB": "body_46",
-            "collideConnected": false,
+            "collideConnected": true,
             "name": "revolute_43",
             "params": {
                 "constraintDampingRatio": 2,
@@ -1297,19 +1251,14 @@
     ],
     "log": [
         {
-            "label": "Target Angle (deg)",
-            "object": "revolute_40",
-            "property": "targetAngle"
+            "label": "open_hatch",
+            "object": "@variables",
+            "property": "open_hatch"
         },
         {
-            "label": "Rotation",
-            "object": "circle_38",
-            "property": "shape.rotation"
-        },
-        {
-            "label": "Rotation",
-            "object": "circle_1",
-            "property": "shape.rotation"
+            "label": "Angle (deg)",
+            "object": "dumper",
+            "property": "angle"
         }
     ],
     "rules": [
@@ -1317,9 +1266,10 @@
             "action": "@clone",
             "actionParams": {
                 "x": -400,
-                "y": -100
+                "y": 20
             },
             "compare": "%",
+            "name": "drop balls",
             "op": "set",
             "property": "",
             "subject": "@world",
@@ -1329,34 +1279,133 @@
             "when": 200
         },
         {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hatch",
+                    "value": -10
+                },
+                {
+                    "op": "set",
+                    "property": "open_hatch",
+                    "target": "@variables",
+                    "value": true
+                }
+            ],
             "compare": "<",
+            "conditions": [
+                {
+                    "compare": "<",
+                    "subject": "dumper",
+                    "watch": "angle",
+                    "when": -3
+                },
+                {
+                    "compare": "=",
+                    "subject": "@variables",
+                    "watch": "open_hatch",
+                    "when": false
+                }
+            ],
+            "join": "all",
+            "name": "hatch open",
             "op": "set",
             "property": "motorSpeed",
-            "subject": "body_44",
-            "target": "revolute_15",
+            "subject": "dumper",
+            "target": "hatch",
             "value": -10,
             "watch": "angle",
             "when": -3
         },
         {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hatch",
+                    "value": 0
+                },
+                {
+                    "op": "set",
+                    "property": "enableMotor",
+                    "target": "dumper",
+                    "value": true
+                }
+            ],
             "compare": "<",
+            "name": "hatch stop",
             "op": "set",
             "property": "motorSpeed",
-            "subject": "body_15",
-            "target": "revolute_15",
+            "subject": "hatch",
+            "target": "hatch",
             "value": 0,
             "watch": "angle",
             "when": -160
         },
         {
-            "compare": "=",
+            "compare": "<",
+            "name": "dumper close",
+            "op": "negate",
+            "property": "motorSpeed",
+            "subject": "dumper",
+            "target": "dumper",
+            "watch": "angle",
+            "when": -60
+        },
+        {
+            "actions": [
+                {
+                    "op": "negate",
+                    "property": "motorSpeed",
+                    "target": "dumper"
+                },
+                {
+                    "op": "set",
+                    "property": "enableMotor",
+                    "target": "dumper",
+                    "value": false
+                },
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hatch",
+                    "value": 10
+                }
+            ],
+            "compare": ">",
+            "name": "dumper stop",
+            "op": "negate",
+            "property": "motorSpeed",
+            "subject": "dumper",
+            "target": "dumper",
+            "watch": "angle",
+            "when": 1
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hatch",
+                    "value": 0
+                },
+                {
+                    "op": "set",
+                    "property": "open_hatch",
+                    "target": "@variables",
+                    "value": false
+                }
+            ],
+            "compare": ">",
+            "name": "hatch closed",
             "op": "set",
-            "property": "targetAngle",
-            "subject": "revolute_15",
-            "target": "revolute_40",
-            "value": 270,
-            "watch": "motorSpeed",
-            "when": 10
+            "property": "motorSpeed",
+            "subject": "hatch",
+            "target": "hatch",
+            "value": 0,
+            "watch": "angle",
+            "when": -1
         }
     ],
     "shapes": [
@@ -2309,68 +2358,13 @@
             "rotation": 0,
             "smoothChain": false,
             "type": "rectangle"
-        },
+        }
+    ],
+    "variables": [
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
-            "capStyle": "round",
-            "cornerRadius": 10,
-            "filled": true,
-            "id": 31,
-            "joinStyle": "round",
-            "name": "rectangle_4",
-            "origin": {
-                "x": 0,
-                "y": 0
-            },
-            "outline": false,
-            "physics": {
-            },
-            "pos": {
-                "x": 31,
-                "y": 480
-            },
-            "rect": {
-                "height": 90,
-                "width": 20,
-                "x": 49,
-                "y": -40
-            },
-            "rotation": 0,
-            "smoothChain": false,
-            "type": "rectangle"
-        },
-        {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
-            "capStyle": "round",
-            "cornerRadius": 0,
-            "filled": true,
-            "id": 32,
-            "joinStyle": "round",
-            "name": "rectangle_5",
-            "origin": {
-                "x": 59,
-                "y": 0
-            },
-            "outline": false,
-            "physics": {
-            },
-            "pos": {
-                "x": -89,
-                "y": 350
-            },
-            "rect": {
-                "height": 100,
-                "width": 20,
-                "x": 49,
-                "y": -50
-            },
-            "rotation": 0,
-            "smoothChain": false,
-            "type": "rectangle"
+            "name": "open_hatch",
+            "type": "bool",
+            "value": false
         }
     ],
     "version": 1,

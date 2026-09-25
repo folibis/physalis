@@ -200,12 +200,12 @@
         },
         {
             "anchorA": {
-                "x": 492.0920808487708,
-                "y": 113.41448162361118
+                "x": 492.09208084877093,
+                "y": 113.4144816236112
             },
             "anchorB": {
-                "x": 492.0920808487707,
-                "y": 113.41448162361117
+                "x": 492.0920808487708,
+                "y": 113.41448162361118
             },
             "axis": {
                 "x": 6.114900252818245e-17,
@@ -233,20 +233,25 @@
     ],
     "rules": [
         {
+            "conditions": [
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_2",
+                    "when": "rectangle_8"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_2",
+                    "when": "rectangle_12"
+                }
+            ],
             "event": "contactBegin",
+            "join": "any",
             "op": "negate",
             "property": "motorSpeed",
             "subject": "polygon_2",
             "target": "wheel_1",
             "when": "rectangle_8"
-        },
-        {
-            "event": "contactBegin",
-            "op": "negate",
-            "property": "motorSpeed",
-            "subject": "polygon_2",
-            "target": "wheel_1",
-            "when": "rectangle_12"
         }
     ],
     "shapes": [

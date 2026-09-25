@@ -568,6 +568,29 @@ void CanvasScene::clearContents()
     emit physicsSelectionChanged();
 }
 
+ShapeItem *CanvasScene::looseShapeAt(const QPointF &scenePos) const
+{
+    ShapeItem *found = nullptr;
+    for (ShapeItem *shape : shapesAt(scenePos))
+    {
+        if (shape->body())
+        {
+            continue;
+        }
+        // One already selected wins over the one on top, so a shape reached
+        // with Ctrl+click is still the one a right-click means.
+        if (isSelectedForPhysics(shape))
+        {
+            return shape;
+        }
+        if (!found)
+        {
+            found = shape;
+        }
+    }
+    return found;
+}
+
 PhysicsBody *CanvasScene::createBodyFromSelection()
 {
     if (m_physicsSelection.isEmpty())

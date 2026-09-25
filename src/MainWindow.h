@@ -121,6 +121,11 @@ private slots:
     void on_actionDeleteJoint_triggered();
     void onJointSelectionChanged();
     void onCreateBody(bool asStatic = false);
+    // A body of the kind asked for, from whatever is selected for physics.
+    void createBodyOfType(physics::BodyType type);
+    // Adds "Create Static/Kinematic/Dynamic Body" for the loose shapes under
+    // the cursor, and says whether it added anything.
+    bool addCreateBodyActions(QMenu *menu, const QPointF &scenePos);
     void on_actionDissolveBody_triggered();
     void onPhysicsSelectionChanged();
     void onSimulationStateChanged();

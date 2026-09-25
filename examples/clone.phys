@@ -43,6 +43,13 @@
     "format": "shape-editor-scene",
     "joints": [
     ],
+    "log": [
+        {
+            "label": "ball counter",
+            "object": "@variables",
+            "property": "ball counter"
+        }
+    ],
     "rays": [
         {
             "angle": 0,
@@ -61,6 +68,7 @@
                 "y": -300
             },
             "compare": "%",
+            "name": "clone",
             "op": "set",
             "property": "",
             "subject": "@world",
@@ -73,13 +81,45 @@
             "action": "removeBody",
             "actionParams": {
             },
+            "actions": [
+                {
+                    "action": "removeBody",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@otherBody",
+                    "value": 0
+                },
+                {
+                    "op": "add",
+                    "property": "ball counter",
+                    "target": "@variables",
+                    "value": 1
+                }
+            ],
             "event": "rayDetects",
+            "name": "detect balls",
             "op": "set",
             "property": "",
             "subject": "ray_1",
             "target": "@otherBody",
             "value": 0,
             "when": ""
+        },
+        {
+            "action": "@stopRun",
+            "actionParams": {
+            },
+            "compare": "=",
+            "name": "stop condition",
+            "op": "set",
+            "property": "",
+            "subject": "@variables",
+            "target": "@world",
+            "value": 0,
+            "watch": "ball counter",
+            "when": 20
         }
     ],
     "shapes": [
@@ -227,6 +267,13 @@
             "rotation": 0,
             "smoothChain": false,
             "type": "polygon"
+        }
+    ],
+    "variables": [
+        {
+            "name": "ball counter",
+            "type": "int",
+            "value": 0
         }
     ],
     "version": 1,

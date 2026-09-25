@@ -135,6 +135,10 @@ public:
     // Physics mode has its own selection, separate from Edit mode's single
     const QVector<ShapeItem *> &physicsSelection() const { return m_physicsSelection; }
     bool isSelectedForPhysics(ShapeItem *shape) const { return m_physicsSelection.contains(shape); }
+    // The shape under this point that is not in a body yet -- the one already
+    // picked where several lie over one another, otherwise the one on top.
+    // Null where everything under the point already belongs to a body.
+    ShapeItem *looseShapeAt(const QPointF &scenePos) const;
     void selectForPhysics(ShapeItem *shape, bool additive = false);
     void clearPhysicsSelection();
 

@@ -736,19 +736,27 @@ void MainWindow::onJointSelectionChanged()
 
 void MainWindow::onCreateBody(bool asStatic)
 {
+    // The two the canvas offers by itself: a plain double-click means the body
+    // that moves, Ctrl means the one that does not.
+    createBodyOfType(asStatic ? physics::BodyType::Static : physics::BodyType::Dynamic);
+}
+
+void MainWindow::createBodyOfType(physics::BodyType type)
+{
     const QStringList problems = m_scene->solidBodyProblems(m_scene->physicsSelection());
 
     PhysicsBody *body = m_scene->createBodyFromSelection();
     if (!body)
         return;
 
-    if (asStatic) {
-        body->props().type = physics::BodyType::Static;
-        body->notifyPropertyChanged();
-    } else if (!problems.isEmpty()) {
-        body->props().type = physics::BodyType::Static;
-        body->notifyPropertyChanged();
+    // Only area gives mass, so a body made of outlines cannot be dynamic
+    // however plainly it was asked for. It is made static instead, and says so
+    // -- quietly handing back something that will not move is worse.
+    const bool refused = type == physics::BodyType::Dynamic && !problems.isEmpty();
+    body->props().type = refused ? physics::BodyType::Static : type;
+    body->notifyPropertyChanged();
 
+    if (refused) {
         QMessageBox::warning(
             this, tr("Create Body"),
             tr("%1 was made Static because it can't be a solid, movable body:\n\n%2\n\n"
@@ -829,12 +837,14 @@ void MainWindow::onPhysicsSelectionChanged()
                 .arg(joint->name()));
     } else if (m_scene->bodies().isEmpty() && picked == 0) {
         m_statusHelpLabel->setText(
-            tr("Click a shape to select it • Shift+Click to add more • Double-click or Create Body"
-               " groups them into a body, which is what Simulate runs"));
+            tr("Click a shape to select it • Shift+Click to add more"
+               " • Double-click makes a dynamic body, Ctrl+double-click a static one"
+               " • Right-click to choose the kind"));
     } else if (picked == 0) {
         m_statusHelpLabel->setText(
             tr("Click a shape to select it • Shift+Click to add more"
-               " • Create Body groups them into one rigid body"));
+               " • Double-click makes a dynamic body, Ctrl+double-click a static one"
+               " • Right-click to choose the kind"));
     } else if (PhysicsBody *body = m_scene->commonSelectedBody()) {
         m_statusHelpLabel->setText(
             m_scene->selectionIsWholeBody()
@@ -844,8 +854,9 @@ void MainWindow::onPhysicsSelectionChanged()
                      " own • Dissolve Body breaks up %2").arg(picked).arg(body->name()));
     } else {
         m_statusHelpLabel->setText(
-            tr("%1 shape(s) selected, not yet in a body"
-               " • Create Body groups them into one").arg(picked));
+            tr("%1 shape(s) selected, not yet in a body • Create Body groups them into one"
+               " • Double-click makes it dynamic, Ctrl+double-click static"
+               " • Right-click to choose the kind").arg(picked));
     }
 }
 
@@ -1664,6 +1675,42 @@ void MainWindow::onActiveItemChanged(ShapeItem *item)
     }
 }
 
+bool MainWindow::addCreateBodyActions(QMenu *menu, const QPointF &scenePos)
+{
+    ShapeItem *loose = m_scene->looseShapeAt(scenePos);
+    if (!loose)
+        return false;
+
+    // Right-clicking something outside the selection means that shape, the way
+    // it does everywhere else; right-clicking one already in it keeps the rest.
+    if (!m_scene->isSelectedForPhysics(loose))
+        m_scene->selectForPhysics(loose);
+
+    // Only shapes with no body of their own: the entries make a body, and one
+    // already in a body would be taken out of it without the menu saying so.
+    int count = 0;
+    for (ShapeItem *shape : m_scene->physicsSelection())
+        count += shape->body() ? 0 : 1;
+    if (count == 0 || count != m_scene->physicsSelection().size())
+        return false;
+
+    const auto entry = [this, menu, count](const QString &label, physics::BodyType type,
+                                           const QString &tip) {
+        QAction *action = menu->addAction(
+            count == 1 ? label : tr("%1 from %n Shapes", nullptr, count).arg(label),
+            this, [this, type] { createBodyOfType(type); });
+        action->setToolTip(tip);
+    };
+
+    entry(tr("Create Static Body"), physics::BodyType::Static,
+          tr("Never moves, whatever hits it: the ground, a wall, a ramp."));
+    entry(tr("Create Kinematic Body"), physics::BodyType::Kinematic,
+          tr("Moved by a velocity you set, and pushed by nothing: a lift, a conveyor."));
+    entry(tr("Create Dynamic Body"), physics::BodyType::Dynamic,
+          tr("Falls, collides and is pushed around like a real object."));
+    return true;
+}
+
 void MainWindow::on_canvasView_customContextMenuRequested(const QPoint &pos)
 {
     // Every entry changes the scene, and nothing does that during a run.
@@ -1687,6 +1734,12 @@ void MainWindow::on_canvasView_customContextMenuRequested(const QPoint &pos)
             addAnchorActions(&menu, joint, simulating);
             menu.addSeparator();
         }
+
+        // A shape not yet in a body takes no part in a run at all. Offered
+        // here by kind, so the body it becomes is chosen outright rather than
+        // made and then changed in the property table.
+        if (!joint && addCreateBodyActions(&menu, scenePos))
+            menu.addSeparator();
 
         QAction *centreAction =
             menu.addAction(tr("Move Origins to Center of Mass"), this,

@@ -1,4 +1,6 @@
 #include "JointPropertyPane.h"
+
+#include <QSet>
 #include "../CanvasScene.h"
 #include "../Joint.h"
 #include "../PhysicsBody.h"
@@ -80,14 +82,25 @@ std::vector<PropertyRow> JointPropertyPane::measuredRows(Joint *joint,
     if (!engine)
         return result;
 
+    // Whatever the type already offers as a setting. A readable under the same
+    // key is that setting read back -- a motor's speed is published both ways,
+    // since a rule wants to ask for it -- and showing it again here put "Motor
+    // Speed" on the joint twice, once under Motor and once under Measured.
+    QSet<QString> settings;
+    for (const physics::JointParam &param : type.params)
+        settings.insert(param.key);
+
     // Blank until a run fills them, but always there: a row that only exists
     // while running cannot be added to the log before the run starts.
     const QString group = QObject::tr("Measured");
     for (const physics::JointParam &param : engine->jointReadables(type.id)) {
         // Anything the joint already offers as a setting is shown there; this
         // is only for what can be read and not written. A readable that merely
-        // reports such a setting is the same row twice, and the engine says so.
+        // reports such a setting is the same row twice -- under its own key,
+        // caught above; under another name, and the engine says so.
         if (param.liveSettable || param.mirrorsSetting || param.rulesOnly)
+            continue;
+        if (settings.contains(param.key))
             continue;
 
         PropertyRow row;
