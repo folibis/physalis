@@ -52,6 +52,11 @@ OptionsDialog::Settings distinctive()
         s.shapeStyles.insert(kind, style);
     }
 
+    s.logFontFamily = QStringLiteral("Courier New");
+    s.logFontSize = 14;
+    s.logColor = QColor(12, 34, 56);
+    s.logCorner = Qt::BottomRightCorner;
+
     s.selectionLineStyle = Qt::DashLine;
     s.selectionLineWidth = 4.0;
     s.selectionColor = QColor(200, 100, 50);
@@ -149,6 +154,8 @@ void everyFieldComesBack(const OptionsDialog::Settings &in, const OptionsDialog:
         EXPECT_DOUBLE_EQ(got.borderWidth, it->borderWidth) << kind << " lost its border width";
         EXPECT_EQ(int(got.borderStyle), int(it->borderStyle)) << kind << " lost its line style";
     }
+    SAME(logFontFamily); SAME(logFontSize); SAME(logColor);
+    EXPECT_EQ(int(out.logCorner), int(in.logCorner)) << "Options lost or changed logCorner";
     EXPECT_EQ(int(out.selectionLineStyle), int(in.selectionLineStyle))
         << "Options lost or changed selectionLineStyle";
     SAME(selectionLineWidth); SAME(selectionColor); SAME(undoDepth);

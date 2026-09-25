@@ -18,6 +18,7 @@
 #include <QVBoxLayout>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QFontComboBox>
 #include <QFormLayout>
 #include <QDoubleSpinBox>
 #include <QLabel>
@@ -132,6 +133,10 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     , m_gridColor(current.gridColor)
     , m_backgroundColor(current.backgroundColor)
     , m_shapeStyles(current.shapeStyles)
+    , m_logColor(current.logColor)
+    , m_logCorner(current.logCorner)
+    , m_logFontFamily(current.logFontFamily)
+    , m_logFontSize(current.logFontSize)
     , m_selectionColor(current.selectionColor)
     , m_handleColor(current.handleColor)
     , m_handleBorderColor(current.handleBorderColor)
@@ -266,6 +271,8 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     }
     bindSliderValue(m_ui->sleepShiftPercent, m_ui->sleepShiftPercentLabel, tr("%"));
 
+
+    buildLogGroup();
 
     // One row per kind of shape. The group's own rows are dropped first: the
     // form came from the .ui with a single set of controls for every kind.
@@ -412,6 +419,50 @@ void OptionsDialog::bindSliderValue(QSlider *slider, QLabel *label, const QStrin
     };
     connect(slider, &QSlider::valueChanged, label, show);
     show(slider->value());
+}
+
+void OptionsDialog::buildLogGroup()
+{
+    auto *group = new QGroupBox(tr("Log"), m_ui->physicsTab);
+    auto *form = new QFormLayout(group);
+
+    auto *font = new QFontComboBox(group);
+    font->setObjectName(QStringLiteral("logFont"));
+    font->setCurrentFont(QFont(m_logFontFamily));
+    font->setToolTip(tr("The typeface the readout is drawn in."));
+    connect(font, &QFontComboBox::currentFontChanged, this,
+            [this](const QFont &f) { m_logFontFamily = f.family(); });
+    form->addRow(tr("Font:"), font);
+
+    auto *size = new QSpinBox(group);
+    size->setObjectName(QStringLiteral("logFontSize"));
+    size->setRange(6, 48);
+    size->setValue(m_logFontSize);
+    size->setSuffix(tr(" pt"));
+    connect(size, qOverload<int>(&QSpinBox::valueChanged), this,
+            [this](int v) { m_logFontSize = v; });
+    form->addRow(tr("Size:"), size);
+
+    auto *corner = new QComboBox(group);
+    corner->setObjectName(QStringLiteral("logCorner"));
+    corner->addItem(tr("Top left"), int(Qt::TopLeftCorner));
+    corner->addItem(tr("Top right"), int(Qt::TopRightCorner));
+    corner->addItem(tr("Bottom left"), int(Qt::BottomLeftCorner));
+    corner->addItem(tr("Bottom right"), int(Qt::BottomRightCorner));
+    corner->setCurrentIndex(corner->findData(int(m_logCorner)));
+    connect(corner, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, corner](int) {
+                m_logCorner = static_cast<Qt::Corner>(corner->currentData().toInt());
+            });
+    form->addRow(tr("Corner:"), corner);
+
+    auto *colour = new QToolButton(group);
+    colour->setObjectName(QStringLiteral("logColorButton"));
+    colour->setFixedSize(kSwatchWidth, kSwatchHeight);
+    bindSwatch(colour, m_logColor, tr("Choose Log Colour"));
+    form->addRow(tr("Colour:"), colour);
+
+    m_ui->physicsLayout->addWidget(group);
 }
 
 void OptionsDialog::buildShapeStyleRows()
@@ -743,6 +794,10 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.scaleMax = m_ui->scaleMax->value();
     s.scaleStep = m_ui->scaleStep->value();
     s.shapeStyles = m_shapeStyles;
+    s.logFontFamily = m_logFontFamily;
+    s.logFontSize = m_logFontSize;
+    s.logColor = m_logColor;
+    s.logCorner = m_logCorner;
     s.selectionLineStyle =
         static_cast<Qt::PenStyle>(m_ui->selectionLineStyle->currentData().toInt());
     s.selectionLineWidth = m_ui->selectionLineWidth->value();

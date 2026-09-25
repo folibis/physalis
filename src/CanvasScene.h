@@ -765,7 +765,7 @@ private:
 
     SnapPoint m_snapPoint = SnapPoint::Position;
     qreal m_snapStep = 20.0;
-    qreal m_snapSensitivity = 5.0;
+    qreal m_snapSensitivity = 10.0;
 
     QHash<QString, ShapeStyle> m_defaultShapeStyles;
 

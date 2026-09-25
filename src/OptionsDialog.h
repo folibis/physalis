@@ -43,7 +43,7 @@ public:
         bool snapToGrid = false;
         SnapPoint snapPoint = SnapPoint::Position;
         qreal snapStep = 20.0;
-        qreal snapSensitivity = 5.0;
+        qreal snapSensitivity = 10.0;
 
         qreal currentScale = 100.0;
         qreal scaleMin = 10.0;
@@ -74,6 +74,12 @@ public:
         Qt::BrushStyle sensorPattern = Qt::DiagCrossPattern;
         bool sensorFillsBody = false;
         qreal physicsBorderWidth = 2.0;
+
+        // The readout pinned to the canvas during a run.
+        QString logFontFamily;
+        int logFontSize = 9;
+        QColor logColor { 0xaa, 0x00, 0x00 };
+        Qt::Corner logCorner = Qt::TopLeftCorner;
         int physicsFillAlpha = 90;
         int jointFillAlpha = 170;
         // Percent: how see-through joint anchors are drawn.
@@ -162,6 +168,7 @@ private:
     std::unique_ptr<Ui::OptionsDialog> m_ui;
 
     void buildShapeStyleRows();
+    void buildLogGroup();
     void bindSwatch(QToolButton *button, QColor &color, const QString &title);
 
     // The Slingshot group, built here rather than in the form.
@@ -199,6 +206,10 @@ private:
     QColor m_gridColor;
     QColor m_backgroundColor;
     QHash<QString, ShapeStyle> m_shapeStyles;
+    QColor m_logColor;
+    Qt::Corner m_logCorner = Qt::TopLeftCorner;
+    QString m_logFontFamily;
+    int m_logFontSize = 9;
     QColor m_selectionColor;
     QColor m_handleColor;
     QColor m_handleBorderColor;

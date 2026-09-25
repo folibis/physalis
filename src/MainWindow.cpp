@@ -465,10 +465,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_logOverlay = new QLabel(m_ui->canvasView);
     m_logOverlay->setObjectName(QStringLiteral("LogOverlay"));
     m_logOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
-    m_logOverlay->setStyleSheet(QStringLiteral(
-        "#LogOverlay { background: rgba(255,255,255,190); border: 1px solid #c8c8c8;"
-        " border-radius: 4px; padding: 4px 8px; color: #1E6FD9; }"));
-    m_logOverlay->move(8, 8);
+    applyLogStyle();
+    m_ui->canvasView->installEventFilter(this);
+    placeLogOverlay();
     m_logOverlay->hide();
     connect(m_scene, &CanvasScene::watchesChanged, this, &MainWindow::updateLogOverlay);
     connect(m_simulation, &SimulationController::stateChanged, this, &MainWindow::updateLogOverlay);
@@ -1336,6 +1335,46 @@ static QString formatLogNumber(double v)
     return QString::number(v, 'g', 3);
 }
 
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_ui->canvasView && event->type() == QEvent::Resize)
+        placeLogOverlay();
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::placeLogOverlay()
+{
+    if (!m_logOverlay)
+        return;
+
+    constexpr int kMargin = 8;
+    const QSize view = m_ui->canvasView->viewport()->size();
+    const QSize own = m_logOverlay->size();
+    const bool right = m_logCorner == Qt::TopRightCorner
+                       || m_logCorner == Qt::BottomRightCorner;
+    const bool bottom = m_logCorner == Qt::BottomLeftCorner
+                        || m_logCorner == Qt::BottomRightCorner;
+    m_logOverlay->move(right ? qMax(kMargin, view.width() - own.width() - kMargin) : kMargin,
+                       bottom ? qMax(kMargin, view.height() - own.height() - kMargin) : kMargin);
+}
+
+void MainWindow::applyLogStyle()
+{
+    if (!m_logOverlay)
+        return;
+
+    m_logOverlay->setStyleSheet(
+        QStringLiteral("#LogOverlay { background: rgba(255,255,255,190);"
+                       " border: 1px solid #c8c8c8; border-radius: 4px;"
+                       " padding: 4px 8px; color: %1; }").arg(m_logColor.name()));
+
+    QFont font = m_logFontFamily.isEmpty() ? m_logOverlay->font() : QFont(m_logFontFamily);
+    font.setPointSize(m_logFontSize);
+    m_logOverlay->setFont(font);
+    m_logOverlay->adjustSize();
+    placeLogOverlay();
+}
+
 void MainWindow::updateLogOverlay()
 {
     if (!m_logOverlay)
@@ -1377,6 +1416,7 @@ void MainWindow::updateLogOverlay()
     }
     m_logOverlay->setText(lines.join(QChar::LineFeed));
     m_logOverlay->adjustSize();
+    placeLogOverlay();
     m_logOverlay->show();
     m_logOverlay->raise();
 }
@@ -1997,6 +2037,10 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.scaleMax = m_scene->scaleMax();
     current.scaleStep = m_scene->scaleStep();
     current.shapeStyles = m_scene->defaultShapeStyles();
+    current.logFontFamily = m_logFontFamily;
+    current.logFontSize = m_logFontSize;
+    current.logColor = m_logColor;
+    current.logCorner = m_logCorner;
     current.bodyDynamicColor = m_scene->bodyColor(physics::BodyType::Dynamic);
     current.bodyStaticColor = m_scene->bodyColor(physics::BodyType::Static);
     current.bodyKinematicColor = m_scene->bodyColor(physics::BodyType::Kinematic);
@@ -2082,6 +2126,11 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_scene->setScaleStep(s.scaleStep);
     m_scene->setCurrentScale(s.currentScale);
     m_scene->setDefaultShapeStyles(s.shapeStyles);
+    m_logFontFamily = s.logFontFamily;
+    m_logFontSize = s.logFontSize;
+    m_logColor = s.logColor;
+    m_logCorner = s.logCorner;
+    applyLogStyle();
     m_scene->setBodyColor(physics::BodyType::Dynamic, s.bodyDynamicColor);
     m_scene->setBodyColor(physics::BodyType::Static, s.bodyStaticColor);
     m_scene->setBodyColor(physics::BodyType::Kinematic, s.bodyKinematicColor);
@@ -2196,6 +2245,10 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
         settings.value("sensorPattern", static_cast<int>(s.sensorPattern)).toInt());
     s.sensorFillsBody = settings.value("sensorFillsBody", s.sensorFillsBody).toBool();
     s.physicsBorderWidth = settings.value("borderWidth", s.physicsBorderWidth).toDouble();
+    s.logFontFamily = settings.value("logFont", s.logFontFamily).toString();
+    s.logFontSize = settings.value("logFontSize", s.logFontSize).toInt();
+    s.logColor = QColor(settings.value("logColor", s.logColor.name(QColor::HexArgb)).toString());
+    s.logCorner = static_cast<Qt::Corner>(settings.value("logCorner", int(s.logCorner)).toInt());
     s.physicsFillAlpha = settings.value("fillAlpha", s.physicsFillAlpha).toInt();
     s.jointFillAlpha = settings.value("jointFillAlpha", s.jointFillAlpha).toInt();
     s.jointAnchorOpacity = settings.value("jointAnchorOpacity", s.jointAnchorOpacity).toInt();
@@ -2363,6 +2416,10 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("sensorPattern", static_cast<int>(s.sensorPattern));
     settings.setValue("sensorFillsBody", s.sensorFillsBody);
     settings.setValue("borderWidth", s.physicsBorderWidth);
+    settings.setValue("logFont", s.logFontFamily);
+    settings.setValue("logFontSize", s.logFontSize);
+    settings.setValue("logColor", s.logColor.name(QColor::HexArgb));
+    settings.setValue("logCorner", int(s.logCorner));
     settings.setValue("fillAlpha", s.physicsFillAlpha);
     settings.setValue("jointFillAlpha", s.jointFillAlpha);
     settings.setValue("jointAnchorOpacity", s.jointAnchorOpacity);

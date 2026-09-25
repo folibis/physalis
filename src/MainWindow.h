@@ -166,6 +166,16 @@ private:
     // The log readout, pinned to the canvas corner.
     QLabel *m_logOverlay = nullptr;
     void updateLogOverlay();
+    // Font, size and colour of that readout, from Options.
+    void applyLogStyle();
+    QString m_logFontFamily;
+    int m_logFontSize = 9;
+    QColor m_logColor { 0xaa, 0x00, 0x00 };
+    Qt::Corner m_logCorner = Qt::TopLeftCorner;
+    // The overlay is a child of the view, so it has to be put back in its
+    // corner whenever the view changes size.
+    void placeLogOverlay();
+    bool eventFilter(QObject *watched, QEvent *event) override;
     // The heading a logged property sits under, worked out again rather than
     // taken from what the watch was named when it was added.
     QString logLabelFor(const CanvasScene::Watch &watch) const;

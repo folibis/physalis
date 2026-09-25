@@ -11,8 +11,8 @@
 // How a shape is drawn when it is created. One of these per kind, held in
 // Options; a shape keeps its own copy from then on.
 struct ShapeStyle {
-    QColor body { 173, 216, 230, 128 };
-    QColor border { 100, 170, 220, 204 };
+    QColor body { 0x00, 0xaa, 0xff, 0x80 };
+    QColor border { 0x00, 0x00, 0xff, 0xcc };
     qreal borderWidth = 2.0;
     Qt::PenStyle borderStyle = Qt::SolidLine;
 
@@ -40,13 +40,10 @@ struct ShapeStyle {
     static ShapeStyle defaultFor(const QString &kind)
     {
         ShapeStyle style;
-        if (kind == QLatin1String("circle")) {
-            style.body = QColor(250, 205, 145, 128);
-            style.border = QColor(205, 145, 60, 204);
-        } else if (kind == QLatin1String("polygon")) {
-            style.body = QColor(170, 220, 170, 128);
-            style.border = QColor(85, 160, 85, 204);
-        }
+        if (kind == QLatin1String("circle"))
+            style.body = QColor(0x55, 0xff, 0x00, 0x80);
+        else if (kind == QLatin1String("polygon"))
+            style.body = QColor(0xff, 0x55, 0xff, 0x80);
         return style;
     }
 
