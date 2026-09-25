@@ -7,6 +7,9 @@
 #include <memory>
 #include <QColor>
 #include <QHash>
+
+#include "ShapeStyle.h"
+#include <QHash>
 #include <QVariantMap>
 #include "CanvasScene.h"
 
@@ -47,9 +50,8 @@ public:
         qreal scaleMax = 500.0;
         qreal scaleStep = 10.0;
 
-        QColor defaultBorderColor { 100, 170, 220, 204 };
-        qreal defaultBorderWidth = 2.0;
-        QColor defaultBodyColor { 173, 216, 230, 128 };
+        // How a newly drawn shape looks, one set per kind.
+        QHash<QString, ShapeStyle> shapeStyles;
 
         Qt::PenStyle selectionLineStyle = Qt::DotLine;
         qreal selectionLineWidth = 2.0;
@@ -159,6 +161,7 @@ private:
     // a swatch button holds no colour of its own, it just shows one.
     std::unique_ptr<Ui::OptionsDialog> m_ui;
 
+    void buildShapeStyleRows();
     void bindSwatch(QToolButton *button, QColor &color, const QString &title);
 
     // The Slingshot group, built here rather than in the form.
@@ -195,8 +198,7 @@ private:
 
     QColor m_gridColor;
     QColor m_backgroundColor;
-    QColor m_defaultBorderColor;
-    QColor m_defaultBodyColor;
+    QHash<QString, ShapeStyle> m_shapeStyles;
     QColor m_selectionColor;
     QColor m_handleColor;
     QColor m_handleBorderColor;

@@ -124,9 +124,6 @@
     ],
     "shapes": [
         {
-            "bodyColor": "#80add8e6",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 0,
             "filled": true,
@@ -156,9 +153,6 @@
             "type": "circle"
         },
         {
-            "bodyColor": "#80add8e6",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "closed": true,
             "cornerRadius": 0,
@@ -218,9 +212,6 @@
             "type": "polygon"
         },
         {
-            "bodyColor": "#80add8e6",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "closed": true,
             "cornerRadius": 0,

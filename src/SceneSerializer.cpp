@@ -12,6 +12,7 @@
 #include "EngineRegistry.h"
 #include "Rule.h"
 #include "SceneVariable.h"
+#include "ShapeStyle.h"
 
 #include <QFile>
 #include <QHash>
@@ -160,9 +161,6 @@ QJsonObject shapeGeometryToJson(const ShapeItem *shape)
         {"origin", toJson(shape->origin())},
         {"pos", toJson(shape->pos())},
         {"rotation", shape->rotation()},
-        {"bodyColor", toJson(shape->bodyColor())},
-        {"borderColor", toJson(shape->borderColor())},
-        {"borderWidth", shape->borderWidth()},
         {"cornerRadius", shape->cornerRadius()},
         {"smoothChain", shape->smoothChain()},
         {"outline", shape->preferOutline()},
@@ -217,9 +215,6 @@ void applyShapeProperties(const QJsonObject &o, ShapeItem *shape)
     // position has to be applied after it, not before.
     shape->setPos(pointFromJson(o.value("pos").toObject()));
     shape->setRotation(o.value("rotation").toDouble());
-    shape->setBodyColor(colorFromJson(o.value("bodyColor"), shape->bodyColor()));
-    shape->setBorderColor(colorFromJson(o.value("borderColor"), shape->borderColor()));
-    shape->setBorderWidth(o.value("borderWidth").toDouble(shape->borderWidth()));
     shape->setCornerRadius(o.value("cornerRadius").toDouble(0.0));
     shape->setSmoothChain(o.value("smoothChain").toBool(false));
     shape->setPreferOutline(o.value("outline").toBool(false));

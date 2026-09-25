@@ -4,6 +4,8 @@
 
 #include <QGraphicsObject>
 #include <QColor>
+
+#include "ShapeStyle.h"
 #include <QSet>
 #include <QString>
 #include <vector>
@@ -59,14 +61,12 @@ public:
     QPointF origin() const { return m_origin; }
     void setOrigin(const QPointF &origin);
 
-    QColor bodyColor() const { return m_bodyColor; }
-    void setBodyColor(const QColor &color);
-
-    QColor borderColor() const { return m_borderColor; }
-    void setBorderColor(const QColor &color);
-
-    qreal borderWidth() const { return m_borderWidth; }
-    void setBorderWidth(qreal width);
+    // Appearance belongs to Options, by kind, the way a joint's and a body's are.
+    ShapeStyle style() const;
+    QColor bodyColor() const { return style().body; }
+    QColor borderColor() const { return style().border; }
+    qreal borderWidth() const { return style().borderWidth; }
+    Qt::PenStyle borderStyle() const { return style().borderStyle; }
 
     // Rounds the corners. Capped at half the shorter side, where the shape
     // becomes a capsule and any more would be meaningless.
@@ -200,12 +200,9 @@ private:
     // Not owned; the body owns the relationship and clears this on destruction.
     PhysicsBody *m_body = nullptr;
 
-    QColor m_bodyColor { 173, 216, 230, 128 };
-    QColor m_borderColor { 100, 170, 220, 204 };
     qreal m_cornerRadius = 0.0;
     bool m_smoothChain = false;
     bool m_preferOutline = false;
-    qreal m_borderWidth = 2.0;
     bool m_filled = kDefaultFilled;
     Qt::PenCapStyle m_capStyle = kDefaultCapStyle;
     Qt::PenJoinStyle m_joinStyle = kDefaultJoinStyle;

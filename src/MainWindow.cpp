@@ -15,6 +15,7 @@
 #include "PropertyPanel.h"
 #include "SceneTree.h"
 #include "RulesPanel.h"
+#include "ShapeStyle.h"
 #include "VariablesPanel.h"
 #include "UndoStack.h"
 #include "RectangleItem.h"
@@ -1995,9 +1996,7 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.scaleMin = m_scene->scaleMin();
     current.scaleMax = m_scene->scaleMax();
     current.scaleStep = m_scene->scaleStep();
-    current.defaultBorderColor = m_scene->defaultBorderColor();
-    current.defaultBorderWidth = m_scene->defaultBorderWidth();
-    current.defaultBodyColor = m_scene->defaultBodyColor();
+    current.shapeStyles = m_scene->defaultShapeStyles();
     current.bodyDynamicColor = m_scene->bodyColor(physics::BodyType::Dynamic);
     current.bodyStaticColor = m_scene->bodyColor(physics::BodyType::Static);
     current.bodyKinematicColor = m_scene->bodyColor(physics::BodyType::Kinematic);
@@ -2082,9 +2081,7 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_scene->setScaleMax(s.scaleMax);
     m_scene->setScaleStep(s.scaleStep);
     m_scene->setCurrentScale(s.currentScale);
-    m_scene->setDefaultBorderColor(s.defaultBorderColor);
-    m_scene->setDefaultBorderWidth(s.defaultBorderWidth);
-    m_scene->setDefaultBodyColor(s.defaultBodyColor);
+    m_scene->setDefaultShapeStyles(s.shapeStyles);
     m_scene->setBodyColor(physics::BodyType::Dynamic, s.bodyDynamicColor);
     m_scene->setBodyColor(physics::BodyType::Static, s.bodyStaticColor);
     m_scene->setBodyColor(physics::BodyType::Kinematic, s.bodyKinematicColor);
@@ -2293,9 +2290,31 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
     settings.endGroup();
 
     settings.beginGroup("Shapes");
-    s.defaultBorderColor = QColor(settings.value("borderColor", s.defaultBorderColor.name(QColor::HexArgb)).toString());
-    s.defaultBorderWidth = settings.value("borderWidth", s.defaultBorderWidth).toDouble();
-    s.defaultBodyColor = QColor(settings.value("bodyColor", s.defaultBodyColor.name(QColor::HexArgb)).toString());
+    // The single default these grew out of, used to seed every kind the first
+    // time a scene is opened after the upgrade.
+    const QColor oldBody(settings.value("bodyColor").toString());
+    const QColor oldBorder(settings.value("borderColor").toString());
+    const double oldWidth = settings.value("borderWidth", -1.0).toDouble();
+    for (const QString &kind : ShapeStyle::kinds()) {
+        ShapeStyle style = ShapeStyle::defaultFor(kind);
+        if (oldBody.isValid())
+            style.body = oldBody;
+        if (oldBorder.isValid())
+            style.border = oldBorder;
+        if (oldWidth >= 0.0)
+            style.borderWidth = oldWidth;
+        const QString group = QStringLiteral("shapeStyles/") + kind + QLatin1Char('/');
+        style.body = QColor(settings.value(group + QStringLiteral("body"),
+                                           style.body.name(QColor::HexArgb)).toString());
+        style.border = QColor(settings.value(group + QStringLiteral("border"),
+                                             style.border.name(QColor::HexArgb)).toString());
+        style.borderWidth = settings.value(group + QStringLiteral("width"),
+                                           style.borderWidth).toDouble();
+        style.borderStyle = ShapeStyle::penStyleFromName(
+            settings.value(group + QStringLiteral("line"),
+                           ShapeStyle::penStyleName(style.borderStyle)).toString());
+        s.shapeStyles.insert(kind, style);
+    }
     s.selectionLineStyle = static_cast<Qt::PenStyle>(settings.value("selectionLineStyle", static_cast<int>(s.selectionLineStyle)).toInt());
     s.selectionLineWidth = settings.value("selectionLineWidth", s.selectionLineWidth).toDouble();
     s.selectionColor = QColor(settings.value("selectionColor", s.selectionColor.name(QColor::HexArgb)).toString());
@@ -2408,9 +2427,14 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.endGroup();
 
     settings.beginGroup("Shapes");
-    settings.setValue("borderColor", s.defaultBorderColor.name(QColor::HexArgb));
-    settings.setValue("borderWidth", s.defaultBorderWidth);
-    settings.setValue("bodyColor", s.defaultBodyColor.name(QColor::HexArgb));
+    for (auto it = s.shapeStyles.constBegin(); it != s.shapeStyles.constEnd(); ++it) {
+        const QString group = QStringLiteral("shapeStyles/") + it.key() + QLatin1Char('/');
+        settings.setValue(group + QStringLiteral("body"), it->body.name(QColor::HexArgb));
+        settings.setValue(group + QStringLiteral("border"), it->border.name(QColor::HexArgb));
+        settings.setValue(group + QStringLiteral("width"), it->borderWidth);
+        settings.setValue(group + QStringLiteral("line"),
+                          ShapeStyle::penStyleName(it->borderStyle));
+    }
     settings.setValue("selectionLineStyle", static_cast<int>(s.selectionLineStyle));
     settings.setValue("selectionLineWidth", s.selectionLineWidth);
     settings.setValue("selectionColor", s.selectionColor.name(QColor::HexArgb));

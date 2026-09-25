@@ -1,5 +1,7 @@
 #include "ShapePropertyPaneBase.h"
 
+#include "../ShapeStyle.h"
+
 #include <QHash>
 #include "../CanvasScene.h"
 
@@ -155,40 +157,8 @@ std::vector<PropertyRow> ShapePropertyPaneBase::geometryRows(ShapeItem *item) co
         -3600.0, 3600.0, {}, -1, 0.0, geometry});
     result.back().tooltip = QObject::tr("Degrees clockwise about the origin above.");
 
-    result.push_back({QObject::tr("Body Color"), PropertyFieldType::Color,
-        [item] { return item->bodyColor(); },
-        [item](const QVariant &v) { item->setBodyColor(v.value<QColor>()); },
-        -100000.0, 100000.0, {}, -1, 0.0, appearance});
-    result.back().tooltip = QObject::tr("The fill. Appearance only -- nothing about the"
-                                        " simulation reads it.");
-
-    result.push_back({QObject::tr("Transparency"), PropertyFieldType::Slider,
-        [item] { return 100 - qRound(item->bodyColor().alpha() / 255.0 * 100.0); },
-        [item](const QVariant &v) {
-            QColor c = item->bodyColor();
-            const int transparency = v.toInt();
-            c.setAlpha(qBound(0, qRound((100 - transparency) / 100.0 * 255.0), 255));
-            item->setBodyColor(c);
-        },
-        0, 100, {}, -1, 0.0, appearance});
-    result.back().tooltip = QObject::tr("How much of what is behind shows through the fill."
-                                        " At 100 the shape is drawn as an outline only.");
-
     for (PropertyRow &row : extraRows(item))
         result.push_back(std::move(row));
-
-    result.push_back({QObject::tr("Border Width"), PropertyFieldType::Numeric,
-        [item] { return item->borderWidth(); },
-        [item](const QVariant &v) { item->setBorderWidth(qMax(0.0, v.toDouble())); },
-        0.0, 100.0, {}, -1, 0.0, appearance});
-    result.back().tooltip = QObject::tr("How thick the outline is drawn. It is drawn on the"
-                                        " edge, and does not change what collides.");
-
-    result.push_back({QObject::tr("Border Color"), PropertyFieldType::Color,
-        [item] { return item->borderColor(); },
-        [item](const QVariant &v) { item->setBorderColor(v.value<QColor>()); },
-        -100000.0, 100000.0, {}, -1, 0.0, appearance});
-    result.back().tooltip = QObject::tr("The outline colour. Appearance only.");
 
     result.push_back({QObject::tr("Line Cap"), PropertyFieldType::Choice,
         [item] {
@@ -243,11 +213,7 @@ std::vector<PropertyRow> ShapePropertyPaneBase::defaultRows(EditorMode mode) con
     constant(QObject::tr("Rotation"), 0.0);
 
     if (const auto *scene = qobject_cast<const CanvasScene *>(m_item->scene())) {
-        constant(QObject::tr("Border Width"), scene->defaultBorderWidth());
-        constant(QObject::tr("Body Color"), scene->defaultBodyColor());
-        constant(QObject::tr("Border Color"), scene->defaultBorderColor());
-        constant(QObject::tr("Transparency"),
-                 100 - qRound(scene->defaultBodyColor().alpha() / 255.0 * 100.0));
+
     }
 
     constant(QObject::tr("Line Cap"), indexOfStyle(kCapStyles, ShapeItem::kDefaultCapStyle));

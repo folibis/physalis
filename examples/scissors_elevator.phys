@@ -897,9 +897,6 @@
     ],
     "shapes": [
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 10,
             "filled": true,
@@ -941,9 +938,6 @@
             "type": "rectangle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 10,
             "filled": true,
@@ -985,9 +979,6 @@
             "type": "rectangle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 10,
             "filled": true,
@@ -1029,9 +1020,6 @@
             "type": "rectangle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 10,
             "filled": true,
@@ -1073,9 +1061,6 @@
             "type": "rectangle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 10,
             "filled": true,
@@ -1117,9 +1102,6 @@
             "type": "rectangle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "closed": true,
             "cornerRadius": 0,
@@ -1180,9 +1162,6 @@
             "type": "polygon"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 0,
             "filled": true,
@@ -1224,9 +1203,6 @@
             "type": "rectangle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "closed": true,
             "cornerRadius": 0,
@@ -1291,9 +1267,6 @@
             "type": "polygon"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 0,
             "filled": true,
@@ -1335,9 +1308,6 @@
             "type": "rectangle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "closed": true,
             "cornerRadius": 0,
@@ -1398,9 +1368,6 @@
             "type": "polygon"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 0,
             "filled": true,
@@ -1442,9 +1409,6 @@
             "type": "rectangle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 0,
             "filled": true,
@@ -1486,9 +1450,6 @@
             "type": "circle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "closed": true,
             "cornerRadius": 0,
@@ -1549,9 +1510,6 @@
             "type": "polygon"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 0,
             "filled": true,
@@ -1593,9 +1551,6 @@
             "type": "rectangle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "closed": true,
             "cornerRadius": 0,
@@ -1656,9 +1611,6 @@
             "type": "polygon"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 0,
             "filled": true,
@@ -1700,9 +1652,6 @@
             "type": "rectangle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "closed": true,
             "cornerRadius": 0,
@@ -1767,9 +1716,6 @@
             "type": "polygon"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "closed": true,
             "cornerRadius": 0,
@@ -1830,9 +1776,6 @@
             "type": "polygon"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 0,
             "filled": true,
@@ -1874,9 +1817,6 @@
             "type": "rectangle"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "closed": true,
             "cornerRadius": 0,
@@ -1937,9 +1877,6 @@
             "type": "polygon"
         },
         {
-            "bodyColor": "#8055ff7f",
-            "borderColor": "#cc64aadc",
-            "borderWidth": 2,
             "capStyle": "round",
             "cornerRadius": 0,
             "filled": true,

@@ -52,13 +52,6 @@ qreal angleAt(const QPointF &origin, const QPointF &pos)
     return qRadiansToDegrees(std::atan2(d.y(), d.x()));
 }
 
-void applyDefaultStyle(ShapeItem *item, const QColor &borderColor, qreal borderWidth, const QColor &bodyColor)
-{
-    item->setBorderColor(borderColor);
-    item->setBorderWidth(borderWidth);
-    item->setBodyColor(bodyColor);
-}
-
 } // namespace
 
 CanvasScene::CanvasScene(QObject *parent) : QGraphicsScene(parent)
@@ -138,7 +131,6 @@ QVector<ShapeItem *> CanvasScene::shapes() const
 RectangleItem *CanvasScene::addRectangle(const QPointF &scenePos)
 {
     auto *item = new RectangleItem();
-    applyDefaultStyle(item, m_defaultBorderColor, m_defaultBorderWidth, m_defaultBodyColor);
     item->setPos(scenePos);
     addItem(item);
     item->setName(uniqueName(item->name(), item));
@@ -370,7 +362,6 @@ ExplosionItem *CanvasScene::explosionNamed(const QString &name) const
 CircleItem *CanvasScene::addCircle(const QPointF &scenePos)
 {
     auto *item = new CircleItem();
-    applyDefaultStyle(item, m_defaultBorderColor, m_defaultBorderWidth, m_defaultBodyColor);
     item->setPos(scenePos);
     addItem(item);
     item->setName(uniqueName(item->name(), item));
@@ -1946,19 +1937,15 @@ void CanvasScene::setSnapSensitivity(qreal sensitivity)
     m_snapSensitivity = qBound(0.0, sensitivity, m_snapStep / 2.0);
 }
 
-void CanvasScene::setDefaultBorderColor(const QColor &color)
+void CanvasScene::setDefaultShapeStyles(const QHash<QString, ShapeStyle> &styles)
 {
-    m_defaultBorderColor = color;
+    m_defaultShapeStyles = styles;
 }
 
-void CanvasScene::setDefaultBorderWidth(qreal width)
+ShapeStyle CanvasScene::defaultShapeStyle(const QString &typeName) const
 {
-    m_defaultBorderWidth = qMax(0.0, width);
-}
-
-void CanvasScene::setDefaultBodyColor(const QColor &color)
-{
-    m_defaultBodyColor = color;
+    const QString kind = ShapeStyle::kindOf(typeName);
+    return m_defaultShapeStyles.value(kind, ShapeStyle::defaultFor(kind));
 }
 
 void CanvasScene::setSelectionLineStyle(Qt::PenStyle style)
@@ -2595,8 +2582,7 @@ void CanvasScene::finishPolygonDrawing(bool closed)
         }
 
         auto *item = new PolygonItem(localPoints, closed);
-        applyDefaultStyle(item, m_defaultBorderColor, m_defaultBorderWidth, m_defaultBodyColor);
-        item->setPos(itemPos);
+            item->setPos(itemPos);
         addItem(item);
         item->setName(uniqueName(item->name(), item));
         emit shapesChanged();

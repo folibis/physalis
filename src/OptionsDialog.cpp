@@ -131,8 +131,7 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     , m_currentScale(current.currentScale)
     , m_gridColor(current.gridColor)
     , m_backgroundColor(current.backgroundColor)
-    , m_defaultBorderColor(current.defaultBorderColor)
-    , m_defaultBodyColor(current.defaultBodyColor)
+    , m_shapeStyles(current.shapeStyles)
     , m_selectionColor(current.selectionColor)
     , m_handleColor(current.handleColor)
     , m_handleBorderColor(current.handleBorderColor)
@@ -196,8 +195,6 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     });
     rebuildExportTab(current.converterPath);
 
-    m_ui->defaultBorderWidth->setValue(current.defaultBorderWidth);
-    m_ui->defaultTransparency->setValue(qRound((1.0 - current.defaultBodyColor.alphaF()) * 100.0));
     selectData(m_ui->selectionLineStyle, current.selectionLineStyle);
     m_ui->selectionLineWidth->setValue(current.selectionLineWidth);
     selectData(m_ui->handleShape, int(current.handleShape));
@@ -227,8 +224,7 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
 
     bindSwatch(m_ui->backgroundColorButton, m_backgroundColor, tr("Choose Background Color"));
     bindSwatch(m_ui->gridColorButton, m_gridColor, tr("Choose Grid Color"));
-    bindSwatch(m_ui->defaultBorderColorButton, m_defaultBorderColor, tr("Choose Border Color"));
-    bindSwatch(m_ui->defaultBodyColorButton, m_defaultBodyColor, tr("Choose Body Color"));
+    buildShapeStyleRows();
     bindSwatch(m_ui->selectionColorButton, m_selectionColor, tr("Choose Selection Color"));
     bindSwatch(m_ui->handleColorButton, m_handleColor, tr("Choose Handle Color"));
     bindSwatch(m_ui->handleBorderColorButton, m_handleBorderColor, tr("Choose Handle Border Color"));
@@ -244,7 +240,6 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     bindSwatch(m_ui->jointOutlineColorButton, m_jointOutlineColor, tr("Choose Joint Outline Color"));
     bindSwatch(m_ui->jointSelectionColorButton, m_jointSelectionColor, tr("Choose Joint Selection Color"));
 
-    bindSliderValue(m_ui->defaultTransparency, m_ui->defaultTransparencyLabel, tr("%"));
     bindSliderValue(m_ui->physicsFillAlpha, m_ui->physicsFillAlphaLabel, QString());
     bindSliderValue(m_ui->jointFillAlpha, m_ui->jointFillAlphaLabel, QString());
 
@@ -271,10 +266,10 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     }
     bindSliderValue(m_ui->sleepShiftPercent, m_ui->sleepShiftPercentLabel, tr("%"));
 
-    connect(m_ui->defaultTransparency, &QSlider::valueChanged, this, [this](int percent) {
-        m_defaultBodyColor.setAlphaF(1.0 - percent / 100.0);
-        m_ui->defaultBodyColorButton->setStyleSheet(colorSwatchStyle(m_defaultBodyColor));
-    });
+
+    // One row per kind of shape. The group's own rows are dropped first: the
+    // form came from the .ui with a single set of controls for every kind.
+    buildShapeStyleRows();
 
     // One row per kind of joint, not per engine's joint type: every engine
     // tags each of its types with one of these five, so the same short list
@@ -417,6 +412,78 @@ void OptionsDialog::bindSliderValue(QSlider *slider, QLabel *label, const QStrin
     };
     connect(slider, &QSlider::valueChanged, label, show);
     show(slider->value());
+}
+
+void OptionsDialog::buildShapeStyleRows()
+{
+    auto *form = qobject_cast<QFormLayout *>(m_ui->defaultStyleGroup->layout());
+    if (!form)
+        return;
+    while (form->rowCount() > 0)
+        form->removeRow(0);
+
+    auto *heading = new QLabel(tr("Fill, border, width and line, for each kind of shape."),
+                               m_ui->defaultStyleGroup);
+    heading->setStyleSheet(QStringLiteral("color: #8a8a8a; font-size: 11px;"));
+    heading->setWordWrap(true);
+    form->addRow(heading);
+
+    for (const QString &kind : ShapeStyle::kinds()) {
+        if (!m_shapeStyles.contains(kind))
+            m_shapeStyles.insert(kind, ShapeStyle::defaultFor(kind));
+
+        auto *row = new QWidget(m_ui->defaultStyleGroup);
+        auto *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(4);
+
+        const auto swatch = [this, row, layout, kind](bool border) {
+            auto *button = new QToolButton(row);
+            button->setFixedSize(kSwatchWidth, kSwatchHeight);
+            const ShapeStyle &style = m_shapeStyles[kind];
+            button->setStyleSheet(colorSwatchStyle(border ? style.border : style.body));
+            button->setToolTip(border ? tr("Border colour") : tr("Fill colour"));
+            connect(button, &QToolButton::clicked, this, [this, button, kind, border] {
+                ShapeStyle &style = m_shapeStyles[kind];
+                const QColor chosen = QColorDialog::getColor(
+                    border ? style.border : style.body, this,
+                    border ? tr("Choose Border Colour") : tr("Choose Fill Colour"),
+                    QColorDialog::ShowAlphaChannel);
+                if (!chosen.isValid())
+                    return;
+                (border ? style.border : style.body) = chosen;
+                button->setStyleSheet(colorSwatchStyle(chosen));
+            });
+            layout->addWidget(button);
+        };
+        swatch(false);
+        swatch(true);
+
+        auto *width = new QDoubleSpinBox(row);
+        width->setDecimals(1);
+        width->setRange(0.0, 100.0);
+        width->setSingleStep(0.5);
+        width->setValue(m_shapeStyles[kind].borderWidth);
+        width->setToolTip(tr("Border width"));
+        connect(width, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+                [this, kind](double v) { m_shapeStyles[kind].borderWidth = v; });
+        layout->addWidget(width);
+
+        auto *style = new QComboBox(row);
+        for (Qt::PenStyle pen : ShapeStyle::penStyles())
+            style->addItem(ShapeStyle::penStyleLabel(pen), static_cast<int>(pen));
+        style->setCurrentIndex(
+            style->findData(static_cast<int>(m_shapeStyles[kind].borderStyle)));
+        style->setToolTip(tr("Border line"));
+        connect(style, qOverload<int>(&QComboBox::currentIndexChanged), this,
+                [this, kind, style](int) {
+                    m_shapeStyles[kind].borderStyle =
+                        static_cast<Qt::PenStyle>(style->currentData().toInt());
+                });
+        layout->addWidget(style, 1);
+
+        form->addRow(ShapeStyle::kindLabel(kind), row);
+    }
 }
 
 void OptionsDialog::bindSwatch(QToolButton *button, QColor &color, const QString &title)
@@ -675,9 +742,7 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.scaleMin = m_ui->scaleMin->value();
     s.scaleMax = m_ui->scaleMax->value();
     s.scaleStep = m_ui->scaleStep->value();
-    s.defaultBorderColor = m_defaultBorderColor;
-    s.defaultBorderWidth = m_ui->defaultBorderWidth->value();
-    s.defaultBodyColor = m_defaultBodyColor;
+    s.shapeStyles = m_shapeStyles;
     s.selectionLineStyle =
         static_cast<Qt::PenStyle>(m_ui->selectionLineStyle->currentData().toInt());
     s.selectionLineWidth = m_ui->selectionLineWidth->value();

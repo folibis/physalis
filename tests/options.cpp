@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Ruslan Muhlinin. See LICENSE.
 #include "CanvasScene.h"
 #include "OptionsDialog.h"
+#include "ShapeStyle.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -42,9 +43,14 @@ OptionsDialog::Settings distinctive()
     s.scaleMax = 450.0;
     s.scaleStep = 25.0;
 
-    s.defaultBorderColor = QColor(77, 88, 99, 200);
-    s.defaultBorderWidth = 3.5;
-    s.defaultBodyColor = QColor(101, 102, 103, 120);
+    for (const QString &kind : ShapeStyle::kinds()) {
+        ShapeStyle style;
+        style.body = QColor(101, 102, 103, 120);
+        style.border = QColor(77, 88, 99, 200);
+        style.borderWidth = 3.5 + ShapeStyle::kinds().indexOf(kind);
+        style.borderStyle = Qt::DashDotLine;
+        s.shapeStyles.insert(kind, style);
+    }
 
     s.selectionLineStyle = Qt::DashLine;
     s.selectionLineWidth = 4.0;
@@ -132,7 +138,17 @@ void everyFieldComesBack(const OptionsDialog::Settings &in, const OptionsDialog:
 
     SAME(currentScale); SAME(scaleMin); SAME(scaleMax); SAME(scaleStep);
 
-    SAME(defaultBorderColor); SAME(defaultBorderWidth); SAME(defaultBodyColor);
+    // Every kind's fill, border, width and line come back as they went out.
+    ASSERT_EQ(out.shapeStyles.size(), in.shapeStyles.size())
+        << "Options lost a shape style";
+    for (auto it = in.shapeStyles.constBegin(); it != in.shapeStyles.constEnd(); ++it) {
+        const ShapeStyle got = out.shapeStyles.value(it.key());
+        const std::string kind = it.key().toStdString();
+        EXPECT_EQ(got.body, it->body) << kind << " lost its fill colour";
+        EXPECT_EQ(got.border, it->border) << kind << " lost its border colour";
+        EXPECT_DOUBLE_EQ(got.borderWidth, it->borderWidth) << kind << " lost its border width";
+        EXPECT_EQ(int(got.borderStyle), int(it->borderStyle)) << kind << " lost its line style";
+    }
     EXPECT_EQ(int(out.selectionLineStyle), int(in.selectionLineStyle))
         << "Options lost or changed selectionLineStyle";
     SAME(selectionLineWidth); SAME(selectionColor); SAME(undoDepth);

@@ -14,6 +14,7 @@
 #include <functional>
 #include "Rule.h"
 #include "SceneVariable.h"
+#include "ShapeStyle.h"
 #include "PhysicsTypes.h"
 #include "JointTypes.h"
 
@@ -484,14 +485,10 @@ public:
     void setSnapSensitivity(qreal sensitivity);
     qreal snapSensitivity() const { return m_snapSensitivity; }
 
-    void setDefaultBorderColor(const QColor &color);
-    QColor defaultBorderColor() const { return m_defaultBorderColor; }
-
-    void setDefaultBorderWidth(qreal width);
-    qreal defaultBorderWidth() const { return m_defaultBorderWidth; }
-
-    void setDefaultBodyColor(const QColor &color);
-    QColor defaultBodyColor() const { return m_defaultBodyColor; }
+    // How a newly drawn shape is styled, one set per kind.
+    void setDefaultShapeStyles(const QHash<QString, ShapeStyle> &styles);
+    QHash<QString, ShapeStyle> defaultShapeStyles() const { return m_defaultShapeStyles; }
+    ShapeStyle defaultShapeStyle(const QString &typeName) const;
 
     void setSelectionLineStyle(Qt::PenStyle style);
     Qt::PenStyle selectionLineStyle() const { return m_selectionLineStyle; }
@@ -770,9 +767,7 @@ private:
     qreal m_snapStep = 20.0;
     qreal m_snapSensitivity = 5.0;
 
-    QColor m_defaultBorderColor { 100, 170, 220, 204 };
-    qreal m_defaultBorderWidth = 2.0;
-    QColor m_defaultBodyColor { 173, 216, 230, 128 };
+    QHash<QString, ShapeStyle> m_defaultShapeStyles;
 
     Qt::PenStyle m_selectionLineStyle = Qt::DotLine;
     qreal m_selectionLineWidth = 2.0;

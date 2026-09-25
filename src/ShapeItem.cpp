@@ -96,7 +96,7 @@ QRectF ShapeItem::boundingRect() const
         selectionWidth = canvasScene->selectionLineWidth();
         handleSize = canvasScene->handleSize();
     }
-    const qreal margin = qMax(handleSize, qMax(m_borderWidth, 1.0) + selectionWidth + 8.0);
+    const qreal margin = qMax(handleSize, qMax(borderWidth(), 1.0) + selectionWidth + 8.0);
     QRectF r = m_rect.adjusted(-margin, -margin, margin, margin);
     QRectF originMargin(m_origin.x() - kOriginRadius - margin, m_origin.y() - kOriginRadius - margin,
                          2 * (kOriginRadius + margin), 2 * (kOriginRadius + margin));
@@ -123,20 +123,6 @@ std::vector<HandleId> ShapeItem::activeHandles() const
 {
     return { HandleId::TopLeft, HandleId::Top, HandleId::TopRight, HandleId::Right,
              HandleId::BottomRight, HandleId::Bottom, HandleId::BottomLeft, HandleId::Left };
-}
-
-void ShapeItem::setBodyColor(const QColor &color)
-{
-    m_bodyColor = color;
-    update();
-    emit propertyChanged();
-}
-
-void ShapeItem::setBorderColor(const QColor &color)
-{
-    m_borderColor = color;
-    update();
-    emit propertyChanged();
 }
 
 qreal ShapeItem::maxCornerRadius() const
@@ -171,11 +157,11 @@ void ShapeItem::setPreferOutline(bool outline)
     emit propertyChanged();
 }
 
-void ShapeItem::setBorderWidth(qreal width)
+ShapeStyle ShapeItem::style() const
 {
-    m_borderWidth = width;
-    update();
-    emit propertyChanged();
+    if (const auto *canvas = qobject_cast<const CanvasScene *>(scene()))
+        return canvas->defaultShapeStyle(typeName());
+    return ShapeStyle::defaultFor(ShapeStyle::kindOf(typeName()));
 }
 
 void ShapeItem::setFilled(bool filled)
@@ -313,15 +299,16 @@ void ShapeItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidg
         return;
     }
 
-    QPen pen(m_borderColor);
-    pen.setWidthF(m_borderWidth);
+    QPen pen(borderColor());
+    pen.setWidthF(borderWidth());
+    pen.setStyle(borderStyle());
     pen.setCosmetic(true);
     pen.setCapStyle(m_capStyle);
     pen.setJoinStyle(m_joinStyle);
     painter->setPen(pen);
     // Both branches must already be QBrush: a QColor/Qt::NoBrush ternary
     // resolves via QColor(QRgb) and turns NoBrush into opaque black.
-    painter->setBrush(drawsFilled() ? QBrush(m_bodyColor) : QBrush(Qt::NoBrush));
+    painter->setBrush(drawsFilled() ? QBrush(bodyColor()) : QBrush(Qt::NoBrush));
     paintShape(painter, m_rect);
 
     const bool showSelection = !(canvas && canvas->simulationRunning());
@@ -442,7 +429,7 @@ QPainterPath ShapeItem::hitTestPath() const
 {
     const QPainterPath path = localShapePath();
     QPainterPathStroker stroker;
-    stroker.setWidth(qMax(m_borderWidth, 1.0) + 6.0);
+    stroker.setWidth(qMax(borderWidth(), 1.0) + 6.0);
     const QPainterPath band = stroker.createStroke(path);
     // united() works on filled areas, and filling an open path closes it --
     // so uniting one in would make the empty space a line happens to span
@@ -457,7 +444,7 @@ QPainterPath ShapeItem::selectionIndicatorPath() const
         indicatorWidth = canvasScene->selectionLineWidth();
 
     const QPainterPath path = localShapePath();
-    const qreal margin = m_borderWidth / 2.0 + indicatorWidth / 2.0 + 1.0;
+    const qreal margin = borderWidth() / 2.0 + indicatorWidth / 2.0 + 1.0;
     QPainterPathStroker stroker;
     stroker.setWidth(margin * 2.0);
     const QPainterPath band = stroker.createStroke(path);
