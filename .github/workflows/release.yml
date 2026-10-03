@@ -21,7 +21,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Qt and MinGW
         uses: jurplel/install-qt-action@v4
@@ -68,7 +68,7 @@ jobs:
           ls -l build/Physalis-*.exe build/Physalis-*.zip
           test -f "$(ls build/Physalis-*.exe | head -1)"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: |
@@ -82,7 +82,7 @@ jobs:
   debian:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Qt and the build tools
         run: |
@@ -114,7 +114,7 @@ jobs:
           ls -l build/*.deb
           dpkg-deb --info build/*.deb | sed -n '/Depends/,+2p'
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: debian
           path: build/*.deb
@@ -126,7 +126,7 @@ jobs:
   debian-qt5:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Qt and the build tools
         run: |
@@ -165,7 +165,7 @@ jobs:
           ls -l build/*.deb
           dpkg-deb --info build/*.deb | sed -n '/Depends/,+2p'
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: debian-qt5
           path: build/*.deb
@@ -175,7 +175,7 @@ jobs:
     runs-on: ubuntu-latest
     container: fedora:44
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Qt and the build tools
         run: |
@@ -205,7 +205,7 @@ jobs:
           ls -l build/*.rpm
           rpm -qpR build/*.rpm
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: redhat
           path: build/*.rpm
@@ -222,7 +222,7 @@ jobs:
     if: always() && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: packages
           # One job failing leaves its artifact missing, not the step.

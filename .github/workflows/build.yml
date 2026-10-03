@@ -10,7 +10,7 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The tests drive real widgets, and one of them sends a keystroke that
       # only resolves while its window is active, so they need a display
@@ -51,7 +51,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Which MinGW packages exist is not guessable and changes over time, so
       # the log carries the list. Read it here if the install below ever fails
