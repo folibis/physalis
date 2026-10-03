@@ -9,6 +9,11 @@
 #include "SimulationController.h"
 
 #include <gtest/gtest.h>
+#include "CircleItem.h"
+#include "EditorMode.h"
+#include <QSignalSpy>
+#include "MainWindow.h"
+#include <QAction>
 
 // The transport: start, pause, step, speed, stop. None of it is physics -- it
 // is what the toolbar does -- and all of it decides what the user sees.
@@ -259,4 +264,140 @@ TEST(Simulation, ARuleChangingAJointDoesNotOutliveTheRun)
     EXPECT_EQ(joint->params(), before)
         << "once it stops, the joint is the document's again -- otherwise the rule's change"
         << " is what gets saved";
+}
+
+namespace {
+
+void oneFallingBody(CanvasScene *scene)
+{
+    scene->setSimulationEngineName(QStringLiteral("Box2D"));
+    scene->setPixelsPerMeter(1000.0);
+    scene->world().params[QStringLiteral("gravityY")] = 9.81;
+    scene->setEditorMode(EditorMode::Physics);
+
+    auto *ball = new CircleItem;
+    ball->setRect(QRectF(0, 0, 40, 40));
+    ball->setName(QStringLiteral("ball"));
+    scene->addItem(ball);
+    scene->notifyShapesChanged();
+    scene->selectForPhysics(ball, true);
+    PhysicsBody *body = scene->createBodyFromSelection();
+    body->props().type = physics::BodyType::Dynamic;
+    body->setName(QStringLiteral("ballBody"));
+    scene->clearPhysicsSelection();
+}
+
+} // namespace
+
+// Stepping one frame at a time has to say so, the same as a step taken by the
+// clock: the property table's live rows and the log read the run when they are
+// told there is something new. Stepping moved the shapes and told nobody, so
+// every number beside them sat at what it had been when the run started.
+TEST(Stepping, OneStepTellsWhateverIsReadingTheRun)
+{
+    CanvasScene scene;
+    oneFallingBody(&scene);
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    QSignalSpy stepped(&sim, &SimulationController::stepped);
+
+    sim.stepFrame();
+    EXPECT_EQ(stepped.count(), 1) << "the first step said nothing";
+
+    const double afterOne =
+        sim.readValue(QStringLiteral("ballBody"), QStringLiteral("velocityY")).toDouble();
+
+    for (int i = 0; i < 4; ++i)
+        sim.stepFrame();
+    EXPECT_EQ(stepped.count(), 5) << "stepping four more times said nothing four more times";
+
+    // And the numbers really did move, so what the panels are being told about
+    // is a change and not a false alarm.
+    const double afterFive =
+        sim.readValue(QStringLiteral("ballBody"), QStringLiteral("velocityY")).toDouble();
+    EXPECT_GT(qAbs(afterFive), qAbs(afterOne))
+        << "five steps of falling left the velocity where one step had it";
+}
+
+// A run driven by the clock already did this; it is what the single step was
+// measured against.
+TEST(Stepping, AClockDrivenStepSaysSoToo)
+{
+    CanvasScene scene;
+    oneFallingBody(&scene);
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    QSignalSpy stepped(&sim, &SimulationController::stepped);
+
+    sim.start();
+    sim.advance(1.0 / 60.0);
+    EXPECT_GE(stepped.count(), 1) << "a running step said nothing";
+}
+
+namespace {
+
+// Two dynamic bodies, which is what a joint needs something to hold.
+void twoBodies(CanvasScene *scene)
+{
+    scene->setSimulationEngineName(QStringLiteral("Box2D"));
+    scene->setEditorMode(EditorMode::Physics);
+    for (int i = 0; i < 2; ++i) {
+        auto *shape = new RectangleItem;
+        shape->setRect(QRectF(0, 0, 40, 40));
+        shape->setPos(i * 120, 0);
+        shape->setName(QStringLiteral("box%1").arg(i + 1));
+        scene->addItem(shape);
+    }
+    scene->notifyShapesChanged();
+    for (ShapeItem *shape : scene->shapes()) {
+        scene->selectForPhysics(shape, true);
+        PhysicsBody *body = scene->createBodyFromSelection();
+        body->props().type = physics::BodyType::Dynamic;
+        scene->clearPhysicsSelection();
+    }
+}
+
+void selectEverything(CanvasScene *scene)
+{
+    scene->clearPhysicsSelection();
+    for (ShapeItem *shape : scene->shapes())
+        scene->selectForPhysics(shape, true);
+}
+
+} // namespace
+
+// Stopping a run has to hand the toolbar back. Add Joint and Delete Joint are
+// set by the joint handler and by nothing else, and stopping called only the
+// physics one -- so they stayed greyed out, and selecting bodies did not bring
+// them round. Switching the editor mode and back did, which is what made it
+// look as though it only happened sometimes.
+TEST(JointActions, StoppingARunHandsTheJointButtonsBack)
+{
+    MainWindow window;
+    auto *scene = window.findChild<CanvasScene *>();
+    ASSERT_NE(scene, nullptr);
+    auto *add = window.findChild<QAction *>(QStringLiteral("actionAddJoint"));
+    auto *simulate = window.findChild<QAction *>(QStringLiteral("actionSimulate"));
+    auto *stop = window.findChild<QAction *>(QStringLiteral("actionStop"));
+    ASSERT_NE(add, nullptr);
+    ASSERT_NE(simulate, nullptr);
+    ASSERT_NE(stop, nullptr);
+
+    twoBodies(scene);
+    selectEverything(scene);
+    ASSERT_TRUE(add->isEnabled()) << "Add Joint is off before a run has even started";
+
+    simulate->trigger();
+    EXPECT_FALSE(add->isEnabled()) << "Add Joint is offered while the simulation runs";
+
+    stop->trigger();
+    EXPECT_TRUE(add->isEnabled())
+        << "the run stopped and Add Joint is still greyed out";
+
+    // And it stays back: picking bodies again is the first thing anyone does.
+    selectEverything(scene);
+    EXPECT_TRUE(add->isEnabled())
+        << "selecting bodies after a run left Add Joint greyed out";
 }

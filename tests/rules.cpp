@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdio>
 #include <gtest/gtest.h>
+#include "EditorMode.h"
 
 // Rules: the part of the app with no physics in it and the most ways to be
 // silently wrong. Two things are checked here, for both engines -- that every
@@ -1042,4 +1043,181 @@ TEST(Rules, TimerVerbsPauseStopAndReset)
     EXPECT_GT(reading(), 5000) << "a timer set to a value did not count on from it";
     EXPECT_LT(reading(), 5600);
     bench.sim.stop();
+}
+
+namespace {
+
+// A scene with one falling body and a counter, so a rule has something to write.
+void build(CanvasScene *scene, quint32 seed)
+{
+    scene->setSimulationEngineName(QStringLiteral("Box2D"));
+    scene->setPixelsPerMeter(1000.0);
+    scene->setEditorMode(EditorMode::Physics);
+    scene->setRandomSeed(seed);
+
+    auto *ball = new CircleItem;
+    ball->setRect(QRectF(0, 0, 40, 40));
+    ball->setName(QStringLiteral("ball"));
+    scene->addItem(ball);
+    scene->notifyShapesChanged();
+    scene->selectForPhysics(ball, true);
+    PhysicsBody *body = scene->createBodyFromSelection();
+    body->props().type = physics::BodyType::Dynamic;
+    body->setName(QStringLiteral("ballBody"));
+    scene->clearPhysicsSelection();
+
+    SceneVariable rolled;
+    rolled.name = QStringLiteral("rolled");
+    rolled.type = SceneVariable::Type::Double;
+    rolled.initial = 0.0;
+    scene->setVariables({ rolled });
+}
+
+double runAndRead(CanvasScene *scene, int steps = 20)
+{
+    SimulationController sim(scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+    for (int s = 0; s < steps; ++s)
+        sim.advance(1.0 / 60.0);
+    return sim.readValue(Rule::variables(), QStringLiteral("rolled")).toDouble();
+}
+
+// Every step, write a random number between the two bounds into `rolled`.
+Rule rollEveryStep(double from, double to)
+{
+    Rule rule;
+    rule.conditions[0].subjectName = Rule::world();
+    rule.conditions[0].conditionKey = QStringLiteral("frame");
+    rule.conditions[0].compare = Rule::Compare::Greater;
+    rule.conditions[0].conditionValue = 0;
+    rule.actions[0].targetName = Rule::variables();
+    rule.actions[0].propertyKey = QStringLiteral("rolled");
+    rule.actions[0].op = Rule::Op::Set;
+    rule.actions[0].value = RuleNumber::range(from, to, 0.0);
+    return rule;
+}
+
+} // namespace
+
+// A value written as a range lands between its two bounds, and is not the same
+// number every time.
+TEST(RandomValues, ARangeLandsBetweenItsBounds)
+{
+    QVector<double> seen;
+    for (quint32 seed = 1; seed <= 12; ++seed) {
+        CanvasScene scene;
+        build(&scene, seed);
+        scene.setRules({ rollEveryStep(-200.0, 200.0) });
+        const double got = runAndRead(&scene);
+        EXPECT_GE(got, -200.0) << "a rolled value fell below the range";
+        EXPECT_LE(got, 200.0) << "a rolled value went above the range";
+        seen << got;
+    }
+    int same = 0;
+    for (double v : seen)
+        same += qFuzzyCompare(v + 1.0, seen.first() + 1.0) ? 1 : 0;
+    EXPECT_LT(same, seen.size())
+        << "every seed produced the same number, so nothing is actually random";
+}
+
+// The same seed gives the same run. Without this a scene with chance in it
+// could never be compared against an export of itself.
+TEST(RandomValues, TheSameSeedGivesTheSameRun)
+{
+    CanvasScene first;
+    build(&first, 20260102u);
+    first.setRules({ rollEveryStep(0.0, 1000.0) });
+    const double a = runAndRead(&first);
+
+    CanvasScene second;
+    build(&second, 20260102u);
+    second.setRules({ rollEveryStep(0.0, 1000.0) });
+    const double b = runAndRead(&second);
+
+    EXPECT_DOUBLE_EQ(a, b) << "the same seed produced a different run";
+
+    CanvasScene other;
+    build(&other, 99u);
+    other.setRules({ rollEveryStep(0.0, 1000.0) });
+    EXPECT_NE(runAndRead(&other), a) << "a different seed produced the same run";
+}
+
+// A seed of zero is the scene asking for a different run every time.
+TEST(RandomValues, ZeroMeansADifferentRunEveryTime)
+{
+    QVector<double> seen;
+    for (int attempt = 0; attempt < 6; ++attempt) {
+        CanvasScene scene;
+        build(&scene, 0);
+        scene.setRules({ rollEveryStep(0.0, 1e6) });
+        seen << runAndRead(&scene);
+    }
+    int same = 0;
+    for (double v : seen)
+        same += qFuzzyCompare(v + 1.0, seen.first() + 1.0) ? 1 : 0;
+    EXPECT_LT(same, seen.size()) << "a seed of zero repeated the same run";
+}
+
+// Chance is a reading of the world that is never the same twice, and a rule
+// comparing it fires about that often. Seeded, so the count is fixed.
+TEST(RandomValues, ChanceFiresAboutAsOftenAsItSays)
+{
+    CanvasScene scene;
+    build(&scene, 7u);
+
+    Rule sometimes;
+    sometimes.conditions[0].subjectName = Rule::world();
+    sometimes.conditions[0].conditionKey = QStringLiteral("chance");
+    sometimes.conditions[0].compare = Rule::Compare::Less;
+    sometimes.conditions[0].conditionValue = 25.0;
+    sometimes.actions[0].targetName = Rule::variables();
+    sometimes.actions[0].propertyKey = QStringLiteral("rolled");
+    sometimes.actions[0].op = Rule::Op::Add;
+    sometimes.actions[0].value = 1.0;
+    scene.setRules({ sometimes });
+
+    // A rule fires as its condition becomes true, so it counts the times chance
+    // crossed under 25 rather than every step below it -- about half as often.
+    const double fired = runAndRead(&scene, 2000);
+    EXPECT_GT(fired, 100.0) << "a one-in-four chance almost never fired in 2000 steps";
+    EXPECT_LT(fired, 700.0) << "a one-in-four chance fired far too often";
+}
+
+// A range survives the file: written when it is there, absent when it is not,
+// so a scene from before ranges existed reads back as a plain value.
+TEST(RandomValues, ARangeIsWrittenAndReadBack)
+{
+    CanvasScene scene;
+    build(&scene, 42u);
+    scene.setRules({ rollEveryStep(-50.0, 150.0) });
+
+    const QJsonObject document = SceneSerializer::save(&scene);
+    const QJsonObject written = document.value(QStringLiteral("rules")).toArray()
+                                    .at(0).toObject();
+    EXPECT_TRUE(written.value(QStringLiteral("value")).isObject())
+        << "a range was not written as one";
+    EXPECT_EQ(document.value(QStringLiteral("world")).toObject()
+                  .value(QStringLiteral("randomSeed")).toDouble(), 42.0)
+        << "the seed was not written to the file";
+
+    CanvasScene back;
+    QString error;
+    ASSERT_TRUE(SceneSerializer::load(&back, document, &error)) << error.toStdString();
+    ASSERT_EQ(back.rules().size(), 1);
+    const RuleAction &read = back.rules().at(0).actions.at(0);
+    EXPECT_TRUE(read.usesRange()) << "the range did not come back";
+    EXPECT_DOUBLE_EQ(RuleNumber::from(read.value), -50.0);
+    EXPECT_DOUBLE_EQ(RuleNumber::to(read.value), 150.0);
+    EXPECT_EQ(back.randomSeed(), 42u) << "the seed did not come back";
+
+    // And a plain value stays a plain number rather than becoming an object.
+    CanvasScene plain;
+    build(&plain, 0);
+    Rule one = rollEveryStep(0.0, 0.0);
+    one.actions[0].value = 7.0;
+    plain.setRules({ one });
+    EXPECT_FALSE(SceneSerializer::save(&plain).value(QStringLiteral("rules")).toArray()
+                     .at(0).toObject().value(QStringLiteral("value")).isObject())
+        << "a plain value was written as a range";
 }

@@ -10,6 +10,11 @@
 #include <QDoubleSpinBox>
 #include <QSpinBox>
 #include <gtest/gtest.h>
+#include "MainWindow.h"
+#include <QAction>
+#include <QDir>
+#include <QMenu>
+#include <QTemporaryDir>
 
 // The Options dialog, every value in it. It is handed what the application
 // currently has and gives back what the user chose, so the one thing that has
@@ -272,4 +277,89 @@ TEST(Options, ChangingAControlChangesItsOwnSetting)
         EXPECT_EQ(out.showGrid, !in.showGrid);
         EXPECT_EQ(out.snapToGrid, in.snapToGrid) << "showing the grid is not snapping to it";
     }
+}
+
+namespace {
+
+// The paths the Open Recent menu is offering, newest first.
+QStringList offered(MainWindow *window)
+{
+    QStringList paths;
+    auto *menu = window->findChild<QMenu *>(QStringLiteral("menuRecent"));
+    if (!menu)
+        return paths;
+    for (QAction *action : menu->actions())
+        paths << QDir::fromNativeSeparators(action->toolTip());
+    return paths;
+}
+
+QString madeIn(const QTemporaryDir &folder, const QString &name)
+{
+    return QDir(folder.path()).filePath(name);
+}
+
+} // namespace
+
+// Saving a scene puts it on the list. A scene saved for the first time has
+// never been opened, so recording only on open left it unreachable from Open
+// Recent until it had been opened the long way round once.
+TEST(RecentFiles, SavingASceneRecordsIt)
+{
+    QTemporaryDir folder;
+    ASSERT_TRUE(folder.isValid());
+
+    MainWindow window;
+    const QString path = madeIn(folder, QStringLiteral("saved.phys"));
+    ASSERT_TRUE(window.saveSceneAsForTest(path)) << "the scene would not save";
+
+    EXPECT_TRUE(offered(&window).contains(QDir::fromNativeSeparators(path)))
+        << "a scene that was just saved is not offered under Open Recent";
+}
+
+// Opening one does too, newest first, with no repeats and no more than five.
+TEST(RecentFiles, TheListIsNewestFirstWithoutRepeats)
+{
+    QTemporaryDir folder;
+    ASSERT_TRUE(folder.isValid());
+
+    MainWindow window;
+    QStringList made;
+    for (int i = 1; i <= 7; ++i) {
+        const QString path = madeIn(folder, QStringLiteral("scene%1.phys").arg(i));
+        ASSERT_TRUE(window.saveSceneAsForTest(path)) << path.toStdString();
+        made << QDir::fromNativeSeparators(path);
+    }
+
+    QStringList list = offered(&window);
+    EXPECT_EQ(list.size(), 5) << "the list is not kept to five";
+    EXPECT_EQ(list.first(), made.last()) << "the newest scene is not at the top";
+    EXPECT_FALSE(list.contains(made.first()))
+        << "the oldest scene was not pushed off the end";
+
+    // Saving one again moves it to the top rather than listing it twice.
+    ASSERT_TRUE(window.saveSceneAsForTest(made.at(3)));
+    list = offered(&window);
+    EXPECT_EQ(list.first(), made.at(3)) << "saving a scene again did not bring it to the top";
+    EXPECT_EQ(list.count(made.at(3)), 1) << "the same scene is listed twice";
+}
+
+// And one that has gone takes itself off rather than sitting there failing.
+TEST(RecentFiles, AMissingSceneDropsOffTheList)
+{
+    QTemporaryDir folder;
+    ASSERT_TRUE(folder.isValid());
+
+    MainWindow window;
+    const QString path = madeIn(folder, QStringLiteral("gone.phys"));
+    ASSERT_TRUE(window.saveSceneAsForTest(path));
+    ASSERT_TRUE(offered(&window).contains(QDir::fromNativeSeparators(path)));
+
+    ASSERT_TRUE(QFile::remove(path));
+    auto *menu = window.findChild<QMenu *>(QStringLiteral("menuRecent"));
+    ASSERT_NE(menu, nullptr);
+    ASSERT_FALSE(menu->actions().isEmpty());
+    menu->actions().first()->trigger();
+
+    EXPECT_FALSE(offered(&window).contains(QDir::fromNativeSeparators(path)))
+        << "a scene that no longer opens is still being offered";
 }
