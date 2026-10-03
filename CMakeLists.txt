@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Physalis VERSION 0.2.2 LANGUAGES C CXX)
+project(Physalis VERSION 0.1.4 LANGUAGES C CXX)
 
 # windres is beside the compiler but rarely on PATH; the bare name fails at build time.
 if(WIN32 AND MINGW)
@@ -106,9 +106,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(WITH_BOX2D "Build the Box2D engine plugin" ON)
 option(WITH_CHIPMUNK "Build the Chipmunk2D engine plugin" ON)
-option(WITH_EXPORTER_BOX2D_QT "Install the Box2D / Qt project export converter" ON)
-option(WITH_EXPORTER_PLANCK "Install the Planck.js web page export converter" ON)
-option(WITH_EXPORTER_QML "Install the QML / qml-box2d project export converter" ON)
+option(WITH_EXPORTER_BOX2D_QT "Install the box2d/Qt export converter" ON)
+option(WITH_EXPORTER_WASM "Install the box2d3wasm web page export converter" ON)
+
 option(WITH_TESTS "Build the test suite" ON)
 
 if(WITH_TESTS AND NOT (WITH_BOX2D AND WITH_CHIPMUNK))
@@ -277,11 +277,8 @@ set(PHYSALIS_EXPORTERS)
 if(WITH_EXPORTER_BOX2D_QT)
     list(APPEND PHYSALIS_EXPORTERS box2d-qt-project)
 endif()
-if(WITH_EXPORTER_PLANCK)
-    list(APPEND PHYSALIS_EXPORTERS planck-js)
-endif()
-if(WITH_EXPORTER_QML)
-    list(APPEND PHYSALIS_EXPORTERS qml-box2d)
+if(WITH_EXPORTER_WASM)
+    list(APPEND PHYSALIS_EXPORTERS box2d3wasm)
 endif()
 foreach(exporter IN LISTS PHYSALIS_EXPORTERS)
     install(DIRECTORY exporters/${exporter} DESTINATION ${PHYSALIS_INSTALL_DIR}/exporters)

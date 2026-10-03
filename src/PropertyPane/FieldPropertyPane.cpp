@@ -25,6 +25,16 @@ std::vector<PropertyRow> FieldPropertyPane::rows(EditorMode mode) const
             QObject::tr("Walls the edges of the field, so nothing can leave it. Off,"
                         " whatever falls out keeps falling.");
 
+        world.push_back({QObject::tr("Random Seed"), PropertyFieldType::Numeric,
+            [scene] { return double(scene->randomSeed()); },
+            [scene](const QVariant &v) { scene->setRandomSeed(quint32(qMax(0.0, v.toDouble()))); },
+            0.0, 4294967295.0, {}, 0, 1.0, QObject::tr("World")});
+        world.back().tooltip =
+            QObject::tr("What the run's random numbers start from. Zero gives a different"
+                        " run every time; any other number makes the run repeat exactly,"
+                        " which is what lets a scene with chance in it be compared with an"
+                        " export of itself.");
+
         for (PropertyRow &row : world)
             result.push_back(std::move(row));
         return result;

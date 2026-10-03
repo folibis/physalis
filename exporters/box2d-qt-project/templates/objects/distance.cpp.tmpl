@@ -1,10 +1,17 @@
 //! A field without a value is left out, and b2DefaultDistanceJointDef's stands.
 {
     b2DistanceJointDef jointDef = b2DefaultDistanceJointDef();
-    jointDef.bodyIdA = {{BODY_A}};
-    jointDef.bodyIdB = {{BODY_B}};
-    jointDef.localAnchorA = b2Body_GetLocalPoint({{BODY_A}}, m({{ANCHOR_A_X}}, {{ANCHOR_A_Y}}));
-    jointDef.localAnchorB = b2Body_GetLocalPoint({{BODY_B}}, m({{ANCHOR_B_X}}, {{ANCHOR_B_Y}}));
+    jointDef.base.bodyIdA = {{BODY_A}};
+    jointDef.base.bodyIdB = {{BODY_B}};
+    //! Frame A's x axis is the axis for the kinds that slide; frame B is turned
+    //! back by the reference angle, so the bodies rest that far apart.
+    jointDef.base.localFrameA = b2Transform{
+        b2Body_GetLocalPoint({{BODY_A}}, m({{ANCHOR_A_X}}, {{ANCHOR_A_Y}})),
+        b2MakeRot(rad({{FRAME_A_DEG}})) };
+    jointDef.base.localFrameB = b2Transform{
+        b2Body_GetLocalPoint({{BODY_B}}, m({{ANCHOR_B_X}}, {{ANCHOR_B_Y}})),
+        b2MakeRot(rad({{FRAME_B_DEG}})) };
+    jointDef.base.collideConnected = {{COLLIDE_CONNECTED}};
     jointDef.length = m({{LENGTH}});
     jointDef.enableSpring = {{ENABLE_SPRING}};
     jointDef.hertz = {{HERTZ}};
@@ -15,7 +22,6 @@
     jointDef.enableMotor = {{ENABLE_MOTOR}};
     jointDef.maxMotorForce = {{MAX_MOTOR_FORCE}};
     jointDef.motorSpeed = m({{MOTOR_SPEED}});
-    jointDef.collideConnected = {{COLLIDE_CONNECTED}};
     {{ID}} = b2CreateDistanceJoint(world, &jointDef);
     b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
 }

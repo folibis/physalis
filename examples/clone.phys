@@ -53,10 +53,18 @@
     "rays": [
         {
             "angle": 0,
-            "length": 960,
+            "length": 100,
             "maskBits": "ffffffffffffffff",
             "name": "ray_1",
-            "x": -480,
+            "x": -499,
+            "y": 220
+        },
+        {
+            "angle": 0,
+            "length": 100,
+            "maskBits": "ffffffffffffffff",
+            "name": "ray_2",
+            "x": 399,
             "y": 220
         }
     ],
@@ -98,7 +106,20 @@
                     "value": 1
                 }
             ],
+            "conditions": [
+                {
+                    "event": "rayDetects",
+                    "subject": "ray_1",
+                    "when": ""
+                },
+                {
+                    "event": "rayDetects",
+                    "subject": "ray_2",
+                    "when": ""
+                }
+            ],
             "event": "rayDetects",
+            "join": "any",
             "name": "detect balls",
             "op": "set",
             "property": "",
@@ -136,7 +157,8 @@
             },
             "outline": false,
             "physics": {
-                "restitution": 0.49999999999999994
+                "friction": 0.7500000000000001,
+                "restitution": 0.6
             },
             "pos": {
                 "x": 0,

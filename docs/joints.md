@@ -24,9 +24,9 @@ machines: pendulums, cars, cranes, catapults and chains.
 
 The first body you selected is **body A** and the second is **body B**. For
 most joints the order makes no difference, but for some it does (see
-[Wheel joints](#wheel-joints-chassis-first) below). A few joint types, such as
-**Mouse**, hold a single body to a point in the world, and need only one body
-selected.
+[Wheel joints](#wheel-joints-chassis-first) below). A few joint types hold a
+single body to a point in the world, and need only one body selected -- such as
+Chipmunk's **Mouse**.
 
 Right-clicking a joint offers quick ways to place its anchors, such as
 **Move Anchor to *body* Center** or **Move Both Anchors to Their Centers**.
@@ -50,9 +50,8 @@ The joint types depend on the scene's [physics engine](engines.md).
   A, and nothing else. Use it for pistons, lifts and drawer runners.
 - **Wheel**: lets a wheel spin freely while it slides along a spring axis on
   the chassis. It is made for vehicle suspension.
-- **Motor**: drives body B to keep a set position and angle relative to
-  body A.
-- **Mouse**: pulls a point on a single body softly towards a target point.
+- **Motor**: drives body B at a set speed relative to body A, within a force
+  and torque budget, with an optional spring holding it where the joint was made.
 - **Filter**: holds nothing; it only stops the two bodies from colliding with
   each other.
 

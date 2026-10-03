@@ -24,6 +24,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <QDateTime>
 #include <utility>
 #include <vector>
 #include <cmath>
@@ -123,11 +124,14 @@ void hatch(QPainter *painter, const QPainterPath &shape)
     painter->restore();
 }
 
-void drawPolygon(const b2Vec2 *vertices, int count, b2HexColor color, void *context)
+void drawPolygon(b2WorldTransform transform, const b2Vec2 *vertices, int count, b2HexColor color,
+                 void *context)
 {
     QPolygonF polygon;
-    for (int i = 0; i < count; ++i)
-        polygon << QPointF(vertices[i].x, vertices[i].y);
+    for (int i = 0; i < count; ++i) {
+        const b2Vec2 at = b2TransformPoint(transform, vertices[i]);
+        polygon << QPointF(at.x, at.y);
+    }
 
     QPainter *painter = static_cast<QPainter *>(context);
     painter->setPen(penOf(color));
@@ -172,12 +176,14 @@ void drawCircle(b2Vec2 center, float radius, b2HexColor color, void *context)
     painter->drawEllipse(QPointF(center.x, center.y), radius, radius);
 }
 
-void drawSolidCircle(b2Transform transform, float radius, b2HexColor color, void *context)
+void drawSolidCircle(b2WorldTransform transform, b2Vec2 offset, float radius, b2HexColor color,
+                     void *context)
 {
     QPainter *painter = static_cast<QPainter *>(context);
     painter->setPen(penOf(color));
     painter->setBrush(fillOf(color));
-    const QPointF center(transform.p.x, transform.p.y);
+    const b2Vec2 middle = b2TransformPoint(transform, offset);
+    const QPointF center(middle.x, middle.y);
     painter->drawEllipse(center, radius, radius);
     if (isSensor(color)) {
         QPainterPath disc;
@@ -207,7 +213,7 @@ void drawSolidCapsule(b2Vec2 p1, b2Vec2 p2, float radius, b2HexColor color, void
         hatch(painter, capsule);
 }
 
-void drawSegment(b2Vec2 p1, b2Vec2 p2, b2HexColor color, void *context)
+void drawLine(b2Vec2 p1, b2Vec2 p2, b2HexColor color, void *context)
 {
     QPainter *painter = static_cast<QPainter *>(context);
     painter->setPen(penOf(color));
@@ -248,8 +254,10 @@ void drawJoint(QPainter &painter, b2JointId joint)
 {
     if (!b2Joint_IsValid(joint))
         return;
-    const b2Vec2 a = b2Body_GetWorldPoint(b2Joint_GetBodyA(joint), b2Joint_GetLocalAnchorA(joint));
-    const b2Vec2 b = b2Body_GetWorldPoint(b2Joint_GetBodyB(joint), b2Joint_GetLocalAnchorB(joint));
+    const b2Vec2 a =
+        b2Body_GetWorldPoint(b2Joint_GetBodyA(joint), b2Joint_GetLocalFrameA(joint).p);
+    const b2Vec2 b =
+        b2Body_GetWorldPoint(b2Joint_GetBodyB(joint), b2Joint_GetLocalFrameB(joint).p);
     const float ring = m({{JOINT_ANCHOR_RADIUS}});
 
     QPainterPath bone;
@@ -290,7 +298,7 @@ void drawAxes(QPainter &painter, b2BodyId body)
     float mass = 0.0f;
     b2Vec2 centre = b2Vec2_zero;
     for (int i = 0; i < count; ++i) {
-        const b2MassData data = b2Shape_GetMassData(shapes[i]);
+        const b2MassData data = b2Shape_ComputeMassData(shapes[i]);
         centre = b2MulAdd(centre, data.mass, data.center);
         mass += data.mass;
     }
@@ -376,7 +384,7 @@ protected:
         draw.DrawCircleFcn = drawCircle;
         draw.DrawSolidCircleFcn = drawSolidCircle;
         draw.DrawSolidCapsuleFcn = drawSolidCapsule;
-        draw.DrawSegmentFcn = drawSegment;
+        draw.DrawLineFcn = drawLine;
         draw.DrawTransformFcn = drawTransform;
         draw.DrawPointFcn = drawPoint;
         draw.DrawStringFcn = drawString;

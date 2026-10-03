@@ -11,11 +11,7 @@ set(BOX2D_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BOX2D_VALIDATE OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(box2d
     GIT_REPOSITORY https://github.com/erincatto/box2d.git
-    GIT_TAG v3.1.1
-    GIT_SHALLOW TRUE
-    # Box2D installs its own library and headers when asked to install; a
-    # subdirectory brought in this way has those rules ignored, which keeps a
-    # Physalis package to Physalis.
+    GIT_TAG 956ce4e1e8acddd05a21102629e268ff9321ec50
     EXCLUDE_FROM_ALL
 )
 # FetchContent_Declare only learned EXCLUDE_FROM_ALL in CMake 3.28. Below that

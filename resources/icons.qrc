@@ -36,6 +36,15 @@
         <file alias="warning.svg">icons/warning.svg</file>
         <file alias="variable.svg">icons/variable.svg</file>
         <file alias="log.svg">icons/log.svg</file>
+        <file alias="align.svg">icons/align.svg</file>
+        <file alias="align_left.svg">icons/align_left.svg</file>
+        <file alias="align_hcentre.svg">icons/align_hcentre.svg</file>
+        <file alias="align_right.svg">icons/align_right.svg</file>
+        <file alias="align_top.svg">icons/align_top.svg</file>
+        <file alias="align_vcentre.svg">icons/align_vcentre.svg</file>
+        <file alias="align_bottom.svg">icons/align_bottom.svg</file>
+        <file alias="value.svg">icons/value.svg</file>
+        <file alias="random.svg">icons/random.svg</file>
     </qresource>
     <qresource prefix="/app">
         <file alias="icon.svg">physalis.svg</file>

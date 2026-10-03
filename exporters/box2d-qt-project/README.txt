@@ -1,4 +1,4 @@
-Box2D / Qt project
+box2d/Qt
 ==================
 
 Turns a Physalis scene into one plain Box2D program and the CMake file that
@@ -58,7 +58,7 @@ reference of 50 px/m and come out already converted.
 Settings
 --------
 
-Options -> Export -> Box2D / Qt project:
+Options -> Export -> box2d/Qt:
 
     Project name          the CMake project, the executable, the window title
     Add controls          a toolbar with Start, Pause and Reset

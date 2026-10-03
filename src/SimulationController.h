@@ -16,6 +16,7 @@
 #include "Rule.h"
 
 class CanvasScene;
+struct SceneVariable;
 class ShapeItem;
 class Joint;
 class PhysicsBody;
@@ -164,6 +165,45 @@ private:
     // The scene's variables while a run is going: started from what each one
     // declares and gone when it stops, like every position on the canvas.
     QVariantMap m_variables;
+
+    // A timer variable's own run state. The millisecond count a rule reads
+    // lives in m_variables with every other variable; what is kept here is the
+    // part that is not a value -- whether it is counting, and the fraction of a
+    // millisecond the whole number above has dropped. Without that fraction a
+    // timer stepped at 16.67 ms would count 16 each time and lose a second
+    // every minute.
+    // mulberry32, chosen because it is four lines and states exactly what it
+    // does: the same seed gives the same numbers here, in the C++ export and in
+    // the web page, so a scene with chance in it can still be compared with an
+    // export of itself. Seeded in start() from the scene, or from the clock
+    // when the scene asks for a different run each time.
+    // Mutable because asking for a number is what moves it on, and reading a
+    // property is const: drawing from the generator is the reading, not a
+    // change to the scene.
+    mutable quint32 m_randomState = 0;
+    quint32 nextRandom() const;
+    // A fresh number in [0, 1), and one somewhere between two bounds.
+    qreal randomUnit() const;
+    qreal randomBetween(qreal from, qreal to) const;
+    // A number a rule uses, rolled if it was written as a range. Everything a
+    // rule writes goes through this -- the value and every action parameter --
+    // so they all behave the same way.
+    QVariant rollNumber(const QVariant &given) const;
+    QVariantMap rollParams(const QVariantMap &given) const;
+
+    struct TimerState {
+        bool running = false;
+        qreal milliseconds = 0.0;
+    };
+    QHash<QString, TimerState> m_timers;
+
+    // Move every running timer on by the step just taken, before any rule is
+    // evaluated, so each condition on a step reads the same count.
+    void advanceTimers(qreal dt);
+
+    // Carry out one of the four timer ops. True when the op was one, so the
+    // ordinary Set/Add path is left alone for everything else.
+    bool applyTimerOp(const SceneVariable &variable, Rule::Op op);
 
     // What a "changed to" or "changed from" condition reads, this step and the
     // step before. Keyed by the property rather than by the rule, since the

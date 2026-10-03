@@ -187,14 +187,19 @@ MainWindow::MainWindow(QWidget *parent)
     m_ui->menuExport->setIcon(Icons::exportScene());
     connect(m_ui->menuExport, &QMenu::aboutToShow, this, &MainWindow::refreshExportMenu);
     m_ui->actionAddJoint->setMenu(m_jointTypeMenu);
-    for (QAction *action : { static_cast<QAction *>(m_ui->actionAddShape), m_ui->actionAddJoint }) {
+    for (QAction *action : { static_cast<QAction *>(m_ui->actionAddShape), m_ui->actionAddJoint,
+                             m_ui->actionAlign }) {
         if (auto *button = qobject_cast<QToolButton *>(toolBar->widgetForAction(action)))
             button->setPopupMode(QToolButton::InstantPopup);
     }
 
+    buildAlignMenu();
+    rebuildRecentMenu();
+
     // The dividers travel with their group, so a hidden group leaves no line.
     m_editModeActions << m_ui->actionAddShape << m_ui->actionDelete
                       << m_ui->actionMoveScale << m_ui->actionEditNodes << m_ui->actionRotate
+                      << m_ui->actionAlign
                       << separatorBefore(toolBar, m_ui->actionMoveScale)
                       << separatorBefore(toolBar, m_ui->actionCreateBody);
     // Listed in the order they sit on the bar, so this reads like the toolbar.
@@ -220,6 +225,7 @@ MainWindow::MainWindow(QWidget *parent)
                          << m_ui->actionUndo << m_ui->actionRedo
                          << m_ui->actionCopy << m_ui->actionPaste << m_ui->actionDelete
                          << m_ui->actionMoveScale << m_ui->actionEditNodes << m_ui->actionRotate
+                         << m_ui->actionAlign << m_ui->menuAlign->menuAction()
                          << m_ui->actionCreateBody << m_ui->actionDissolveBody
                          << m_ui->actionAddJoint << m_ui->actionDeleteJoint
                          << m_ui->menuAddShape->menuAction();
@@ -1136,12 +1142,18 @@ bool MainWindow::openScene(const QString &path)
 
     QString error;
     if (!SceneSerializer::loadFromFile(m_scene, path, &error)) {
-        QMessageBox::warning(this, tr("Load Scene"),
-                             tr("Couldn't open %1:\n%2").arg(QDir::toNativeSeparators(path), error));
+        // The same reason the unsaved-changes prompt stands aside under a test:
+        // nobody is there to dismiss a modal, and a recent entry that no longer
+        // opens is exactly what a test drives this with.
+        if (!qEnvironmentVariableIsSet("PHYSALIS_SETTINGS")) {
+            QMessageBox::warning(this, tr("Load Scene"),
+                                 tr("Couldn't open %1:\n%2").arg(QDir::toNativeSeparators(path), error));
+        }
         return false;
     }
 
     m_scenePath = path;
+    rememberRecent(path);
     // The file said which engine it was built for, and the loader refused it
     // if that one is missing; everything else follows from the scene.
     useEngine(m_scene->simulationEngineName());
@@ -1177,6 +1189,11 @@ bool MainWindow::onSaveScene()
         return false;
     }
     m_undo->markClean();
+    // Saving is as much "this is the scene I am working on" as opening is, and
+    // a scene saved for the first time has never been opened at all -- so
+    // without this it could not be reached from Open Recent until it had been
+    // opened the long way round once.
+    rememberRecent(m_scenePath);
     statusBar()->showMessage(tr("Saved %1").arg(QDir::toNativeSeparators(m_scenePath)), 4000);
     return true;
 }
@@ -1582,7 +1599,12 @@ void MainWindow::onSimulationStateChanged()
     } else {
         for (QAction *action : std::as_const(m_alwaysOnWhenStopped))
             action->setEnabled(true);
-        onPhysicsSelectionChanged();
+        // Through the joint handler, which ends by calling the physics one:
+        // Add Joint and Delete Joint are set nowhere else, so stopping a run
+        // used to leave them greyed out until the editor mode was switched and
+        // back. Selecting bodies did not bring them round, which is what made
+        // it look like it happened only sometimes.
+        onJointSelectionChanged();
         if (m_scene->editorMode() == EditorMode::Edit)
             onActiveItemChanged(m_scene->activeItem());
     }
@@ -1640,6 +1662,7 @@ void MainWindow::onEditorModeChanged(EditorMode mode)
     const bool editing = mode == EditorMode::Edit;
 
     m_ui->menuAddShape->setEnabled(editing);
+    updateAlignActions();
     m_ui->actionCopy->setEnabled(editing && m_scene->activeItem() != nullptr);
     updatePasteAction();
 
@@ -1652,8 +1675,110 @@ void MainWindow::onEditorModeChanged(EditorMode mode)
         onActiveItemChanged(m_scene->activeItem());
 }
 
+// Lining shapes up: one button with the six edges under it, used from the
+// toolbar and from the Edit menu. The scene does the work -- it owns the
+// selection, and the move is an edit like any other.
+void MainWindow::buildAlignMenu()
+{
+    struct Entry {
+        CanvasScene::Align edge;
+        QString text;
+        QIcon icon;
+    };
+    const QVector<Entry> entries {
+        { CanvasScene::Align::Left, tr("Align &Left"), Icons::alignLeft() },
+        { CanvasScene::Align::HorizontalCentre, tr("Align &Centres Across"),
+          Icons::alignHorizontalCentre() },
+        { CanvasScene::Align::Right, tr("Align &Right"), Icons::alignRight() },
+        { CanvasScene::Align::Top, tr("Align &Top"), Icons::alignTop() },
+        { CanvasScene::Align::VerticalCentre, tr("Align C&entres Down"),
+          Icons::alignVerticalCentre() },
+        { CanvasScene::Align::Bottom, tr("Align &Bottom"), Icons::alignBottom() },
+    };
+
+    for (int i = 0; i < entries.size(); ++i) {
+        const Entry &entry = entries.at(i);
+        auto *action = m_ui->menuAlign->addAction(entry.icon, entry.text);
+        const CanvasScene::Align edge = entry.edge;
+        connect(action, &QAction::triggered, this, [this, edge] {
+            m_scene->alignSelection(edge);
+        });
+        if (i == 2)
+            m_ui->menuAlign->addSeparator();   // across, then down
+    }
+
+    m_ui->actionAlign->setIcon(Icons::align());
+    m_ui->actionAlign->setMenu(m_ui->menuAlign);
+    m_ui->menuAlign->setIcon(Icons::align());
+    m_ui->actionAlign->setEnabled(false);
+    m_ui->menuAlign->setEnabled(false);
+}
+
+// The scenes opened last, newest first and without repeats. Kept beside the
+// rest of the settings so they survive the application closing.
+void MainWindow::rememberRecent(const QString &path)
+{
+    const QString full = QFileInfo(path).absoluteFilePath();
+    if (full.isEmpty())
+        return;
+    m_recentFiles.removeAll(full);
+    m_recentFiles.prepend(full);
+    while (m_recentFiles.size() > kRecentFiles)
+        m_recentFiles.removeLast();
+
+    QSettings settings(settingsFilePath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("Files/recent"), m_recentFiles);
+    rebuildRecentMenu();
+}
+
+void MainWindow::rebuildRecentMenu()
+{
+    if (!m_ui->menuRecent)
+        return;
+    if (m_recentFiles.isEmpty()) {
+        QSettings settings(settingsFilePath(), QSettings::IniFormat);
+        m_recentFiles = settings.value(QStringLiteral("Files/recent")).toStringList();
+        while (m_recentFiles.size() > kRecentFiles)
+            m_recentFiles.removeLast();
+    }
+
+    m_ui->menuRecent->clear();
+    m_ui->menuRecent->setEnabled(!m_recentFiles.isEmpty());
+    for (int i = 0; i < m_recentFiles.size(); ++i) {
+        const QString path = m_recentFiles.at(i);
+        // Numbered, so the first four can be reached without reading: the name
+        // alone is what tells two scenes apart, and the whole path is the hint.
+        auto *action = m_ui->menuRecent->addAction(
+            tr("&%1  %2").arg(i + 1).arg(QFileInfo(path).fileName()));
+        action->setStatusTip(QDir::toNativeSeparators(path));
+        action->setToolTip(QDir::toNativeSeparators(path));
+        connect(action, &QAction::triggered, this, [this, path] {
+            if (!confirmDiscardChanges(tr("Load Scene")))
+                return;
+            if (openScene(path))
+                return;
+            // Gone, or no longer readable: it has no business being offered again.
+            m_recentFiles.removeAll(path);
+            QSettings settings(settingsFilePath(), QSettings::IniFormat);
+            settings.setValue(QStringLiteral("Files/recent"), m_recentFiles);
+            rebuildRecentMenu();
+        });
+    }
+}
+
+// Aligning needs two shapes to line up against each other, so the button
+// follows the selection rather than the mode: it was set only when the mode
+// changed, and picking a second shape left it off.
+void MainWindow::updateAlignActions()
+{
+    const bool can = m_scene->canAlignSelection();
+    m_ui->actionAlign->setEnabled(can);
+    m_ui->menuAlign->setEnabled(can);
+}
+
 void MainWindow::onActiveItemChanged(ShapeItem *item)
 {
+    updateAlignActions();
     if (!item) {
         m_ui->actionMoveScale->setEnabled(false);
         m_ui->actionMoveScale->setChecked(false);

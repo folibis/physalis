@@ -70,8 +70,8 @@ runs, and it is left out of an export.
 
 The **Variables** tab, next to Rules, holds values the scene carries that no
 physics engine knows about: a score, a count of lives, a flag saying which way
-a lift is going. Each has a name, a type -- **Boolean**, **Integer** or
-**Double** -- and the value it starts every run at.
+a lift is going. Each has a name, a type -- **Boolean**, **Integer**,
+**Double** or **Timer** -- and the value it starts every run at.
 
 Rules reach them through a single object called **Variables**: pick it as the
 thing watched or the thing acted on, and the variable itself is the property.
@@ -82,15 +82,44 @@ A variable is run state. It starts each run at the value in the tab and goes
 back there when the run stops, the way every shape goes back to where it
 started.
 
-**Add to Log** on the tab's toolbar shows the selected variable in the readout
-pinned to the canvas, so you can watch it count while the scene runs; the same
-offer is on the right-click menu, and the button says **Remove from Log** once
-it is there.
+### Timers
+
+A **Timer** is a variable measured in milliseconds. It is read like any other
+number -- *when Variables.clock is greater than 3000, open the gate* -- but it
+is the one type that does not simply hold what it is given: while it is running
+it counts up on its own, a step at a time.
+
+A timer **stands still until a rule starts it**. That is deliberate: it is what
+lets a timer measure the gap after something happens rather than time from the
+beginning of the run. To time from the start of the run, start it on the
+*starting simulation* event.
+
+Beside the usual **Set to**, the action's list offers four things only a timer
+has:
+
+| Verb | What it does |
+| --- | --- |
+| **Start** | Begins counting, on from wherever it stands. |
+| **Pause** | Stops counting and leaves the value where it is. |
+| **Stop** | Stops counting and puts the value back to the one in the tab. |
+| **Reset** | Puts the value back without stopping it, so it climbs again at once. |
+
+*Reset* is what a timer measuring the gap between repeated events wants: wound
+back on each one and still counting.
+
+Compare a timer with **is greater than** rather than **changed to**. It advances
+by the length of a simulation step -- about 17 ms at the usual rate -- so it
+steps straight over most exact values, and a condition waiting for one of them
+would never fire.
+
+**Add to Log** on a variable's right-click menu shows it in the readout pinned
+to the canvas, so you can watch it count while the scene runs. The entry says
+**Remove from Log** once it is there.
 
 Double-click a name to rename it, the way a rule card's title is renamed.
-Renaming carries every rule and log row that named it along with it. Removing a
-variable leaves the rules that used it marked unfinished, so nothing goes wrong
-quietly.
+Renaming carries every rule and log row that named it along with it. **Remove
+Variable**, also on the right-click menu, leaves the rules that used it marked
+unfinished, so nothing goes wrong quietly.
 
 ## When: the condition
 
@@ -219,6 +248,49 @@ with **changed to** on the thing being counted, that is a tally.
 
 (**Increment by** is what used to be called **Add**; it is the same operation
 under a name that says what it does. Files written either way still load.)
+
+### A random value
+
+Beside the value box is a die. Press it and the box becomes two, with **to**
+between them: the rule then takes a fresh number somewhere between the two
+every time it fires, rather than the one number you typed. A ball launched at
+a random speed, a motor wound to a random angle, a score going up by a random
+amount.
+
+It works wherever a number is typed: the value an action writes, and every
+parameter of an action -- where a **Clone** lands, how hard a **Push** pushes,
+how wide an **Explode** reaches. The two ends are read in the same units as the
+single value they replace.
+
+Beside them is **by**, which decides what the rolled number is a whole number
+of. Left at **any** it can be anything between the two ends; at `1` it rolls
+whole numbers, at `10` it rolls tens, and `1 to 6 by 1` is a die with each face
+as likely as the others.
+
+### Only some of the time: "Chance"
+
+The world has a reading called **Chance (0-100)**, and it is a different number
+every time a rule looks at it. Comparing it is how a rule happens only
+sometimes:
+
+- `Chance` **less than** `25` is about one time in four.
+- `Chance` **less than** `100` is every time; `less than 0` is never.
+
+Put it beside an event with **all of these** and the event counts only some of
+the time: *when the ball hits the wall, and Chance is less than 20, clone it.*
+
+### Making a run repeat: the seed
+
+Random would make a scene different every run, which is awkward when you are
+trying to see whether a change helped. The field's **Random Seed** (in the
+world's properties, during a run's mode) decides:
+
+- **0** -- a different run every time.
+- **anything else** -- the same run every time, exactly.
+
+The seed travels with the scene and is used by the exports as well, so a scene
+with chance in it still behaves the same way in an exported page or project as
+it does here.
 
 ## Answering a removal: "to be removed"
 

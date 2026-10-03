@@ -504,11 +504,34 @@ void OptionsDialog::buildShapeStyleRows()
                     return;
                 (border ? style.border : style.body) = chosen;
                 button->setStyleSheet(colorSwatchStyle(chosen));
+                if (border)
+                    return;
+                if (auto *box = findChild<QSpinBox *>(QStringLiteral("transparency_") + kind)) {
+                    QSignalBlocker blocker(box);
+                    box->setValue(100 - qRound(chosen.alpha() / 255.0 * 100.0));
+                }
             });
             layout->addWidget(button);
         };
         swatch(false);
         swatch(true);
+
+        // The fill's alpha, as the percentage the old single slider showed.
+        auto *clear = new QSpinBox(row);
+        clear->setObjectName(QStringLiteral("transparency_") + kind);
+        clear->setRange(0, 100);
+        clear->setSuffix(tr("%"));
+        clear->setToolTip(tr("How much of what is behind shows through the fill."));
+        clear->setValue(100 - qRound(m_shapeStyles[kind].body.alpha() / 255.0 * 100.0));
+        connect(clear, qOverload<int>(&QSpinBox::valueChanged), this,
+                [this, kind, layout](int percent) {
+                    QColor fill = m_shapeStyles[kind].body;
+                    fill.setAlpha(qBound(0, qRound((100 - percent) / 100.0 * 255.0), 255));
+                    m_shapeStyles[kind].body = fill;
+                    if (auto *button = qobject_cast<QToolButton *>(layout->itemAt(0)->widget()))
+                        button->setStyleSheet(colorSwatchStyle(fill));
+                });
+        layout->addWidget(clear);
 
         auto *width = new QDoubleSpinBox(row);
         width->setDecimals(1);

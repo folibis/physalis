@@ -1431,6 +1431,12 @@ void CanvasScene::addWatch(const Watch &watch)
     }
     m_watches.append(watch);
     emit watchesChanged();
+    // What the log shows is saved with the scene, so putting something on it is
+    // a change like any other -- without this the Save button stayed grey and
+    // closing offered to throw the change away without saying there was one.
+    // The loader uses setWatches() and so does not come through here.
+    notifyEdit(tr("Add %1 to the log").arg(watch.label.isEmpty() ? watch.propertyKey
+                                                                 : watch.label));
 }
 
 void CanvasScene::removeWatch(const QString &objectName, const QString &propertyKey)
@@ -1445,6 +1451,7 @@ void CanvasScene::removeWatch(const QString &objectName, const QString &property
     if (m_watches.size() != before)
     {
         emit watchesChanged();
+        notifyEdit(tr("Take %1 off the log").arg(propertyKey));
     }
 }
 
@@ -1862,6 +1869,16 @@ bool CanvasScene::selectionIsWholeBody() const
     return body && body->shapes().size() == m_physicsSelection.size();
 }
 
+void CanvasScene::setRandomSeed(quint32 seed)
+{
+    if (m_randomSeed == seed)
+    {
+        return;
+    }
+    m_randomSeed = seed;
+    emit fieldPropertyChanged();
+}
+
 void CanvasScene::setPixelsPerMeter(qreal pixelsPerMeter)
 {
     pixelsPerMeter = qMax(1.0, pixelsPerMeter);
@@ -2239,6 +2256,74 @@ QVector<ShapeItem *> CanvasScene::selectedShapes() const
     return all;
 }
 
+bool CanvasScene::canAlignSelection() const
+{
+    return m_editorMode == EditorMode::Edit && selectedShapes().size() > 1;
+}
+
+void CanvasScene::alignSelection(Align edge)
+{
+    const QVector<ShapeItem *> shapes = selectedShapes();
+    if (!canAlignSelection())
+    {
+        return;
+    }
+
+    // Each shape is lined up by the box it covers on the canvas, turning and
+    // all -- what the eye sees, not the rectangle it was drawn with, or a
+    // rotated shape would settle somewhere its own outline never reaches.
+    QVector<QRectF> boxes;
+    boxes.reserve(shapes.size());
+    QRectF all;
+    for (ShapeItem *shape : shapes)
+    {
+        const QRectF box = shape->mapToScene(shape->rect()).boundingRect();
+        boxes.append(box);
+        all = all.isNull() ? box : all.united(box);
+    }
+
+    QString what;
+    for (int i = 0; i < shapes.size(); ++i)
+    {
+        const QRectF &box = boxes.at(i);
+        QPointF delta;
+        switch (edge)
+        {
+        case Align::Left:
+            delta.setX(all.left() - box.left());
+            what = tr("Align left");
+            break;
+        case Align::HorizontalCentre:
+            delta.setX(all.center().x() - box.center().x());
+            what = tr("Align centres across");
+            break;
+        case Align::Right:
+            delta.setX(all.right() - box.right());
+            what = tr("Align right");
+            break;
+        case Align::Top:
+            delta.setY(all.top() - box.top());
+            what = tr("Align top");
+            break;
+        case Align::VerticalCentre:
+            delta.setY(all.center().y() - box.center().y());
+            what = tr("Align centres down");
+            break;
+        case Align::Bottom:
+            delta.setY(all.bottom() - box.bottom());
+            what = tr("Align bottom");
+            break;
+        }
+        shapes.at(i)->setPos(shapes.at(i)->pos() + delta);
+    }
+
+    refreshGroupOrigin();
+    update();
+    // No merge key: two alignments in a row are two things to undo, where a
+    // nudge held down is one.
+    notifyEdit(what);
+}
+
 QRectF CanvasScene::editSelectionBounds() const
 {
     if (!m_active || m_editSelection.isEmpty())
@@ -2428,6 +2513,28 @@ void CanvasScene::deactivate()
 void CanvasScene::setNodeSelection(const QSet<int> &indices)
 {
     m_selectedNodes = indices;
+    // Whatever was already picked keeps the place it had; whatever is new goes
+    // on the end. Each Shift-click adds one, so the end of the list is the one
+    // just picked and the front is the one picked first.
+    QList<int> kept;
+    for (int node : std::as_const(m_nodePickOrder))
+    {
+        if (m_selectedNodes.contains(node))
+        {
+            kept.append(node);
+        }
+    }
+    QList<int> added(m_selectedNodes.begin(), m_selectedNodes.end());
+    std::sort(added.begin(), added.end());
+    for (int node : std::as_const(added))
+    {
+        if (!kept.contains(node))
+        {
+            kept.append(node);
+        }
+    }
+    m_nodePickOrder = kept;
+
     if (m_active)
     {
         m_active->setSelectedNodes(m_selectedNodes);
@@ -3174,7 +3281,17 @@ void CanvasScene::keyPressEvent(QKeyEvent *event)
     if (m_active && m_active->mode() == ShapeMode::Editing
         && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter))
     {
-        handleEditModeEnter();
+        // Shift, the same as everywhere else Enter has a bigger version: while
+        // a polygon is being drawn Enter finishes it open and Shift+Enter
+        // closes it, and that is answered further up.
+        if (event->modifiers().testFlag(Qt::ShiftModifier))
+        {
+            subdivideSelectedNodes();
+        }
+        else
+        {
+            handleEditModeEnter();
+        }
         event->accept();
         return;
     }
@@ -3303,6 +3420,94 @@ bool CanvasScene::nudgeSelection(const QPointF &delta)
     update();
     notifyEdit(tr("Move %1").arg(what), QStringLiteral("nudge"));
     return true;
+}
+
+// Ctrl+Enter puts a node in the middle of every edge the selection spans. Plain
+// Enter inserts one node between two nodes that are already neighbours; this is
+// for the other case -- picking the two ends of a run and splitting all of it at
+// once, whether or not the nodes in between were picked too.
+void CanvasScene::subdivideSelectedNodes()
+{
+    if (!m_active || m_selectedNodes.size() < 2 || !m_active->supportsNodeEditing())
+    {
+        return;
+    }
+
+    const int count = m_active->nodeCount();
+    QList<int> picked;
+    for (int node : std::as_const(m_nodePickOrder))
+    {
+        if (node >= 0 && node < count)
+        {
+            picked.append(node);
+        }
+    }
+    if (picked.size() < 2)
+    {
+        return;
+    }
+
+    // Between any two nodes of a closed outline there are two runs, so which
+    // one is meant has to come from somewhere: it starts at the node picked
+    // first and goes clockwise. Which way round the indices run is the
+    // outline's own business -- the shoelace sum says, remembering that the
+    // canvas has y growing downwards, so a positive sum is clockwise on screen.
+    int step = 1;
+    if (m_active->isClosed())
+    {
+        qreal twiceArea = 0.0;
+        for (int at = 0; at < count; ++at)
+        {
+            const QPointF here = m_active->nodePosition(at);
+            const QPointF next = m_active->nodePosition((at + 1) % count);
+            twiceArea += here.x() * next.y() - next.x() * here.y();
+        }
+        step = twiceArea >= 0.0 ? 1 : -1;
+    }
+
+    // Walk from each picked node to the next, collecting the edges passed. An
+    // edge is named by the lower of the two indices it joins, except the one
+    // that closes the outline, which is named by the last.
+    QList<int> edges;
+    for (int at = 0; at + 1 < picked.size(); ++at)
+    {
+        int node = picked.at(at);
+        const int until = picked.at(at + 1);
+        for (int guard = 0; node != until && guard <= count; ++guard)
+        {
+            int next = node + step;
+            if (!m_active->isClosed() && (next < 0 || next >= count))
+            {
+                break; // an open run has only the one way to go
+            }
+            next = (next + count) % count;
+            const bool closingEdge = (node == count - 1 && next == 0)
+                                     || (node == 0 && next == count - 1);
+            const int edge = closingEdge ? count - 1 : qMin(node, next);
+            if (!edges.contains(edge))
+            {
+                edges.append(edge);
+            }
+            node = next;
+        }
+    }
+    if (edges.isEmpty())
+    {
+        return;
+    }
+
+    // Backwards: inserting shifts every index above it, and an edge named
+    // before the insert would then point at the wrong pair.
+    std::sort(edges.begin(), edges.end(), std::greater<int>());
+    for (int edge : std::as_const(edges))
+    {
+        m_active->insertNodeBetween(edge, (edge + 1) % m_active->nodeCount());
+    }
+
+    setNodeSelection({});
+    update();
+    notifyEdit(tr("Split %n edge(s) of %1", nullptr, int(edges.size()))
+                   .arg(m_active->name()));
 }
 
 void CanvasScene::handleEditModeEnter()
@@ -3538,9 +3743,31 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
     {
         const QPointF local = m_active->mapFromScene(scenePos);
 
+        // Shift is two things at once: it adds a shape to the selection, and
+        // while dragging it suspends snapping. A press on a handle can only
+        // mean the second -- there is no shape to add that is not already the
+        // one being resized -- so the handles are tested first. Without this,
+        // holding Shift before grabbing a handle picked the shape underneath
+        // and the drag never started, and the only way to drag without snapping
+        // was to start the drag and press Shift afterwards.
+        const auto pressedOnAHandle = [&] {
+            if (groupHandleAt(scenePos) >= 0 || groupOriginHandleContains(scenePos))
+            {
+                return true;
+            }
+            if (m_active->mode() == ShapeMode::Rotating
+                && m_active->originHandleContains(local))
+            {
+                return true;
+            }
+            return m_active->mode() == ShapeMode::Selected && geometryEditingAllowed()
+                   && m_active->handleAt(local) != HandleId::None;
+        };
+
         // Shift adds a shape to the selection instead of replacing it. Node
         // editing spends Shift on picking vertices, so it is left alone there.
-        if (event->modifiers().testFlag(Qt::ShiftModifier) && m_active->mode() != ShapeMode::Editing)
+        if (event->modifiers().testFlag(Qt::ShiftModifier) && m_active->mode() != ShapeMode::Editing
+            && !pressedOnAHandle())
         {
             ShapeItem *picked = nullptr;
             for (QGraphicsItem *candidate : items(scenePos))
@@ -3630,16 +3857,25 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
             {
                 if (event->modifiers() & Qt::ShiftModifier)
                 {
-                    QSet<int> selection = m_selectedNodes;
-                    if (selection.contains(node))
+                    // Shift on a node picks it as well as suspending snapping,
+                    // and which was meant is not known until the mouse either
+                    // moves or does not. So the drag begins either way and the
+                    // picking is done on release, if nothing moved.
+                    m_shiftPickNode = node;
+                    m_shiftPickWasSelected = m_selectedNodes.contains(node);
+                    if (!m_shiftPickWasSelected)
                     {
-                        selection.remove(node);
-                    }
-                    else
-                    {
+                        QSet<int> selection = m_selectedNodes;
                         selection.insert(node);
+                        setNodeSelection(selection);
                     }
-                    setNodeSelection(selection);
+                    m_dragMode = DragMode::EditNode;
+                    m_editNodeIndex = node;
+                    m_editDragNodeStart.clear();
+                    for (int idx : std::as_const(m_selectedNodes))
+                    {
+                        m_editDragNodeStart[idx] = m_active->nodePosition(idx);
+                    }
                     return;
                 }
                 if (!m_selectedNodes.contains(node))
@@ -3901,6 +4137,11 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         const QPointF grabbedStart = m_editDragNodeStart.value(m_editNodeIndex);
         const QPointF grabbedNew = m_active->mapFromScene(snapScenePoint(scenePos));
         const QPointF delta = grabbedNew - grabbedStart;
+        // Which tells a Shift drag from a Shift click, once the button is up.
+        if (!delta.isNull())
+        {
+            m_editNodeMoved = true;
+        }
         for (auto it = m_editDragNodeStart.constBegin(); it != m_editDragNodeStart.constEnd(); ++it)
         {
             m_active->moveNode(it.key(), it.value() + delta);
@@ -3938,6 +4179,30 @@ void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
     {
         const DragMode finished = m_dragMode;
         m_dragMode = DragMode::None;
+
+        // A Shift press on a node that never moved was somebody picking it, not
+        // dragging it: taken off the selection here, where it is finally known
+        // which of the two it was.
+        const int picked = m_shiftPickNode;
+        const bool wasPicked = m_shiftPickWasSelected;
+        m_shiftPickNode = -1;
+        if (finished == DragMode::EditNode && picked >= 0 && !m_editNodeMoved)
+        {
+            // Nothing moved, so it was a click: one that lands on a node
+            // already picked takes it off again, and one on a node that was not
+            // leaves it picked, which the press has already done.
+            if (wasPicked && m_selectedNodes.size() > 1)
+            {
+                QSet<int> selection = m_selectedNodes;
+                selection.remove(picked);
+                setNodeSelection(selection);
+            }
+            m_editNodeMoved = false;
+            m_dragMode = DragMode::None;
+            event->accept();
+            return;
+        }
+        m_editNodeMoved = false;
 
         // Physics-mode drags have no m_active to hang the undo label on, and
         // the joints anchored to what moved need their cached ends refreshed.

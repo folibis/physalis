@@ -78,11 +78,25 @@ from one state to the next, or use the buttons on the toolbar.
 3. **Edit** (polygons only). Each corner point becomes a handle that can be
    dragged on its own, so you can reshape the outline.
 
+   Click a point to pick it, **Shift+click** to pick more than one, and drag
+   any picked point to move them all together. With points picked:
+
+   - **Enter** on two neighbouring points puts a new point between them. On
+     the two ends of an unclosed outline it joins them up instead, closing it.
+   - **Shift+Enter** puts a new point in the middle of *every* edge the picked
+     points span -- so picking the two ends of a run splits all of it at once,
+     whether or not the points in between were picked.
+
+     On a closed outline there are two runs between any two points, so the one
+     that gets split starts at the point you picked **first** and goes
+     **clockwise** from there. Pick the same two the other way round and the
+     other half is split instead.
+
 More ways to move a shape:
 
 - **Arrow keys** move the selection by one unit at a time.
-- **Shift** while dragging ignores the grid, so the shape can be placed
-  anywhere.
+- **Shift** ignores the grid, so a shape, a handle or a point can be placed
+  anywhere. It works held down before the drag starts as well as during it.
 - **Left**, **Top** and **Rotation** in the properties place a shape exactly.
   Rotation is in degrees, clockwise.
 

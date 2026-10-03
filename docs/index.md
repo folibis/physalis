@@ -59,8 +59,9 @@ tools that make sense in that mode.
   collapse its groups.
 - **Rules** holds the rules that run during a simulation. See [Rules](rules.md).
 - **Variables** holds the values the scene carries that belong to no object: a
-  score, a count of lives, a flag saying which way a lift is going. Rules read
-  and write them, and they can be watched in the log. See
+  score, a count of lives, a flag saying which way a lift is going, a timer a
+  rule starts and reads. Rules read and write them, and they can be watched in
+  the log. See
   [Variables](rules.md#variables).
 
 **The status bar** at the bottom always describes the current selection and

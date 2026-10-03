@@ -121,6 +121,16 @@ public:
     QRectF editSelectionBox() const;
     // The lead plus everything picked alongside it.
     QVector<ShapeItem *> selectedShapes() const;
+
+    // Lining the selection up on one edge of the box it all sits in. Each shape
+    // moves, nothing is resized or turned, and with fewer than two shapes picked
+    // there is nothing to line up against.
+    enum class Align {
+        Left, HorizontalCentre, Right,
+        Top, VerticalCentre, Bottom,
+    };
+    void alignSelection(Align edge);
+    bool canAlignSelection() const;
     // True while the selection is being turned rather than moved -- which is
     // what decides between showing handles and showing the pivot.
     bool editSelectionRotating() const;
@@ -299,6 +309,13 @@ public:
     // --- Physics (the field acts as the simulation's world) -----------
 
     // How many scene units make up one simulated meter.
+    // What a run's random numbers start from. Zero means a different run
+    // every time; anything else makes the run repeat exactly, which is what
+    // lets a scene with chance in it still be compared against an export of
+    // itself.
+    quint32 randomSeed() const { return m_randomSeed; }
+    void setRandomSeed(quint32 seed);
+
     void setPixelsPerMeter(qreal pixelsPerMeter);
     qreal pixelsPerMeter() const { return m_world.pixelsPerMeter; }
 
@@ -540,6 +557,9 @@ public:
 
 public slots:
     void switchActiveToSelected();
+    // A node in the middle of every edge the picked nodes span.
+    void subdivideSelectedNodes();
+
     void switchActiveToEditing();
     void switchActiveToRotating();
     void deleteActiveItem();
@@ -685,6 +705,14 @@ private:
     int m_jointFillAlpha = 170;
     int m_jointAnchorOpacity = 60;
 
+    // A node pressed with Shift down: the drag starts at once, and if nothing
+    // moved by the time the button comes up it was a pick instead.
+    int m_shiftPickNode = -1;
+    // Whether it was already picked before that press, which is what decides
+    // which way a click toggles it.
+    bool m_shiftPickWasSelected = false;
+    bool m_editNodeMoved = false;
+    quint32 m_randomSeed = 0;
     ShapeItem *m_active = nullptr;
 
     DragMode m_dragMode = DragMode::None;
@@ -708,6 +736,11 @@ private:
     void drawShot(QPainter *painter) const;
 
     QSet<int> m_selectedNodes;
+    // The same nodes in the order they were picked. Which way round a closed
+    // outline a run goes cannot be worked out from the indices -- between any
+    // two nodes there are two runs -- so the one picked first is where it
+    // starts, and it goes clockwise from there.
+    QList<int> m_nodePickOrder;
     int m_editNodeIndex = -1;
     QHash<int, QPointF> m_editDragNodeStart;
 

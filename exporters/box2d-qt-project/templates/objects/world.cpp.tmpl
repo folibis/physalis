@@ -10,7 +10,7 @@ b2SetLengthUnitsPerMeter({{LENGTH_UNITS}});
 b2WorldDef worldDef = b2DefaultWorldDef();
 worldDef.gravity = b2Vec2{ {{GRAVITY_X}}, {{GRAVITY_Y}} };
 worldDef.maximumLinearSpeed = {{MAXIMUM_LINEAR_SPEED}};
-worldDef.maxContactPushSpeed = {{MAX_CONTACT_PUSH_SPEED}};
+worldDef.contactSpeed = {{CONTACT_SPEED}};
 worldDef.restitutionThreshold = {{RESTITUTION_THRESHOLD}};
 worldDef.hitEventThreshold = {{HIT_EVENT_THRESHOLD}};
 worldDef.contactHertz = {{CONTACT_HERTZ}};
@@ -18,9 +18,9 @@ worldDef.contactDampingRatio = {{CONTACT_DAMPING_RATIO}};
 worldDef.enableSleep = {{ENABLE_SLEEP}};
 worldDef.enableContinuous = {{ENABLE_CONTINUOUS}};
 world = b2CreateWorld(&worldDef);
-//! Neither is a field of b2WorldDef: both are switched on the world once it
-//! exists, and both are on unless the scene turned them off.
+//! Not a field of b2WorldDef: switched on the world once it exists, and on
+//! unless the scene turned it off. Speculative contacts are no longer optional.
 b2World_EnableWarmStarting(world, {{ENABLE_WARM_STARTING}});
-b2World_EnableSpeculative(world, {{ENABLE_SPECULATIVE}});
 //! PRE_SOLVE is notePreSolve when a rule watches contacts about to be solved.
-b2World_SetPreSolveCallback(world, {{PRE_SOLVE}}, nullptr);
+//! 3.2 takes a pre-continuous callback beside it, which nothing here wants.
+b2World_SetPreSolveCallback(world, {{PRE_SOLVE}}, nullptr, nullptr);

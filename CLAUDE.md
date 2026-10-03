@@ -91,12 +91,7 @@ tests/            one .cpp per scenario, all built into a single binary
 exporters/        export converters -- one folder each, all JavaScript
     box2d-qt-project/  manifest.json, export.js, templates/ -> one plain Box2D
                        program, main.cpp; rules become ifs after b2World_Step
-    planck-js/         the same, as one index.html of plain Planck.js
-    qml-box2d/         a Qt Quick project: Scene.qml holds the scene as
-                       qml-box2d objects, rules as JavaScript after each step;
-                       its drawing code is QML components the project carries
-                       (templates/components/)
-                  All three write no code of their own but the rules': every
+                  It writes no code of its own but the rules': every
                   object -- world, body, shape, joint, helper, toolbar -- is a
                   template under templates/objects/, filled by render() in
                   export.js. A placeholder alone on a line takes a block; a line
@@ -119,9 +114,9 @@ ctest --test-dir build
 ```
 
 Parts can be left out with options, all `ON` by default: `WITH_BOX2D`,
-`WITH_CHIPMUNK` (the engine plugins), `WITH_EXPORTER_BOX2D_QT`,
-`WITH_EXPORTER_PLANCK`, `WITH_EXPORTER_QML` (which converter folders are
-installed -- they are JavaScript, nothing is compiled) and `WITH_TESTS`. The
+`WITH_CHIPMUNK` (the engine plugins), `WITH_EXPORTER_BOX2D_QT` (which converter
+folders are installed -- they are JavaScript, nothing is compiled) and
+`WITH_TESTS`. The
 suite runs scenes on both engines, so `WITH_TESTS` refuses to configure
 without both plugins.
 
@@ -316,7 +311,7 @@ so `SimulationController` remembers one and acts on it once the step is over.
   `SimulationController` sets `ShapePart::watchedByRules`, and each engine
   switches on whatever it needs to report contacts -- so turning the flag off
   in the file changes nothing for that shape.
-- **A sensor needs both sides to opt in.** Box2D 3.1 reports an overlap only
+- **A sensor needs both sides to opt in.** Box2D reports an overlap only
   when the sensor *and* the shape entering it have `enableSensorEvents`, and it
   is off by default even for sensors -- so a pocket's rule never fired unless
   every ball had been ticked by hand. Once a rule watches a sensor, the engine
@@ -381,7 +376,7 @@ so `SimulationController` remembers one and acts on it once the step is over.
   anchor A put the whole range somewhere the joint could never reach as soon as
   the two anchors were apart.
   Every exporter has to add the same offset (`travelOrigin(s)` in each
-  `export.js`) -- the C++ and Planck.js ones once did not, and a lift set to
+  `export.js`) -- the C++ one once did not, and a lift set to
   rise 0 to 430 had its whole range behind it.
 - **An engine may not end the process.** Box2D checks its own arithmetic and,
   left alone, calls `abort()` when a check fails -- which used to take the
@@ -407,12 +402,25 @@ so `SimulationController` remembers one and acts on it once the step is over.
   18446744073709552000, which C++ wraps round to 384, and every shape in the
   C++ export collided with nothing. Exporters turn them into literals from the
   string (`bits64` in the Box2D/Qt one).
-- **Exports run older Box2D, and the same number can mean something else
-  there.** Box2D v3 applies a motor joint's `correctionFactor` on each of its
-  sub-steps, 2.3/2.4 once a step, so Planck and qml-box2d get
-  `1 - (1 - f)^subSteps` (`stepCorrection`) -- 0.05 left as it was made the
-  can in 11.phys crawl. Compare an export against the app by tracing both,
-  step for step; building and running it is not enough.
+- **An export runs the same Box2D the app does, and still has to be traced.**
+  The converter targets 3.2, so a number means the same on both sides -- but
+  that is exactly why a difference is worth chasing rather than explaining away.
+  Compare an export against the app by tracing both, step for step; building and
+  running it is not enough, and neither is grepping the output for a string you
+  put in the template yourself. Trace a scene with few bodies: a pile of thirty
+  amplifies the last bit of a float into pixels and tells you nothing.
+- **Box2D 3.2 is written but not tagged.** The newest tag upstream is v3.1.1, so
+  `engines/box2d` pins a commit of `main` instead. 3.2 defines a joint by a frame
+  on each body rather than by anchors, a reference angle and an axis; it replaced
+  `fixedRotation` with three motion locks, renamed `maxContactPushSpeed` to
+  `contactSpeed`, made speculative contacts compulsory, turned the motor joint
+  from position-offset into velocity-driven, and **deleted the mouse joint**.
+  All of that is the plugin's to absorb: the catalogue publishes what the engine
+  offers under the engine's own names, and nothing in `src/` changed for it.
+- **An open chain needs its ghost vertices set.** 3.2 fills `b2ChainDef::ghost1`
+  and `ghost2` with infinity on purpose, and refuses the whole def when a
+  non-loop chain leaves them -- so every polyline outline silently failed to be
+  created, with no shapes and no message. They carry straight on past each end.
 
 ## Exporting
 

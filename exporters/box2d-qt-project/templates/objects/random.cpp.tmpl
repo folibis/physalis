@@ -1,0 +1,34 @@
+//! mulberry32: four lines with a stated algorithm, so this program and the
+//! editor give the same numbers from the same seed. Zero in the scene means a
+//! different run every time, and the seed comes from the clock instead.
+static uint32_t randomState = {{SEED}};
+
+static uint32_t nextRandom()
+{
+    uint32_t z = (randomState += 0x6D2B79F5u);
+    z = (z ^ (z >> 15)) * (z | 1u);
+    z ^= z + (z ^ (z >> 7)) * (z | 61u);
+    return z ^ (z >> 14);
+}
+
+// A fresh number in [0, 1), and one somewhere between two bounds.
+static float randomUnit() { return float(nextRandom() / 4294967296.0); }
+
+static float rollBetween(float from, float to)
+{
+    if (from > to)
+        std::swap(from, to);
+    return from + randomUnit() * (to - from);
+}
+
+// Whole steps of `step` between the two ends, both included: 1 to 6 by 1 is a
+// die, and each face comes up as often as the others.
+static float rollSteps(float from, float to, float step)
+{
+    if (from > to)
+        std::swap(from, to);
+    if (!(step > 0.0f))
+        return rollBetween(from, to);
+    const int faces = int((to - from) / step) + 1;
+    return from + step * float(int(randomUnit() * faces) % std::max(1, faces));
+}

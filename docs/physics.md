@@ -77,8 +77,9 @@ This page describes the body as a whole.
   clear difference.
 - **Gravity Scale** multiplies the world's gravity for this body only: 0 makes
   it float, 2 makes it fall twice as fast.
-- **Fixed Rotation** stops the body from turning, which suits characters that
-  must stay upright.
+- **Lock X**, **Lock Y** and **Lock Rotation** stop the body moving sideways,
+  moving up and down, or turning. Locking rotation suits characters that must
+  stay upright.
 - **Bullet** makes the engine check a fast body more carefully, so that it
   cannot pass through a thin wall between two steps.
 - **Allow Sleep**, **Awake** and **Sleep Below Speed** control sleeping. A body

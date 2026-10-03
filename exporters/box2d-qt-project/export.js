@@ -33,6 +33,7 @@ var STATE = null;   // globals the step code keeps between steps
 var RESETS = null;  // what createWorld() sets those back to
 var LOST = false;   // whether any rule destroys a body or joint
 var COUNTERS = null;
+var RANDOM_USED = false;      // a rule rolls a value or asks the world its chance
 
 // What the engine says an object has, under the names it publishes. The
 // application keeps them in one bag per object rather than as fields of its
@@ -151,7 +152,22 @@ var RESERVED = ("world dt a b i m rad step createWorld main view window app tool
     + "debug other sensor visitor contacts sensors moves bodyDef shapeDef jointDef chainDef "
     + "worldDef box circle polygon hull points segment material filter data explosion walls "
     + "wall elapsed stepCount colorOf penOf drawRay FILL_ALPHA PIXELS_PER_METER "
+    // The helpers main.cpp defines for itself. Only three of them were listed,
+    // so a joint called "hatch" or a body called "drawJoint" declared a handle
+    // over the top of a function and the program stopped building -- on a name
+    // that is perfectly reasonable for the thing it was given to.
+    + "hatch isSensor fillOf SENSOR_COLOR drawPolygon drawSolidPolygon drawCircle "
+    + "drawSolidCircle drawSolidCapsule drawLine drawTransform drawPoint "
+    + "drawString drawJoint drawAxes "
     + "COLOR_DYNAMIC COLOR_STATIC COLOR_KINEMATIC SceneView "
+    // Names from the C library and the Windows headers that main.cpp pulls in.
+    // These are not keywords, so the compiler accepts the declaration and only
+    // objects where the name is used -- a timer called "clock" redeclares
+    // clock() from <time.h>, and the generated program stops building on a name
+    // that looked perfectly ordinary in the editor.
+    + "clock time div abs labs fabs exp log log10 pow sqrt sin cos tan floor ceil "
+    + "round trunc fmod modf frexp ldexp rand srand atoi atof exit system remove "
+    + "rename index near far min max unix small huge "
     + "alignas alignof and asm auto bool break case catch char class const constexpr "
     + "continue decltype default delete do double else enum explicit export extern false "
     + "float for friend goto if inline int long mutable namespace new noexcept not nullptr "
@@ -236,7 +252,7 @@ function worldCode(world) {
         GRAVITY_X: fnum(g.x * MOTION),
         GRAVITY_Y: fnum(g.y * MOTION),
         MAXIMUM_LINEAR_SPEED: speed("maximumLinearSpeed", 400),
-        MAX_CONTACT_PUSH_SPEED: speed("maxContactPushSpeed", 3),
+        CONTACT_SPEED: speed("contactSpeed", 3),
         RESTITUTION_THRESHOLD: speed("restitutionThreshold", 1),
         HIT_EVENT_THRESHOLD: speed("hitEventThreshold", 1),
         CONTACT_HERTZ: differs(pickNumber(v.contactHertz, 30), 30) ? fnum(v.contactHertz) : null,
@@ -244,7 +260,6 @@ function worldCode(world) {
         ENABLE_SLEEP: v.enableSleep === false ? "false" : null,
         ENABLE_CONTINUOUS: v.enableContinuous === false ? "false" : null,
         ENABLE_WARM_STARTING: v.enableWarmStarting === false ? "false" : null,
-        ENABLE_SPECULATIVE: v.enableSpeculative === false ? "false" : null,
         PRE_SOLVE: HELPERS.preSolve ? "notePreSolve" : null,
     });
 }
@@ -315,7 +330,9 @@ function bodyCode(body, name, colours) {
             ? fnum(v.sleepThreshold * MOTION) : null,
         ENABLE_SLEEP: v.enableSleep === false ? "false" : null,
         AWAKE: v.isAwake === false ? "false" : null,
-        FIXED_ROTATION: v.fixedRotation ? "true" : null,
+        LOCK_LINEAR_X: v.lockLinearX ? "true" : null,
+        LOCK_LINEAR_Y: v.lockLinearY ? "true" : null,
+        LOCK_ANGULAR_Z: v.lockAngularZ ? "true" : null,
         BULLET: v.isBullet ? "true" : null,
         ALLOW_FAST_ROTATION: v.allowFastRotation ? "true" : null,
         ENABLED: body.isEnabled === false ? "false" : null,
@@ -525,22 +542,29 @@ function jointCode(scene, joint, name, index) {
     // The angle the two bodies already stand at, so a joint made in place
     // starts unstrained.
     var resting = (bodies[joint.bodyB].rotation || 0) - (bodies[joint.bodyA].rotation || 0);
-    var axis = function (fallbackX, fallbackY) {
+    // Box2D 3.2 defines a joint by a frame on each body rather than by anchors, a
+    // reference angle and an axis: it works to bring frame A onto frame B. Frame
+    // A's x axis is the axis for the kinds that slide, and frame B is turned back
+    // by the reference angle, so the bodies come to rest that far apart.
+    //
+    // The two angles are always written. The anchors always were, and the
+    // rotations now carry what the reference angle and the axis used to say.
+    var frames = function (referenceDegrees) {
         var ax = joint.axis || { x: 1, y: 0 };
-        var len = Math.sqrt(ax.x * ax.x + ax.y * ax.y) || 1;
         // Into body A's frame: turned back by A's own rotation.
-        var turn = -(bodies[joint.bodyA].rotation || 0) * Math.PI / 180;
-        var x = (ax.x * Math.cos(turn) - ax.y * Math.sin(turn)) / len;
-        var y = (ax.x * Math.sin(turn) + ax.y * Math.cos(turn)) / len;
-        var set = differs(x, fallbackX) || differs(y, fallbackY);
-        values.AXIS_X = set ? fnum(x) : null;
-        values.AXIS_Y = set ? fnum(y) : null;
+        var turn = -(bodies[joint.bodyA].rotation || 0);
+        var axisDegrees = needsAxis
+            ? Math.atan2(ax.y, ax.x) * 180 / Math.PI + turn
+            : 0;
+        values.FRAME_A_DEG = short(axisDegrees);
+        values.FRAME_B_DEG = short(axisDegrees - referenceDegrees);
     };
+    var needsAxis = type === "prismatic" || type === "wheel";
 
     if (type === "revolute") {
         // Box2D asserts on lower > upper and on a limit past a half turn.
         var angles = ordered(clampAngle(pick(p, "lowerAngle", 0)), clampAngle(pick(p, "upperAngle", 0)));
-        values.REFERENCE_ANGLE = angle(resting + pick(p, "referenceAngle", 0));
+        frames(resting + pick(p, "referenceAngle", 0));
         values.TARGET_ANGLE = angle(pick(p, "targetAngle", 0));
         values.ENABLE_SPRING = flag(p.enableSpring, false);
         values.HERTZ = number(pick(p, "hertz", 0), 0);
@@ -553,13 +577,11 @@ function jointCode(scene, joint, name, index) {
         values.MOTOR_SPEED = angle(pick(p, "motorSpeed", 0));
     } else if (type === "prismatic" || type === "wheel") {
         var wheel = type === "wheel";
-        axis(wheel ? 0 : 1, wheel ? 1 : 0);
         var origin = travelOrigin(joint);
         var span = ordered(pick(p, "lowerTranslation", 0), pick(p, "upperTranslation", 0));
-        if (!wheel) {
-            values.REFERENCE_ANGLE = angle(resting + pick(p, "referenceAngle", 0));
+        frames(resting + (wheel ? 0 : pick(p, "referenceAngle", 0)));
+        if (!wheel)
             values.TARGET_TRANSLATION = length(origin + pick(p, "targetTranslation", 0));
-        }
         values.ENABLE_SPRING = flag(pick(p, "enableSpring", wheel), wheel);
         values.HERTZ = number(pick(p, "hertz", wheel ? 1 : 0), wheel ? 1 : 0);
         values.DAMPING_RATIO = number(pick(p, "dampingRatio", wheel ? 0.7 : 0), wheel ? 0.7 : 0);
@@ -575,6 +597,7 @@ function jointCode(scene, joint, name, index) {
             values.MOTOR_SPEED = length(pick(p, "motorSpeed", 0));
         }
     } else if (type === "distance") {
+        frames(resting);
         // Zero length means however far apart the anchors already are.
         var distance = pick(p, "length", 0);
         if (!(distance > 0))
@@ -590,27 +613,26 @@ function jointCode(scene, joint, name, index) {
         values.MAX_MOTOR_FORCE = number(pick(p, "maxMotorForce", 0), 0);
         values.MOTOR_SPEED = length(pick(p, "motorSpeed", 0));
     } else if (type === "weld") {
-        values.REFERENCE_ANGLE = angle(resting + pick(p, "referenceAngle", 0));
+        frames(resting + pick(p, "referenceAngle", 0));
         values.LINEAR_HERTZ = number(pick(p, "linearHertz", 0), 0);
         values.ANGULAR_HERTZ = number(pick(p, "angularHertz", 0), 0);
         values.LINEAR_DAMPING_RATIO = number(pick(p, "linearDampingRatio", 0), 0);
         values.ANGULAR_DAMPING_RATIO = number(pick(p, "angularDampingRatio", 0), 0);
     } else if (type === "motor") {
-        var ox = pick(p, "linearOffsetX", 0), oy = pick(p, "linearOffsetY", 0);
-        values.OFFSET_X = ox || oy ? short(ox) : null;
-        values.OFFSET_Y = ox || oy ? short(oy) : null;
-        values.ANGULAR_OFFSET = angle(pick(p, "angularOffset", 0));
-        values.MAX_FORCE = number(pick(p, "maxForce", 1), 1);
-        values.MAX_TORQUE = number(pick(p, "maxTorque", 1), 1);
-        values.CORRECTION_FACTOR = number(pick(p, "correctionFactor", 0.3), 0.3);
-    } else if (type === "mouse") {
-        var tx = pick(p, "targetX", 0), ty = pick(p, "targetY", 0);
-        var target = (tx === 0 && ty === 0) ? a : { x: tx, y: ty };
-        values.TARGET_X = short(target.x);
-        values.TARGET_Y = short(target.y);
-        values.HERTZ = number(pick(p, "hertz", 4), 4);
-        values.DAMPING_RATIO = number(pick(p, "dampingRatio", 1), 1);
-        values.MAX_FORCE = number(pick(p, "maxForce", 1), 1);
+        frames(resting);
+        values.LINEAR_VELOCITY_X = length(pick(p, "linearVelocityX", 0));
+        values.LINEAR_VELOCITY_Y = length(pick(p, "linearVelocityY", 0));
+        values.ANGULAR_VELOCITY = angle(pick(p, "angularVelocity", 0));
+        values.MAX_VELOCITY_FORCE = number(pick(p, "maxVelocityForce", 1), 1);
+        values.MAX_VELOCITY_TORQUE = number(pick(p, "maxVelocityTorque", 1), 1);
+        values.LINEAR_HERTZ = number(pick(p, "linearHertz", 0), 0);
+        values.LINEAR_DAMPING_RATIO = number(pick(p, "linearDampingRatio", 1), 1);
+        values.MAX_SPRING_FORCE = number(pick(p, "maxSpringForce", 1), 1);
+        values.ANGULAR_HERTZ = number(pick(p, "angularHertz", 0), 0);
+        values.ANGULAR_DAMPING_RATIO = number(pick(p, "angularDampingRatio", 1), 1);
+        values.MAX_SPRING_TORQUE = number(pick(p, "maxSpringTorque", 1), 1);
+    } else if (type === "filter") {
+        frames(resting);
     } else if (type !== "filter") {
         return render("objects/unsupported-joint.cpp.tmpl", {
             NAME: name, WHY: "is a kind of joint this converter does not know; not exported.",
@@ -656,6 +678,11 @@ function stepBody(scene, io) {
         out.push("elapsed += dt;");
     if (COUNTERS.frame)
         out.push("++stepCount;");
+    for (var t = 0; t < TIMERS.length; ++t) {
+        out = out.concat(render("objects/timer-tick.cpp.tmpl",
+                                { NAME: TIMERS[t].handle,
+                                  RUNNING: TIMERS[t].running }).split(NEWLINE));
+    }
     var rays = scene.rays || [];
     for (var r = 0; r < rays.length; ++r)
         out = out.concat(rayCast(rays[r], NAMES["ray:" + r]).split(NEWLINE));
@@ -1192,9 +1219,14 @@ function debugDrawing(scene) {
 // step code reads and writes, set back to what the scene declares whenever the
 // world is built -- which is what the editor does when a run starts.
 var VARIABLES = null;
+// The timer variables, in declaration order, so the step code can move each one
+// on; and the ops that are a timer's rather than a value's.
+var TIMERS = [];
+var TIMER_VERBS = { timerStart: true, timerPause: true, timerStop: true, timerReset: true };
 
 function declareVariables(scene) {
     VARIABLES = {};
+    TIMERS = [];
     var variables = scene.variables || [];
     for (var i = 0; i < variables.length; ++i) {
         var variable = variables[i];
@@ -1209,6 +1241,16 @@ function declareVariables(scene) {
         TAKEN[ident] = true;
         remember(DECL, ident, start);
         VARIABLES[variable.name] = { handle: ident, type: variable.type };
+        // A timer is a millisecond count and a flag saying whether it is
+        // counting. The count is a float so the fraction of a millisecond a
+        // step leaves over is not lost, which is what the editor keeps too.
+        if (variable.type === "timer") {
+            var flag = identifier(variable.name + "_running", "timer_running");
+            remember("bool", flag, "false");
+            VARIABLES[variable.name].running = flag;
+            VARIABLES[variable.name].start = start;
+            TIMERS.push({ handle: ident, running: flag });
+        }
     }
 }
 
@@ -1219,7 +1261,8 @@ function variableProperty(key) {
     var variable = VARIABLES ? VARIABLES[key] : null;
     if (!variable)
         return null;
-    var unit = variable.type === "bool" ? "bool" : variable.type === "int" ? "int" : "num";
+    var unit = variable.type === "bool" ? "bool"
+                 : variable.type === "int" ? "int" : "num";
     return prop(unit, variable.handle, function (value) {
         return [variable.handle + " = " + value + ";"];
     });
@@ -1326,6 +1369,12 @@ function worldProperty(key) {
             remember("int", "stepCount", "0");
         }
         return prop("int", "stepCount", null);
+    }
+    // Read, not kept: a fresh number every time a rule asks, so "chance < 25"
+    // is that rule about one time in four.
+    if (key === "chance") {
+        RANDOM_USED = true;
+        return prop("float", "randomUnit() * 100.0f", null);
     }
     if (key === "gravityX")
         return prop("scaled", "b2World_GetGravity(world).x", function (v) {
@@ -1469,8 +1518,8 @@ function bodyProperty(B, key) {
             var named = { "0": "b2_staticBody", "1": "b2_kinematicBody", "2": "b2_dynamicBody" };
             return ["b2Body_SetType(" + B + ", " + (named[v] || ("b2BodyType(" + v + ")")) + ");"];
         });
-    case "centerOfMassX": return prop("len", "b2Body_GetWorldCenterOfMass(" + B + ").x", null);
-    case "centerOfMassY": return prop("len", "b2Body_GetWorldCenterOfMass(" + B + ").y", null);
+    case "centerOfMassX": return prop("len", "b2Body_GetWorldCenter(" + B + ").x", null);
+    case "centerOfMassY": return prop("len", "b2Body_GetWorldCenter(" + B + ").y", null);
     }
     return null;
 }
@@ -1515,7 +1564,7 @@ function shapeProperty(place, key) {
     case "enableHitEvents": return getSet("bool", "b2Shape_AreHitEventsEnabled", "b2Shape_EnableHitEvents", S);
     case "enableSensorEvents":
         return getSet("bool", "b2Shape_AreSensorEventsEnabled", "b2Shape_EnableSensorEvents", S);
-    case "mass": return prop("none", "b2Shape_GetMassData(" + S + ").mass", null);
+    case "mass": return prop("none", "b2Shape_ComputeMassData(" + S + ").mass", null);
     case "radius":
         if (place.shapeKind !== "circle")
             return null;
@@ -1666,18 +1715,27 @@ function jointProperty(place, key) {
         case "maxLength": return limit("len", "upper", "GetMinLength", "GetMaxLength", "SetLengthRange", false);
         }
     } else if (t === "motor") {
+        // 3.2 turned the motor joint from a position offset into a velocity with
+        // an optional spring: linearOffset, angularOffset, correctionFactor,
+        // maxForce and maxTorque are gone. A rule naming one of those is refused
+        // rather than written as a call that does not exist.
         switch (key) {
-        case "maxForce": return simple("none", "GetMaxForce", "SetMaxForce");
-        case "maxTorque": return simple("none", "GetMaxTorque", "SetMaxTorque");
-        case "correctionFactor": return simple("none", "GetCorrectionFactor", "SetCorrectionFactor");
-        case "angularOffset": return simple("angle", "GetAngularOffset", "SetAngularOffset");
-        case "linearOffsetX":
-        case "linearOffsetY":
-            return prop("len", P + "GetLinearOffset(" + J + ")." + (key === "linearOffsetX" ? "x" : "y"),
+        case "maxVelocityForce": return simple("none", "GetMaxVelocityForce", "SetMaxVelocityForce");
+        case "maxVelocityTorque": return simple("none", "GetMaxVelocityTorque", "SetMaxVelocityTorque");
+        case "maxSpringForce": return simple("none", "GetMaxSpringForce", "SetMaxSpringForce");
+        case "maxSpringTorque": return simple("none", "GetMaxSpringTorque", "SetMaxSpringTorque");
+        case "linearHertz": return simple("none", "GetLinearHertz", "SetLinearHertz");
+        case "linearDampingRatio": return simple("none", "GetLinearDampingRatio", "SetLinearDampingRatio");
+        case "angularHertz": return simple("none", "GetAngularHertz", "SetAngularHertz");
+        case "angularDampingRatio": return simple("none", "GetAngularDampingRatio", "SetAngularDampingRatio");
+        case "angularVelocity": return simple("angle", "GetAngularVelocity", "SetAngularVelocity");
+        case "linearVelocityX":
+        case "linearVelocityY":
+            return prop("len", P + "GetLinearVelocity(" + J + ")." + (key === "linearVelocityX" ? "x" : "y"),
                         function (v) {
-                var keep = P + "GetLinearOffset(" + J + ")." + (key === "linearOffsetX" ? "y" : "x");
-                return [wake, P + "SetLinearOffset(" + J + ", b2Vec2{ "
-                        + (key === "linearOffsetX" ? (v + ", " + keep) : (keep + ", " + v)) + " });"];
+                var keep = P + "GetLinearVelocity(" + J + ")." + (key === "linearVelocityX" ? "y" : "x");
+                return [wake, P + "SetLinearVelocity(" + J + ", b2Vec2{ "
+                        + (key === "linearVelocityX" ? (v + ", " + keep) : (keep + ", " + v)) + " });"];
             });
         }
     } else if (t === "mouse") {
@@ -1863,7 +1921,62 @@ function effectLines(scene, rule, other) {
     return ["if (" + guard + ") {"].concat(indentLines("    ", lines)).concat(["}"]);
 }
 
+// Starting, pausing or winding back a timer is not writing a value to it, so
+// it is answered before the ordinary value path is reached at all. Null when the
+// rule is not one of the four, which leaves everything else alone.
+function timerVerbLines(rule) {
+    var op = rule.op || "set";
+    if (rule.target !== "@variables" || !TIMER_VERBS[op])
+        return null;
+    var variable = VARIABLES ? VARIABLES[rule.property] : null;
+    if (!variable || variable.type !== "timer")
+        return null;
+
+    var run = function (on) { return variable.running + " = " + on + ";"; };
+    var rewind = function () { return variable.handle + " = " + variable.start + ";"; };
+    if (op === "timerStart")
+        return [run("true")];
+    if (op === "timerPause")
+        return [run("false")];
+    if (op === "timerStop")
+        return [run("false"), rewind()];
+    return [rewind()]; // timerReset: back to the start, still counting
+}
+
+// A number a rule carries, as code: the number itself, or a roll between two of
+// them. The same shape the editor writes -- a map of from, to and step -- so a
+// value and an action's parameter are handled the one way.
+function isRange(given) {
+    return given !== null && typeof given === "object" && given.from !== undefined;
+}
+
+// In the units Box2D wants, which is what literal() does to a plain number.
+function rolled(unit, given) {
+    RANDOM_USED = true;
+    var low = literal(unit, given.from);
+    var high = literal(unit, given.to);
+    var step = pickNumber(given.step, 0);
+    if (step > 0)
+        return "rollSteps(" + low + ", " + high + ", " + literal(unit, step) + ")";
+    return "rollBetween(" + low + ", " + high + ")";
+}
+
+function numberOrRoll(unit, given) {
+    return isRange(given) ? rolled(unit, given) : literal(unit, given);
+}
+
+// A bare number for somewhere that cannot take an expression. A range reaching
+// one of these would quietly become its near end, so it says so instead.
+function flatNumber(given, fallback, what) {
+    if (isRange(given))
+        throw new Error(what + " cannot be a range here.");
+    return pickNumber(given, fallback);
+}
+
 function writeLines(scene, rule, target) {
+    var verb = timerVerbLines(rule);
+    if (verb)
+        return verb;
     var p = property(target, rule.property);
     if (!p || !p.write)
         return null;
@@ -1895,11 +2008,29 @@ function writeLines(scene, rule, target) {
     } else if (op === "add" || op === "subtract") {
         if (!p.read || p.unit === "bool")
             return null;
-        value = p.read + (op === "add" ? " + " : " - ") + literal(p.unit, rule.value);
+        value = p.read + (op === "add" ? " + " : " - ") + numberOrRoll(p.unit, rule.value);
     } else {
-        value = literal(p.unit, rule.value);
+        value = numberOrRoll(p.unit, rule.value);
     }
     return p.write(value);
+}
+
+// What an explosion setting falls back to: the engine's own default, which is
+// where the editor takes it from too. A scene stores only what differs from it,
+// so an explosion left as it was made carries no radius at all -- and reading
+// that as zero made the rule look impossible to write.
+function explosionDefault(scene, key, fallback) {
+    var actions = (scene.engine && scene.engine.bodyActions) || [];
+    for (var i = 0; i < actions.length; ++i) {
+        if (actions[i].id !== "explode")
+            continue;
+        var params = actions[i].params || [];
+        for (var p = 0; p < params.length; ++p) {
+            if (params[p].key === key)
+                return pickNumber(params[p].defaultValue, fallback);
+        }
+    }
+    return fallback;
 }
 
 function actionLines(scene, rule, target) {
@@ -1926,20 +2057,21 @@ function actionLines(scene, rule, target) {
             return null;
         HELPERS.clones[target.index] = true;
         return ["cloneOf_" + NAMES["body:" + target.index] + "(m("
-                + short(pickNumber(params.x, 0)) + ", " + short(pickNumber(params.y, 0)) + "));"];
+                + numberOrRoll("len", params.x) + ", " + numberOrRoll("len", params.y) + "));"];
     }
     if (rule.action === "pushForceAt") {
         if (!isBody)
             return null;
-        var force = "m(" + short(pickNumber(params.impulseX, 0)) + ", " + short(pickNumber(params.impulseY, 0)) + ")";
-        var fx = pickNumber(params.offsetX, 0), fy = pickNumber(params.offsetY, 0);
+        var force = "vec(" + numberOrRoll("len", params.impulseX) + ", " + numberOrRoll("len", params.impulseY) + ")";
+        var fx = flatNumber(params.offsetX, 0, "Where a push is applied"),
+            fy = flatNumber(params.offsetY, 0, "Where a push is applied");
         if (!fx && !fy)
             return ["b2Body_ApplyForceToCenter(" + body + ", " + force + ", true);"];
-        return ["b2Body_ApplyForce(" + body + ", " + force + ", b2Add(b2Body_GetWorldCenterOfMass("
+        return ["b2Body_ApplyForce(" + body + ", " + force + ", b2Add(b2Body_GetWorldCenter("
                 + body + "), m(" + short(fx) + ", " + short(fy) + ")), true);"];
     }
     if (rule.action === "resetMass")
-        return isBody ? ["b2Body_ApplyMassFromShapes(" + body + ");"] : null;
+        return isBody ? ["b2Body_UpdateMassFromShapes(" + body + ");"] : null;
 
     if (rule.action === "explode") {
         var settings = {}, key;
@@ -1961,14 +2093,15 @@ function actionLines(scene, rule, target) {
         }
         if (!at && (target.kind === "body" || target.kind === "shape"))
             at = "b2Body_GetPosition(" + body + ")";
-        var radius = pickNumber(settings.radius, 0);
+        var radius = pickNumber(settings.radius, explosionDefault(scene, "radius", 200));
         if (!at || !(radius > 0))
             return null;
         var lines = ["{", "    b2ExplosionDef explosion = b2DefaultExplosionDef();",
                      "    explosion.position = " + at + ";",
                      "    explosion.radius = m(" + short(radius) + ");"];
-        if (pickNumber(settings.falloff, 0))
-            lines.push("    explosion.falloff = m(" + short(settings.falloff) + ");");
+        var falloff = pickNumber(settings.falloff, explosionDefault(scene, "falloff", 100));
+        if (falloff)
+            lines.push("    explosion.falloff = m(" + short(falloff) + ");");
         if (pickNumber(settings.impulse, 0))
             lines.push("    explosion.impulsePerLength = m(" + short(settings.impulse) + ");");
         if (pickNumber(settings.maskBits, 0) > 0)
@@ -1980,12 +2113,13 @@ function actionLines(scene, rule, target) {
     if (rule.action === "pushAt") {
         if (target.kind !== "body" && target.kind !== "shape")
             return null;
-        var impulse = "m(" + short(pickNumber(params.impulseX, 0)) + ", "
-                      + short(pickNumber(params.impulseY, 0)) + ")";
-        var ox = pickNumber(params.offsetX, 0), oy = pickNumber(params.offsetY, 0);
+        var impulse = "vec(" + numberOrRoll("len", params.impulseX) + ", "
+                      + numberOrRoll("len", params.impulseY) + ")";
+        var ox = flatNumber(params.offsetX, 0, "Where a push is applied"),
+            oy = flatNumber(params.offsetY, 0, "Where a push is applied");
         if (!ox && !oy)
             return ["b2Body_ApplyLinearImpulseToCenter(" + body + ", " + impulse + ", true);"];
-        return ["b2Body_ApplyLinearImpulse(" + body + ", " + impulse + ", b2Add(b2Body_GetWorldCenterOfMass("
+        return ["b2Body_ApplyLinearImpulse(" + body + ", " + impulse + ", b2Add(b2Body_GetWorldCenter("
                 + body + "), m(" + short(ox) + ", " + short(oy) + ")), true);"];
     }
     if (rule.action === "removeBody") {
@@ -2077,6 +2211,17 @@ function removal(scene, rule, target, body, remove) {
 
 function helpersCode(scene, colours) {
     var out = [];
+    // Written only when something asks for a number. mulberry32, the same four
+    // lines the application runs, so a seeded scene gives the same numbers in
+    // this program as it does in the editor.
+    if (RANDOM_USED) {
+        // The scene's own, beside pixelsPerMeter, not one of the engine's settings.
+        var seed = Math.round(pickNumber((scene.world || {}).randomSeed, 0)) >>> 0;
+        out.push(render("objects/random.cpp.tmpl", {
+            SEED: seed ? (String(seed) + "u")
+                       : "uint32_t(QDateTime::currentMSecsSinceEpoch()) | 1u",
+        }));
+    }
     var bodies = scene.simulation.bodies;
     if (HELPERS.preSolve) {
         RESETS.push(render("objects/pre-solve-reset.cpp.tmpl", {}));

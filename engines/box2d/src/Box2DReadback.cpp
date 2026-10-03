@@ -55,8 +55,12 @@ QVariant Box2DEngine::bodyValue(BodyHandle handle, const QString &key) const
         return b2Body_GetLinearDamping(body);
     if (key == QLatin1String("angularDamping"))
         return b2Body_GetAngularDamping(body);
-    if (key == QLatin1String("fixedRotation"))
-        return b2Body_IsFixedRotation(body);
+    if (key == QLatin1String("lockLinearX"))
+        return b2Body_GetMotionLocks(body).linearX;
+    if (key == QLatin1String("lockLinearY"))
+        return b2Body_GetMotionLocks(body).linearY;
+    if (key == QLatin1String("lockAngularZ"))
+        return b2Body_GetMotionLocks(body).angularZ;
     if (key == QLatin1String("isBullet"))
         return b2Body_IsBullet(body);
     if (key == QLatin1String("enableSleep"))
@@ -83,9 +87,9 @@ QVariant Box2DEngine::bodyValue(BodyHandle handle, const QString &key) const
         return 500.0 * (b2Body_GetMass(body) * v * v + b2Body_GetRotationalInertia(body) * w * w);
     }
     if (key == QLatin1String("localCenterOfMassX"))
-        return toScene(b2Body_GetLocalCenterOfMass(body).x);
+        return toScene(b2Body_GetLocalCenter(body).x);
     if (key == QLatin1String("localCenterOfMassY"))
-        return toScene(b2Body_GetLocalCenterOfMass(body).y);
+        return toScene(b2Body_GetLocalCenter(body).y);
     if (key == QLatin1String("jointCount"))
         return b2Body_GetJointCount(body);
     if (key == QLatin1String("contactCount")) {
@@ -104,9 +108,9 @@ QVariant Box2DEngine::bodyValue(BodyHandle handle, const QString &key) const
         if (key == QLatin1String("boundsMaxY")) return toScene(box.upperBound.y);
     }
     if (key == QLatin1String("centerOfMassX"))
-        return toScene(b2Body_GetWorldCenterOfMass(body).x);
+        return toScene(b2Body_GetWorldCenter(body).x);
     if (key == QLatin1String("centerOfMassY"))
-        return toScene(b2Body_GetWorldCenterOfMass(body).y);
+        return toScene(b2Body_GetWorldCenter(body).y);
 
     return {};
 }
@@ -187,22 +191,30 @@ QVariant Box2DEngine::jointValue(JointHandle handle, const QString &key) const
         // converts a whole point rather than one number.
         const QPointF world =
             this->toScene(b2Body_GetWorldPoint(b2Joint_GetBodyA(joint),
-                                               b2Joint_GetLocalAnchorA(joint)));
+                                               b2Joint_GetLocalFrameA(joint).p));
         return key == QLatin1String("anchorAX") ? world.x() : world.y();
     }
     if (key == QLatin1String("anchorBX") || key == QLatin1String("anchorBY")) {
         const QPointF world =
             this->toScene(b2Body_GetWorldPoint(b2Joint_GetBodyB(joint),
-                                               b2Joint_GetLocalAnchorB(joint)));
+                                               b2Joint_GetLocalFrameB(joint).p));
         return key == QLatin1String("anchorBX") ? world.x() : world.y();
     }
-    if (key == QLatin1String("referenceAngleNow"))
-        return qRadiansToDegrees(b2Joint_GetReferenceAngle(joint));
+    // How far the two frames are turned from one another, which is what the
+    // reference angle has always meant: the joint rests where they line up.
+    if (key == QLatin1String("referenceAngleNow")) {
+        const float turned = b2Rot_GetAngle(b2Joint_GetLocalFrameA(joint).q)
+                             - b2Rot_GetAngle(b2Joint_GetLocalFrameB(joint).q);
+        return qRadiansToDegrees(turned);
+    }
     if (key == QLatin1String("axisAngle")) {
         // The axis is stored in body A's frame, so it is rotated back out of
         // it before being reported as a scene direction.
+        // Frame A's own x direction is the axis, so it is rotated out of body A's
+        // frame before being reported as a scene direction.
+        const b2Rot frameA = b2Joint_GetLocalFrameA(joint).q;
         const b2Vec2 axis = b2RotateVector(b2Body_GetRotation(b2Joint_GetBodyA(joint)),
-                                           b2Joint_GetLocalAxisA(joint));
+                                           b2Vec2 { frameA.c, frameA.s });
         return qRadiansToDegrees(std::atan2(static_cast<double>(axis.y),
                                             static_cast<double>(axis.x)));
     }
@@ -289,13 +301,6 @@ QVariant Box2DEngine::jointValue(JointHandle handle, const QString &key) const
             return b2WheelJoint_IsMotorEnabled(joint);
         break;
 
-    case b2_mouseJoint:
-        if (key == QLatin1String("targetX"))
-            return toScene(b2MouseJoint_GetTarget(joint).x);
-        if (key == QLatin1String("targetY"))
-            return toScene(b2MouseJoint_GetTarget(joint).y);
-        break;
-
     default:
         break;
     }
@@ -329,7 +334,7 @@ QVariant Box2DEngine::worldValue(const QString &key) const
         return m_contactTuning.hertz;
     if (key == QLatin1String("contactDampingRatio"))
         return m_contactTuning.dampingRatio;
-    if (key == QLatin1String("maxContactPushSpeed"))
+    if (key == QLatin1String("contactSpeed"))
         return unscaled(m_contactTuning.pushSpeed);
 
     if (key == QLatin1String("enableSleep"))
@@ -339,7 +344,6 @@ QVariant Box2DEngine::worldValue(const QString &key) const
     if (key == QLatin1String("enableWarmStarting"))
         return b2World_IsWarmStartingEnabled(m_worldId);
     if (key == QLatin1String("enableSpeculative"))
-        return m_speculative;   // b2World_EnableSpeculative has no counterpart
 
     if (key == QLatin1String("awakeBodyCount"))
         return b2World_GetAwakeBodyCount(m_worldId);
@@ -398,7 +402,7 @@ void Box2DEngine::setWorldParam(const QString &key, const QVariant &value)
     // One call carries all three, so the two not being written come from the
     // copy kept when the world was made.
     if (key == QLatin1String("contactHertz") || key == QLatin1String("contactDampingRatio")
-        || key == QLatin1String("maxContactPushSpeed")) {
+        || key == QLatin1String("contactSpeed")) {
         if (key == QLatin1String("contactHertz"))
             m_contactTuning.hertz = static_cast<float>(value.toDouble());
         else if (key == QLatin1String("contactDampingRatio"))
@@ -416,10 +420,6 @@ void Box2DEngine::setWorldParam(const QString &key, const QVariant &value)
         b2World_EnableContinuous(m_worldId, flag);
     else if (key == QLatin1String("enableWarmStarting"))
         b2World_EnableWarmStarting(m_worldId, flag);
-    else if (key == QLatin1String("enableSpeculative")) {
-        b2World_EnableSpeculative(m_worldId, flag);
-        m_speculative = flag;
-    }
 }
 
 } // namespace physics

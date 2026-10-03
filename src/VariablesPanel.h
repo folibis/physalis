@@ -31,10 +31,11 @@ public:
 private:
     void buildUi();
     void rebuild();
+    void fitColumns();
     void addVariable();
-    void removeSelected();
-    // Put the selected variable in the log, or take it out again.
-    void toggleLog();
+    void removeVariable(int row);
+    // Put that variable in the log, or take it out again.
+    void toggleLog(int row);
     void fillRow(int row, const SceneVariable &variable);
     // The value editor depends on the type, so changing the type replaces it.
     void setValueEditor(int row, const SceneVariable &variable);
@@ -46,9 +47,6 @@ private:
     void beginRename(int row);
     void finishRename(int row, bool keep);
     bool eventFilter(QObject *watched, QEvent *event) override;
-    // Everything the toolbar says depends on what is selected.
-    void syncTools();
-    int selectedRow() const;
     // Whatever a cell widget was tagged with, since a click arrives at the
     // widget rather than at the table underneath it.
     static int rowOf(const QObject *widget);
@@ -62,8 +60,6 @@ private:
 
     QPointer<CanvasScene> m_scene;
     QTableWidget *m_table = nullptr;
-    QToolButton *m_remove = nullptr;
-    QToolButton *m_log = nullptr;
     QVector<RowWidgets> m_rows;
     // Rebuilding recreates every editor, so a handler must not write back
     // while it is happening.

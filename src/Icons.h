@@ -42,4 +42,17 @@ QIcon variable();
 // The readout of watched values, pinned to the canvas during a run.
 QIcon log();
 
+// Lining shapes up: the toolbar button, and one for each edge the menu offers.
+QIcon align();
+QIcon alignLeft();
+QIcon alignHorizontalCentre();
+QIcon alignRight();
+QIcon alignTop();
+QIcon alignVerticalCentre();
+QIcon alignBottom();
+
+// The two kinds of number a rule can carry: one you type, or one it rolls.
+QIcon value();
+QIcon random();
+
 } // namespace Icons

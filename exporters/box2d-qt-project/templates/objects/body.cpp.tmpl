@@ -13,7 +13,9 @@
     bodyDef.sleepThreshold = {{SLEEP_THRESHOLD}};
     bodyDef.enableSleep = {{ENABLE_SLEEP}};
     bodyDef.isAwake = {{AWAKE}};
-    bodyDef.fixedRotation = {{FIXED_ROTATION}};
+    bodyDef.motionLocks.linearX = {{LOCK_LINEAR_X}};
+    bodyDef.motionLocks.linearY = {{LOCK_LINEAR_Y}};
+    bodyDef.motionLocks.angularZ = {{LOCK_ANGULAR_Z}};
     bodyDef.isBullet = {{BULLET}};
     bodyDef.allowFastRotation = {{ALLOW_FAST_ROTATION}};
     bodyDef.isEnabled = {{ENABLED}};

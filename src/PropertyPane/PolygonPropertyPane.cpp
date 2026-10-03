@@ -91,19 +91,25 @@ std::vector<PropertyRow> PolygonPropertyPane::extraRows(ShapeItem *item) const
         "sliding along can catch at a join.");
     result.push_back(std::move(kind));
 
+    // The count first and what becomes of it second. Answering "none" for a
+    // filled polygon was true of the engine and nonsense to read: the outline
+    // plainly has edges, and the row is next to the points that make them.
     PropertyRow count;
-    count.label = QObject::tr("Segments");
+    count.label = QObject::tr("Edges");
     count.type = PropertyFieldType::String;
     count.readOnly = true;
     count.key = QStringLiteral("shape.segmentCount");
-    count.getter = [item, canBeSolid, segments]() -> QVariant {
+    count.getter = [item, canBeSolid, canBeChain, segments]() -> QVariant {
         if (canBeSolid && !item->preferOutline())
-            return QObject::tr("none — it is one filled shape");
-        return QString::number(segments);
+            return QObject::tr("%n, built as one filled shape", nullptr, segments);
+        if (canBeChain && item->smoothChain())
+            return QObject::tr("%n, joined into one chain", nullptr, segments);
+        return QObject::tr("%n, one shape each", nullptr, segments);
     };
     count.setter = [](const QVariant &) {};
-    count.tooltip = QObject::tr("How many straight edges the engine builds this outline from."
-                                " A filled polygon is one shape and has none.");
+    count.tooltip = QObject::tr("How many straight edges this outline has, and what the engine"
+                                " makes of them: one filled shape, one chain, or a shape per"
+                                " edge.");
     result.push_back(std::move(count));
 
     return result;

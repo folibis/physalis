@@ -1,14 +1,27 @@
 //! A field without a value is left out, and b2DefaultMotorJointDef's stands.
 {
     b2MotorJointDef jointDef = b2DefaultMotorJointDef();
-    jointDef.bodyIdA = {{BODY_A}};
-    jointDef.bodyIdB = {{BODY_B}};
-    jointDef.linearOffset = m({{OFFSET_X}}, {{OFFSET_Y}});
-    jointDef.angularOffset = rad({{ANGULAR_OFFSET}});
-    jointDef.maxForce = {{MAX_FORCE}};
-    jointDef.maxTorque = {{MAX_TORQUE}};
-    jointDef.correctionFactor = {{CORRECTION_FACTOR}};
-    jointDef.collideConnected = {{COLLIDE_CONNECTED}};
+    jointDef.base.bodyIdA = {{BODY_A}};
+    jointDef.base.bodyIdB = {{BODY_B}};
+    //! Frame A's x axis is the axis for the kinds that slide; frame B is turned
+    //! back by the reference angle, so the bodies rest that far apart.
+    jointDef.base.localFrameA = b2Transform{
+        b2Body_GetLocalPoint({{BODY_A}}, m({{ANCHOR_A_X}}, {{ANCHOR_A_Y}})),
+        b2MakeRot(rad({{FRAME_A_DEG}})) };
+    jointDef.base.localFrameB = b2Transform{
+        b2Body_GetLocalPoint({{BODY_B}}, m({{ANCHOR_B_X}}, {{ANCHOR_B_Y}})),
+        b2MakeRot(rad({{FRAME_B_DEG}})) };
+    jointDef.base.collideConnected = {{COLLIDE_CONNECTED}};
+    jointDef.linearVelocity = m({{LINEAR_VELOCITY_X}}, {{LINEAR_VELOCITY_Y}});
+    jointDef.angularVelocity = rad({{ANGULAR_VELOCITY}});
+    jointDef.maxVelocityForce = {{MAX_VELOCITY_FORCE}};
+    jointDef.maxVelocityTorque = {{MAX_VELOCITY_TORQUE}};
+    jointDef.linearHertz = {{LINEAR_HERTZ}};
+    jointDef.linearDampingRatio = {{LINEAR_DAMPING_RATIO}};
+    jointDef.maxSpringForce = {{MAX_SPRING_FORCE}};
+    jointDef.angularHertz = {{ANGULAR_HERTZ}};
+    jointDef.angularDampingRatio = {{ANGULAR_DAMPING_RATIO}};
+    jointDef.maxSpringTorque = {{MAX_SPRING_TORQUE}};
     {{ID}} = b2CreateMotorJoint(world, &jointDef);
     b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
 }

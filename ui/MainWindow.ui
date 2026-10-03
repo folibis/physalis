@@ -63,6 +63,7 @@
     </property>
     <addaction name="actionNewScene"/>
     <addaction name="actionLoadScene"/>
+    <addaction name="menuRecent"/>
     <addaction name="actionSaveScene"/>
     <addaction name="actionSaveSceneAs"/>
     <addaction name="separator"/>
@@ -71,6 +72,11 @@
     <addaction name="actionOptions"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
+   </widget>
+   <widget class="QMenu" name="menuRecent">
+    <property name="title">
+     <string>Open &amp;Recent</string>
+    </property>
    </widget>
    <widget class="QMenu" name="menuExport">
     <property name="title">
@@ -87,7 +93,14 @@
     <addaction name="actionCopy"/>
     <addaction name="actionPaste"/>
     <addaction name="separator"/>
+    <addaction name="menuAlign"/>
+    <addaction name="separator"/>
     <addaction name="actionSaveScreenshot"/>
+   </widget>
+   <widget class="QMenu" name="menuAlign">
+    <property name="title">
+     <string>&amp;Align</string>
+    </property>
    </widget>
    <widget class="QMenu" name="menuShapes">
     <property name="title">
@@ -141,6 +154,7 @@
    <addaction name="actionMoveScale"/>
    <addaction name="actionEditNodes"/>
    <addaction name="actionRotate"/>
+   <addaction name="actionAlign"/>
    <addaction name="separator"/>
    <addaction name="actionCreateBody"/>
    <addaction name="actionAddExplosion"/>
@@ -328,6 +342,14 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+V</string>
+   </property>
+  </action>
+  <action name="actionAlign">
+   <property name="text">
+    <string>Align</string>
+   </property>
+   <property name="toolTip">
+    <string>Line the selected shapes up on one edge</string>
    </property>
   </action>
   <action name="actionSaveScreenshot">

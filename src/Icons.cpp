@@ -33,4 +33,15 @@ QIcon warning() { return QIcon(QStringLiteral(":/icons/warning.svg")); }
 QIcon variable() { return QIcon(QStringLiteral(":/icons/variable.svg")); }
 QIcon log() { return QIcon(QStringLiteral(":/icons/log.svg")); }
 
+QIcon align() { return QIcon(QStringLiteral(":/icons/align.svg")); }
+QIcon alignLeft() { return QIcon(QStringLiteral(":/icons/align_left.svg")); }
+QIcon alignHorizontalCentre() { return QIcon(QStringLiteral(":/icons/align_hcentre.svg")); }
+QIcon alignRight() { return QIcon(QStringLiteral(":/icons/align_right.svg")); }
+QIcon alignTop() { return QIcon(QStringLiteral(":/icons/align_top.svg")); }
+QIcon alignVerticalCentre() { return QIcon(QStringLiteral(":/icons/align_vcentre.svg")); }
+QIcon alignBottom() { return QIcon(QStringLiteral(":/icons/align_bottom.svg")); }
+
+QIcon value() { return QIcon(QStringLiteral(":/icons/value.svg")); }
+QIcon random() { return QIcon(QStringLiteral(":/icons/random.svg")); }
+
 } // namespace Icons

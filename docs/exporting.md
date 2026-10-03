@@ -17,21 +17,25 @@ that were written or explains what went wrong.
 
 ## Available formats
 
-- **Box2D / Qt project** writes a C++ project: a small Qt application that
+- **box2d/Qt** writes a C++ project: a small Qt application that
   downloads Box2D, builds the scene and runs it in a window. Open the project
   in Qt Creator, or build it with CMake, like any other C++ project.
-- **Planck.js / web page** writes a single `index.html` file that runs the
-  scene in a web browser, using Planck.js, a JavaScript version of Box2D.
-  Open the file in a browser, or put it on any website.
-- **QML / qml-box2d project** writes a Qt Quick project. The scene becomes QML
-  objects of the [qml-box2d](https://github.com/qml-box2d/qml-box2d) plugin:
-  a `World`, a `Body` with its fixtures for each body, and the joints. The rules
-  become JavaScript that runs after every step. The project downloads
-  qml-box2d when it is first configured and links it in, so the finished
-  program needs nothing else. Open it in Qt Creator, or build it with CMake.
-  qml-box2d is based on Box2D 2.3. Anything it cannot do, such as rounded
-  corners in collisions or a hinge spring, is listed in the message when the
-  export finishes.
+- **box2d3wasm** writes an `index.html` that runs the scene in a web browser.
+  It uses the same Box2D the application itself runs, compiled to WebAssembly,
+  so the physics is the same physics rather than an approximation of it. Open
+  the file in a browser, or put it on any website.
+
+  Its **Engine** setting decides where the browser gets Box2D from:
+
+  - **Built into the page** carries it inside `index.html`. One file, and it
+    opens straight from disk with no web server and no network.
+  - **Beside the page** puts it in a `box2d3wasm.js` next to it. Two files that
+    have to travel together, and still no server: the engine is carried as text
+    rather than fetched.
+  - **From a CDN** carries neither and fetches it instead, which needs both a
+    server and a network. The **CDN address** beside it is the module to
+    import, and its version has to match the one this converter was built
+    against.
 
 ## Export settings
 
@@ -42,7 +46,7 @@ For example:
 - whether the result has buttons to start, pause and restart the simulation;
 - whether helpers such as joints and centres of mass are drawn;
 - how many simulation steps are calculated per second;
-- which version of Box2D, Planck.js or qml-box2d to use, and where to get it from.
+- for the C++ project, which version of Box2D to use and where to get it from.
 
 ## Writing your own exporter
 
@@ -213,5 +217,5 @@ the manifest and the script in it as `manifest.json` and `export.js`, and
 choose **File → Export to → Bodies as CSV**.
 
 For larger examples, look at the two exporters that come with Physalis, in the
-`box2d-qt-project` and `planck-js` folders. They read templates with
+`box2d-qt-project` and `box2d3wasm` folders. They read templates with
 `io.read`, turn the rules into code, and write several files.

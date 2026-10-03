@@ -121,8 +121,8 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
     // them at once and a large scene trips none.
     worldDef.maximumLinearSpeed =
         static_cast<float>(number(world, "maximumLinearSpeed", 400.0) * m_motionScale);
-    worldDef.maxContactPushSpeed =
-        static_cast<float>(number(world, "maxContactPushSpeed", 3.0) * m_motionScale);
+    worldDef.contactSpeed =
+        static_cast<float>(number(world, "contactSpeed", 3.0) * m_motionScale);
     worldDef.restitutionThreshold =
         static_cast<float>(number(world, "restitutionThreshold", 1.0) * m_motionScale);
     worldDef.hitEventThreshold =
@@ -138,12 +138,11 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
     // b2World_SetContactTuning takes all three at once and Box2D has no
     // getters for them, so what the world starts with is remembered here.
     m_contactTuning = { worldDef.contactHertz, worldDef.contactDampingRatio,
-                        worldDef.maxContactPushSpeed };
+                        worldDef.contactSpeed };
     // Neither of these is a b2WorldDef field: both are switched on the world
     // once it exists, below. Speculative contacts have no getter either, so
     // what the scene asked for is remembered here to answer with.
     const bool warmStarting = flag(world, "enableWarmStarting", true);
-    m_speculative = flag(world, "enableSpeculative", true);
     // Not part of b2WorldDef -- it is an argument to every b2World_Step, so it
     // is kept rather than handed over.
     m_subStepCount = qBound(1, static_cast<int>(number(world, "subStepCount", 4.0)), 64);
@@ -153,7 +152,6 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
     m_worldId = b2CreateWorld(&worldDef);
 
     b2World_EnableWarmStarting(m_worldId, warmStarting);
-    b2World_EnableSpeculative(m_worldId, m_speculative);
 
     // Without this the shapes' Pre-Solve Events flag reaches Box2D and then
     // has nowhere to go. Box2D calls it only for shapes that asked, and only
@@ -163,8 +161,9 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
     b2World_SetPreSolveCallback(
         m_worldId,
         [](b2ShapeId shapeA, b2ShapeId shapeB, b2Manifold *, void *context) {
-            return static_cast<Box2DEngine *>(context)->preSolve(shapeA, shapeB);
+            static_cast<Box2DEngine *>(context)->preSolve(shapeA, shapeB);
         },
+        nullptr,
         this);
 }
 
@@ -199,8 +198,23 @@ bool Box2DEngine::attachSmoothChain(b2BodyId bodyId, const Geometry &geometry,
 
     b2ChainDef chainDef = b2DefaultChainDef();
     chainDef.points = points.constData();
-    chainDef.count = points.size();
+    chainDef.pointCount = points.size();
     chainDef.isLoop = geometry.closed;
+    // An open chain has to say what lies beyond each end: 3.2 fills these with
+    // infinity so that a caller who forgets is refused rather than quietly given
+    // a chain with nonsense at its ends, and refusing means no shapes at all.
+    // Nothing lies beyond the ends of a drawn outline, so each one carries
+    // straight on -- which is what an end with no neighbour should behave like.
+    if (!chainDef.isLoop && points.size() >= 2) {
+        const b2Vec2 first = points.first();
+        const b2Vec2 second = points.at(1);
+        const b2Vec2 last = points.last();
+        const b2Vec2 penultimate = points.at(points.size() - 2);
+        chainDef.ghost1 = b2Vec2 { first.x + (first.x - second.x),
+                                   first.y + (first.y - second.y) };
+        chainDef.ghost2 = b2Vec2 { last.x + (last.x - penultimate.x),
+                                   last.y + (last.y - penultimate.y) };
+    }
     chainDef.filter = shapeDef.filter;
     chainDef.enableSensorEvents = shapeDef.enableSensorEvents;
     // Every other shape carries the index of its name here, and the segments a
@@ -357,7 +371,9 @@ BodyHandle Box2DEngine::addBody(const BodyDesc &desc)
     // only centimetres across, so everything "stops moving" while falling.
     bodyDef.sleepThreshold =
         static_cast<float>(number(body, "sleepThreshold", 0.05) * m_motionScale);
-    bodyDef.fixedRotation = flag(body, "fixedRotation", false);
+    bodyDef.motionLocks.linearX = flag(body, "lockLinearX", false);
+    bodyDef.motionLocks.linearY = flag(body, "lockLinearY", false);
+    bodyDef.motionLocks.angularZ = flag(body, "lockAngularZ", false);
     bodyDef.isBullet = flag(body, "isBullet", false);
     bodyDef.allowFastRotation = flag(body, "allowFastRotation", false);
     bodyDef.isEnabled = desc.isEnabled;
@@ -540,7 +556,7 @@ BodyState Box2DEngine::bodyState(BodyHandle handle) const
     }
     state.position = toScene(b2Body_GetPosition(bodyId));
     state.rotationDegrees = qRadiansToDegrees(b2Rot_GetAngle(b2Body_GetRotation(bodyId)));
-    state.centerOfMass = toScene(b2Body_GetWorldCenterOfMass(bodyId));
+    state.centerOfMass = toScene(b2Body_GetWorldCenter(bodyId));
     state.awake = b2Body_IsAwake(bodyId);
     return state;
 }

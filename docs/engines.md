@@ -15,7 +15,7 @@ Physalis comes with plugins for two well-known open-source engines:
 
 - **[Box2D](https://box2d.org)**, the default. It is fast and accurate, and is
   used in a great many games. Its joints are Revolute, Distance, Weld,
-  Prismatic, Wheel, Motor, Mouse and Filter.
+  Prismatic, Wheel, Motor and Filter.
 - **[Chipmunk2D](https://chipmunk-physics.net)**, a lightweight engine with a
   wider choice of constraints: Pivot, Pin, Slide, Groove, Damped Spring, Rotary
   Spring, Rotary Limit, Ratchet, Gear, Simple Motor and Mouse.
@@ -85,7 +85,7 @@ A plugin exports four plain C functions:
 - `physalisEngineApi()` returns `"PhysalisEngine-1"`;
 - `physalisEngineName()` returns the name shown to the user, such as `"Box2D"`;
 - `physalisEngineVersion()` returns the version of the engine inside, such as
-  `"3.1.1"`. It is optional, and appears in **Help → About**;
+  `"3.2.0"`. It is optional, and appears in **Help → About**;
 - `physalisCreateEngine()` creates and returns a new engine object.
 
 You do not write these by hand. The header `include/PluginApi.h` provides a

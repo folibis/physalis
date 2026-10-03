@@ -1,5 +1,7 @@
 #include "SimulationController.h"
 
+#include <QRandomGenerator>
+
 #include "CanvasScene.h"
 #include "ExplosionItem.h"
 #include "RayItem.h"
@@ -168,8 +170,56 @@ void SimulationController::addFieldBounds(IPhysicsEngine *engine) const
     }
 }
 
+quint32 SimulationController::nextRandom() const
+{
+    quint32 z = (m_randomState += 0x6D2B79F5u);
+    z = (z ^ (z >> 15)) * (z | 1u);
+    z ^= z + (z ^ (z >> 7)) * (z | 61u);
+    return z ^ (z >> 14);
+}
+
+qreal SimulationController::randomUnit() const
+{
+    return nextRandom() / 4294967296.0;
+}
+
+qreal SimulationController::randomBetween(qreal from, qreal to) const
+{
+    if (from > to)
+        std::swap(from, to);
+    return from + randomUnit() * (to - from);
+}
+
+QVariant SimulationController::rollNumber(const QVariant &given) const
+{
+    if (!RuleNumber::isRange(given))
+        return given;
+    const qreal low = qMin(RuleNumber::from(given), RuleNumber::to(given));
+    const qreal high = qMax(RuleNumber::from(given), RuleNumber::to(given));
+    const qreal step = RuleNumber::step(given);
+    if (step <= 0.0)
+        return randomBetween(low, high);
+    // Whole steps of it, both ends included: a range of 1 to 6 by 1 is a die,
+    // and each face comes up as often as the others.
+    const int faces = int((high - low) / step) + 1;
+    return low + step * double(int(randomUnit() * faces) % qMax(1, faces));
+}
+
+QVariantMap SimulationController::rollParams(const QVariantMap &given) const
+{
+    QVariantMap rolled;
+    for (auto it = given.constBegin(); it != given.constEnd(); ++it)
+        rolled.insert(it.key(), rollNumber(it.value()));
+    return rolled;
+}
+
 void SimulationController::start()
 {
+    // A seed of zero means the scene wants a different run every time; anything
+    // else is asking for this run to be repeatable, and gets exactly that.
+    const quint32 asked = m_scene ? m_scene->randomSeed() : 0;
+    m_randomState = asked ? asked : quint32(QRandomGenerator::global()->generate() | 1u);
+
     if (isActive())
         return;
     dropPreview();
@@ -185,8 +235,14 @@ void SimulationController::start()
     m_ruleState.clear();
     // Each run starts them where the scene says, whatever the last one left.
     m_variables.clear();
-    for (const SceneVariable &variable : m_scene->variables())
+    m_timers.clear();
+    for (const SceneVariable &variable : m_scene->variables()) {
         m_variables.insert(variable.name, variable.value());
+        // A timer stands at what the scene declares and does not move until a
+        // rule starts it.
+        if (variable.isTimer())
+            m_timers.insert(variable.name, { false, qreal(variable.value().toInt()) });
+    }
     // No step before the first one, so nothing has changed yet.
     m_watchedNow.clear();
     m_watchedBefore.clear();
@@ -348,7 +404,8 @@ QVariant SimulationController::initialValue(const QString &name, const QString &
         return variable ? variable->value() : QVariant();
     }
     if (name == Rule::world()) {
-        if (key == QLatin1String("time") || key == QLatin1String("frame"))
+        if (key == QLatin1String("time") || key == QLatin1String("frame")
+            || key == QLatin1String("chance"))
             return 0.0;
     }
     if (m_scene->rayNamed(name))
@@ -637,6 +694,11 @@ void SimulationController::stepFrame()
     m_owedTime = 0.0;
     m_clock.restart();
     emit stateChanged();
+    // The same as a step taken by the clock: the canvas has the new positions,
+    // and everything reading the run -- the property table's live rows, the
+    // log -- is told there is something new to read. Without this, stepping
+    // moved the shapes and left every number beside them as it was.
+    emit stepped();
     applyPendingRunAction();
 }
 
@@ -759,7 +821,52 @@ void SimulationController::stepWorld(qreal dt)
     syncRays();
     m_elapsedSeconds += dt;
     ++m_frameCount;
+    advanceTimers(dt);
     applyRules();
+}
+
+void SimulationController::advanceTimers(qreal dt)
+{
+    for (auto it = m_timers.begin(); it != m_timers.end(); ++it) {
+        if (!it->running)
+            continue;
+        it->milliseconds += dt * 1000.0;
+        // The whole number is what a rule reads; the fraction stays behind in
+        // the state so it is not lost step after step. Rounded rather than
+        // truncated: a sixtieth of a second is 16.6667 ms, and sixty of them
+        // come to 999.9999999999998, which truncated reads 999 ms for a second
+        // that has actually passed.
+        m_variables.insert(it.key(), qRound(it->milliseconds));
+    }
+}
+
+bool SimulationController::applyTimerOp(const SceneVariable &variable, Rule::Op op)
+{
+    if (!variable.isTimer() || !Rule::isTimerVerb(op))
+        return false;
+
+    TimerState &timer = m_timers[variable.name];
+    switch (op) {
+    case Rule::Op::TimerStart:
+        timer.running = true;
+        break;
+    case Rule::Op::TimerPause:
+        timer.running = false;
+        break;
+    case Rule::Op::TimerStop:
+        timer.running = false;
+        timer.milliseconds = variable.value().toInt();
+        break;
+    case Rule::Op::TimerReset:
+        // Back to the start without stopping: a timer measuring the gap
+        // between two events is wound back on each one and goes on counting.
+        timer.milliseconds = variable.value().toInt();
+        break;
+    default:
+        return false;
+    }
+    m_variables.insert(variable.name, qRound(timer.milliseconds));
+    return true;
 }
 
 void SimulationController::applyRules()
@@ -1031,6 +1138,10 @@ QVariant SimulationController::readValue(const QString &name, const QString &key
             return m_elapsedSeconds;
         if (key == QLatin1String("frame"))
             return double(m_frameCount);
+        // Chance is read, not kept: every time a rule asks, it is a new number.
+        // "Chance < 20" on an event is that event one time in five.
+        if (key == QLatin1String("chance"))
+            return randomUnit() * 100.0;
         // Everything else the world can be asked is the engine's to answer.
     }
     return readFrom(m_engine.get(), m_bodyByName, m_jointByName, name, key);
@@ -1153,8 +1264,10 @@ void SimulationController::applyAction(const RuleAction &action,
             if (!parent && shape->name() == action.targetName)
                 parent = shape->body();
         }
-        cloneBody(parent, QPointF(action.actionParams.value(Rule::cloneXParam()).toDouble(),
-                                  action.actionParams.value(Rule::cloneYParam()).toDouble()));
+        // Where the copy lands may be a range, like any other number a rule uses.
+        cloneBody(parent,
+                  QPointF(rollNumber(action.actionParams.value(Rule::cloneXParam())).toDouble(),
+                          rollNumber(action.actionParams.value(Rule::cloneYParam())).toDouble()));
         return;
     }
 
@@ -1183,8 +1296,10 @@ void SimulationController::applyAction(const RuleAction &action,
         // carried none at all, and performing a blast of radius zero looks
         // exactly like the rule not firing.
         QVariantMap params = defaultsFor(action.actionId);
-        for (auto it = action.actionParams.constBegin();
-             it != action.actionParams.constEnd(); ++it)
+        // Rolled here, once per firing: a parameter written as a range is a
+        // fresh number every time the action is performed.
+        const QVariantMap stored = rollParams(action.actionParams);
+        for (auto it = stored.constBegin(); it != stored.constEnd(); ++it)
             params.insert(it.key(), it.value());
 
         // A explosion is a bare coordinate -- it has no body to name.
@@ -1267,7 +1382,7 @@ void SimulationController::applyAction(const RuleAction &action,
         action.usesSource()
             ? QVariant(readValue(action.sourceObject, action.sourceProperty).toDouble()
                        + action.sourceOffset)
-            : action.value;
+            : rollNumber(action.value);
 
     const auto compute = [&action, applied](const QVariant &current) {
         switch (action.op) {
@@ -1288,10 +1403,18 @@ void SimulationController::applyAction(const RuleAction &action,
         const SceneVariable *declared = m_scene->variableNamed(action.propertyKey);
         if (!declared)
             return;
+        // Starting, pausing or winding back a timer is not writing a value, so
+        // it is answered before the value is worked out at all.
+        if (applyTimerOp(*declared, action.op))
+            return;
         const QVariant updated = compute(m_variables.value(action.propertyKey,
                                                            declared->value()));
-        m_variables.insert(action.propertyKey,
-                           SceneVariable::coerce(declared->type, updated));
+        const QVariant kept = SceneVariable::coerce(declared->type, updated);
+        m_variables.insert(action.propertyKey, kept);
+        // Setting a timer moves the count the fraction is measured from as
+        // well, or the next step would put the old one straight back.
+        if (declared->isTimer())
+            m_timers[declared->name].milliseconds = kept.toInt();
         return;
     }
 

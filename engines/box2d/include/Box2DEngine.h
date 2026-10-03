@@ -108,7 +108,7 @@ public:
     // solver has done anything about it. Never cancels a contact -- it only
     // raises the event, which is what the shape's Pre-Solve Events flag is
     // asking for.
-    bool preSolve(b2ShapeId shapeA, b2ShapeId shapeB);
+    void preSolve(b2ShapeId shapeA, b2ShapeId shapeB);
     // The handle a b2BodyId stands for, or kInvalidBody. Box2D carries it in
     // the body's user data, set when the body is added.
     BodyHandle handleOf(b2BodyId body) const;
@@ -200,7 +200,6 @@ private:
         float pushSpeed = 3.0f;
     };
     ContactTuning m_contactTuning;
-    bool m_speculative = true;
 
     // How long the last step was. b2Body_SetTargetTransform needs it to work
     // out the velocity that would arrive on time, and nothing else carries it

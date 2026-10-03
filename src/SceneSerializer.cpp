@@ -263,6 +263,7 @@ QJsonObject save(const CanvasScene *scene)
     document.insert("world", QJsonObject {
         {"pixelsPerMeter", scene->world().pixelsPerMeter},
         {"solidBounds", scene->fieldBoundsSolid()},
+        {"randomSeed", double(scene->randomSeed())},
         // Gravity, the solver's tuning, whether bodies may sleep: the engine
         // named every one of these, and they are written back as they came.
         {"physics", QJsonObject::fromVariantMap(scene->world().params)},
@@ -417,6 +418,7 @@ QJsonObject save(const CanvasScene *scene)
         o.insert("op", Rule::opName(action.op));
         if (Rule::usesValue(action.op))
             o.insert("value", QJsonValue::fromVariant(action.value));
+
         return o;
     };
 
@@ -546,6 +548,7 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
         }
     }
     scene->setFieldBoundsSolid(world.value("solidBounds").toBool(scene->fieldBoundsSolid()));
+    scene->setRandomSeed(quint32(world.value("randomSeed").toDouble(0.0)));
 
     QHash<int, ShapeItem *> byId;
     const QJsonArray shapes = document.value("shapes").toArray();
@@ -707,6 +710,7 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
         action.propertyKey = o.value("property").toString();
         action.op = Rule::opFromName(o.value("op").toString());
         action.value = o.value("value").toVariant();
+
         return action;
     };
 

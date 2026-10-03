@@ -12,7 +12,7 @@ A run is not only watched. The application applies forces and impulses to
 bodies, measures distances with rays, sets off explosions, and carries out
 rules that describe how the scene answers events, with no programming --
 *when the ball enters the pocket, return it to the start*. A finished scene
-can be exported as a standalone C++, QML or JavaScript program.
+can be exported as a standalone C++ program or a web page.
 
 <p align="center">
   <img src="docs/images/overview.png" alt="The Physalis window in Physics mode" width="640">
@@ -33,7 +33,8 @@ can be exported as a standalone C++, QML or JavaScript program.
   watch several things at once -- joined with *and* or *or* -- do several things
   when it fires, and fire on the step a value changes to or from something.
 - **Variables:** values the scene carries that belong to no object -- a score, a
-  count of lives, a flag -- which rules count with and the log can watch.
+  count of lives, a flag, a timer counting milliseconds -- which rules count
+  with and the log can watch.
 - **Running:** play, pause and step, playback from ×¼ to ×8, full-screen mode,
   a live log of chosen values and variables, and a slingshot for flinging bodies
   with the mouse.
@@ -41,9 +42,10 @@ can be exported as a standalone C++, QML or JavaScript program.
   It comes with plugins for [Box2D](https://box2d.org) and
   [Chipmunk2D](https://chipmunk-physics.net), and further engines can be added
   as plugins.
-- **Export:** turn a scene into a standalone Box2D/Qt C++ project, a Qt Quick
-  project built on qml-box2d, or a Planck.js web page. Export formats are
-  JavaScript plugins, so new ones can be added without rebuilding.
+- **Export:** turn a scene into a standalone Box2D/Qt C++ project, or a single
+  self-contained web page carrying the same engine compiled to WebAssembly.
+  Export formats are JavaScript plugins, so new ones can be added without
+  rebuilding.
 
 ## Building
 

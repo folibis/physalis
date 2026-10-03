@@ -876,3 +876,170 @@ TEST(Rules, RulesSurviveTheFile)
     EXPECT_EQ(int(old.rules().at(2).join), int(Rule::Join::All)); // nothing said, the default
 }
 
+
+// A timer variable: it stands at what the scene declares until a rule starts
+// it, counts in milliseconds from there, and answers the four verbs only it
+// has. The counting is checked at a pace whose step is not a whole number of
+// milliseconds, because that is where a timer that dropped the fraction each
+// step would drift -- 60 steps of 16.67 ms is a second, not 960 ms.
+TEST(Rules, TimerVariableCountsOnlyWhileStarted)
+{
+    Bench bench(QStringLiteral("Box2D"), 0.0);
+
+    SceneVariable clock;
+    clock.name = QStringLiteral("clock");
+    clock.type = SceneVariable::Type::Timer;
+    clock.initial = 0;
+    bench.scene.setVariables({ clock });
+
+    const auto reading = [&bench] {
+        return bench.sim.readValue(Rule::variables(), QStringLiteral("clock")).toInt();
+    };
+    const auto verb = [&bench](Rule::Op op) {
+        Rule rule;
+        rule.conditions[0].subjectName = Rule::world();
+        rule.conditions[0].eventId = Rule::runStartedEvent();
+        rule.actions[0].targetName = Rule::variables();
+        rule.actions[0].propertyKey = QStringLiteral("clock");
+        rule.actions[0].op = op;
+        return rule;
+    };
+
+    // Before a run it reads what it starts at, like any other variable.
+    EXPECT_EQ(bench.sim.initialValue(Rule::variables(), QStringLiteral("clock")).toInt(), 0);
+
+    // Left alone it never moves: a timer waits to be started.
+    bench.scene.setRules({});
+    bench.run(60);
+    EXPECT_EQ(reading(), 0) << "a timer counted without being started";
+    bench.sim.stop();
+
+    // A rule reading it clones the box once it passes 1500 ms, so the count is
+    // checked both as a number and by something acting on it.
+    Rule far;
+    far.conditions[0].subjectName = Rule::variables();
+    far.conditions[0].conditionKey = QStringLiteral("clock");
+    far.conditions[0].compare = Rule::Compare::Greater;
+    far.conditions[0].conditionValue = 1500;
+    far.actions[0].targetName = bench.box->name();
+    far.actions[0].actionId = Rule::cloneAction();
+    far.actions[0].actionParams.insert(Rule::cloneXParam(), 300.0);
+    far.actions[0].actionParams.insert(Rule::cloneYParam(), 0.0);
+
+    // Started at the top of the run, a second of steps is a second on the clock.
+    bench.scene.setRules({ verb(Rule::Op::TimerStart), far });
+    bench.run(60);
+    EXPECT_EQ(reading(), 1000) << "a timer lost the fraction of a millisecond in a step";
+    EXPECT_EQ(bench.scene.bodies().size(), 2) << "the rule fired before the timer passed 1500";
+
+    bench.run(31);
+    EXPECT_GT(reading(), 1500);
+    EXPECT_EQ(bench.scene.bodies().size(), 3) << "a rule reading a timer did not fire";
+    bench.sim.stop();
+
+    // And it goes back to what the scene declares when the run stops, like
+    // every other variable.
+    EXPECT_EQ(bench.sim.initialValue(Rule::variables(), QStringLiteral("clock")).toInt(), 0);
+
+    // The type and the verb both survive the file: a timer read back as a
+    // double would stop counting, and a verb read back as Set would write a
+    // null over the count instead of starting it.
+    const QJsonObject document = SceneSerializer::save(&bench.scene);
+    CanvasScene reopened;
+    QString error;
+    ASSERT_TRUE(SceneSerializer::load(&reopened, document, &error)) << error.toStdString();
+    ASSERT_EQ(reopened.variables().size(), 1);
+    EXPECT_EQ(reopened.variables().first().type, SceneVariable::Type::Timer)
+        << "a timer came back from the file as some other type";
+    ASSERT_FALSE(reopened.rules().isEmpty());
+    EXPECT_EQ(reopened.rules().first().actions[0].op, Rule::Op::TimerStart)
+        << "a timer verb came back from the file as something else";
+    EXPECT_EQ(reopened.rules().first().problem(), Rule::Problem::None)
+        << "a rule starting a timer was read back as unfinished";
+}
+
+// The three verbs that are not Start, each checked against what it leaves
+// behind: Pause keeps the count, Stop puts it back, Reset puts it back and goes
+// on counting.
+TEST(Rules, TimerVerbsPauseStopAndReset)
+{
+    Bench bench(QStringLiteral("Box2D"), 0.0);
+
+    SceneVariable clock;
+    clock.name = QStringLiteral("clock");
+    clock.type = SceneVariable::Type::Timer;
+    clock.initial = 200; // not zero, so "back to the start" is visibly not "to 0"
+    bench.scene.setVariables({ clock });
+
+    const auto reading = [&bench] {
+        return bench.sim.readValue(Rule::variables(), QStringLiteral("clock")).toInt();
+    };
+    // Start on the first frame, then the verb under test once the frame count
+    // reaches `at` -- which is how a timer is driven by anything else.
+    const auto scenario = [&bench](Rule::Op op, int at) {
+        Rule start;
+        start.conditions[0].subjectName = Rule::world();
+        start.conditions[0].eventId = Rule::runStartedEvent();
+        start.actions[0].targetName = Rule::variables();
+        start.actions[0].propertyKey = QStringLiteral("clock");
+        start.actions[0].op = Rule::Op::TimerStart;
+
+        Rule then;
+        then.conditions[0].subjectName = Rule::world();
+        then.conditions[0].conditionKey = QStringLiteral("frame");
+        then.conditions[0].compare = Rule::Compare::GreaterEqual;
+        then.conditions[0].conditionValue = at;
+        then.actions[0].targetName = Rule::variables();
+        then.actions[0].propertyKey = QStringLiteral("clock");
+        then.actions[0].op = op;
+
+        bench.scene.setRules({ start, then });
+    };
+
+    // Paused at frame 30, it holds what it had reached and no more.
+    scenario(Rule::Op::TimerPause, 30);
+    bench.run(30);
+    const int held = reading();
+    EXPECT_GT(held, 200) << "the timer never started";
+    bench.run(30);
+    EXPECT_EQ(reading(), held) << "a paused timer went on counting";
+    bench.sim.stop();
+
+    // Stopped, it is back at what the scene declares and stays there.
+    scenario(Rule::Op::TimerStop, 30);
+    bench.run(30);
+    EXPECT_EQ(reading(), 200) << "a stopped timer did not go back to its starting value";
+    bench.run(30);
+    EXPECT_EQ(reading(), 200) << "a stopped timer went on counting";
+    bench.sim.stop();
+
+    // Reset winds it back without stopping it, so it is climbing again the very
+    // next step. The rule fires once, as the frame count reaches 30 -- a rule
+    // goes off as its conditions become true, not on every step they stay true
+    // -- so after sixty steps the clock carries the thirty since the reset and
+    // not the thirty before it.
+    scenario(Rule::Op::TimerReset, 30);
+    bench.run(60);
+    EXPECT_GT(reading(), 600) << "a reset timer stopped counting";
+    EXPECT_LT(reading(), 800) << "a reset timer kept the count it had before";
+    bench.sim.stop();
+
+    // Set to jumps it, and the count goes on from where it was put rather than
+    // from where the step before had left it.
+    Rule start;
+    start.conditions[0].subjectName = Rule::world();
+    start.conditions[0].eventId = Rule::runStartedEvent();
+    start.actions.resize(2);
+    start.actions[0].targetName = Rule::variables();
+    start.actions[0].propertyKey = QStringLiteral("clock");
+    start.actions[0].op = Rule::Op::TimerStart;
+    start.actions[1].targetName = Rule::variables();
+    start.actions[1].propertyKey = QStringLiteral("clock");
+    start.actions[1].op = Rule::Op::Set;
+    start.actions[1].value = 5000;
+    bench.scene.setRules({ start });
+    bench.run(30);
+    EXPECT_GT(reading(), 5000) << "a timer set to a value did not count on from it";
+    EXPECT_LT(reading(), 5600);
+    bench.sim.stop();
+}

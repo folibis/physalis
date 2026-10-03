@@ -243,7 +243,11 @@ PropertyList Box2DEngine::bodyProperties() const
                true, true, 0.0, 1000.0, 3, 0.01,
                QObject::tr("Move slower than this for long enough and the body stops"
                            " being simulated until something disturbs it.")),
-        flag(QStringLiteral("fixedRotation"), QObject::tr("Fixed Rotation"), true, true,
+        flag(QStringLiteral("lockLinearX"), QObject::tr("Lock X"), true, true,
+             QObject::tr("Stops it moving sideways, whatever hits it.")),
+        flag(QStringLiteral("lockLinearY"), QObject::tr("Lock Y"), true, true,
+             QObject::tr("Stops it moving up or down, whatever hits it.")),
+        flag(QStringLiteral("lockAngularZ"), QObject::tr("Lock Rotation"), true, true,
              QObject::tr("Stops it turning, whatever hits it. What keeps a character"
                          " upright, or a platform level.")),
         flag(QStringLiteral("isBullet"), QObject::tr("Bullet"), true, true,
@@ -377,7 +381,9 @@ PropertyList Box2DEngine::bodyProperties() const
         {QStringLiteral("linearDamping"), 0.0},
         {QStringLiteral("angularDamping"), 0.0},
         {QStringLiteral("gravityScale"), 1.0},
-        {QStringLiteral("fixedRotation"), false},
+        {QStringLiteral("lockLinearX"), false},
+        {QStringLiteral("lockLinearY"), false},
+        {QStringLiteral("lockAngularZ"), false},
         {QStringLiteral("isBullet"), false},
         {QStringLiteral("allowFastRotation"), false},
         {QStringLiteral("enableSleep"), true},
@@ -771,7 +777,7 @@ PropertyList Box2DEngine::worldProperties() const
                true, true, 0.0, 100.0, 2, 0.5,
                QObject::tr("How quickly a contact stops springing back. Low values leave"
                            " stacks jittering.")),
-        number(QStringLiteral("maxContactPushSpeed"), QObject::tr("Max Push Speed (m/s)"),
+        number(QStringLiteral("contactSpeed"), QObject::tr("Contact Speed (m/s)"),
                true, true, 0.0, 1000.0, 2, 0.1,
                QObject::tr("How fast overlapping shapes are pushed apart. Too high and"
                            " anything caught inside another is flung out.")),
@@ -785,9 +791,6 @@ PropertyList Box2DEngine::worldProperties() const
              QObject::tr("Lets the solver start from last step's answer. Off is much"
                          " worse at stacking, and is mostly of interest for seeing"
                          " what it does.")),
-        flag(QStringLiteral("enableSpeculative"), QObject::tr("Speculative Contacts"), true, true,
-             QObject::tr("Contacts are reported slightly before shapes visibly touch."
-                         " Off, they touch first and are resolved after.")),
 
         // b2World_GetAwakeBodyCount and b2World_GetCounters: what the world
         // currently costs, as numbers a rule can watch.
@@ -856,13 +859,12 @@ PropertyList Box2DEngine::worldProperties() const
         {QStringLiteral("maximumLinearSpeed"), 400.0},
         {QStringLiteral("contactHertz"), 30.0},
         {QStringLiteral("contactDampingRatio"), 10.0},
-        {QStringLiteral("maxContactPushSpeed"), 3.0},
+        {QStringLiteral("contactSpeed"), 3.0},
         {QStringLiteral("subStepCount"), 4},
         {QStringLiteral("contactMargin"), 2.0},
         {QStringLiteral("enableSleep"), true},
         {QStringLiteral("enableContinuous"), true},
         {QStringLiteral("enableWarmStarting"), true},
-        {QStringLiteral("enableSpeculative"), true},
     }, QObject::tr("Solver"));
     return properties;
 }
@@ -945,80 +947,6 @@ PropertyList Box2DEngine::jointReadables(const QString &typeId) const
         };
         appendJointSwitches(&result, true, true, true);
     }
-    if (typeId == QLatin1String("mouse")) {
-        // b2MouseJoint_GetTarget, so a rule can follow where the joint is
-        // currently leading as well as change it.
-        result = {
-            number(QStringLiteral("targetX"), QObject::tr("Target X"), true, true,
-                   -1e7, 1e7, 1, 10.0,
-                   QObject::tr("The point the joint is dragging the body towards. Move"
-                               " it and the body follows, softly.")),
-            number(QStringLiteral("targetY"), QObject::tr("Target Y"), true, true,
-                   -1e7, 1e7, 1, 10.0,
-                   QObject::tr("The point the joint is dragging the body towards. Move"
-                               " it and the body follows, softly.")),
-        };
-    }
-
-    // Every joint reports the load it is carrying and how far it is being
-    // pulled out of shape, whatever kind it is -- so these are appended to
-    // whatever that type measures of its own.
-    result.push_back(number(QStringLiteral("constraintForce"),
-                            QObject::tr("Constraint Force (N)"), true, false,
-                            0.0, 1e12, 2, 1.0,
-                            QObject::tr("The load the joint is carrying. Watch it to"
-                                        " break something under strain.")));
-    result.push_back(number(QStringLiteral("constraintTorque"),
-                            QObject::tr("Constraint Torque (N·m)"), true, false,
-                            -1e12, 1e12, 2, 1.0,
-                            QObject::tr("The twisting load on the joint, as the force"
-                                        " above is the pulling one.")));
-    // b2Joint_GetLinearSeparation / GetAngularSeparation: the error the solver
-    // has not managed to remove. A joint being torn apart shows here first.
-    result.push_back(number(QStringLiteral("linearSeparation"),
-                            QObject::tr("Linear Separation"), true, false,
-                            0.0, 1e7, 1, 1.0,
-                            QObject::tr("How far the joint is from where it should be"
-                                        " holding, in scene units. Climbs as the load"
-                                        " on it grows.")));
-    result.push_back(number(QStringLiteral("angularSeparation"),
-                            QObject::tr("Angular Separation (deg)"), true, false,
-                            -1e5, 1e5, 2, 1.0,
-                            QObject::tr("The angle the solver has not managed to remove."
-                                        " A joint being twisted apart shows here.")));
-    // b2Joint_GetCollideConnected / SetCollideConnected. Belongs to the joint
-    // rather than to any one kind of it, and can be changed while running.
-    result.push_back(flag(QStringLiteral("collideConnected"),
-                          QObject::tr("Bodies Collide"), true, true,
-                          QObject::tr("While off, the two bodies pass through each other."
-                                      " If one of them is scenery, the other falls"
-                                      " straight through it.")));
-
-    // b2Joint_SetLocalAnchorA/B and SetReferenceAngle. Where a joint holds is
-    // as changeable as anything else about it -- a hinge can slide along the
-    // thing it is hinged to. Shown in scene coordinates, as the anchors are.
-    const QString moved =
-        QObject::tr("Moving it mid-run moves where the joint holds. The handle"
-                    " drawn on the canvas belongs to the scene and stays where"
-                    " it was put.");
-    result.push_back(number(QStringLiteral("anchorAX"), QObject::tr("Anchor A X"),
-                            true, true, -1e7, 1e7, 1, 10.0, moved));
-    result.push_back(number(QStringLiteral("anchorAY"), QObject::tr("Anchor A Y"),
-                            true, true, -1e7, 1e7, 1, 10.0, moved));
-    result.push_back(number(QStringLiteral("anchorBX"), QObject::tr("Anchor B X"),
-                            true, true, -1e7, 1e7, 1, 10.0, moved));
-    result.push_back(number(QStringLiteral("anchorBY"), QObject::tr("Anchor B Y"),
-                            true, true, -1e7, 1e7, 1, 10.0, moved));
-    result.push_back(number(QStringLiteral("referenceAngleNow"),
-                            QObject::tr("Reference Angle Now (deg)"), true, true,
-                            -360.0, 360.0, 2, 1.0,
-                            QObject::tr("The body-B-minus-body-A angle the joint counts"
-                                        " as zero. Re-zeroing it while running moves"
-                                        " the limit and the spring with it.")));
-
-    // b2Joint_SetLocalAxisA, for the two types that travel along one. As an
-    // angle rather than a pair of components, which is how the editor's own
-    // axis handle is expressed.
     if (typeId == QLatin1String("prismatic") || typeId == QLatin1String("wheel")) {
         result.push_back(number(QStringLiteral("axisAngle"), QObject::tr("Axis Angle (deg)"),
                                 true, true, -360.0, 360.0, 2, 1.0,

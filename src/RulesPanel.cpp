@@ -20,6 +20,7 @@
 #include <QFontMetrics>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QKeyEvent>
@@ -192,6 +193,41 @@ QIcon arrowIcon(bool up)
 
 } // namespace
 
+namespace {
+
+// Two triangles and the line they fold onto: pointing at the line for collapse,
+// away from it for expand. Painted rather than typed for the same reason the
+// card's own marker is -- the glyphs differ wildly between fonts and some render
+// as a box.
+QIcon foldIcon(bool expand, const QColor &colour)
+{
+    const int side = 16;
+    QPixmap pm(side, side);
+    pm.fill(Qt::transparent);
+
+    QPainter painter(&pm);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(colour);
+    painter.drawRect(QRectF(2.0, 7.5, 12.0, 1.0));
+
+    QPolygonF top;
+    QPolygonF bottom;
+    if (expand) {
+        top << QPointF(8, 1) << QPointF(12, 5.5) << QPointF(4, 5.5);
+        bottom << QPointF(4, 10.5) << QPointF(12, 10.5) << QPointF(8, 15);
+    } else {
+        top << QPointF(4, 1) << QPointF(12, 1) << QPointF(8, 5.5);
+        bottom << QPointF(8, 10.5) << QPointF(12, 15) << QPointF(4, 15);
+    }
+    painter.drawPolygon(top);
+    painter.drawPolygon(bottom);
+    painter.end();
+    return QIcon(pm);
+}
+
+} // namespace
+
 void RulesPanel::buildUi()
 {
     auto *layout = new QVBoxLayout(this);
@@ -218,7 +254,23 @@ void RulesPanel::buildUi()
     add->setAutoRaise(true);
     connect(add, &QToolButton::clicked, this, &RulesPanel::addRule);
 
+    // Beside the title rather than out by the add button: they act on the cards
+    // below, which is what the title names.
+    m_collapseAll = new QToolButton(headerBar);
+    m_collapseAll->setIcon(foldIcon(false, accent));
+    m_collapseAll->setToolTip(tr("Collapse all rules"));
+    m_collapseAll->setAutoRaise(true);
+    connect(m_collapseAll, &QToolButton::clicked, this, [this] { setAllCollapsed(true); });
+
+    m_expandAll = new QToolButton(headerBar);
+    m_expandAll->setIcon(foldIcon(true, accent));
+    m_expandAll->setToolTip(tr("Expand all rules"));
+    m_expandAll->setAutoRaise(true);
+    connect(m_expandAll, &QToolButton::clicked, this, [this] { setAllCollapsed(false); });
+
     header->addWidget(title);
+    header->addWidget(m_collapseAll);
+    header->addWidget(m_expandAll);
     header->addStretch();
     header->addWidget(add);
     layout->addWidget(headerBar);
@@ -285,6 +337,7 @@ void RulesPanel::rebuild()
         // -- and the card has to show what it ended up as.
         refreshCardLook(i);
     }
+    syncFoldButtons();
 
     emit incompleteCountChanged(incompleteCount());
 }
@@ -430,11 +483,15 @@ QWidget *RulesPanel::buildCard(int index)
     outer->addWidget(headerBand);
 
     // Now the caption exists, so the pale look can reach it too.
-    const Rule::Problem problem = rule.problem();
+    const Rule::Problem problem = rule.problem(knownProperty());
     setCardLook(card, heading, rule.enabled, problem == Rule::Problem::None);
     if (problem != Rule::Problem::None) {
         warning->setVisible(true);
         warning->setToolTip(problemText(problem));
+        // On the card as well: a marked card is what catches the eye, and the
+        // icon beside the name is a small thing to have to find. A child with
+        // no tooltip of its own shows this one, so anywhere on the card does.
+        card->setToolTip(problemText(problem));
     }
     connect(enabled, &QCheckBox::toggled, this, [this, index](bool on) {
         if (m_building)
@@ -479,8 +536,10 @@ QWidget *RulesPanel::buildCard(int index)
     for (int slot = 0; slot < rule.actions.size(); ++slot)
         stack->addWidget(buildActionBlock(index, slot));
 
-    connect(collapse, &QToolButton::clicked, this,
-            [this, index] { setCollapsed(index, !m_collapsed.contains(index)); });
+    connect(collapse, &QToolButton::clicked, this, [this, index] {
+        setCollapsed(index, !m_collapsed.contains(index));
+        syncFoldButtons();
+    });
     return card;
 }
 
@@ -789,15 +848,11 @@ QWidget *RulesPanel::buildActionBlock(int index, int slot)
     // choice between Set, Toggle, Negate and Add is simply gone from the card.
     // It keeps the width its shortest entry needs; the number beside it is the
     // part that gives way.
-    act.op->addItem(tr("Set to"), static_cast<int>(Rule::Op::Set));
-    act.op->addItem(tr("Toggle"), static_cast<int>(Rule::Op::Toggle));
-    act.op->addItem(tr("Negate"), static_cast<int>(Rule::Op::Negate));
-    // "Add" is what this was called; it counts the value on from where it
-    // stands, which is what increment means, so the name says so now.
-    act.op->addItem(tr("Increment by"), static_cast<int>(Rule::Op::Add));
-    act.op->addItem(tr("Decrement by"), static_cast<int>(Rule::Op::Subtract));
-    act.op->setCurrentIndex(act.op->findData(static_cast<int>(action.op)));
     act.op->setToolTip(tr("Negate flips the sign, which is how a motor reverses at a limit."));
+    // Filled before anything is connected to it: this row is not in m_rows
+    // until the end of the function, and a currentIndexChanged delivered from
+    // addItem() would look it up there and run off the end.
+    fillOpBox(act.op, propertyIsTimer(action.targetName, action.propertyKey), action.op);
     connect(act.op, qOverload<int>(&QComboBox::currentIndexChanged), this,
             [this, index, slot](int) {
         if (m_building)
@@ -815,17 +870,20 @@ QWidget *RulesPanel::buildActionBlock(int index, int slot)
     act.valueMode = new QComboBox(block);
     act.valueMode->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     act.valueMode->setMinimumContentsLength(4);
-    act.valueMode->addItem(tr("Value"), false);
-    act.valueMode->addItem(tr("Property"), true);
-    act.valueMode->setToolTip(tr("A number you type, or one taken from another "
-                                 "object while the rule runs."));
+    act.valueMode->addItem(Icons::value(), tr("Value"), int(ValueMode::Typed));
+    act.valueMode->addItem(Icons::random(), tr("Random"), int(ValueMode::Rolled));
+    act.valueMode->addItem(tr("Property"), int(ValueMode::Read));
+    act.valueMode->setToolTip(tr("A number you type, a fresh one between two numbers every"
+                                 " time the rule fires, or one taken from another object"
+                                 " while the rule runs."));
     connect(act.valueMode, qOverload<int>(&QComboBox::currentIndexChanged), this,
             [this, index, slot](int) {
         if (m_building)
             return;
         Rule updated = m_scene->rules().at(index);
         RuleAction &a = updated.actions[slot];
-        if (m_rows[index].actions[slot].valueMode->currentData().toBool()) {
+        const int chosen = m_rows[index].actions[slot].valueMode->currentData().toInt();
+        if (chosen == int(ValueMode::Read)) {
             // Property with nothing picked would leave the rule half-set and
             // silently skipped, so the first candidate is filled in at once.
             if (a.sourceObject.isEmpty()) {
@@ -849,6 +907,14 @@ QWidget *RulesPanel::buildActionBlock(int index, int slot)
         } else {
             a.sourceObject.clear();
             a.sourceProperty.clear();
+            // Between a typed number and a rolled one, whatever was showing is
+            // kept: a range starts where the number stood, and going back takes
+            // the near end of the range.
+            const qreal had = RuleNumber::shown(a.value);
+            if (chosen == int(ValueMode::Rolled) && !RuleNumber::isRange(a.value))
+                a.value = RuleNumber::range(had, had, 0.0);
+            else if (chosen == int(ValueMode::Typed) && RuleNumber::isRange(a.value))
+                a.value = had;
         }
         commit(index, updated);
         scheduleValueEditorRefresh(index, slot);
@@ -979,8 +1045,14 @@ void RulesPanel::refreshEvents(int index, int slot)
                                                : condition.conditionKey;
     row.event->selectData(wanted);
 
+    // Only ever to fill a blank, the same as the action row's property box and
+    // for the same reason: a condition that already names something keeps it
+    // even when the box cannot show it. The list comes from the engine, so a
+    // scene drawn for an older plugin has keys that are not in it -- and taking
+    // whatever sat on top instead rewrote the rule and saved it that way, which
+    // is exactly the case the card is meant to be marked for.
     const QString shown = row.event->currentData().toString();
-    if (shown != wanted && !shown.isEmpty()) {
+    if (shown != wanted && !shown.isEmpty() && wanted.isEmpty()) {
         applyWatchChoice(index, slot, shown);
         condition = m_scene->rules().at(index).conditions.at(slot);
     }
@@ -1099,6 +1171,7 @@ QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
         addEvents(eventsFor(name));
         choices.append({QStringLiteral("time"), tr("Elapsed Time (s)")});
         choices.append({QStringLiteral("frame"), tr("Frame")});
+        choices.append({QStringLiteral("chance"), tr("Chance (0-100)")});
         addReadable(engine->worldProperties());
         return choices;
     }
@@ -1416,6 +1489,123 @@ QVariantMap RulesPanel::defaultActionParams(const QString &id) const
     return params;
 }
 
+QWidget *RulesPanel::buildNumberEditor(QWidget *parent, const physics::JointParam &shape,
+                                      const QVariant &current,
+                                      const std::function<void(const QVariant &)> &store,
+                                      bool withKind)
+{
+    // A line each, because the panel is docked and narrow: three numbers and
+    // their words across one line left every box too small to read, let alone
+    // type into. The word sits in a narrow first column and the box takes
+    // whatever width is left.
+    auto *holder = new QWidget(parent);
+    auto *grid = new QGridLayout(holder);
+    grid->setContentsMargins(0, 0, 0, 0);
+    grid->setHorizontalSpacing(4);
+    grid->setVerticalSpacing(2);
+    grid->setColumnStretch(0, 0);
+    grid->setColumnStretch(1, 1);
+
+    const auto box = [&](qreal value) {
+        auto *spin = new QDoubleSpinBox(holder);
+        spin->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        spin->setMinimumWidth(80);
+        spin->setRange(shape.minValue, shape.maxValue);
+        spin->setDecimals(shape.decimals);
+        spin->setSingleStep(shape.step);
+        spin->setToolTip(shape.tooltip);
+        spin->setValue(value);
+        return spin;
+    };
+    const auto caption = [&](const QString &text) {
+        auto *label = new QLabel(text, holder);
+        label->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
+        label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        return label;
+    };
+
+    const bool ranged = RuleNumber::isRange(current);
+    const qreal shown = RuleNumber::shown(current);
+
+    auto *kind = new QComboBox(holder);
+    kind->addItem(Icons::value(), tr("value"));
+    kind->addItem(Icons::random(), tr("random"));
+    kind->setCurrentIndex(ranged ? 1 : 0);
+    kind->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    kind->setToolTip(tr("A number you type, or a fresh one between two numbers every"
+                        " time the rule fires."));
+
+    auto *typed = box(shown);
+    auto *from = box(shown);
+    auto *to = box(ranged ? RuleNumber::to(current) : shown);
+    auto *step = box(ranged ? RuleNumber::step(current) : 0.0);
+    step->setRange(0.0, qMax(1.0, shape.maxValue - shape.minValue));
+    step->setSpecialValueText(tr("any"));
+    step->setToolTip(tr("What the rolled number is a whole number of. Left at \"any\" it can"
+                        " be anything between the two ends; at 1 it is whole numbers, at 10"
+                        " it is tens."));
+
+    auto *fromLabel = caption(tr("from"));
+    auto *toLabel = caption(tr("to"));
+    auto *stepLabel = caption(tr("step"));
+
+    kind->setVisible(withKind);
+    grid->addWidget(kind, 0, 0);
+    grid->addWidget(typed, 0, 1);
+    if (!withKind) {
+        // The row's own picker says which this is, so the near column is just
+        // a word like the ones under it.
+        grid->addWidget(caption(tr("value")), 0, 0);
+    }
+    grid->addWidget(fromLabel, 1, 0);
+    grid->addWidget(from, 1, 1);
+    grid->addWidget(toLabel, 2, 0);
+    grid->addWidget(to, 2, 1);
+    grid->addWidget(stepLabel, 3, 0);
+    grid->addWidget(step, 3, 1);
+
+    // Hidden rather than rebuilt: the box that changed is still delivering its
+    // own signal, and deleting it from inside that is what takes the window
+    // down. The typed box and the near end of the range show the same number,
+    // so switching between them keeps whatever was there.
+    const auto show = [typed, fromLabel, from, toLabel, to, stepLabel, step](bool random) {
+        typed->setVisible(!random);
+        for (QWidget *w : { static_cast<QWidget *>(fromLabel), static_cast<QWidget *>(from),
+                            static_cast<QWidget *>(toLabel), static_cast<QWidget *>(to),
+                            static_cast<QWidget *>(stepLabel), static_cast<QWidget *>(step) }) {
+            w->setVisible(random);
+        }
+    };
+    show(ranged);
+
+    const auto write = [this, store, kind, typed, from, to, step] {
+        if (m_building)
+            return;
+        store(kind->currentIndex() == 1
+                  ? RuleNumber::range(from->value(), to->value(), step->value())
+                  : QVariant(typed->value()));
+    };
+
+    connect(typed, qOverload<double>(&QDoubleSpinBox::valueChanged), this, write);
+    connect(from, qOverload<double>(&QDoubleSpinBox::valueChanged), this, write);
+    connect(to, qOverload<double>(&QDoubleSpinBox::valueChanged), this, write);
+    connect(step, qOverload<double>(&QDoubleSpinBox::valueChanged), this, write);
+    connect(kind, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, show, write, typed, from](int at) {
+                const bool random = at == 1;
+                const bool was = m_building;
+                m_building = true;
+                if (random)
+                    from->setValue(typed->value());
+                else
+                    typed->setValue(from->value());
+                m_building = was;
+                show(random);
+                write();
+            });
+    return holder;
+}
+
 QWidget *RulesPanel::buildActionParamEditor(int index, int slot, const RuleAction &ruleAction,
                                             QWidget *parent)
 {
@@ -1470,23 +1660,13 @@ QWidget *RulesPanel::buildActionParamEditor(int index, int slot, const RuleActio
             continue;
         }
 
-        auto *spin = new QDoubleSpinBox(holder);
-        spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-        spin->setMinimumWidth(70);
-        spin->setRange(param.minValue, param.maxValue);
-        spin->setDecimals(param.decimals);
-        spin->setSingleStep(param.step);
-        spin->setToolTip(param.tooltip);
-        spin->setValue(current.toDouble());
-        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
-                [this, index, slot, key = param.key](double v) {
-                    if (m_building)
-                        return;
-                    Rule updated = m_scene->rules().at(index);
-                    updated.actions[slot].actionParams.insert(key, v);
-                    commit(index, updated);
-                });
-        form->addRow(param.label, spin);
+        form->addRow(param.label,
+                     buildNumberEditor(holder, param, current,
+                                       [this, index, slot, key = param.key](const QVariant &v) {
+                                           Rule updated = m_scene->rules().at(index);
+                                           updated.actions[slot].actionParams.insert(key, v);
+                                           commit(index, updated);
+                                       }));
     }
     return holder;
 }
@@ -1710,6 +1890,20 @@ void RulesPanel::refreshValueEditor(int index, int slot)
     const bool wasBuilding = m_building;
     m_building = true;
 
+    // The list of things that can be done to a property belongs to that
+    // property, so it is rebuilt here alongside the value editor -- queued,
+    // because the property box that changed is still delivering its signal.
+    // Where the op the rule held is not in the new list the box falls back, and
+    // the rule has to be told so or it would keep an op the card cannot show.
+    // Written straight into the scene: it follows from the property the user
+    // just chose and is not a second edit of its own.
+    const Rule::Op settled =
+        fillOpBox(row.op, propertyIsTimer(action.targetName, action.propertyKey), action.op);
+    if (settled != action.op && index < m_scene->rules().size()
+        && slot < m_scene->rules().at(index).actions.size()) {
+        m_scene->rules()[index].actions[slot].op = settled;
+    }
+
     // A control showing a number nobody typed is a lie: the rule carries no
     // value at all. One without a value is dropped as half-filled -- never
     // written to the file, never run -- so "set the motor to 0" could not be
@@ -1739,8 +1933,10 @@ void RulesPanel::refreshValueEditor(int index, int slot)
         // action's own parameters are edited here. Without this they stayed at
         // whatever they were seeded with and the rule could not be tuned.
         row.value = buildActionParamEditor(index, slot, action, row.valueHolder);
-    } else if (!Rule::usesValue(action.op)) {
-        auto *label = new QLabel(tr("(current value)"), row.valueHolder);
+    } else if (!Rule::usesValue(settled)) {
+        auto *label = new QLabel(Rule::isTimerVerb(settled) ? tr("(the timer)")
+                                                            : tr("(current value)"),
+                                 row.valueHolder);
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
         label->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
         row.value = label;
@@ -1773,20 +1969,19 @@ void RulesPanel::refreshValueEditor(int index, int slot)
         });
         row.value = combo;
     } else {
-        auto *spin = new QDoubleSpinBox(row.valueHolder);
-        spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-        spin->setMinimumWidth(48);
-        // Range, precision and step as the engine declared them.
-        if (const physics::JointParam *p = describe(action.targetName, action.propertyKey)) {
-            spin->setRange(p->minValue, p->maxValue);
-            spin->setDecimals(p->decimals);
-            spin->setSingleStep(p->step);
-            spin->setToolTip(p->tooltip);
-        } else {
-            spin->setRange(-1e6, 1e6);
-            spin->setDecimals(1);
-            spin->setSingleStep(10.0);
-        }
+        // A number, or a range to roll between. The two boxes and the die that
+        // switches between them sit in one holder, so the row keeps a single
+        // widget to delete and rebuild as everything else here does.
+        // The shape of the box -- its range, precision and step -- is the
+        // engine's to declare; a joint's own parameters override it where the
+        // target is a joint.
+        physics::JointParam shape;
+        shape.minValue = -1e6;
+        shape.maxValue = 1e6;
+        shape.decimals = 1;
+        shape.step = 10.0;
+        if (const physics::JointParam *p = describe(action.targetName, action.propertyKey))
+            shape = *p;
         auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName());
         if (engine) {
             for (Joint *joint : m_scene->joints()) {
@@ -1796,28 +1991,27 @@ void RulesPanel::refreshValueEditor(int index, int slot)
                     if (type.id != joint->typeId())
                         continue;
                     for (const physics::JointParam &param : type.params) {
-                        if (param.key != action.propertyKey)
-                            continue;
-                        spin->setRange(param.minValue, param.maxValue);
-                        spin->setDecimals(param.decimals);
-                        spin->setSingleStep(param.step);
-                        spin->setToolTip(param.tooltip);
+                        if (param.key == action.propertyKey)
+                            shape = param;
                     }
                 }
             }
         }
-        spin->setValue(action.value.toDouble());
+
         // Read back rather than assumed: the range the engine declared may not
-        // reach zero, and the box has already clamped into it.
-        seedShownValue(spin->value());
-        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, index, slot](double v) {
-            if (m_building)
-                return;
-            Rule updated = m_scene->rules().at(index);
-            updated.actions[slot].value = v;
-            commit(index, updated);
-        });
-        row.value = spin;
+        // reach zero, and the box will have clamped into it.
+        QVariant shownValue = action.value;
+        if (!RuleNumber::isRange(shownValue))
+            shownValue = qBound(shape.minValue, shownValue.toDouble(), shape.maxValue);
+        seedShownValue(shownValue);
+
+        row.value = buildNumberEditor(row.valueHolder, shape, shownValue,
+                                      [this, index, slot](const QVariant &v) {
+                                          Rule updated = m_scene->rules().at(index);
+                                          updated.actions[slot].value = v;
+                                          commit(index, updated);
+                                      },
+                                      false);
     }
 
     row.valueHolder->layout()->addWidget(row.value);
@@ -1829,7 +2023,10 @@ void RulesPanel::refreshValueEditor(int index, int slot)
     const bool sourced = canSource && action.usesSource();
     if (row.valueMode) {
         row.valueMode->setVisible(canSource);
-        row.valueMode->setCurrentIndex(row.valueMode->findData(sourced));
+        const ValueMode mode = sourced ? ValueMode::Read
+                             : action.usesRange() ? ValueMode::Rolled
+                                                  : ValueMode::Typed;
+        row.valueMode->setCurrentIndex(row.valueMode->findData(int(mode)));
     }
     setFormRowVisible(row.form, row.sourceRow, sourced);
     // The two are alternatives, so the typed editor goes away entirely rather
@@ -1904,6 +2101,21 @@ void RulesPanel::refreshValueEditor(int index, int slot)
     m_building = wasBuilding;
 }
 
+// Whether an object still has a property by that name, asked of the engine the
+// scene was drawn for. Built once and handed to every rule: describe() makes a
+// fresh engine per call, which is more than a panel of cards should cost.
+Rule::KnownProperty RulesPanel::knownProperty() const
+{
+    if (!m_scene)
+        return {};
+    return [this](const QString &object, const QString &key) {
+        // An action is named in the same slot as a property and is not one.
+        if (key.startsWith(QLatin1Char('@')) || actionIdOf(key).size())
+            return true;
+        return describe(object, key) != nullptr;
+    };
+}
+
 const physics::JointParam *RulesPanel::describe(const QString &objectName,
                                                 const QString &key) const
 {
@@ -1930,6 +2142,35 @@ const physics::JointParam *RulesPanel::describe(const QString &objectName,
     physics::PropertyList candidates;
     bool matched = false;
     if (objectName == Rule::world()) {
+        // Two readings of the run itself, which no engine named -- the same two
+        // the condition's property list offers. Left out, every rule counting
+        // frames or seconds looked as though it named a property the engine had
+        // dropped, and the panel marked a finished card red.
+        if (key == QLatin1String("time") || key == QLatin1String("frame")
+            || key == QLatin1String("chance")) {
+            found = physics::JointParam {};
+            found.key = key;
+            const bool seconds = key == QLatin1String("time");
+            const bool luck = key == QLatin1String("chance");
+            found.label = luck ? tr("Chance (0-100)")
+                               : seconds ? tr("Elapsed Time (s)") : tr("Frame");
+            found.type = seconds || luck ? physics::ParamType::Real
+                                         : physics::ParamType::Integer;
+            found.defaultValue = seconds || luck ? QVariant(0.0) : QVariant(0);
+            found.minValue = 0.0;
+            found.maxValue = luck ? 100.0 : 1e9;
+            found.decimals = luck ? 1 : (seconds ? 3 : 0);
+            found.step = seconds ? 0.1 : (luck ? 5.0 : 1.0);
+            found.liveReadable = true;
+            found.rulesOnly = true;
+            found.tooltip = luck
+                ? tr("A fresh number from 0 to 100 every time it is read, so "
+                     "\"less than 25\" happens about one time in four. Use it beside an "
+                     "event to let that event count only sometimes.")
+                : seconds ? tr("How long this run has been going.")
+                          : tr("How many steps this run has taken.");
+            return &found;
+        }
         candidates = engine->worldProperties();
         matched = true;
     }
@@ -1987,6 +2228,52 @@ bool RulesPanel::propertyIsChoice(const QString &objectName, const QString &key)
 {
     const physics::JointParam *param = describe(objectName, key);
     return param && param->type == physics::ParamType::Choice && !param->choices.isEmpty();
+}
+
+bool RulesPanel::propertyIsTimer(const QString &objectName, const QString &key) const
+{
+    if (objectName != Rule::variables() || !m_scene)
+        return false;
+    const SceneVariable *variable = m_scene->variableNamed(key);
+    return variable && variable->isTimer();
+}
+
+QVector<QPair<QString, Rule::Op>> RulesPanel::opChoices(bool timer)
+{
+    if (timer) {
+        // A duration has no sign to flip and no two states to toggle between,
+        // so Negate and Toggle are gone; what a timer has instead is the four
+        // things that only it can be told to do.
+        return { { tr("Set to"),  Rule::Op::Set },
+                 { tr("Start"),   Rule::Op::TimerStart },
+                 { tr("Pause"),   Rule::Op::TimerPause },
+                 { tr("Stop"),    Rule::Op::TimerStop },
+                 { tr("Reset"),   Rule::Op::TimerReset } };
+    }
+    // "Add" is what this was called; it counts the value on from where it
+    // stands, which is what increment means, so the name says so now.
+    return { { tr("Set to"),        Rule::Op::Set },
+             { tr("Toggle"),        Rule::Op::Toggle },
+             { tr("Negate"),        Rule::Op::Negate },
+             { tr("Increment by"),  Rule::Op::Add },
+             { tr("Decrement by"),  Rule::Op::Subtract } };
+}
+
+Rule::Op RulesPanel::fillOpBox(QComboBox *box, bool timer, Rule::Op current)
+{
+    if (!box)
+        return current;
+
+    box->clear();
+    for (const auto &choice : opChoices(timer))
+        box->addItem(choice.first, static_cast<int>(choice.second));
+
+    // An op the new list does not have -- Start left behind by a property that
+    // is no longer a timer, Toggle by one that now is -- would leave the box
+    // showing the first entry while the rule held something else.
+    const int found = box->findData(static_cast<int>(current));
+    box->setCurrentIndex(found >= 0 ? found : 0);
+    return static_cast<Rule::Op>(box->currentData().toInt());
 }
 
 void RulesPanel::commit(int index, const Rule &rule)
@@ -2120,6 +2407,10 @@ QString RulesPanel::problemText(Rule::Problem problem)
     case Rule::Problem::NoValue:
         return tr("This rule does not run: it has nothing to set. Type a value,"
                   " or read one from another object.");
+    case Rule::Problem::UnknownProperty:
+        return tr("This rule does not run: it names a property this scene's engine"
+                  " does not offer. It may have been dropped or renamed since the"
+                  " scene was made; pick another.");
     }
     return QString();
 }
@@ -2177,21 +2468,25 @@ void RulesPanel::refreshCardLook(int index)
         return;
 
     const Rule &rule = m_scene->rules().at(index);
-    const Rule::Problem problem = rule.problem();
+    const Rule::Problem problem = rule.problem(knownProperty());
     setCardLook(row.card, row.heading, rule.enabled, problem == Rule::Problem::None);
     if (row.warning) {
         row.warning->setVisible(problem != Rule::Problem::None);
         row.warning->setToolTip(problemText(problem));
     }
+    row.card->setToolTip(problemText(problem));   // empty when there is nothing wrong
 
     // And the row it came from, so a card with several Whens says which of
-    // them is the one still to be filled in.
+    // them is the one still to be filled in. With the same question about what
+    // the engine offers the card itself was judged by, or a card could go red
+    // over a property while every row under it looked fine.
+    const Rule::KnownProperty known = knownProperty();
     for (int slot = 0; slot < row.conditions.size() && slot < rule.conditions.size(); ++slot)
         setRowWarning(row.conditions.at(slot).warning,
-                      Rule::conditionProblem(rule.conditions.at(slot)));
+                      Rule::conditionProblem(rule.conditions.at(slot), known));
     for (int slot = 0; slot < row.actions.size() && slot < rule.actions.size(); ++slot)
         setRowWarning(row.actions.at(slot).warning,
-                      Rule::actionProblem(rule.actions.at(slot)));
+                      Rule::actionProblem(rule.actions.at(slot), known));
 }
 
 void RulesPanel::setRowWarning(QLabel *warning, Rule::Problem problem)
@@ -2206,9 +2501,10 @@ int RulesPanel::incompleteCount() const
 {
     if (!m_scene)
         return 0;
+    const Rule::KnownProperty known = knownProperty();
     int count = 0;
     for (const Rule &rule : m_scene->rules()) {
-        if (!rule.isValid())
+        if (!rule.isValid(known))
             ++count;
     }
     return count;
@@ -2259,6 +2555,29 @@ void RulesPanel::setCollapseLook(QToolButton *button, bool collapsed)
     button->setIconSize(QSize(side, side));
     button->setProperty("collapsed", collapsed);
     button->setToolTip(collapsed ? tr("Expand this rule") : tr("Collapse this rule"));
+}
+
+void RulesPanel::setAllCollapsed(bool collapsed)
+{
+    for (int index = 0; index < m_rows.size(); ++index)
+        setCollapsed(index, collapsed);
+    syncFoldButtons();
+}
+
+void RulesPanel::syncFoldButtons()
+{
+    // Nothing to fold with no cards; and once every card is already one way,
+    // the button for that way has nothing left to do.
+    const int cards = m_rows.size();
+    int folded = 0;
+    for (int index : m_collapsed) {
+        if (index >= 0 && index < cards)
+            ++folded;
+    }
+    if (m_collapseAll)
+        m_collapseAll->setEnabled(folded < cards);
+    if (m_expandAll)
+        m_expandAll->setEnabled(folded > 0);
 }
 
 void RulesPanel::setCollapsed(int index, bool collapsed)

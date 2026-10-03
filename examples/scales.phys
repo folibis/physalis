@@ -1,0 +1,675 @@
+{
+    "bodies": [
+        {
+            "isEnabled": true,
+            "name": "body_2",
+            "physics": {
+            },
+            "shapes": [
+                1
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_3",
+            "physics": {
+            },
+            "shapes": [
+                11
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_4",
+            "physics": {
+            },
+            "shapes": [
+                3
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_8",
+            "physics": {
+            },
+            "shapes": [
+                8,
+                6,
+                2,
+                5,
+                9
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_9",
+            "physics": {
+            },
+            "shapes": [
+                4
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_10",
+            "physics": {
+            },
+            "shapes": [
+                7
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_11",
+            "physics": {
+            },
+            "shapes": [
+                10
+            ],
+            "type": "static"
+        }
+    ],
+    "engine": "Box2D",
+    "field": {
+        "backgroundColor": "#ffffffff",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 1000,
+        "showGrid": true,
+        "width": 1000
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+        {
+            "anchorA": {
+                "x": 0,
+                "y": 253.53383458646618
+            },
+            "anchorB": {
+                "x": 0,
+                "y": 253.53383458646618
+            },
+            "axis": {
+                "x": 0,
+                "y": -1
+            },
+            "bodyA": "body_4",
+            "bodyB": "body_8",
+            "collideConnected": false,
+            "name": "revolute_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0.2,
+                "drawSize": 0.25,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": true,
+                "hertz": 0.3,
+                "lowerAngle": 0,
+                "maxMotorTorque": 0,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        }
+    ],
+    "log": [
+        {
+            "label": "left",
+            "object": "@variables",
+            "property": "left"
+        },
+        {
+            "label": "right",
+            "object": "@variables",
+            "property": "right"
+        },
+        {
+            "label": "out",
+            "object": "@variables",
+            "property": "out"
+        }
+    ],
+    "rays": [
+        {
+            "angle": 0,
+            "length": 100,
+            "maskBits": "ffffffffffffffff",
+            "name": "ray_1",
+            "x": -500,
+            "y": 400
+        },
+        {
+            "angle": 0,
+            "length": 100,
+            "maskBits": "ffffffffffffffff",
+            "name": "ray_2",
+            "x": 400,
+            "y": 400
+        }
+    ],
+    "rules": [
+        {
+            "action": "@clone",
+            "actionParams": {
+                "x": {
+                    "from": -300,
+                    "step": 10,
+                    "to": 300
+                },
+                "y": -100
+            },
+            "compare": "%",
+            "name": "clone",
+            "op": "set",
+            "property": "",
+            "subject": "@world",
+            "target": "circle_1",
+            "value": 0,
+            "watch": "frame",
+            "when": 50
+        },
+        {
+            "action": "removeBody",
+            "actionParams": {
+            },
+            "actions": [
+                {
+                    "action": "removeBody",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@otherBody",
+                    "value": false
+                },
+                {
+                    "op": "add",
+                    "property": "left",
+                    "target": "@variables",
+                    "value": 1
+                }
+            ],
+            "event": "rayDetects",
+            "name": "left",
+            "op": "set",
+            "property": "",
+            "subject": "ray_1",
+            "target": "@otherBody",
+            "value": false,
+            "when": ""
+        },
+        {
+            "action": "removeBody",
+            "actionParams": {
+            },
+            "actions": [
+                {
+                    "action": "removeBody",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@otherBody",
+                    "value": false
+                },
+                {
+                    "op": "add",
+                    "property": "right",
+                    "target": "@variables",
+                    "value": 1
+                }
+            ],
+            "event": "rayDetects",
+            "name": "right",
+            "op": "set",
+            "property": "",
+            "subject": "ray_2",
+            "target": "@otherBody",
+            "value": false,
+            "when": ""
+        },
+        {
+            "action": "removeBody",
+            "actionParams": {
+            },
+            "actions": [
+                {
+                    "action": "removeBody",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@otherBody",
+                    "value": false
+                },
+                {
+                    "op": "add",
+                    "property": "out",
+                    "target": "@variables",
+                    "value": 1
+                }
+            ],
+            "event": "sensorBegin",
+            "name": "out",
+            "op": "set",
+            "property": "",
+            "subject": "rectangle_2",
+            "target": "@otherBody",
+            "value": false,
+            "when": ""
+        }
+    ],
+    "shapes": [
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "friction": 0,
+                "groupIndex": 0,
+                "restitution": 0.49999999999999994
+            },
+            "pos": {
+                "x": 20,
+                "y": -200
+            },
+            "rect": {
+                "height": 30,
+                "width": 30,
+                "x": -15,
+                "y": -15
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "rectangle_2",
+            "origin": {
+                "x": 300,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+                "groupIndex": -1,
+                "isSensor": true
+            },
+            "pos": {
+                "x": -300,
+                "y": 205
+            },
+            "rect": {
+                "height": 20,
+                "width": 400,
+                "x": 100,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "polygon_1",
+            "origin": {
+                "x": 100.5,
+                "y": 58.5
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 0,
+                    "y": 120
+                },
+                {
+                    "x": 100,
+                    "y": 0
+                },
+                {
+                    "x": 200,
+                    "y": 120
+                }
+            ],
+            "pos": {
+                "x": -100,
+                "y": 260
+            },
+            "rect": {
+                "height": 120,
+                "width": 200,
+                "x": 0,
+                "y": 0
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 4,
+            "joinStyle": "round",
+            "name": "rectangle_3",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "friction": 0
+            },
+            "pos": {
+                "x": -240,
+                "y": 230
+            },
+            "rect": {
+                "height": 180,
+                "width": 20,
+                "x": -100,
+                "y": -110
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 5,
+            "joinStyle": "round",
+            "name": "rectangle_4",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "friction": 0.3
+            },
+            "pos": {
+                "x": -120,
+                "y": 230
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 6,
+            "joinStyle": "round",
+            "name": "rectangle_6",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "friction": 0.3
+            },
+            "pos": {
+                "x": 300,
+                "y": 230
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 7,
+            "joinStyle": "round",
+            "name": "rectangle_7",
+            "origin": {
+                "x": -90,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "friction": 0
+            },
+            "pos": {
+                "x": 420,
+                "y": 230
+            },
+            "rect": {
+                "height": 180,
+                "width": 20,
+                "x": -100,
+                "y": -110
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 8,
+            "joinStyle": "round",
+            "name": "rectangle_8",
+            "origin": {
+                "x": -69.99999999999999,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+                "friction": 0
+            },
+            "pos": {
+                "x": 340,
+                "y": 330
+            },
+            "rect": {
+                "height": 20,
+                "width": 116,
+                "x": -140,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 9,
+            "joinStyle": "round",
+            "name": "rectangle_9",
+            "origin": {
+                "x": -59.999999999999986,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+                "friction": 0
+            },
+            "pos": {
+                "x": -195.00000000000003,
+                "y": 330
+            },
+            "rect": {
+                "height": 20,
+                "width": 115,
+                "x": -119.99999999999997,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 10,
+            "joinStyle": "round",
+            "name": "polyline_1",
+            "origin": {
+                "x": 180,
+                "y": 11.5
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": -19,
+                    "y": -19
+                },
+                {
+                    "x": 181,
+                    "y": -39
+                },
+                {
+                    "x": 381,
+                    "y": -19
+                }
+            ],
+            "pos": {
+                "x": -181,
+                "y": 139
+            },
+            "rect": {
+                "height": 20,
+                "width": 400,
+                "x": -19,
+                "y": -39
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 11,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": 300,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": -100,
+                    "y": 37.89473684210526
+                },
+                {
+                    "x": 200,
+                    "y": 30
+                },
+                {
+                    "x": 400,
+                    "y": 30
+                },
+                {
+                    "x": 700,
+                    "y": 38.4210526315789
+                },
+                {
+                    "x": 700,
+                    "y": 50
+                },
+                {
+                    "x": -100,
+                    "y": 50
+                }
+            ],
+            "pos": {
+                "x": -300,
+                "y": 350
+            },
+            "rect": {
+                "height": 20,
+                "width": 800,
+                "x": -100,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        }
+    ],
+    "variables": [
+        {
+            "name": "left",
+            "type": "int",
+            "value": 0
+        },
+        {
+            "name": "right",
+            "type": "int",
+            "value": 0
+        },
+        {
+            "name": "out",
+            "type": "int",
+            "value": 0
+        }
+    ],
+    "version": 1,
+    "world": {
+        "physics": {
+        },
+        "pixelsPerMeter": 1000,
+        "randomSeed": 0,
+        "solidBounds": false
+    }
+}

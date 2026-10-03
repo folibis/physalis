@@ -124,7 +124,7 @@ OptionsDialog::Settings distinctive()
     s.jointOutlineWidth = 2.3;
 
     s.converterPath = QStringLiteral("C:/converters");
-    s.converterSettings.insert(QStringLiteral("planck-js"),
+    s.converterSettings.insert(QStringLiteral("box2d3wasm"),
                                QVariantMap { { QStringLiteral("scale"), 3 } });
 
     s.pixelsPerMeter = 250.0;

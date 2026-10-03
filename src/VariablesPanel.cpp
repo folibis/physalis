@@ -56,26 +56,6 @@ void VariablesPanel::buildUi()
     connect(add, &QToolButton::clicked, this, &VariablesPanel::addVariable);
     tools->addWidget(add);
 
-    m_remove = new QToolButton(this);
-    m_remove->setIcon(Icons::deleteShape());
-    m_remove->setText(tr("Remove"));
-    m_remove->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    m_remove->setAutoRaise(true);
-    m_remove->setToolTip(tr("Remove the selected variable. Rules naming it will"
-                            " say they are unfinished."));
-    connect(m_remove, &QToolButton::clicked, this, &VariablesPanel::removeSelected);
-    tools->addWidget(m_remove);
-
-    // The log is where a variable is actually watched counting, so the offer
-    // belongs on the toolbar rather than only behind a right-click.
-    m_log = new QToolButton(this);
-    m_log->setIcon(Icons::log());
-    m_log->setText(tr("Add to Log"));
-    m_log->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    m_log->setAutoRaise(true);
-    connect(m_log, &QToolButton::clicked, this, &VariablesPanel::toggleLog);
-    tools->addWidget(m_log);
-
     tools->addStretch();
     outer->addLayout(tools);
 
@@ -83,21 +63,26 @@ void VariablesPanel::buildUi()
     m_table->setColumnCount(3);
     m_table->setHorizontalHeaderLabels({ tr("Name"), tr("Type"), tr("Value") });
     m_table->verticalHeader()->setVisible(false);
-    m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_table->setSelectionMode(QAbstractItemView::SingleSelection);
+    // No selection: every cell holds a widget, so a highlighted row shows only
+    // in the gaps between them and in whatever the widgets do not cover --
+    // which reads as one row being a different colour for no reason. Nothing
+    // needs it either; the menu acts on the row that was clicked.
+    m_table->setSelectionMode(QAbstractItemView::NoSelection);
+    m_table->setFocusPolicy(Qt::NoFocus);
     m_table->horizontalHeader()->setSectionResizeMode(kName, QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(kType, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(kValue, QHeaderView::ResizeToContents);
+    // Not ResizeToContents: every cell here holds a widget, and that mode sizes
+    // a column to its *item*, which is empty -- so the type box came out reading
+    // "In" and the value box had no room for a number. The width is taken from
+    // what the widgets ask for instead, once they are there.
+    m_table->horizontalHeader()->setSectionResizeMode(kType, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(kValue, QHeaderView::Fixed);
     m_table->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_table, &QTableWidget::customContextMenuRequested, this, [this](const QPoint &where) {
         const int row = m_table->rowAt(where.y());
         if (row >= 0)
             showMenu(row, m_table->viewport()->mapToGlobal(where));
     });
-    connect(m_table, &QTableWidget::itemSelectionChanged, this, &VariablesPanel::syncTools);
     outer->addWidget(m_table, 1);
-
-    syncTools();
 }
 
 void VariablesPanel::setScene(CanvasScene *scene)
@@ -108,9 +93,6 @@ void VariablesPanel::setScene(CanvasScene *scene)
     m_scene = scene;
     if (m_scene) {
         connect(m_scene, &CanvasScene::variablesChanged, this, &VariablesPanel::rebuild);
-        // The toolbar says "Add to Log" or "Remove from Log", so it follows
-        // the log as well as the selection.
-        connect(m_scene, &CanvasScene::watchesChanged, this, &VariablesPanel::syncTools);
         // Editing them mid-run would change what the run is counting with.
         connect(m_scene, &CanvasScene::simulationRunningChanged, this,
                 [this](bool running) { setEnabled(!running); });
@@ -121,14 +103,6 @@ void VariablesPanel::setScene(CanvasScene *scene)
 int VariablesPanel::rowOf(const QObject *widget)
 {
     return widget ? widget->property(kRowProperty).toInt() : -1;
-}
-
-int VariablesPanel::selectedRow() const
-{
-    const int row = m_table ? m_table->currentRow() : -1;
-    if (!m_scene || row < 0 || row >= m_scene->variables().size())
-        return -1;
-    return row;
 }
 
 void VariablesPanel::adopt(QWidget *widget, int row)
@@ -144,13 +118,7 @@ void VariablesPanel::adopt(QWidget *widget, int row)
 
 bool VariablesPanel::eventFilter(QObject *watched, QEvent *event)
 {
-    if (event->type() == QEvent::MouseButtonPress) {
-        // A cell widget covers its cell, so the table never learns which row
-        // was clicked and the selection would never move off the first one.
-        const int row = rowOf(watched);
-        if (row >= 0 && m_table && row != m_table->currentRow())
-            m_table->setCurrentCell(row, kName);
-    } else if (event->type() == QEvent::MouseButtonDblClick) {
+    if (event->type() == QEvent::MouseButtonDblClick) {
         const int row = rowOf(watched);
         if (row >= 0 && qobject_cast<QLabel *>(watched)) {
             beginRename(row);
@@ -182,12 +150,31 @@ void VariablesPanel::rebuild()
         for (int row = 0; row < m_scene->variables().size(); ++row)
             fillRow(row, m_scene->variables().at(row));
     }
+    fitColumns();
     m_building = false;
-    // Something selected from the start, or the toolbar sits greyed out until
-    // a row is clicked and the offer to log one looks unavailable.
-    if (m_table->currentRow() < 0 && m_table->rowCount() > 0)
-        m_table->setCurrentCell(0, kName);
-    syncTools();
+}
+
+// What the boxes in a column actually need, which the table cannot work out for
+// itself: a cell widget is not the cell's item, and sizing to the item leaves
+// every one of them squashed.
+void VariablesPanel::fitColumns()
+{
+    if (!m_table)
+        return;
+    constexpr int kPadding = 10;
+    for (int column : { kType, kValue }) {
+        int wanted = 0;
+        for (int row = 0; row < m_table->rowCount(); ++row) {
+            if (QWidget *cell = m_table->cellWidget(row, column))
+                wanted = qMax(wanted, cell->sizeHint().width());
+        }
+        // Room for the heading as well, so a table with no rows still reads.
+        const QString heading = m_table->horizontalHeaderItem(column)
+                                    ? m_table->horizontalHeaderItem(column)->text()
+                                    : QString();
+        wanted = qMax(wanted, m_table->fontMetrics().horizontalAdvance(heading) + kPadding);
+        m_table->setColumnWidth(column, wanted + kPadding);
+    }
 }
 
 void VariablesPanel::fillRow(int row, const SceneVariable &variable)
@@ -270,6 +257,24 @@ void VariablesPanel::setValueEditor(int row, const SceneVariable &variable)
     case SceneVariable::Type::Integer: {
         auto *spin = new QSpinBox(m_table);
         spin->setRange(-1000000000, 1000000000);
+        spin->setValue(variable.value().toInt());
+        connect(spin, qOverload<int>(&QSpinBox::valueChanged), this, [this, row](int v) {
+            if (m_building || !m_scene || row >= m_scene->variables().size())
+                return;
+            SceneVariable updated = m_scene->variables().at(row);
+            updated.initial = v;
+            commit(row, updated);
+        });
+        editor = spin;
+        break;
+    }
+    case SceneVariable::Type::Timer: {
+        // Milliseconds, and never below zero. The suffix is what tells a
+        // reader the 3000 in the cell is three seconds.
+        auto *spin = new QSpinBox(m_table);
+        spin->setRange(0, 1000000000);
+        spin->setSingleStep(100);
+        spin->setSuffix(tr(" ms"));
         spin->setValue(variable.value().toInt());
         connect(spin, qOverload<int>(&QSpinBox::valueChanged), this, [this, row](int v) {
             if (m_building || !m_scene || row >= m_scene->variables().size())
@@ -372,15 +377,13 @@ void VariablesPanel::addVariable()
     updated.append(variable);
     m_scene->setVariables(updated);
     m_scene->notifyEdit(tr("Add variable"));
-    m_table->setCurrentCell(updated.size() - 1, kName);
     // Straight into renaming it: the name it was given is a placeholder.
     beginRename(updated.size() - 1);
 }
 
-void VariablesPanel::removeSelected()
+void VariablesPanel::removeVariable(int row)
 {
-    const int row = selectedRow();
-    if (row < 0)
+    if (!m_scene || row < 0 || row >= m_scene->variables().size())
         return;
 
     const QString gone = m_scene->variables().at(row).name;
@@ -392,10 +395,9 @@ void VariablesPanel::removeSelected()
     m_scene->notifyEdit(tr("Remove variable"));
 }
 
-void VariablesPanel::toggleLog()
+void VariablesPanel::toggleLog(int row)
 {
-    const int row = selectedRow();
-    if (row < 0)
+    if (!m_scene || row < 0 || row >= m_scene->variables().size())
         return;
 
     const SceneVariable variable = m_scene->variables().at(row);
@@ -403,25 +405,6 @@ void VariablesPanel::toggleLog()
         m_scene->removeWatch(Rule::variables(), variable.name);
     else
         m_scene->addWatch({ Rule::variables(), variable.name, variable.name });
-    syncTools();
-}
-
-void VariablesPanel::syncTools()
-{
-    const int row = selectedRow();
-    const bool has = row >= 0;
-    if (m_remove)
-        m_remove->setEnabled(has);
-    if (!m_log)
-        return;
-
-    m_log->setEnabled(has);
-    const bool watched =
-        has && m_scene->isWatched(Rule::variables(), m_scene->variables().at(row).name);
-    m_log->setText(watched ? tr("Remove from Log") : tr("Add to Log"));
-    m_log->setToolTip(watched
-                          ? tr("Stop showing this variable in the log during a run.")
-                          : tr("Show this variable in the log while the scene runs."));
 }
 
 void VariablesPanel::showMenu(int row, const QPoint &globalPos)
@@ -429,18 +412,20 @@ void VariablesPanel::showMenu(int row, const QPoint &globalPos)
     if (!m_scene || row < 0 || row >= m_scene->variables().size())
         return;
 
-    m_table->setCurrentCell(row, kName);
     const SceneVariable variable = m_scene->variables().at(row);
 
     QMenu menu(this);
     menu.addAction(tr("Rename"), this, [this, row] { beginRename(row); });
 
     // The same offer the property tables make, so a variable is watched during
-    // a run exactly as a body's speed is.
+    // a run exactly as a body's speed is. Every entry is given the row the menu
+    // was opened for rather than reading the selection: the two are not always
+    // the same row, and an entry that says one thing and does another is worse
+    // than no entry at all.
     const bool watched = m_scene->isWatched(Rule::variables(), variable.name);
     menu.addAction(watched ? tr("Remove from Log") : tr("Add to Log"),
-                   this, &VariablesPanel::toggleLog);
+                   this, [this, row] { toggleLog(row); });
     menu.addSeparator();
-    menu.addAction(tr("Remove Variable"), this, &VariablesPanel::removeSelected);
+    menu.addAction(tr("Remove Variable"), this, [this, row] { removeVariable(row); });
     menu.exec(globalPos);
 }

@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QVariantMap>
 #include <QList>
+#include <QStringList>
 #include <QPointer>
 #include "OptionsDialog.h"
 #include "EditorMode.h"
@@ -194,6 +195,8 @@ public:
     bool saveSceneAsForTest(const QString &path) { return saveSceneAs(path); }
 
 private:
+    void buildAlignMenu();
+    void updateAlignActions();
     void duplicateShape(ShapeItem *item);
     void flipShape(ShapeItem *item, bool horizontally);
     void convertToPolygon(ShapeItem *item);
@@ -210,6 +213,12 @@ private:
     QList<QAction *> m_transportActions;
 
     QString m_scenePath;
+    // The scenes opened last, newest first, kept across sessions. Five is as
+    // many as a menu reads at a glance.
+    static constexpr int kRecentFiles = 5;
+    QStringList m_recentFiles;
+    void rememberRecent(const QString &path);
+    void rebuildRecentMenu();
     // Where the last screenshot went, so the next one is offered beside it.
     QString m_lastScreenshotPath;
     int m_pasteCount = 0;

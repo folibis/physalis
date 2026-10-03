@@ -1,0 +1,4 @@
+//! One timer variable moved on by the step just taken. A timer stands still
+//! until a rule starts it, so the flag is what decides whether it counts.
+if ({{RUNNING}})
+    {{NAME}} += dt * 1000.0f;

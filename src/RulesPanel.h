@@ -49,6 +49,10 @@ signals:
 
 private:
     void setCollapsed(int index, bool collapsed);
+    // Fold or unfold every card at once, from the two buttons beside the title.
+    void setAllCollapsed(bool collapsed);
+    // Greys out whichever of the two has nothing left to do.
+    void syncFoldButtons();
 
     // Actions share the property dropdown, tagged so they can be told from
     // real properties.
@@ -56,6 +60,18 @@ private:
     // The editors for one action's own parameters, stacked into a single
     // widget the value column can hold. Returns a plain label when the action
     // has none, so there is always something to put there.
+    // Where the number an action writes comes from. One picker rather than two:
+    // a separate "value or random" box beside this one asked the same question
+    // twice and answered it in two places.
+    enum class ValueMode { Typed, Rolled, Read };
+
+    // One number a rule uses. `withKind` adds the value-or-random picker inside
+    // it, which an action's parameter needs because it has no mode box of its
+    // own; the value an action writes is told which to show by that box.
+    QWidget *buildNumberEditor(QWidget *parent, const physics::JointParam &shape,
+                               const QVariant &current,
+                               const std::function<void(const QVariant &)> &store,
+                               bool withKind = true);
     QWidget *buildActionParamEditor(int index, int slot, const RuleAction &action,
                                     QWidget *parent);
     static QString actionKey(const QString &id);
@@ -173,11 +189,25 @@ private:
     void refreshConditionEditor(int index, int slot);
     void applyWatchChoice(int index, int slot, const QString &chosen);
     const physics::JointParam *describe(const QString &objectName, const QString &key) const;
+    // What a rule is checked against: does the scene's engine still offer this?
+    Rule::KnownProperty knownProperty() const;
     bool propertyIsFlag(const QString &objectName, const QString &key) const;
     // A property the engine offers as one of a fixed set rather than as a
     // number. The editor knows nothing about what the choices mean; it shows
     // the labels it was given and stores the index.
     bool propertyIsChoice(const QString &objectName, const QString &key) const;
+    // A timer variable, which is the one property whose "what to do" list is
+    // its own: Toggle and Negate mean nothing on a duration, and starting or
+    // winding one back means nothing anywhere else.
+    bool propertyIsTimer(const QString &objectName, const QString &key) const;
+    // What the op box offers for the property an action writes, in the order it
+    // shows them. Built per property rather than once, so the list a card shows
+    // is only what that property can do.
+    static QVector<QPair<QString, Rule::Op>> opChoices(bool timer);
+    // Put those choices into an action row's op box and select `current`,
+    // falling back to Set where the new list does not have it. Returns the op
+    // actually selected, which is what the rule should then hold.
+    static Rule::Op fillOpBox(QComboBox *box, bool timer, Rule::Op current);
 
     QVector<RuleChoice> sourceChoices() const;
     QVector<RuleChoice> watchChoices(const QString &name) const;
@@ -198,6 +228,8 @@ private:
 
     QPointer<CanvasScene> m_scene;
     QVBoxLayout *m_cards = nullptr;
+    QToolButton *m_collapseAll = nullptr;
+    QToolButton *m_expandAll = nullptr;
     QVector<Row> m_rows;
 
     bool m_building = false;

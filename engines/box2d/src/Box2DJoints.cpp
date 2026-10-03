@@ -147,15 +147,25 @@ JointHandle Box2DEngine::addJoint(const JointDesc &desc)
         travelOrigin = b2Dot(b2Sub(toMeters(sceneB), toMeters(sceneA)), worldAxis);
     }
 
+    // 3.2 defines a joint by a frame on each body rather than by a pair of
+    // anchors, a reference angle and an axis: the joint works to bring frame A
+    // onto frame B. Frame A's x axis is the axis for the two kinds that slide,
+    // and frame B is turned back by the reference angle -- so the bodies come to
+    // rest that far apart, which is what the editor has always meant by it.
+    const float axisAngle = std::atan2(localAxisA.y, localAxisA.x);
+    const auto fillBase = [&](b2JointDef &base, float frameAngle) {
+        base.bodyIdA = bodyA;
+        base.bodyIdB = bodyB;
+        base.localFrameA = b2Transform { anchorA, b2MakeRot(frameAngle) };
+        base.localFrameB = b2Transform { anchorB, b2MakeRot(frameAngle - referenceAngle) };
+        base.collideConnected = desc.collideConnected;
+    };
+
     b2JointId joint = b2_nullJointId;
 
     if (desc.typeId == QLatin1String("revolute")) {
         b2RevoluteJointDef def = b2DefaultRevoluteJointDef();
-        def.bodyIdA = bodyA;
-        def.bodyIdB = bodyB;
-        def.localAnchorA = anchorA;
-        def.localAnchorB = anchorB;
-        def.referenceAngle = referenceAngle;
+        fillBase(def.base, 0.0f);
         def.targetAngle = radians(desc.params, "targetAngle");
         def.enableSpring = boolValue(desc.params, "enableSpring");
         def.hertz = static_cast<float>(realValue(desc.params, "hertz"));
@@ -167,16 +177,13 @@ JointHandle Box2DEngine::addJoint(const JointDesc &desc)
         def.enableMotor = boolValue(desc.params, "enableMotor");
         def.maxMotorTorque = static_cast<float>(realValue(desc.params, "maxMotorTorque"));
         def.motorSpeed = radians(desc.params, "motorSpeed");
-        def.drawSize = static_cast<float>(realValue(desc.params, "drawSize", 0.25));
-        def.collideConnected = desc.collideConnected;
+        // drawSize became base.drawScale, which only Box2D's own debug draw uses.
+        def.base.drawScale = static_cast<float>(realValue(desc.params, "drawSize", 0.25));
         joint = b2CreateRevoluteJoint(m_worldId, &def);
 
     } else if (desc.typeId == QLatin1String("distance")) {
         b2DistanceJointDef def = b2DefaultDistanceJointDef();
-        def.bodyIdA = bodyA;
-        def.bodyIdB = bodyB;
-        def.localAnchorA = anchorA;
-        def.localAnchorB = anchorB;
+        fillBase(def.base, 0.0f);
 
         // Length zero means "however far apart the anchors already are", which
         // is what you want when the joint is dropped onto an existing layout.
@@ -198,31 +205,20 @@ JointHandle Box2DEngine::addJoint(const JointDesc &desc)
         def.maxMotorForce = static_cast<float>(realValue(desc.params, "maxMotorForce"));
         // Scene units per second, converted the same way a length is.
         def.motorSpeed = metres(realValue(desc.params, "motorSpeed"));
-        def.collideConnected = desc.collideConnected;
         joint = b2CreateDistanceJoint(m_worldId, &def);
 
     } else if (desc.typeId == QLatin1String("weld")) {
         b2WeldJointDef def = b2DefaultWeldJointDef();
-        def.bodyIdA = bodyA;
-        def.bodyIdB = bodyB;
-        def.localAnchorA = anchorA;
-        def.localAnchorB = anchorB;
-        def.referenceAngle = referenceAngle;
+        fillBase(def.base, 0.0f);
         def.linearHertz = static_cast<float>(realValue(desc.params, "linearHertz"));
         def.angularHertz = static_cast<float>(realValue(desc.params, "angularHertz"));
         def.linearDampingRatio = static_cast<float>(realValue(desc.params, "linearDampingRatio"));
         def.angularDampingRatio = static_cast<float>(realValue(desc.params, "angularDampingRatio"));
-        def.collideConnected = desc.collideConnected;
         joint = b2CreateWeldJoint(m_worldId, &def);
 
     } else if (desc.typeId == QLatin1String("prismatic")) {
         b2PrismaticJointDef def = b2DefaultPrismaticJointDef();
-        def.bodyIdA = bodyA;
-        def.bodyIdB = bodyB;
-        def.localAnchorA = anchorA;
-        def.localAnchorB = anchorB;
-        def.localAxisA = localAxisA;
-        def.referenceAngle = referenceAngle;
+        fillBase(def.base, axisAngle);
         def.targetTranslation = travelOrigin + metres(realValue(desc.params, "targetTranslation"));
         def.enableSpring = boolValue(desc.params, "enableSpring");
         def.hertz = static_cast<float>(realValue(desc.params, "hertz"));
@@ -235,16 +231,11 @@ JointHandle Box2DEngine::addJoint(const JointDesc &desc)
         def.maxMotorForce = static_cast<float>(realValue(desc.params, "maxMotorForce"));
         // Scene units per second; see the distance joint above.
         def.motorSpeed = metres(realValue(desc.params, "motorSpeed"));
-        def.collideConnected = desc.collideConnected;
         joint = b2CreatePrismaticJoint(m_worldId, &def);
 
     } else if (desc.typeId == QLatin1String("wheel")) {
         b2WheelJointDef def = b2DefaultWheelJointDef();
-        def.bodyIdA = bodyA;
-        def.bodyIdB = bodyB;
-        def.localAnchorA = anchorA;
-        def.localAnchorB = anchorB;
-        def.localAxisA = localAxisA;
+        fillBase(def.base, axisAngle);
         def.enableSpring = boolValue(desc.params, "enableSpring", true);
         def.hertz = static_cast<float>(realValue(desc.params, "hertz", 1.0));
         def.dampingRatio = static_cast<float>(realValue(desc.params, "dampingRatio", 0.7));
@@ -255,61 +246,36 @@ JointHandle Box2DEngine::addJoint(const JointDesc &desc)
         def.enableMotor = boolValue(desc.params, "enableMotor");
         def.maxMotorTorque = static_cast<float>(realValue(desc.params, "maxMotorTorque"));
         def.motorSpeed = radians(desc.params, "motorSpeed");
-        def.collideConnected = desc.collideConnected;
         joint = b2CreateWheelJoint(m_worldId, &def);
 
     } else if (desc.typeId == QLatin1String("motor")) {
+        // 3.2's motor joint: it drives frame A onto frame B at a velocity, with
+        // an optional spring. Its anchors become frames like every other
+        // joint's; the rest is the engine's own fields under the engine's own
+        // names.
         b2MotorJointDef def = b2DefaultMotorJointDef();
-        def.bodyIdA = bodyA;
-        def.bodyIdB = bodyB;
-        def.linearOffset = b2Vec2 { metres(realValue(desc.params, "linearOffsetX")),
-                                    metres(realValue(desc.params, "linearOffsetY")) };
-        def.angularOffset = radians(desc.params, "angularOffset");
-        def.maxForce = static_cast<float>(realValue(desc.params, "maxForce", 1.0));
-        def.maxTorque = static_cast<float>(realValue(desc.params, "maxTorque", 1.0));
-        def.correctionFactor = static_cast<float>(realValue(desc.params, "correctionFactor", 0.3));
-        def.collideConnected = desc.collideConnected;
+        fillBase(def.base, 0.0f);
+        def.linearVelocity = b2Vec2 { metres(realValue(desc.params, "linearVelocityX")),
+                                      metres(realValue(desc.params, "linearVelocityY")) };
+        def.angularVelocity = radians(desc.params, "angularVelocity");
+        def.maxVelocityForce =
+            static_cast<float>(realValue(desc.params, "maxVelocityForce", 1.0));
+        def.maxVelocityTorque =
+            static_cast<float>(realValue(desc.params, "maxVelocityTorque", 1.0));
+        def.linearHertz = static_cast<float>(realValue(desc.params, "linearHertz"));
+        def.linearDampingRatio =
+            static_cast<float>(realValue(desc.params, "linearDampingRatio", 1.0));
+        def.maxSpringForce = static_cast<float>(realValue(desc.params, "maxSpringForce", 1.0));
+        def.angularHertz = static_cast<float>(realValue(desc.params, "angularHertz"));
+        def.angularDampingRatio =
+            static_cast<float>(realValue(desc.params, "angularDampingRatio", 1.0));
+        def.maxSpringTorque = static_cast<float>(realValue(desc.params, "maxSpringTorque", 1.0));
         joint = b2CreateMotorJoint(m_worldId, &def);
-
-    } else if (desc.typeId == QLatin1String("mouse")) {
-        // Box2D asserts rather than fails if body A moves, and an assert in a
-        // release-mode solver is a crash with no message. Refusing here turns
-        // it into a joint the run reports as skipped.
-        if (b2Body_GetType(bodyA) != b2_staticBody)
-            return kInvalidJoint;
-
-        b2MouseJointDef def = b2DefaultMouseJointDef();
-        def.bodyIdA = bodyA;
-        def.bodyIdB = bodyB;
-        // b2MouseJointDef::target is the *initial* target, and Box2D works out
-        // which point on the body it has hold of from where that lands. Give it
-        // the destination here and it grabs whatever is standing there --
-        // empty space, for a body that has not arrived yet -- and then holds
-        // the body exactly where it is. Nothing moves, and no force appears to
-        // be doing anything.
-        //
-        // So it is created on the point being held, which is the first anchor,
-        // and only then told where to pull.
-        def.target = toMeters(sceneA);
-        def.hertz = static_cast<float>(realValue(desc.params, "hertz", 4.0));
-        def.dampingRatio = static_cast<float>(realValue(desc.params, "dampingRatio", 1.0));
-        def.maxForce = static_cast<float>(realValue(desc.params, "maxForce", 1.0));
-        def.collideConnected = desc.collideConnected;
-        joint = b2CreateMouseJoint(m_worldId, &def);
-
-        if (b2Joint_IsValid(joint)) {
-            // Where it pulls towards: the second anchor, or a target named
-            // outright, which wins -- the same way the distance joint reads a
-            // zero length as "however far apart they already are".
-            const QPointF target(realValue(desc.params, "targetX"),
-                                 realValue(desc.params, "targetY"));
-            b2MouseJoint_SetTarget(joint, toMeters(target.isNull() ? sceneB : target));
-        }
 
     } else if (desc.typeId == QLatin1String("filter")) {
         b2FilterJointDef def = b2DefaultFilterJointDef();
-        def.bodyIdA = bodyA;
-        def.bodyIdB = bodyB;
+        def.base.bodyIdA = bodyA;
+        def.base.bodyIdB = bodyB;
         joint = b2CreateFilterJoint(m_worldId, &def);
 
     } else {
@@ -378,32 +344,44 @@ void Box2DEngine::setJointParam(JointHandle handle, const QString &key, const QV
     // Where the joint holds, and which way it travels. Both are stored in a
     // body's own frame and both are one value out of a pair, so the current
     // one is read back, converted to scene coordinates, amended and put back.
+    // An anchor is the origin of the joint's frame on that body.
     if (key.startsWith(QLatin1String("anchor"))) {
         const bool endA = key.at(6) == QLatin1Char('A');
         const b2BodyId body = endA ? b2Joint_GetBodyA(joint) : b2Joint_GetBodyB(joint);
-        const b2Vec2 local = endA ? b2Joint_GetLocalAnchorA(joint)
-                                  : b2Joint_GetLocalAnchorB(joint);
-        QPointF world = toScene(b2Body_GetWorldPoint(body, local));
+        b2Transform frame = endA ? b2Joint_GetLocalFrameA(joint) : b2Joint_GetLocalFrameB(joint);
+        QPointF world = toScene(b2Body_GetWorldPoint(body, frame.p));
         if (key.endsWith(QLatin1Char('X')))
             world.setX(value.toDouble());
         else
             world.setY(value.toDouble());
 
-        const b2Vec2 moved = b2Body_GetLocalPoint(body, toMeters(world));
+        frame.p = b2Body_GetLocalPoint(body, toMeters(world));
         if (endA)
-            b2Joint_SetLocalAnchorA(joint, moved);
+            b2Joint_SetLocalFrameA(joint, frame);
         else
-            b2Joint_SetLocalAnchorB(joint, moved);
+            b2Joint_SetLocalFrameB(joint, frame);
         return;
     }
+    // The reference angle is how far the two frames are turned from one another:
+    // the joint rests where they line up, so frame B carries it.
     if (key == QLatin1String("referenceAngleNow")) {
-        b2Joint_SetReferenceAngle(joint, radians);
+        b2Transform frameB = b2Joint_GetLocalFrameB(joint);
+        frameB.q = b2MakeRot(b2Rot_GetAngle(b2Joint_GetLocalFrameA(joint).q) - radians);
+        b2Joint_SetLocalFrameB(joint, frameB);
         return;
     }
+    // The axis is frame A's own x direction. Turning it turns frame B by the
+    // same amount, so the angle the joint holds the bodies at does not move too.
     if (key == QLatin1String("axisAngle")) {
-        const b2Rot rotationA = b2Body_GetRotation(b2Joint_GetBodyA(joint));
-        const b2Vec2 world { std::cos(radians), std::sin(radians) };
-        b2Joint_SetLocalAxisA(joint, b2Normalize(b2InvRotateVector(rotationA, world)));
+        const float worldA = b2Rot_GetAngle(b2Body_GetRotation(b2Joint_GetBodyA(joint)));
+        b2Transform frameA = b2Joint_GetLocalFrameA(joint);
+        b2Transform frameB = b2Joint_GetLocalFrameB(joint);
+        const float was = b2Rot_GetAngle(frameA.q);
+        const float now = radians - worldA;
+        frameA.q = b2MakeRot(now);
+        frameB.q = b2MakeRot(b2Rot_GetAngle(frameB.q) + (now - was));
+        b2Joint_SetLocalFrameA(joint, frameA);
+        b2Joint_SetLocalFrameB(joint, frameB);
         return;
     }
 
@@ -500,33 +478,34 @@ void Box2DEngine::setJointParam(JointHandle handle, const QString &key, const QV
         break;
 
     case b2_motorJoint:
-        if (key == QLatin1String("maxForce"))            b2MotorJoint_SetMaxForce(joint, number);
-        else if (key == QLatin1String("maxTorque"))      b2MotorJoint_SetMaxTorque(joint, number);
-        else if (key == QLatin1String("correctionFactor")) b2MotorJoint_SetCorrectionFactor(joint, number);
-        else if (key == QLatin1String("angularOffset"))  b2MotorJoint_SetAngularOffset(joint, radians);
-        // The offset is one b2Vec2 but two properties, so the component that
+        if (key == QLatin1String("maxVelocityForce"))
+            b2MotorJoint_SetMaxVelocityForce(joint, number);
+        else if (key == QLatin1String("maxVelocityTorque"))
+            b2MotorJoint_SetMaxVelocityTorque(joint, number);
+        else if (key == QLatin1String("maxSpringForce"))
+            b2MotorJoint_SetMaxSpringForce(joint, number);
+        else if (key == QLatin1String("maxSpringTorque"))
+            b2MotorJoint_SetMaxSpringTorque(joint, number);
+        else if (key == QLatin1String("linearHertz"))
+            b2MotorJoint_SetLinearHertz(joint, number);
+        else if (key == QLatin1String("linearDampingRatio"))
+            b2MotorJoint_SetLinearDampingRatio(joint, number);
+        else if (key == QLatin1String("angularHertz"))
+            b2MotorJoint_SetAngularHertz(joint, number);
+        else if (key == QLatin1String("angularDampingRatio"))
+            b2MotorJoint_SetAngularDampingRatio(joint, number);
+        else if (key == QLatin1String("angularVelocity"))
+            b2MotorJoint_SetAngularVelocity(joint, radians);
+        // The velocity is one b2Vec2 but two properties, so the component that
         // is not being set is read back rather than assumed to be zero.
-        else if (key == QLatin1String("linearOffsetX")) {
-            b2Vec2 offset = b2MotorJoint_GetLinearOffset(joint);
-            offset.x = metres;
-            b2MotorJoint_SetLinearOffset(joint, offset);
-        } else if (key == QLatin1String("linearOffsetY")) {
-            b2Vec2 offset = b2MotorJoint_GetLinearOffset(joint);
-            offset.y = metres;
-            b2MotorJoint_SetLinearOffset(joint, offset);
-        }
-        break;
-
-    case b2_mouseJoint:
-        if (key == QLatin1String("hertz"))               b2MouseJoint_SetSpringHertz(joint, number);
-        else if (key == QLatin1String("dampingRatio"))   b2MouseJoint_SetSpringDampingRatio(joint, number);
-        else if (key == QLatin1String("maxForce"))       b2MouseJoint_SetMaxForce(joint, number);
-        // Moving the target is the whole point of this joint -- it is how a
-        // body is led somewhere softly instead of being placed there.
-        else if (key == QLatin1String("targetX") || key == QLatin1String("targetY")) {
-            b2Vec2 target = b2MouseJoint_GetTarget(joint);
-            (key == QLatin1String("targetX") ? target.x : target.y) = metres;
-            b2MouseJoint_SetTarget(joint, target);
+        else if (key == QLatin1String("linearVelocityX")) {
+            b2Vec2 velocity = b2MotorJoint_GetLinearVelocity(joint);
+            velocity.x = metres;
+            b2MotorJoint_SetLinearVelocity(joint, velocity);
+        } else if (key == QLatin1String("linearVelocityY")) {
+            b2Vec2 velocity = b2MotorJoint_GetLinearVelocity(joint);
+            velocity.y = metres;
+            b2MotorJoint_SetLinearVelocity(joint, velocity);
         }
         break;
 
@@ -585,7 +564,7 @@ void Box2DEngine::setBodyParam(BodyHandle handle, const QString &key, const QVar
             target.p.y = static_cast<float>(value.toDouble() / m_pixelsPerMeter);
         else
             target.q = b2MakeRot(static_cast<float>(qDegreesToRadians(value.toDouble())));
-        b2Body_SetTargetTransform(body, target, m_lastStep);
+        b2Body_SetTargetTransform(body, target, m_lastStep, true);
         return;
     }
 
@@ -685,7 +664,16 @@ void Box2DEngine::setBodyParam(BodyHandle handle, const QString &key, const QVar
     if (key == QLatin1String("gravityScale"))        b2Body_SetGravityScale(body, number);
     else if (key == QLatin1String("linearDamping"))  b2Body_SetLinearDamping(body, number);
     else if (key == QLatin1String("angularDamping")) b2Body_SetAngularDamping(body, number);
-    else if (key == QLatin1String("fixedRotation"))  b2Body_SetFixedRotation(body, flag);
+    else if (key == QLatin1String("lockLinearX") || key == QLatin1String("lockLinearY")
+             || key == QLatin1String("lockAngularZ")) {
+        // The engine sets all three at once, so the other two are read back and
+        // handed straight in again.
+        b2MotionLocks locks = b2Body_GetMotionLocks(body);
+        if (key == QLatin1String("lockLinearX"))       locks.linearX = flag;
+        else if (key == QLatin1String("lockLinearY"))  locks.linearY = flag;
+        else                                           locks.angularZ = flag;
+        b2Body_SetMotionLocks(body, locks);
+    }
     else if (key == QLatin1String("isBullet"))       b2Body_SetBullet(body, flag);
     else if (key == QLatin1String("enableSleep"))    b2Body_EnableSleep(body, flag);
     else if (key == QLatin1String("isAwake"))        b2Body_SetAwake(body, flag);
@@ -699,10 +687,10 @@ void Box2DEngine::setBodyParam(BodyHandle handle, const QString &key, const QVar
     }
 }
 
-bool Box2DEngine::preSolve(b2ShapeId shapeA, b2ShapeId shapeB)
+void Box2DEngine::preSolve(b2ShapeId shapeA, b2ShapeId shapeB)
 {
     if (!b2Shape_IsValid(shapeA) || !b2Shape_IsValid(shapeB))
-        return true;
+        return;
 
     const auto nameOf = [this](b2ShapeId shape) {
         const auto index =
@@ -728,7 +716,7 @@ bool Box2DEngine::preSolve(b2ShapeId shapeA, b2ShapeId shapeB)
 
     // Always solved. Cancelling a contact from here is what one-way platforms
     // are built on, but nothing in the editor says which way is through.
-    return true;
+    return;
 }
 
 void Box2DEngine::collectBodyEvents()
@@ -996,7 +984,7 @@ void Box2DEngine::performAction(const QString &id, BodyHandle target,
                                       / m_pixelsPerMeter);
         };
         const b2Vec2 impulse { metres(params, "impulseX"), metres(params, "impulseY") };
-        const b2Vec2 centre = b2Body_GetWorldCenterOfMass(body);
+        const b2Vec2 centre = b2Body_GetWorldCenter(body);
         const b2Vec2 point { centre.x + metres(params, "offsetX"),
                              centre.y + metres(params, "offsetY") };
         b2Body_ApplyLinearImpulse(body, impulse, point, true);
@@ -1011,7 +999,7 @@ void Box2DEngine::performAction(const QString &id, BodyHandle target,
                                       / m_pixelsPerMeter);
         };
         const b2Vec2 force { metres(params, "impulseX"), metres(params, "impulseY") };
-        const b2Vec2 centre = b2Body_GetWorldCenterOfMass(body);
+        const b2Vec2 centre = b2Body_GetWorldCenter(body);
         const b2Vec2 point { centre.x + metres(params, "offsetX"),
                              centre.y + metres(params, "offsetY") };
         b2Body_ApplyForce(body, force, point, true);
@@ -1020,7 +1008,7 @@ void Box2DEngine::performAction(const QString &id, BodyHandle target,
 
     // Puts back what the shapes say it weighs, undoing a mass set by hand.
     if (id == QLatin1String("resetMass")) {
-        b2Body_ApplyMassFromShapes(body);
+        b2Body_UpdateMassFromShapes(body);
         return;
     }
 
@@ -1094,7 +1082,7 @@ void Box2DEngine::setShapeParam(const QString &name, const QString &key, const Q
             material.rollingResistance = number;
         else
             material.tangentSpeed = static_cast<float>(value.toDouble() / m_pixelsPerMeter);
-        b2Shape_SetSurfaceMaterial(*it, material);
+        b2Shape_SetSurfaceMaterial(*it, &material);
     } else if (key == QLatin1String("categoryBits") || key == QLatin1String("maskBits")
                || key == QLatin1String("groupIndex")) {
         b2Filter filter = b2Shape_GetFilter(*it);
@@ -1161,13 +1149,13 @@ QVariant Box2DEngine::shapeValue(const QString &name, const QString &key) const
             return {};
         return b2Shape_GetCircle(*it).radius * m_pixelsPerMeter;
     }
-    if (key == QLatin1String("mass")) return b2Shape_GetMassData(*it).mass;
+    if (key == QLatin1String("mass")) return b2Shape_ComputeMassData(*it).mass;
     if (key == QLatin1String("rotationalInertia"))
-        return b2Shape_GetMassData(*it).rotationalInertia;
+        return b2Shape_ComputeMassData(*it).rotationalInertia;
     if (key == QLatin1String("centerOfMassX"))
-        return toScene(b2Shape_GetMassData(*it).center).x();
+        return toScene(b2Shape_ComputeMassData(*it).center).x();
     if (key == QLatin1String("centerOfMassY"))
-        return toScene(b2Shape_GetMassData(*it).center).y();
+        return toScene(b2Shape_ComputeMassData(*it).center).y();
     if (key.startsWith(QLatin1String("bounds"))) {
         const b2AABB box = b2Shape_GetAABB(*it);
         if (key == QLatin1String("boundsMinX")) return box.lowerBound.x * m_pixelsPerMeter;
@@ -1193,7 +1181,7 @@ QVariant Box2DEngine::shapeValue(const QString &name, const QString &key) const
         if (capacity <= 0)
             return 0;   // not a sensor, or nothing in it
         QVarLengthArray<b2ShapeId, 32> overlaps(capacity);
-        const int found = b2Shape_GetSensorOverlaps(*it, overlaps.data(), capacity);
+        const int found = b2Shape_GetSensorData(*it, overlaps.data(), capacity);
         int alive = 0;
         for (int i = 0; i < found; ++i)
             alive += b2Shape_IsValid(overlaps[i]) ? 1 : 0;

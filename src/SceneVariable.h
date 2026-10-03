@@ -20,7 +20,7 @@
 // A variable is run state: it starts each run at `initial` and goes back there
 // when the run stops, like every position on the canvas.
 struct SceneVariable {
-    enum class Type { Bool, Integer, Double };
+    enum class Type { Bool, Integer, Double, Timer };
 
     QString name;
     Type type = Type::Double;
@@ -32,6 +32,7 @@ struct SceneVariable {
         case Type::Bool:    return QStringLiteral("bool");
         case Type::Integer: return QStringLiteral("int");
         case Type::Double:  return QStringLiteral("double");
+        case Type::Timer:   return QStringLiteral("timer");
         }
         return QStringLiteral("double");
     }
@@ -42,6 +43,8 @@ struct SceneVariable {
             return Type::Bool;
         if (name == QLatin1String("int"))
             return Type::Integer;
+        if (name == QLatin1String("timer"))
+            return Type::Timer;
         return Type::Double;
     }
 
@@ -51,11 +54,20 @@ struct SceneVariable {
         case Type::Bool:    return QObject::tr("Boolean");
         case Type::Integer: return QObject::tr("Integer");
         case Type::Double:  return QObject::tr("Double");
+        case Type::Timer:   return QObject::tr("Timer");
         }
         return QObject::tr("Double");
     }
 
-    static QVector<Type> types() { return { Type::Bool, Type::Integer, Type::Double }; }
+    static QVector<Type> types()
+    {
+        return { Type::Bool, Type::Integer, Type::Double, Type::Timer };
+    }
+
+    // A timer is counted in whole milliseconds and started by a rule, so the
+    // two places that ask "is this one of those" ask here rather than naming
+    // the enumerator.
+    bool isTimer() const { return type == Type::Timer; }
 
     // What an empty one of this type holds, and what a value coerced to it
     // becomes -- so a variable switched from a number to a flag does not keep
@@ -65,6 +77,7 @@ struct SceneVariable {
         switch (type) {
         case Type::Bool:    return value.toBool();
         case Type::Integer: return value.toInt();
+        case Type::Timer:   return qMax(0, value.toInt());
         case Type::Double:  return value.toDouble();
         }
         return value;
@@ -104,6 +117,23 @@ struct SceneVariable {
             p.decimals = 3;
             p.step = 0.1;
             p.tooltip = QObject::tr("A number variable of this scene.");
+            break;
+        case Type::Timer:
+            p.type = physics::ParamType::Integer;
+            p.minValue = 0;
+            p.maxValue = 1e9;
+            p.decimals = 0;
+            p.step = 100.0;
+            // Worth saying outright: a timer stands still until a rule starts
+            // it, and it moves by however long a step lasted -- some 17 ms at
+            // the usual pace -- so it steps over most exact values. "Greater
+            // than" is the comparison that catches it; "changed to" is not.
+            p.tooltip = QObject::tr(
+                "A timer of this scene, in milliseconds. It starts each run at "
+                "the value above and stands still until a rule starts it. "
+                "Compare it with \"greater than\" rather than \"changed to\": "
+                "it advances by the length of a step and steps over most "
+                "exact values.");
             break;
         }
         return p;
