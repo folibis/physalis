@@ -1,0 +1,11 @@
+//! The bytes came with the file beside this one, as a string rather than
+//! something to fetch -- so this still runs from a file URL.
+function decodeWasm() {
+    var raw = atob(globalThis.Box2DWasmBytes);
+    var bytes = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; ++i)
+        bytes[i] = raw.charCodeAt(i);
+    return bytes;
+}
+
+Box2DFactory({ wasmBinary: decodeWasm() }).then(begin);

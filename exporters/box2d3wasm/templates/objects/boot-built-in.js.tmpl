@@ -1,0 +1,13 @@
+//! The wasm is handed over as bytes rather than fetched, which is what lets the
+//! page work from a file URL with no server at all.
+function decodeWasm() {
+    var text = document.getElementById("wasm").textContent;
+    var clean = text.replace(/[^A-Za-z0-9+/=]/g, "");
+    var raw = atob(clean);
+    var bytes = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; ++i)
+        bytes[i] = raw.charCodeAt(i);
+    return bytes;
+}
+
+Box2DFactory({ wasmBinary: decodeWasm() }).then(begin);

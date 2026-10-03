@@ -1,0 +1,8 @@
+//! Inside the loop over this step's hit events: what a watched shape keeps of
+//! its last one.
+// How hard {{ID}} was last hit, and where.
+if (same(a, {{ID}}) || same(b, {{ID}})) {
+    {{ID}}HitSpeed = hit.approachSpeed;
+    {{ID}}HitPoint = hit.point;
+    {{ID}}HitNormal = same(a, {{ID}}) ? hit.normal : b2.b2Neg(hit.normal);
+}

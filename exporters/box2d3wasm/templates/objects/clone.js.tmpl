@@ -1,0 +1,8 @@
+// A copy of {{NAME}}, as it was drawn, with its origin at at.
+function cloneOf_{{ID}}(at)
+{
+    var clone;
+    {{BODY}}
+    b2.b2Body_SetTransform(clone, at, b2.b2Body_GetRotation(clone));
+    return clone;
+}

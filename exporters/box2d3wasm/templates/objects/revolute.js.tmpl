@@ -1,0 +1,23 @@
+//! A field without a value is left out, and b2DefaultRevoluteJointDef's stands.
+{
+    var jointDef = b2.b2DefaultRevoluteJointDef();
+    jointDef.base.bodyIdA = {{BODY_A}};
+    jointDef.base.bodyIdB = {{BODY_B}};
+    //! Frame A's x axis is the axis for the kinds that slide; frame B is turned
+    //! back by the reference angle, so the bodies rest that far apart.
+    jointDef.base.localFrameA = frame(b2.b2Body_GetLocalPoint({{BODY_A}}, m({{ANCHOR_A_X}}, {{ANCHOR_A_Y}})), rad({{FRAME_A_DEG}}));
+    jointDef.base.localFrameB = frame(b2.b2Body_GetLocalPoint({{BODY_B}}, m({{ANCHOR_B_X}}, {{ANCHOR_B_Y}})), rad({{FRAME_B_DEG}}));
+    jointDef.base.collideConnected = {{COLLIDE_CONNECTED}};
+    jointDef.targetAngle = rad({{TARGET_ANGLE}});
+    jointDef.enableSpring = {{ENABLE_SPRING}};
+    jointDef.hertz = {{HERTZ}};
+    jointDef.dampingRatio = {{DAMPING_RATIO}};
+    jointDef.enableLimit = {{ENABLE_LIMIT}};
+    jointDef.lowerAngle = rad({{LOWER_ANGLE}});
+    jointDef.upperAngle = rad({{UPPER_ANGLE}});
+    jointDef.enableMotor = {{ENABLE_MOTOR}};
+    jointDef.maxMotorTorque = {{MAX_MOTOR_TORQUE}};
+    jointDef.motorSpeed = rad({{MOTOR_SPEED}});
+    {{ID}} = b2.b2CreateRevoluteJoint(world, jointDef);
+    b2.b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
+}

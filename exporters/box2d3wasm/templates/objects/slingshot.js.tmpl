@@ -1,0 +1,115 @@
+//! Flinging a body with the mouse, the way the editor does it during a run:
+//! press on it, pull back, let go, and it is pushed the other way through its
+//! centre of mass. Only the bodies the scene marked "Can Be Shot", and only
+//! while the run is going.
+//! Filled by createWorld(), not here: the bodies do not exist until it has run,
+//! and a reset makes new ones.
+var shootable = [];
+
+var shot = null;   // { body, maxPull, fullImpulse, atX, atY } while aiming
+
+// Where a client point lands in the scene, undoing the view the canvas draws
+// with. The same arithmetic as applyView(), run backwards.
+function scenePoint(e) {
+    var box = canvas.getBoundingClientRect();
+    var x = (e.clientX - box.left - canvas.width / 2) / camera.scale - camera.x;
+    var y = (e.clientY - box.top - canvas.height / 2) / camera.scale - camera.y;
+    return { x: x + {{VIEW_CENTER_X}}, y: y + {{VIEW_CENTER_Y}} };
+}
+
+// The topmost body under the pointer that can be shot, looking through any that
+// cannot: a ball lying under a table is still a ball to shoot.
+function shootableAt(at) {
+    var point = m(at.x, at.y);
+    for (var i = shootable.length - 1; i >= 0; --i) {
+        var entry = shootable[i];
+        if (!b2.b2Body_IsValid(entry.body))
+            continue;
+        // The bindings hand back shapes up to a capacity, so the count has to be
+        // asked for first; left out, it returns an empty list and nothing is hit.
+        var shapes = b2.b2Body_GetShapes(entry.body, b2.b2Body_GetShapeCount(entry.body));
+        for (var s = 0; s < shapes.length; ++s) {
+            if (b2.b2Shape_TestPoint(shapes[s], point))
+                return entry;
+        }
+    }
+    return null;
+}
+
+// Pulled back, flung forward: the push points away from the pull, and its size
+// is how far back it was pulled as a fraction of the body's own full pull.
+function shotImpulse() {
+    if (!shot)
+        return null;
+    var centre = b2.b2Body_GetWorldCenterOfMass(shot.body);
+    var dx = shot.atX - centre.x * PIXELS_PER_METER;
+    var dy = shot.atY - centre.y * PIXELS_PER_METER;
+    var length = Math.sqrt(dx * dx + dy * dy);
+    if (length < 1e-6 || shot.maxPull <= 0)
+        return null;
+    var power = Math.min(length / shot.maxPull, 1);
+    return { x: -dx / length * power * shot.fullImpulse,
+             y: -dy / length * power * shot.fullImpulse,
+             power: power, fromX: centre.x * PIXELS_PER_METER,
+             fromY: centre.y * PIXELS_PER_METER };
+}
+
+function beginShot(e) {
+    if (!timer)
+        return false;             // only while the run is going
+    var found = shootableAt(scenePoint(e));
+    if (!found)
+        return false;
+    var at = scenePoint(e);
+    shot = { body: found.body, maxPull: found.maxPull,
+             fullImpulse: found.fullImpulse, atX: at.x, atY: at.y };
+    return true;
+}
+
+function aimShot(e) {
+    if (!shot)
+        return;
+    var at = scenePoint(e);
+    shot.atX = at.x;
+    shot.atY = at.y;
+}
+
+function releaseShot() {
+    if (!shot)
+        return;
+    var push = shotImpulse();
+    var body = shot.body;
+    shot = null;
+    if (push && b2.b2Body_IsValid(body))
+        b2.b2Body_ApplyLinearImpulseToCenter(body, m(push.x, push.y), true);
+}
+
+function cancelShot() { shot = null; }
+
+// One line from the body to the pointer, coloured by the force it would apply:
+// the light-pull colour with little in it, the full-pull colour at full power.
+function drawShot() {
+    var push = shotImpulse();
+    if (!push)
+        return;
+    var light = [{{LIGHT_RGBA}}], full = [{{FULL_RGBA}}];
+    var mix = [];
+    for (var c = 0; c < 4; ++c)
+        mix.push(light[c] + (full[c] - light[c]) * push.power);
+    ctx.save();
+    ctx.strokeStyle = "rgba(" + Math.round(mix[0]) + ", " + Math.round(mix[1]) + ", "
+                    + Math.round(mix[2]) + ", " + (mix[3] / 255).toFixed(3) + ")";
+    ctx.lineWidth = {{LINE_WIDTH}} / camera.scale;
+    ctx.lineCap = "round";
+    // The dash is a length like the width, so it keeps its look as the view
+    // is zoomed rather than growing with the scene.
+    var dash = {{LINE_DASH}};
+    for (var d = 0; d < dash.length; ++d)
+        dash[d] /= camera.scale;
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    ctx.moveTo(push.fromX, push.fromY);
+    ctx.lineTo(shot.atX, shot.atY);
+    ctx.stroke();
+    ctx.restore();
+}

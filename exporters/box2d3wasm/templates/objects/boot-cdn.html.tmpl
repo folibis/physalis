@@ -1,0 +1,7 @@
+<!-- The engine comes from {{ENGINE_URL}} rather than being carried here, so this
+     page needs a server and a network where a built-in one needs neither. A
+     module runs after the classic scripts above, so begin() is already there. -->
+<script type="module">
+import Box2DFactory from "{{ENGINE_URL}}";
+Box2DFactory().then(begin);
+</script>

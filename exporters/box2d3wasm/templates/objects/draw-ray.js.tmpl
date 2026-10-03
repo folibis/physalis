@@ -1,0 +1,18 @@
+
+// A ray, drawn as far as it reached, with a dot on whatever it found.
+function drawRay(origin, translation, result) {
+    var end = result.hit ? result.point : b2.b2Add(origin, translation);
+    ctx.strokeStyle = result.hit ? "#e86a6a" : "#9a9a9a";
+    ctx.lineWidth = 1.5 / camera.scale;
+    ctx.beginPath();
+    ctx.moveTo(origin.x * PIXELS_PER_METER, origin.y * PIXELS_PER_METER);
+    ctx.lineTo(end.x * PIXELS_PER_METER, end.y * PIXELS_PER_METER);
+    ctx.stroke();
+    if (result.hit) {
+        ctx.fillStyle = "#e86a6a";
+        ctx.beginPath();
+        ctx.arc(end.x * PIXELS_PER_METER, end.y * PIXELS_PER_METER, 4 / camera.scale,
+                0, 2 * Math.PI);
+        ctx.fill();
+    }
+}

@@ -1,0 +1,3 @@
+box2d3-wasm 5.2.0 (compat build), which is Box2D 3.2 -- the same version
+engines/box2d fetches. Upgrading one means upgrading the other: 5.x tracks
+Box2D main, where the joint frames and motion locks live.

@@ -1,0 +1,3 @@
+var debugBox = document.getElementById("debugSwitch");
+debugBox.checked = debug;
+debugBox.onchange = function () { debug = debugBox.checked; draw(); };

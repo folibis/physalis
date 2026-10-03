@@ -1,0 +1,14 @@
+{
+    // The walls around the field.
+    var bodyDef = b2.b2DefaultBodyDef();
+    var walls = b2.b2CreateBody(world, bodyDef);
+    var shapeDef = b2.b2DefaultShapeDef();
+    var wall = b2.b2MakeOffsetBox(len({{HALF_SPAN}}), len({{HALF_THICKNESS}}), m(0, {{TOP}}), noTurn());
+    b2.b2CreatePolygonShape(walls, shapeDef, wall);
+    wall = b2.b2MakeOffsetBox(len({{HALF_SPAN}}), len({{HALF_THICKNESS}}), m(0, {{BOTTOM}}), noTurn());
+    b2.b2CreatePolygonShape(walls, shapeDef, wall);
+    wall = b2.b2MakeOffsetBox(len({{HALF_THICKNESS}}), len({{HALF_HEIGHT}}), m({{LEFT}}, 0), noTurn());
+    b2.b2CreatePolygonShape(walls, shapeDef, wall);
+    wall = b2.b2MakeOffsetBox(len({{HALF_THICKNESS}}), len({{HALF_HEIGHT}}), m({{RIGHT}}, 0), noTurn());
+    b2.b2CreatePolygonShape(walls, shapeDef, wall);
+}

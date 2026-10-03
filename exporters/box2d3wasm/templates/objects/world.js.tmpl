@@ -1,0 +1,23 @@
+// Box2D's tolerances are lengths fixed for metre-sized objects: 5 mm of slop,
+// contacts made 2 cm before shapes meet, and box2d3wasm cannot be told what a
+// metre is. So the metre is chosen instead: at {{PIXELS_PER_METER}} scene units
+// to it, that fixed 2 cm is the {{SLOP_UNITS}} scene units of contact margin this
+// scene asked for. Lengths, speeds and gravity are divided by the same number and
+// mean the same motion; density carries the difference in mass.
+var worldDef = b2.b2DefaultWorldDef();
+worldDef.gravity = vec({{GRAVITY_X}}, {{GRAVITY_Y}});
+worldDef.maximumLinearSpeed = {{MAXIMUM_LINEAR_SPEED}};
+worldDef.restitutionThreshold = {{RESTITUTION_THRESHOLD}};
+worldDef.hitEventThreshold = {{HIT_EVENT_THRESHOLD}};
+worldDef.contactHertz = {{CONTACT_HERTZ}};
+worldDef.contactDampingRatio = {{CONTACT_DAMPING_RATIO}};
+worldDef.enableSleep = {{ENABLE_SLEEP}};
+worldDef.enableContinuous = {{ENABLE_CONTINUOUS}};
+world = b2.b2CreateWorld(worldDef);
+//! Not a field of b2WorldDef: switched on the world once it exists, and on
+//! unless the scene turned it off. Speculative contacts are no longer optional.
+b2.b2World_EnableWarmStarting(world, {{ENABLE_WARM_STARTING}});
+//! PRE_SOLVE is notePreSolve when a rule watches contacts about to be solved.
+//! The binding takes the callback on its own, where the C API also asks for a
+//! pre-continuous one and a context.
+b2.b2World_SetPreSolveCallback(world, {{PRE_SOLVE}});

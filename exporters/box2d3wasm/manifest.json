@@ -1,0 +1,71 @@
+{
+    "name": "box2d3wasm",
+    "description": "A standalone web page: an index.html that builds this scene and runs it on a canvas. Where the engine comes from is a setting -- built into the page, beside it, or from a CDN.",
+    "settings": [
+        {
+            "key": "projectName",
+            "label": "Project name",
+            "type": "string",
+            "default": "PhysalisScene",
+            "tooltip": "The page title. Letters, digits and underscores."
+        },
+        {
+            "key": "engineSource",
+            "label": "Engine",
+            "type": "choice",
+            "choices": [
+                "Built into the page",
+                "Beside the page",
+                "From a CDN"
+            ],
+            "default": "Built into the page",
+            "tooltip": "Where the page gets Box2D. Built in, it is part of index.html and the page opens straight from a file with no server and no network. Beside the page, it is a second file next to it, which is smaller to reload and still needs no server. From a CDN, neither is written and the page fetches it, which needs both."
+        },
+        {
+            "key": "engineUrl",
+            "label": "CDN address",
+            "type": "string",
+            "default": "https://cdn.jsdelivr.net/npm/box2d3-wasm@5.2.0/build/dist/es/entry.mjs",
+            "tooltip": "The module the page imports when Engine is From a CDN. Ignored otherwise. The version has to be the one this converter was built against, or the page will call things that are not there."
+        },
+        {
+            "key": "addControls",
+            "label": "Add controls",
+            "type": "bool",
+            "default": true,
+            "tooltip": "Start, Pause and Stop buttons above the canvas. Without them the page opens running and there is nothing to press."
+        },
+        {
+            "key": "debugView",
+            "label": "Debug view",
+            "type": "bool",
+            "default": true,
+            "tooltip": "Adds a Debug view switch to the controls: joints, each body's centre of mass and heading, and where the rays are looking, drawn over the scene."
+        },
+        {
+            "key": "navigation",
+            "label": "Pan and zoom",
+            "type": "bool",
+            "default": true,
+            "tooltip": "Drag the canvas to move the view and use the wheel to zoom, the way the editor's own canvas works. Without it the page shows a fixed view of the field."
+        },
+        {
+            "key": "stepsPerSecond",
+            "label": "Steps per second",
+            "type": "int",
+            "default": 60,
+            "min": 15,
+            "max": 480,
+            "tooltip": "How often the exported page steps the world. The editor's own setting is not carried across, since it is a preference rather than part of the scene."
+        },
+        {
+            "key": "subStepCount",
+            "label": "Sub-steps",
+            "type": "int",
+            "default": 4,
+            "min": 1,
+            "max": 16,
+            "tooltip": "How many times Box2D relaxes the constraints within one step. The scene's own value is used when it has one; this is the fallback."
+        }
+    ]
+}

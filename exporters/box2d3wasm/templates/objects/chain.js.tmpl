@@ -1,0 +1,10 @@
+//! A chain is one-sided and smooth across its joins; the editor builds it with
+//! b2CreateChain when asked to.
+{{DEF}}
+{{POINTS}}
+var chainDef = b2.b2DefaultChainDef();
+chainDef.SetPoints({{POINTS_NAME}});
+chainDef.isLoop = {{LOOP}};
+chainDef.filter = shapeDef.filter;
+chainDef.SetMaterials([shapeDef.material]);
+b2.b2CreateChain({{BODY}}, chainDef);

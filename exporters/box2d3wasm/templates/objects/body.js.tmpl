@@ -1,0 +1,28 @@
+//! One body and its shapes, in a block of its own so each can have a bodyDef.
+//! A field without a value is left out, and b2DefaultBodyDef's stands.
+{
+    var bodyDef = b2.b2DefaultBodyDef();
+    bodyDef.type = {{TYPE}};
+    bodyDef.position = m({{X}}, {{Y}});
+    bodyDef.rotation = b2.b2MakeRot(rad({{ANGLE}}));
+    bodyDef.linearVelocity = vec({{VELOCITY_X}}, {{VELOCITY_Y}});
+    bodyDef.angularVelocity = rad({{ANGULAR_VELOCITY}});
+    bodyDef.linearDamping = {{LINEAR_DAMPING}};
+    bodyDef.angularDamping = {{ANGULAR_DAMPING}};
+    bodyDef.gravityScale = {{GRAVITY_SCALE}};
+    bodyDef.sleepThreshold = {{SLEEP_THRESHOLD}};
+    bodyDef.enableSleep = {{ENABLE_SLEEP}};
+    bodyDef.isAwake = {{AWAKE}};
+    bodyDef.motionLocks.linearX = {{LOCK_LINEAR_X}};
+    bodyDef.motionLocks.linearY = {{LOCK_LINEAR_Y}};
+    bodyDef.motionLocks.angularZ = {{LOCK_ANGULAR_Z}};
+    bodyDef.isBullet = {{BULLET}};
+    bodyDef.allowFastRotation = {{ALLOW_FAST_ROTATION}};
+    bodyDef.isEnabled = {{ENABLED}};
+    {{ID}} = b2.b2CreateBody(world, bodyDef);
+
+    {{SHAPES}}
+
+    //! How the page paints it, since Box2D keeps no list of a world's bodies.
+    {{DRAW}}
+}

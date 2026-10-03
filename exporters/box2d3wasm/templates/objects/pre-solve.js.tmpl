@@ -1,0 +1,6 @@
+// Box2D asks before it solves each contact; noted here, acted on after the step.
+// 3.2 tells rather than asks: the callback returns nothing.
+var aboutToTouch = [];
+function notePreSolve(a, b) {
+    aboutToTouch.push([a, b]);
+}

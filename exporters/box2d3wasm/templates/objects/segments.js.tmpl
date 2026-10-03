@@ -1,0 +1,10 @@
+//! Any other outline: one two-sided segment per edge. NEXT is the index of the
+//! point after i, going round for a closed outline.
+{{DEF}}
+{{POINTS}}
+for (var i = 0; i < {{COUNT}}; ++i) {
+    var segment = new b2.b2Segment();
+    segment.point1 = {{POINTS_NAME}}[i];
+    segment.point2 = {{POINTS_NAME}}[{{NEXT}}];
+    b2.b2CreateSegmentShape({{BODY}}, shapeDef, segment);
+}

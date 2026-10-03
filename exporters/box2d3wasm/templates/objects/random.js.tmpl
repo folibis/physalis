@@ -1,0 +1,29 @@
+//! mulberry32: four lines with a stated algorithm, so this page and the editor
+//! give the same numbers from the same seed. Zero in the scene means a different
+//! run every time, and the seed comes from the clock instead.
+var randomState = {{SEED}};
+
+function nextRandom() {
+    randomState = (randomState + 0x6D2B79F5) >>> 0;
+    var z = randomState;
+    z = Math.imul(z ^ (z >>> 15), z | 1) >>> 0;
+    z = (z ^ (z + (Math.imul(z ^ (z >>> 7), z | 61) >>> 0))) >>> 0;
+    return (z ^ (z >>> 14)) >>> 0;
+}
+
+// A fresh number in [0, 1), and one somewhere between two bounds.
+function randomUnit() { return nextRandom() / 4294967296; }
+
+function rollBetween(from, to) {
+    if (from > to) { var swap = from; from = to; to = swap; }
+    return from + randomUnit() * (to - from);
+}
+
+// Whole steps of `step` between the two ends, both included: 1 to 6 by 1 is a
+// die, and each face comes up as often as the others.
+function rollSteps(from, to, step) {
+    if (from > to) { var swap = from; from = to; to = swap; }
+    if (!(step > 0)) return rollBetween(from, to);
+    var faces = Math.floor((to - from) / step) + 1;
+    return from + step * (Math.floor(randomUnit() * faces) % Math.max(1, faces));
+}

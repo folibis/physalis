@@ -1,0 +1,5 @@
+{{DEF}}
+var {{NAME}} = new b2.b2Circle();
+{{NAME}}.center = m({{X}}, {{Y}});
+{{NAME}}.radius = len({{RADIUS}});
+{{KEEP}}b2.b2CreateCircleShape({{BODY}}, shapeDef, {{NAME}});

@@ -1,0 +1,47 @@
+//! The readout the editor shows in a corner of the canvas while a run is going:
+//! one line per property the scene was told to watch. Painted in screen pixels,
+//! not scene units, so panning and zooming leave it where it is.
+function logLines() {
+    var rows = [];
+    {{ROWS}}
+    return rows;
+}
+
+// A number the way the editor writes it: two decimals, or three figures for
+// something smaller than one.
+function logNumber(v) {
+    if (v === 0 || Math.abs(v) >= 1)
+        return v.toFixed(2);
+    return Number(v.toPrecision(3)).toString();
+}
+
+function drawLog() {
+    var rows = logLines();
+    if (!rows.length)
+        return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.font = "{{FONT_SIZE}}px {{FONT_FAMILY}}";
+    ctx.textBaseline = "top";
+
+    var pad = 8, gap = 4, line = {{FONT_SIZE}} * 1.35;
+    var width = 0;
+    for (var i = 0; i < rows.length; ++i)
+        width = Math.max(width, ctx.measureText(rows[i]).width);
+    var boxW = width + pad * 2, boxH = rows.length * line + pad * 2 - (line - {{FONT_SIZE}});
+    var x = {{AT_RIGHT}} ? canvas.width - boxW - gap : gap;
+    var y = {{AT_BOTTOM}} ? canvas.height - boxH - gap : gap;
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.745)";
+    ctx.strokeStyle = "#c8c8c8";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.rect(x + 0.5, y + 0.5, boxW, boxH);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "{{TEXT_COLOR}}";
+    for (var r = 0; r < rows.length; ++r)
+        ctx.fillText(rows[r], x + pad, y + pad + r * line);
+    ctx.restore();
+}
