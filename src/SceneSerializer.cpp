@@ -528,6 +528,19 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
     scene->setPixelsPerMeter(world.value("pixelsPerMeter").toDouble(scene->pixelsPerMeter()));
     scene->world().params = world.value("physics").toObject().toVariantMap();
 
+    // Everything written before format 2 ran with gravity quoted at the
+    // engine's reference scale, so it keeps doing that and moves as it always
+    // has. Which key says so is the engine's business: it is asked for the one
+    // it tagged, and named here no more than any other.
+    if (version < 2) {
+        if (auto engine = physics::EngineRegistry::create(scene->simulationEngineName())) {
+            for (const physics::JointParam &property : engine->worldProperties()) {
+                if (property.role == physics::PropertyRole::PaceAcrossScales)
+                    scene->world().params.insert(property.key, true);
+            }
+        }
+    }
+
     // A scene written before the engine described its own world kept those
     // settings loose in the world object, under the names Box2D uses -- which
     // are the names its catalogue publishes, so they carry straight over.

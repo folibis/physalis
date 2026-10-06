@@ -234,6 +234,15 @@ QVariant Box2DEngine::jointValue(JointHandle handle, const QString &key) const
     if (const QString live = kSettingReaders.value(key); !live.isEmpty())
         return jointValue(handle, live);
 
+    // The holding force split into its two components, beside the magnitude
+    // answered above. Reported as Box2D reports it, which is what the motor
+    // force and torque beside it already do -- two force readings on one joint
+    // in different units would be worse than both being the engine's.
+    if (key == QLatin1String("constraintForceX"))
+        return b2Joint_GetConstraintForce(joint).x;
+    if (key == QLatin1String("constraintForceY"))
+        return b2Joint_GetConstraintForce(joint).y;
+
     switch (b2Joint_GetType(joint)) {
     case b2_revoluteJoint:
         if (key == QLatin1String("angle"))
@@ -280,6 +289,8 @@ QVariant Box2DEngine::jointValue(JointHandle handle, const QString &key) const
             return toScene(b2DistanceJoint_GetMotorSpeed(joint));
         if (key == QLatin1String("motorForce"))
             return b2DistanceJoint_GetMotorForce(joint);
+        if (key == QLatin1String("springForce"))
+            return b2DistanceJoint_GetSpringForce(joint);
         if (key == QLatin1String("springEnabled"))
             return b2DistanceJoint_IsSpringEnabled(joint);
         if (key == QLatin1String("limitEnabled"))

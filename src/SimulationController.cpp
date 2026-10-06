@@ -813,11 +813,19 @@ void SimulationController::stepWorld(qreal dt)
     // Anything the engine could not do; kept for the window to show. A scene
     // can ask a solver for the impossible, and being told is better than
     // watching a body vanish without a word.
-    const QStringList problems = m_engine->takeProblems();
-    if (!problems.isEmpty()) {
-        m_problems += problems;
-        emit stateChanged();
+    // Only what has not been said already. A solver that trips over something
+    // trips over it again every step, and a list that grew by one a frame
+    // stretched the window past the edge of the screen before it stopped
+    // repainting at all.
+    bool fresh = false;
+    for (const QString &problem : m_engine->takeProblems()) {
+        if (!m_problems.contains(problem)) {
+            m_problems.append(problem);
+            fresh = true;
+        }
     }
+    if (fresh)
+        emit stateChanged();
     syncRays();
     m_elapsedSeconds += dt;
     ++m_frameCount;

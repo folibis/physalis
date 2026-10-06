@@ -33,6 +33,9 @@ const QHash<QString, const char *> kUnreadable {
     { QStringLiteral("contactMargin"), "contactmargin.cpp" },
     // b2Body_SetAllowFastRotation has no getter in Box2D 3.1.
     { QStringLiteral("allowFastRotation"), "spinfast.cpp" },
+    // Decides the scale gravity is handed over at, which is settled before the
+    // world exists and is not a value the world holds afterwards.
+    { QStringLiteral("scaleIndependentPace"), "physics.cpp" },
 };
 
 QVariant somethingElse(const physics::JointParam &property)

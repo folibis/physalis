@@ -82,16 +82,16 @@ QVector<JointParam> solverBlock(qreal maxForce = 0.0, qreal errorBias = std::pow
 {
     const QString section = solverSection();
     return {
-        realParam(QStringLiteral("maxForce"), QObject::tr("Max Force"), section, maxForce,
+        realParam(QStringLiteral("maxForce"), QObject::tr("Max Force (N)"), section, maxForce,
                   0.0, 1e9, 4, 0.1,
                   QObject::tr("The most force the joint may use to hold -- a torque, for"
                               " the ones that act on angles. Zero is unlimited, which is"
                               " Chipmunk's own default.")),
-        realParam(QStringLiteral("errorBias"), QObject::tr("Error Left After 1 s"), section,
+        realParam(QStringLiteral("errorBias"), QObject::tr("Error Bias"), section,
                   errorBias, 0.0, 1.0, 6, 0.0001,
                   QObject::tr("How much of any drift the joint leaves uncorrected after a"
                               " second. Smaller pulls back harder.")),
-        realParam(QStringLiteral("maxBias"), QObject::tr("Max Correction Speed"), section, 0.0,
+        realParam(QStringLiteral("maxBias"), QObject::tr("Max Bias (px/s)"), section, 0.0,
                   0.0, 1e9, 1, 10.0,
                   QObject::tr("The fastest the joint may pull drift back, in scene units"
                               " per second -- degrees per second, for the ones that act"
@@ -150,7 +150,7 @@ QVector<JointType> ChipmunkEngine::jointTypes() const
                                     " with a hinge at each end.");
         t.anchorCount = 2;
         t.visual = JointVisual::Segment;
-        t.params.append(lengthParam(QStringLiteral("distance"), QObject::tr("Distance"),
+        t.params.append(lengthParam(QStringLiteral("distance"), QObject::tr("Distance (px)"),
                                     jointSection(), 0.0,
                                     QObject::tr("In scene units. Zero means however far apart"
                                                 " the anchors are when the run starts.")));
@@ -168,11 +168,11 @@ QVector<JointType> ChipmunkEngine::jointTypes() const
                                     " distance. With no shortest it is a rope.");
         t.anchorCount = 2;
         t.visual = JointVisual::Segment;
-        t.params.append(lengthParam(QStringLiteral("minLength"), QObject::tr("Min Length"),
+        t.params.append(lengthParam(QStringLiteral("minLength"), QObject::tr("Min Length (px)"),
                                     limitSection(), 0.0,
                                     QObject::tr("The closest the anchors may come, in scene"
                                                 " units.")));
-        t.params.append(lengthParam(QStringLiteral("maxLength"), QObject::tr("Max Length"),
+        t.params.append(lengthParam(QStringLiteral("maxLength"), QObject::tr("Max Length (px)"),
                                     limitSection(), 0.0,
                                     QObject::tr("The furthest apart they may go, in scene"
                                                 " units. Zero means however far apart they"
@@ -195,11 +195,11 @@ QVector<JointType> ChipmunkEngine::jointTypes() const
         t.defaultAxisDegrees = 0.0;
         t.visual = JointVisual::Axis;
         t.params.append(lengthParam(QStringLiteral("lowerTranslation"),
-                                    QObject::tr("Slot Start"), limitSection(), -100.0,
+                                    QObject::tr("Groove Start (px)"), limitSection(), -100.0,
                                     QObject::tr("Where the slot begins, measured back along"
                                                 " the axis from the anchor, in scene units.")));
         t.params.append(lengthParam(QStringLiteral("upperTranslation"),
-                                    QObject::tr("Slot End"), limitSection(), 100.0,
+                                    QObject::tr("Groove End (px)"), limitSection(), 100.0,
                                     QObject::tr("Where the slot ends, measured forward along"
                                                 " the axis from the anchor, in scene units.")));
         append(&t.params, solverBlock());
@@ -216,7 +216,7 @@ QVector<JointType> ChipmunkEngine::jointTypes() const
         t.description = QObject::tr("A spring with a shock absorber between two points.");
         t.anchorCount = 2;
         t.visual = JointVisual::Segment;
-        t.params.append(lengthParam(QStringLiteral("restLength"), QObject::tr("Rest Length"),
+        t.params.append(lengthParam(QStringLiteral("restLength"), QObject::tr("Rest Length (px)"),
                                     jointSection(), 0.0,
                                     QObject::tr("The length it springs back to, in scene"
                                                 " units. Zero means however far apart the"
@@ -278,7 +278,7 @@ QVector<JointType> ChipmunkEngine::jointTypes() const
                                     " catches it every click if it turns back.");
         t.anchorCount = 0;
         t.visual = JointVisual::Link;
-        t.params.append(angleParam(QStringLiteral("ratchet"), QObject::tr("Click (deg)"),
+        t.params.append(angleParam(QStringLiteral("ratchet"), QObject::tr("Ratchet (deg)"),
                                    jointSection(), 90.0,
                                    QObject::tr("The angle between two clicks. Its sign says"
                                                " which way it turns freely.")));
@@ -344,12 +344,12 @@ QVector<JointType> ChipmunkEngine::jointTypes() const
                                     " second to choose where it is pulled.");
         t.anchorCount = 2;
         t.visual = JointVisual::Pivot;
-        t.params.append(lengthParam(QStringLiteral("targetX"), QObject::tr("Target X"),
+        t.params.append(lengthParam(QStringLiteral("targetX"), QObject::tr("Target X (px)"),
                                     jointSection(), 0.0,
                                     QObject::tr("Where the body is pulled towards, in scene"
                                                 " coordinates. Leave both at zero to use the"
                                                 " second anchor.")));
-        t.params.append(lengthParam(QStringLiteral("targetY"), QObject::tr("Target Y"),
+        t.params.append(lengthParam(QStringLiteral("targetY"), QObject::tr("Target Y (px)"),
                                     jointSection(), 0.0,
                                     QObject::tr("Where the body is pulled towards, in scene"
                                                 " coordinates. Leave both at zero to use the"
@@ -357,6 +357,18 @@ QVector<JointType> ChipmunkEngine::jointTypes() const
         // The budget and the softness Chipmunk's own demo drags with.
         append(&t.params, solverBlock(1.0, std::pow(1.0 - 0.15, 60.0)));
         types.append(t);
+    }
+
+    // Which parameters say "this one is a spring". Chipmunk has no switch --
+    // a damped spring is its own constraint type -- so only the stiffness is
+    // marked, and the editor reads "above zero" as "it is one".
+    for (JointType &type : types) {
+        for (JointParam &param : type.params) {
+            if (param.key == QLatin1String("hertz"))
+                param.role = PropertyRole::SpringStiffness;
+            else if (param.key == QLatin1String("restLength"))
+                param.role = PropertyRole::SpringRestLength;
+        }
     }
 
     return types;

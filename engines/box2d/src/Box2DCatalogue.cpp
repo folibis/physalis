@@ -156,33 +156,33 @@ PropertyList Box2DEngine::bodyProperties() const
     PropertyList properties = {
         // Applied, not assigned: b2Body_ApplyLinearImpulseToCenter. Nothing to
         // read back, which is why these are write-only.
-        number(QStringLiteral("impulseY"), QObject::tr("Impulse Up/Down"),
+        number(QStringLiteral("impulseY"), QObject::tr("Linear Impulse Y (N·s)"),
                false, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("A kick. Adds to whatever the body was already doing,"
                            " so something arriving fast leaves faster.")),
-        number(QStringLiteral("impulseX"), QObject::tr("Impulse Left/Right"),
+        number(QStringLiteral("impulseX"), QObject::tr("Linear Impulse X (N·s)"),
                false, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("A kick sideways. Adds to whatever the body was already"
                            " doing.")),
         // b2Body_ApplyAngularImpulse -- the same kick, about the centre of
         // mass instead of through it.
-        number(QStringLiteral("angularImpulse"), QObject::tr("Spin Impulse"),
+        number(QStringLiteral("angularImpulse"), QObject::tr("Angular Impulse (N·m·s)"),
                false, true, -1e9, 1e9, 2, 1.0,
                QObject::tr("A twist. Sets something spinning, or adds to the spin"
                            " it already had.")),
 
         // b2Body_GetLinearVelocity / SetLinearVelocity.
-        number(QStringLiteral("velocityY"), QObject::tr("Velocity Y"),
+        number(QStringLiteral("velocityY"), QObject::tr("Linear Velocity Y (px/s)"),
                true, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("How fast it is travelling. Setting it replaces the motion"
                            " outright, where an impulse adds to it.")),
-        number(QStringLiteral("velocityX"), QObject::tr("Velocity X"),
+        number(QStringLiteral("velocityX"), QObject::tr("Linear Velocity X (px/s)"),
                true, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("How fast it is travelling. Setting it replaces the motion"
                            " outright, where an impulse adds to it.")),
         // b2Body_GetLinearVelocity, magnitude only -- there is no setter for a
         // speed without a direction.
-        number(QStringLiteral("speed"), QObject::tr("Speed"), true, false, 0.0, 1e6, 1, 10.0,
+        number(QStringLiteral("speed"), QObject::tr("Speed (px/s)"), true, false, 0.0, 1e6, 1, 10.0,
                QObject::tr("How fast it is going, whichever way. Read only -- a speed"
                            " with no direction is not something to set.")),
         // b2Body_GetAngularVelocity / SetAngularVelocity.
@@ -195,12 +195,12 @@ PropertyList Box2DEngine::bodyProperties() const
         // teleport: the body arrives without travelling, so it can appear
         // inside something. That is what "move it there" means, and it is the
         // caller's business.
-        number(QStringLiteral("positionX"), QObject::tr("Position X"),
+        number(QStringLiteral("positionX"), QObject::tr("Position X (px)"),
                true, true, -1e7, 1e7, 1, 10.0,
                QObject::tr("Moving a body while it runs places it there outright,"
                            " without travelling -- so it can land inside something."
                            " Glide To X arrives the long way instead.")),
-        number(QStringLiteral("positionY"), QObject::tr("Position Y"),
+        number(QStringLiteral("positionY"), QObject::tr("Position Y (px)"),
                true, true, -1e7, 1e7, 1, 10.0,
                QObject::tr("Moving a body while it runs places it there outright,"
                            " without travelling -- so it can land inside something."
@@ -213,19 +213,19 @@ PropertyList Box2DEngine::bodyProperties() const
         // b2Body_SetTargetTransform: the velocity that would arrive there by
         // the end of the step, rather than the arrival itself. Write-only --
         // what it reads back as is the position, above.
-        number(QStringLiteral("targetX"), QObject::tr("Glide To X"),
+        number(QStringLiteral("targetX"), QObject::tr("Target X (px)"),
                false, true, -1e7, 1e7, 1, 10.0,
                QObject::tr("Travels there rather than appearing there, so it pushes"
                            " what is in the way. Meant for kinematic bodies, and"
                            " ignored if the move would be slower than the sleep"
                            " threshold.")),
-        number(QStringLiteral("targetY"), QObject::tr("Glide To Y"),
+        number(QStringLiteral("targetY"), QObject::tr("Target Y (px)"),
                false, true, -1e7, 1e7, 1, 10.0,
                QObject::tr("Travels there rather than appearing there, so it pushes"
                            " what is in the way. Meant for kinematic bodies, and"
                            " ignored if the move would be slower than the sleep"
                            " threshold.")),
-        number(QStringLiteral("targetAngle"), QObject::tr("Glide To Angle (deg)"),
+        number(QStringLiteral("targetAngle"), QObject::tr("Target Angle (deg)"),
                false, true, -1e5, 1e5, 1, 1.0,
                QObject::tr("Turns there rather than appearing turned.")),
 
@@ -239,7 +239,7 @@ PropertyList Box2DEngine::bodyProperties() const
              QObject::tr("Whether it may drop out of the simulation at all. Turn it off"
                          " for something that must keep reacting.")),
         // b2Body_GetSleepThreshold / SetSleepThreshold.
-        number(QStringLiteral("sleepThreshold"), QObject::tr("Sleep Below Speed (m/s)"),
+        number(QStringLiteral("sleepThreshold"), QObject::tr("Sleep Threshold (m/s)"),
                true, true, 0.0, 1000.0, 3, 0.01,
                QObject::tr("Move slower than this for long enough and the body stops"
                            " being simulated until something disturbs it.")),
@@ -298,30 +298,30 @@ PropertyList Box2DEngine::bodyProperties() const
                            " Reaches zero when it has come to rest.")),
         // b2Body_GetContactData: how many of this body's shapes are touching
         // something right now, counted across all of them.
-        number(QStringLiteral("contactCount"), QObject::tr("Contacts"), true, false,
+        number(QStringLiteral("contactCount"), QObject::tr("Contact Count"), true, false,
                0.0, 1e6, 0, 1.0,
                QObject::tr("How many contacts this body is in right now, across all its"
                            " shapes. Zero when nothing is touching it.")),
         // b2Body_GetJointCount.
-        number(QStringLiteral("jointCount"), QObject::tr("Joints"), true, false,
+        number(QStringLiteral("jointCount"), QObject::tr("Joint Count"), true, false,
                0.0, 1e6, 0, 1.0,
                QObject::tr("How many joints hold this body. Drops when a rule breaks one.")),
 
         // b2Body_ComputeAABB: the box the body currently occupies, shapes and
         // all, in scene coordinates.
-        number(QStringLiteral("boundsMinX"), QObject::tr("Bounds Left"), true, false,
+        number(QStringLiteral("boundsMinX"), QObject::tr("Bounds Min X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box the body takes up right now, worked out from its"
                            " shapes where they have got to.")),
-        number(QStringLiteral("boundsMinY"), QObject::tr("Bounds Top"), true, false,
+        number(QStringLiteral("boundsMinY"), QObject::tr("Bounds Min Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box the body takes up right now, worked out from its"
                            " shapes where they have got to.")),
-        number(QStringLiteral("boundsMaxX"), QObject::tr("Bounds Right"), true, false,
+        number(QStringLiteral("boundsMaxX"), QObject::tr("Bounds Max X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box the body takes up right now, worked out from its"
                            " shapes where they have got to.")),
-        number(QStringLiteral("boundsMaxY"), QObject::tr("Bounds Bottom"), true, false,
+        number(QStringLiteral("boundsMaxY"), QObject::tr("Bounds Max Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box the body takes up right now, worked out from its"
                            " shapes where they have got to.")),
@@ -336,22 +336,22 @@ PropertyList Box2DEngine::bodyProperties() const
 
         // b2Body_GetLocalCenterOfMass, in the body's own frame -- where it
         // balances regardless of where it has got to.
-        number(QStringLiteral("localCenterOfMassX"), QObject::tr("Centre of Mass X (local)"),
+        number(QStringLiteral("localCenterOfMassX"), QObject::tr("Local Center of Mass X (px)"),
                true, false, -1e7, 1e7, 1, 10.0,
                QObject::tr("Where the body balances, measured from its own origin rather"
                            " than in the scene.")),
-        number(QStringLiteral("localCenterOfMassY"), QObject::tr("Centre of Mass Y (local)"),
+        number(QStringLiteral("localCenterOfMassY"), QObject::tr("Local Center of Mass Y (px)"),
                true, false, -1e7, 1e7, 1, 10.0,
                QObject::tr("Where the body balances, measured from its own origin rather"
                            " than in the scene.")),
 
         // b2Body_GetWorldCenterOfMass. A body turns about this, not about its
         // origin, so it is the point worth watching.
-        number(QStringLiteral("centerOfMassX"), QObject::tr("Centre of Mass X"),
+        number(QStringLiteral("centerOfMassX"), QObject::tr("World Center of Mass X (px)"),
                true, false, -1e7, 1e7, 1, 10.0,
                QObject::tr("A body turns about this point, not about its origin. Worked"
                            " out from the shapes and their density.")),
-        number(QStringLiteral("centerOfMassY"), QObject::tr("Centre of Mass Y"),
+        number(QStringLiteral("centerOfMassY"), QObject::tr("World Center of Mass Y (px)"),
                true, false, -1e7, 1e7, 1, 10.0,
                QObject::tr("A body turns about this point, not about its origin. Worked"
                            " out from the shapes and their density.")),
@@ -359,16 +359,16 @@ PropertyList Box2DEngine::bodyProperties() const
         // b2Body_ApplyForceToCenter and b2Body_ApplyTorque. Last, because a
         // rule fires for one step and anything applied for one step is nearly
         // nothing.
-        number(QStringLiteral("forceY"), QObject::tr("Force Up/Down (one step)"),
+        number(QStringLiteral("forceY"), QObject::tr("Force Y (N)"),
                false, true, -1e9, 1e9, 1, 10.0,
                QObject::tr("A force lasts only as long as it is applied, and a rule"
                            " fires for a single step. An impulse is usually what"
                            " is wanted.")),
-        number(QStringLiteral("forceX"), QObject::tr("Force Left/Right (one step)"),
+        number(QStringLiteral("forceX"), QObject::tr("Force X (N)"),
                false, true, -1e9, 1e9, 1, 10.0,
                QObject::tr("Sideways, and just as brief. An impulse is usually what"
                            " is wanted.")),
-        number(QStringLiteral("torque"), QObject::tr("Torque (one step)"),
+        number(QStringLiteral("torque"), QObject::tr("Torque (N·m)"),
                false, true, -1e9, 1e9, 2, 1.0,
                QObject::tr("The turning equivalent, and just as brief. Spin Impulse"
                            " is usually what is wanted.")),
@@ -572,7 +572,7 @@ PropertyList Box2DEngine::shapeProperties() const
     // Geometry is here too: Box2D can replace a shape's outline in place, so a
     // circle's radius really is a value and not a rebuild.
     PropertyList properties = {
-        number(QStringLiteral("density"), QObject::tr("Density"), true, true,
+        number(QStringLiteral("density"), QObject::tr("Density (kg/m²)"), true, true,
                0.0, 1e6, 2, 0.1,
                QObject::tr("Mass per unit area. The body's own mass is worked out from"
                            " this and the size of its shapes.")),
@@ -590,14 +590,14 @@ PropertyList Box2DEngine::shapeProperties() const
         number(QStringLiteral("rollingResistance"), QObject::tr("Rolling Resistance"),
                true, true, 0.0, 100.0, 2, 0.05,
                QObject::tr("Stops a ball rolling forever.")),
-        number(QStringLiteral("tangentSpeed"), QObject::tr("Surface Speed"),
+        number(QStringLiteral("tangentSpeed"), QObject::tr("Tangent Speed (px/s)"),
                true, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("The surface drags along what touches it, like a conveyor"
                            " belt. Switchable while running.")),
 
         // b2Shape_GetCircle / SetCircle. Circles only -- reading it on
         // anything else gives nothing, and writing it does nothing.
-        number(QStringLiteral("radius"), QObject::tr("Radius"), true, true,
+        number(QStringLiteral("radius"), QObject::tr("Radius (px)"), true, true,
                0.0, 1e7, 1, 1.0,
                QObject::tr("Circles only. Changing it resizes the collision shape"
                            " where it stands; what is drawn does not follow.")),
@@ -611,15 +611,15 @@ PropertyList Box2DEngine::shapeProperties() const
         // What b2ContactHitEvent carried the last time this shape was hit.
         // The "is hit" event says only that it happened; these say how hard,
         // which is the difference between a tap and a crash.
-        number(QStringLiteral("lastHitSpeed"), QObject::tr("Last Hit Speed"), true, false,
+        number(QStringLiteral("lastHitSpeed"), QObject::tr("Last Hit Approach Speed (m/s)"), true, false,
                0.0, 1e7, 1, 10.0,
                QObject::tr("How fast the two were closing on the last impact above"
                            " the world's hit threshold. Zero until something hits it.")),
-        number(QStringLiteral("lastHitX"), QObject::tr("Last Hit X"), true, false,
+        number(QStringLiteral("lastHitX"), QObject::tr("Last Hit Point X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("Where the last hard impact landed. Useful for putting a"
                            " mark, a spark or an explosion at the point of contact.")),
-        number(QStringLiteral("lastHitY"), QObject::tr("Last Hit Y"), true, false,
+        number(QStringLiteral("lastHitY"), QObject::tr("Last Hit Point Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("Where the last hard impact landed. Useful for putting a"
                            " mark, a spark or an explosion at the point of contact.")),
@@ -632,33 +632,33 @@ PropertyList Box2DEngine::shapeProperties() const
 
         // b2Shape_GetMassData, the rest of it: what this shape alone contributes
         // to the body, and where.
-        number(QStringLiteral("rotationalInertia"), QObject::tr("Moment of Inertia (kg·m²)"),
+        number(QStringLiteral("rotationalInertia"), QObject::tr("Rotational Inertia (kg·m²)"),
                true, false, 0.0, 1e9, 6, 0.1,
                QObject::tr("What this shape alone contributes to how hard the body is to"
                            " spin.")),
-        number(QStringLiteral("centerOfMassX"), QObject::tr("Centre of Mass X"), true, false,
+        number(QStringLiteral("centerOfMassX"), QObject::tr("World Center of Mass X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("Where this shape balances, in scene coordinates.")),
-        number(QStringLiteral("centerOfMassY"), QObject::tr("Centre of Mass Y"), true, false,
+        number(QStringLiteral("centerOfMassY"), QObject::tr("World Center of Mass Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("Where this shape balances, in scene coordinates.")),
 
         // b2Shape_GetAABB: the box it currently occupies.
-        number(QStringLiteral("boundsMinX"), QObject::tr("Bounds Left"), true, false,
+        number(QStringLiteral("boundsMinX"), QObject::tr("Bounds Min X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box this shape takes up right now, where it has got to.")),
-        number(QStringLiteral("boundsMinY"), QObject::tr("Bounds Top"), true, false,
+        number(QStringLiteral("boundsMinY"), QObject::tr("Bounds Min Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box this shape takes up right now, where it has got to.")),
-        number(QStringLiteral("boundsMaxX"), QObject::tr("Bounds Right"), true, false,
+        number(QStringLiteral("boundsMaxX"), QObject::tr("Bounds Max X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box this shape takes up right now, where it has got to.")),
-        number(QStringLiteral("boundsMaxY"), QObject::tr("Bounds Bottom"), true, false,
+        number(QStringLiteral("boundsMaxY"), QObject::tr("Bounds Max Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box this shape takes up right now, where it has got to.")),
 
         // b2Shape_GetContactData.
-        number(QStringLiteral("contactCount"), QObject::tr("Contacts"), true, false,
+        number(QStringLiteral("contactCount"), QObject::tr("Contact Count"), true, false,
                0.0, 1e6, 0, 1.0,
                QObject::tr("How many other shapes this one is touching right now.")),
 
@@ -668,7 +668,7 @@ PropertyList Box2DEngine::shapeProperties() const
              QObject::tr("A sensor is passed straight through: it reports what overlaps"
                          " it and stops nothing. Decided when the shape is made.")),
         // b2Shape_GetSensorOverlaps. Sensors only, and zero for anything else.
-        number(QStringLiteral("sensorOverlapCount"), QObject::tr("Things Inside"),
+        number(QStringLiteral("sensorOverlapCount"), QObject::tr("Sensor Overlap Count"),
                true, false, 0.0, 1e6, 0, 1.0,
                QObject::tr("How many shapes are inside this sensor right now. The"
                            " entered and left events say when it changes; this says"
@@ -691,15 +691,15 @@ PropertyList Box2DEngine::shapeProperties() const
 
         // b2Shape_GetFilter / SetFilter. Bits rather than a number, but a
         // number is what a rule can carry -- so they are shown as the sum.
-        number(QStringLiteral("categoryBits"), QObject::tr("Belongs To"), true, true,
+        number(QStringLiteral("categoryBits"), QObject::tr("Category Bits"), true, true,
                0.0, 9.007199254740992e15, 0, 1.0,
                QObject::tr("Which collision groups this shape is part of, as the sum of their"
                            " numbers: 1, 2, 4, 8 and so on.")),
-        number(QStringLiteral("maskBits"), QObject::tr("Collides With"), true, true,
+        number(QStringLiteral("maskBits"), QObject::tr("Mask Bits"), true, true,
                0.0, 9.007199254740992e15, 0, 1.0,
                QObject::tr("Which groups it will hit, as the sum of their numbers. Both sides"
                            " have to agree before two shapes collide.")),
-        number(QStringLiteral("groupIndex"), QObject::tr("Group Override"), true, true,
+        number(QStringLiteral("groupIndex"), QObject::tr("Group Index"), true, true,
                -32768.0, 32767.0, 0, 1.0,
                QObject::tr("Shapes sharing a number above zero always collide, and sharing one"
                            " below zero never do -- whatever the two rows above say. Zero"
@@ -762,14 +762,14 @@ PropertyList Box2DEngine::worldProperties() const
                true, true, 0.0, 1000.0, 2, 0.1,
                QObject::tr("How hard a knock has to be before it counts as a hit. Below"
                            " this the shapes still touch, but nothing is reported.")),
-        number(QStringLiteral("maximumLinearSpeed"), QObject::tr("Max Speed (m/s)"),
+        number(QStringLiteral("maximumLinearSpeed"), QObject::tr("Maximum Linear Speed (m/s)"),
                true, true, 0.0, 100000.0, 1, 10.0,
                QObject::tr("Nothing in the world may travel faster than this, whatever"
                            " it is hit with.")),
 
         // b2World_SetContactTuning -- one call for all three, and no getters,
         // so these read back what the world was last told.
-        number(QStringLiteral("contactHertz"), QObject::tr("Contact Stiffness (Hz)"),
+        number(QStringLiteral("contactHertz"), QObject::tr("Contact Hertz (Hz)"),
                true, true, 0.0, 1000.0, 1, 1.0,
                QObject::tr("How firmly contacts are held. Higher is less forgiving, and"
                            " cannot exceed a quarter of the sub-step rate.")),
@@ -794,44 +794,44 @@ PropertyList Box2DEngine::worldProperties() const
 
         // b2World_GetAwakeBodyCount and b2World_GetCounters: what the world
         // currently costs, as numbers a rule can watch.
-        number(QStringLiteral("awakeBodyCount"), QObject::tr("Awake Bodies"), true, false,
+        number(QStringLiteral("awakeBodyCount"), QObject::tr("Awake Body Count"), true, false,
                0.0, 1e9, 0, 1.0,
                QObject::tr("Reaches zero when everything has settled.")),
-        number(QStringLiteral("bodyCount"), QObject::tr("Bodies"), true, false,
+        number(QStringLiteral("bodyCount"), QObject::tr("Body Count"), true, false,
                0.0, 1e9, 0, 1.0,
                QObject::tr("How many bodies the world holds, asleep or not.")),
-        number(QStringLiteral("contactCount"), QObject::tr("Contacts"), true, false,
+        number(QStringLiteral("contactCount"), QObject::tr("Contact Count"), true, false,
                0.0, 1e9, 0, 1.0,
                QObject::tr("How many pairs of shapes are touching right now.")),
-        number(QStringLiteral("jointCount"), QObject::tr("Joints"), true, false,
+        number(QStringLiteral("jointCount"), QObject::tr("Joint Count"), true, false,
                0.0, 1e9, 0, 1.0,
                QObject::tr("How many joints the world holds.")),
-        number(QStringLiteral("shapeCount"), QObject::tr("Shapes"), true, false,
+        number(QStringLiteral("shapeCount"), QObject::tr("Shape Count"), true, false,
                0.0, 1e9, 0, 1.0,
                QObject::tr("How many shapes the world holds, across every body.")),
-        number(QStringLiteral("islandCount"), QObject::tr("Islands"), true, false,
+        number(QStringLiteral("islandCount"), QObject::tr("Island Count"), true, false,
                0.0, 1e9, 0, 1.0,
                QObject::tr("Groups of bodies the solver is holding together as one. They"
                            " fall apart as things stop touching.")),
-        number(QStringLiteral("treeHeight"), QObject::tr("Broadphase Depth"), true, false,
+        number(QStringLiteral("treeHeight"), QObject::tr("Tree Height"), true, false,
                0.0, 1e6, 0, 1.0,
                QObject::tr("How deep the tree Box2D searches for possible collisions has"
                            " grown. A rough measure of how crowded the scene is.")),
 
         // b2World_GetProfile: where the last step went, in milliseconds.
-        number(QStringLiteral("stepMilliseconds"), QObject::tr("Step Time (ms)"), true, false,
+        number(QStringLiteral("stepMilliseconds"), QObject::tr("Step (ms)"), true, false,
                0.0, 1e6, 3, 0.1,
                QObject::tr("How long the last step took. Everything below is part of it.")),
-        number(QStringLiteral("collideMilliseconds"), QObject::tr("Collide Time (ms)"),
+        number(QStringLiteral("collideMilliseconds"), QObject::tr("Collide (ms)"),
                true, false, 0.0, 1e6, 3, 0.1,
                QObject::tr("The part of it spent finding what touches what.")),
-        number(QStringLiteral("solveMilliseconds"), QObject::tr("Solve Time (ms)"), true, false,
+        number(QStringLiteral("solveMilliseconds"), QObject::tr("Solve (ms)"), true, false,
                0.0, 1e6, 3, 0.1,
                QObject::tr("The part spent working out where everything ends up.")),
 
         // An argument to every b2World_Step rather than a field of the world,
         // so it is stored and set when the world is made, never after.
-        number(QStringLiteral("subStepCount"), QObject::tr("Solver Sub-Steps"), false, false,
+        number(QStringLiteral("subStepCount"), QObject::tr("Sub-Step Count"), false, false,
                1.0, 64.0, 0, 1.0,
                QObject::tr("How many times the solver relaxes the constraints within one"
                            " step. More holds a tall stack together; fewer is faster and"
@@ -849,10 +849,17 @@ PropertyList Box2DEngine::worldProperties() const
                            " touch. In scene units, whatever the scale.")),
     };
 
+    properties.push_back(flag(QStringLiteral("scaleIndependentPace"),
+                              QObject::tr("Keep Pace Across Scales"), false, false,
+                              QObject::tr("Quotes gravity and the speed thresholds at 50 px per metre rather than at this scene's own scale, so changing Pixels Per Metre leaves the motion on screen alone. It makes that setting a weight knob rather than a scale one, and gravity is then only m/s\u00b2 where the scene is at 50 px per metre. Off, a metre is a metre: 9.81 is 9.81, and small objects fall as fast as small objects do. Scenes saved before this setting existed carry it on, so they still move the way they did.")));
+
     markStored(&properties, {
         {QStringLiteral("gravityX"), 0.0},
         {QStringLiteral("gravityY"), 9.81},
+        {QStringLiteral("scaleIndependentPace"), false},
     }, QObject::tr("World"));
+    markRole(&properties, QStringLiteral("scaleIndependentPace"),
+             PropertyRole::PaceAcrossScales);
     markStored(&properties, {
         {QStringLiteral("restitutionThreshold"), 1.0},
         {QStringLiteral("hitEventThreshold"), 1.0},
@@ -886,7 +893,7 @@ PropertyList Box2DEngine::jointReadables(const QString &typeId) const
                    -1e5, 1e5, 1, 10.0,
                    QObject::tr("The turn rate the motor is aiming for -- not necessarily"
                                " the one it is achieving.")),
-            number(QStringLiteral("motorTorque"), QObject::tr("Motor Torque"), true, false,
+            number(QStringLiteral("motorTorque"), QObject::tr("Motor Torque (N·m)"), true, false,
                    -1e9, 1e9, 2, 1.0,
                    QObject::tr("What the motor is actually pulling this step. Sitting at"
                                " its maximum means it is stalled against something.")),
@@ -895,18 +902,18 @@ PropertyList Box2DEngine::jointReadables(const QString &typeId) const
     }
     if (typeId == QLatin1String("prismatic")) {
         result = {
-            number(QStringLiteral("translation"), QObject::tr("Translation"), true, false,
+            number(QStringLiteral("translation"), QObject::tr("Translation (px)"), true, false,
                    -1e7, 1e7, 1, 10.0,
                    QObject::tr("How far along its axis the joint has slid from where it"
                                " started. What a limit is measured against.")),
-            number(QStringLiteral("speed"), QObject::tr("Speed"), true, false,
+            number(QStringLiteral("speed"), QObject::tr("Speed (px/s)"), true, false,
                    -1e6, 1e6, 1, 10.0,
                    QObject::tr("How fast it is sliding right now.")),
-            number(QStringLiteral("motorSpeed"), QObject::tr("Motor Speed"), true, false,
+            number(QStringLiteral("motorSpeed"), QObject::tr("Motor Speed (px/s)"), true, false,
                    -1e6, 1e6, 1, 10.0,
                    QObject::tr("The sliding rate the motor is aiming for -- not"
                                " necessarily the one it is achieving.")),
-            number(QStringLiteral("motorForce"), QObject::tr("Motor Force"), true, false,
+            number(QStringLiteral("motorForce"), QObject::tr("Motor Force (N)"), true, false,
                    -1e9, 1e9, 2, 1.0,
                    QObject::tr("What the motor is actually pushing with this step."
                                " Sitting at its maximum means it is stalled.")),
@@ -915,23 +922,35 @@ PropertyList Box2DEngine::jointReadables(const QString &typeId) const
     }
     if (typeId == QLatin1String("distance")) {
         result = {
-            number(QStringLiteral("length"), QObject::tr("Rest Length"), true, false,
+            number(QStringLiteral("length"), QObject::tr("Length (px)"), true, false,
                    0.0, 1e7, 1, 10.0,
                    QObject::tr("The distance the joint is trying to hold. Drive this to"
                                " use the joint as a ram.")),
             // b2DistanceJoint_GetCurrentLength -- how far apart the anchors
             // are now, which is not the length the joint is holding for.
-            number(QStringLiteral("currentLength"), QObject::tr("Current Length"), true, false,
+            number(QStringLiteral("currentLength"), QObject::tr("Current Length (px)"), true, false,
                    0.0, 1e7, 1, 10.0,
                    QObject::tr("How far apart the two ends are right now. A rope under"
                                " load reads longer than its rest length.")),
-            number(QStringLiteral("motorSpeed"), QObject::tr("Motor Speed"), true, false,
+            number(QStringLiteral("motorSpeed"), QObject::tr("Motor Speed (px/s)"), true, false,
                    -1e6, 1e6, 1, 10.0,
                    QObject::tr("How fast the motor is trying to lengthen or shorten the"
                                " joint. Only acts while the spring is on.")),
-            number(QStringLiteral("motorForce"), QObject::tr("Motor Force"), true, false,
+            number(QStringLiteral("motorForce"), QObject::tr("Motor Force (N)"), true, false,
                    -1e9, 1e9, 2, 1.0,
-                   QObject::tr("What the motor is actually pulling with this step.")),
+                   QObject::tr("What the motor is actually pulling with this step."
+                               " Measured along the line from anchor A to anchor B:"
+                               " negative pulls the two ends together, positive pushes"
+                               " them apart.")),
+            // b2DistanceJoint_GetSpringForce -- the spring's own pull, which is
+            // not the motor's and not the joint's total.
+            number(QStringLiteral("springForce"), QObject::tr("Spring Force (N)"), true, false,
+                   -1e9, 1e9, 2, 1.0,
+                   QObject::tr("What the spring is pulling with this step, as against the"
+                               " motor. Only acts while the spring is on. Measured along"
+                               " the line from anchor A to anchor B, so it reads negative"
+                               " under tension -- a rope taking a load -- and positive"
+                               " under compression, holding the two apart.")),
         };
         appendJointSwitches(&result, true, true, true);
     }
@@ -941,7 +960,7 @@ PropertyList Box2DEngine::jointReadables(const QString &typeId) const
                    -1e5, 1e5, 1, 10.0,
                    QObject::tr("How fast the motor is trying to spin the wheel about"
                                " its axle.")),
-            number(QStringLiteral("motorTorque"), QObject::tr("Motor Torque"), true, false,
+            number(QStringLiteral("motorTorque"), QObject::tr("Motor Torque (N·m)"), true, false,
                    -1e9, 1e9, 2, 1.0,
                    QObject::tr("What the motor is actually turning it with this step.")),
         };
@@ -953,6 +972,44 @@ PropertyList Box2DEngine::jointReadables(const QString &typeId) const
                                 QObject::tr("Which way the joint slides, in scene degrees."
                                             " As with the anchors, the handle drawn on the"
                                             " canvas does not follow.")));
+    }
+
+    // What every joint measures about itself: what it is pulling with, and how
+    // far it is from being satisfied -- the same four calls for every type
+    // published here, rather than for the ones somebody remembered. Only for
+    // the ones published here, though: all but the force switch over the types
+    // Box2D wrote them for and assert on the rest, so adding a type means
+    // checking it is in those switches.
+    {
+        result.push_back(number(QStringLiteral("constraintForceX"),
+                                QObject::tr("Constraint Force X (N)"), true, false,
+                                -1e9, 1e9, 2, 1.0,
+                                QObject::tr("What the joint is pulling its two bodies together"
+                                            " with, sideways, this step. A rope about to snap"
+                                            " reads high here. This one is a world direction,"
+                                            " not a direction along the joint: the sign is"
+                                            " simply left or right.")));
+        result.push_back(number(QStringLiteral("constraintForceY"),
+                                QObject::tr("Constraint Force Y (N)"), true, false,
+                                -1e9, 1e9, 2, 1.0,
+                                QObject::tr("The same, up and down, with positive pointing"
+                                            " down the screen. The two together are the whole"
+                                            " force the joint is holding with.")));
+        result.push_back(number(QStringLiteral("constraintTorque"),
+                                QObject::tr("Constraint Torque (N·m)"), true, false,
+                                -1e9, 1e9, 2, 1.0,
+                                QObject::tr("What the joint is twisting its two bodies with"
+                                            " this step.")));
+        result.push_back(number(QStringLiteral("linearSeparation"),
+                                QObject::tr("Linear Separation (px)"), true, false,
+                                0.0, 1e7, 2, 1.0,
+                                QObject::tr("How far apart the joint's two frames have been"
+                                            " pulled, in scene units. Zero is a joint holding"
+                                            " perfectly; a loaded one drifts.")));
+        result.push_back(number(QStringLiteral("angularSeparation"),
+                                QObject::tr("Angular Separation (deg)"), true, false,
+                                -360.0, 360.0, 2, 1.0,
+                                QObject::tr("The same for the angle between them.")));
     }
     return result;
 }

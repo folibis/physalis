@@ -167,7 +167,7 @@ QVector<JointParam> solverBlock()
         hertzParam(QStringLiteral("constraintHertz"), QObject::tr("Constraint Hertz"), section,
                    60.0, QObject::tr("How stiffly the solver corrects drift in this joint."
                                      " Box2D's default is 60 Hz.")),
-        ratioParam(QStringLiteral("constraintDampingRatio"), QObject::tr("Constraint Damping"),
+        ratioParam(QStringLiteral("constraintDampingRatio"), QObject::tr("Constraint Damping Ratio"),
                    section, 2.0,
                    QObject::tr("Damping applied to that correction. Box2D's default is 2.")),
     };
@@ -200,7 +200,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                    QObject::tr("Reference Angle (deg)"), jointSection(), 0.0,
                                    QObject::tr("The body-B-minus-body-A angle that counts as zero"
                                                " for the limit and the spring.")));
-        t.params.append(realParam(QStringLiteral("drawSize"), QObject::tr("Draw Size"),
+        t.params.append(realParam(QStringLiteral("drawSize"), QObject::tr("Draw Scale"),
                                   jointSection(), 0.25, 0.0, 1000.0, 2, 0.05,
                                   QObject::tr("Size Box2D uses when it debug-draws this joint.")));
 
@@ -211,11 +211,11 @@ QVector<JointType> Box2DEngine::jointTypes() const
         t.params.append(angleParam(QStringLiteral("targetAngle"), QObject::tr("Target Angle (deg)"),
                                    springSection(), 0.0,
                                    QObject::tr("The angle the spring pulls towards.")));
-        t.params.append(hertzParam(QStringLiteral("hertz"), QObject::tr("Frequency (Hz)"),
+        t.params.append(hertzParam(QStringLiteral("hertz"), QObject::tr("Spring Hertz (Hz)"),
                                    springSection(), 0.0,
                                    QObject::tr("Spring stiffness in oscillations per second."
                                                " Higher is stiffer.")));
-        t.params.append(ratioParam(QStringLiteral("dampingRatio"), QObject::tr("Damping Ratio"),
+        t.params.append(ratioParam(QStringLiteral("dampingRatio"), QObject::tr("Spring Damping Ratio"),
                                    springSection(), 0.0,
                                    QObject::tr("How quickly the spring settles. 0 oscillates"
                                                " forever, 1 stops without overshooting.")));
@@ -259,7 +259,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
         t.anchorCount = 2;
         t.visual = JointVisual::Segment;
 
-        t.params.append(realParam(QStringLiteral("length"), QObject::tr("Length"), jointSection(),
+        t.params.append(realParam(QStringLiteral("length"), QObject::tr("Length (px)"), jointSection(),
                                   0.0, 0.0, 1e6, 1, 1.0,
                                   QObject::tr("Rest length in scene units. Zero means whatever the"
                                               " anchors are apart when the joint is created.")));
@@ -268,10 +268,10 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                   springSection(), false,
                                   QObject::tr("Let the rod flex. While off it is rigid and"
                                               " overrides both the limit and the motor.")));
-        t.params.append(hertzParam(QStringLiteral("hertz"), QObject::tr("Frequency (Hz)"),
+        t.params.append(hertzParam(QStringLiteral("hertz"), QObject::tr("Spring Hertz (Hz)"),
                                    springSection(), 0.0,
                                    QObject::tr("Spring stiffness in oscillations per second.")));
-        t.params.append(ratioParam(QStringLiteral("dampingRatio"), QObject::tr("Damping Ratio"),
+        t.params.append(ratioParam(QStringLiteral("dampingRatio"), QObject::tr("Spring Damping Ratio"),
                                    springSection(), 0.0,
                                    QObject::tr("How quickly the spring settles.")));
 
@@ -279,10 +279,10 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                   limitSection(), false,
                                   QObject::tr("Keep the length between the bounds below."
                                               " Only has an effect while the spring is on.")));
-        t.params.append(realParam(QStringLiteral("minLength"), QObject::tr("Min Length"),
+        t.params.append(realParam(QStringLiteral("minLength"), QObject::tr("Min Length (px)"),
                                   limitSection(), 0.0, 0.0, 1e6, 1, 1.0,
                                   QObject::tr("Shortest allowed length, in scene units.")));
-        t.params.append(realParam(QStringLiteral("maxLength"), QObject::tr("Max Length"),
+        t.params.append(realParam(QStringLiteral("maxLength"), QObject::tr("Max Length (px)"),
                                   limitSection(), 0.0, 0.0, 1e6, 1, 1.0,
                                   QObject::tr("Longest allowed length, in scene units."
                                               " Zero means unbounded, which is Box2D's default.")));
@@ -293,7 +293,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
         t.params.append(forceParam(QStringLiteral("maxMotorForce"),
                                    QObject::tr("Max Motor Force (N)"), motorSection(), 0.0,
                                    QObject::tr("The most force the motor may apply.")));
-        t.params.append(lengthParam(QStringLiteral("motorSpeed"), QObject::tr("Motor Speed"),
+        t.params.append(lengthParam(QStringLiteral("motorSpeed"), QObject::tr("Motor Speed (px/s)"),
                                     motorSection(), 0.0,
                                     QObject::tr("Target rate of change of length, in scene units"
                                                 " per second.")));
@@ -319,14 +319,14 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                    QObject::tr("The body-B-minus-body-A angle the weld holds.")));
 
         t.params.append(hertzParam(QStringLiteral("linearHertz"),
-                                   QObject::tr("Linear Frequency (Hz)"), springSection(), 0.0,
+                                   QObject::tr("Linear Hertz (Hz)"), springSection(), 0.0,
                                    QObject::tr("Zero is perfectly rigid; above zero lets the bodies"
                                                " shift slightly against each other.")));
         t.params.append(ratioParam(QStringLiteral("linearDampingRatio"),
                                    QObject::tr("Linear Damping Ratio"), springSection(), 0.0,
                                    QObject::tr("Use 1 for critical damping.")));
         t.params.append(hertzParam(QStringLiteral("angularHertz"),
-                                   QObject::tr("Angular Frequency (Hz)"), springSection(), 0.0,
+                                   QObject::tr("Angular Hertz (Hz)"), springSection(), 0.0,
                                    QObject::tr("Zero is perfectly rigid; above zero lets the bodies"
                                                " rotate slightly against each other.")));
         t.params.append(ratioParam(QStringLiteral("angularDampingRatio"),
@@ -360,13 +360,13 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                   springSection(), false,
                                   QObject::tr("Drive the slider towards its target translation.")));
         t.params.append(lengthParam(QStringLiteral("targetTranslation"),
-                                    QObject::tr("Target Translation"), springSection(), 0.0,
+                                    QObject::tr("Target Translation (px)"), springSection(), 0.0,
                                     QObject::tr("Where along the axis the spring pulls towards,"
                                                 " in scene units.")));
-        t.params.append(hertzParam(QStringLiteral("hertz"), QObject::tr("Frequency (Hz)"),
+        t.params.append(hertzParam(QStringLiteral("hertz"), QObject::tr("Spring Hertz (Hz)"),
                                    springSection(), 0.0,
                                    QObject::tr("Spring stiffness in oscillations per second.")));
-        t.params.append(ratioParam(QStringLiteral("dampingRatio"), QObject::tr("Damping Ratio"),
+        t.params.append(ratioParam(QStringLiteral("dampingRatio"), QObject::tr("Spring Damping Ratio"),
                                    springSection(), 0.0,
                                    QObject::tr("How quickly the spring settles.")));
 
@@ -375,10 +375,10 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                   QObject::tr("Stop the slider travelling past the bounds"
                                               " below.")));
         t.params.append(lengthParam(QStringLiteral("lowerTranslation"),
-                                    QObject::tr("Lower Translation"), limitSection(), 0.0,
+                                    QObject::tr("Lower Translation (px)"), limitSection(), 0.0,
                                     QObject::tr("How far back along the axis, in scene units.")));
         t.params.append(lengthParam(QStringLiteral("upperTranslation"),
-                                    QObject::tr("Upper Translation"), limitSection(), 0.0,
+                                    QObject::tr("Upper Translation (px)"), limitSection(), 0.0,
                                     QObject::tr("How far forward along the axis, in scene"
                                                 " units.")));
 
@@ -389,7 +389,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
         t.params.append(forceParam(QStringLiteral("maxMotorForce"),
                                    QObject::tr("Max Motor Force (N)"), motorSection(), 0.0,
                                    QObject::tr("The most force the motor may apply.")));
-        t.params.append(lengthParam(QStringLiteral("motorSpeed"), QObject::tr("Motor Speed"),
+        t.params.append(lengthParam(QStringLiteral("motorSpeed"), QObject::tr("Motor Speed (px/s)"),
                                     motorSection(), 0.0,
                                     QObject::tr("Target speed along the axis, in scene units per"
                                                 " second.")));
@@ -424,11 +424,11 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                   springSection(), true,
                                   QObject::tr("Suspend body B along the axis instead of holding it"
                                               " rigidly.")));
-        t.params.append(hertzParam(QStringLiteral("hertz"), QObject::tr("Frequency (Hz)"),
+        t.params.append(hertzParam(QStringLiteral("hertz"), QObject::tr("Spring Hertz (Hz)"),
                                    springSection(), 1.0,
                                    QObject::tr("Suspension stiffness in oscillations per"
                                                " second.")));
-        t.params.append(ratioParam(QStringLiteral("dampingRatio"), QObject::tr("Damping Ratio"),
+        t.params.append(ratioParam(QStringLiteral("dampingRatio"), QObject::tr("Spring Damping Ratio"),
                                    springSection(), 0.7,
                                    QObject::tr("How quickly the suspension settles.")));
 
@@ -436,10 +436,10 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                   limitSection(), false,
                                   QObject::tr("Stop the travel past the bounds below.")));
         t.params.append(lengthParam(QStringLiteral("lowerTranslation"),
-                                    QObject::tr("Lower Translation"), limitSection(), 0.0,
+                                    QObject::tr("Lower Translation (px)"), limitSection(), 0.0,
                                     QObject::tr("How far back along the axis, in scene units.")));
         t.params.append(lengthParam(QStringLiteral("upperTranslation"),
-                                    QObject::tr("Upper Translation"), limitSection(), 0.0,
+                                    QObject::tr("Upper Translation (px)"), limitSection(), 0.0,
                                     QObject::tr("How far forward along the axis, in scene"
                                                 " units.")));
 
@@ -473,40 +473,40 @@ QVector<JointType> Box2DEngine::jointTypes() const
         t.visual = JointVisual::Link;
 
         t.params.append(lengthParam(QStringLiteral("linearVelocityX"),
-                                    QObject::tr("Speed X"), motorSection(), 0.0,
+                                    QObject::tr("Linear Velocity X (px/s)"), motorSection(), 0.0,
                                     QObject::tr("How fast body B is driven sideways relative to"
                                                 " body A, in scene units per second.")));
         t.params.append(lengthParam(QStringLiteral("linearVelocityY"),
-                                    QObject::tr("Speed Y"), motorSection(), 0.0,
+                                    QObject::tr("Linear Velocity Y (px/s)"), motorSection(), 0.0,
                                     QObject::tr("How fast body B is driven up or down relative to"
                                                 " body A, in scene units per second.")));
         t.params.append(angleParam(QStringLiteral("angularVelocity"),
-                                   QObject::tr("Spin (deg/s)"), motorSection(), 0.0,
+                                   QObject::tr("Angular Velocity (deg/s)"), motorSection(), 0.0,
                                    QObject::tr("How fast body B is driven round relative to"
                                                " body A.")));
         t.params.append(forceParam(QStringLiteral("maxVelocityForce"),
-                                   QObject::tr("Max Speed Force (N)"), motorSection(), 1.0,
+                                   QObject::tr("Max Velocity Force (N)"), motorSection(), 1.0,
                                    QObject::tr("The most force the motor may use to reach those"
                                                " speeds.")));
         t.params.append(forceParam(QStringLiteral("maxVelocityTorque"),
-                                   QObject::tr("Max Speed Torque (N·m)"), motorSection(), 1.0,
+                                   QObject::tr("Max Velocity Torque (N·m)"), motorSection(), 1.0,
                                    QObject::tr("The most torque the motor may use to reach that"
                                                " spin.")));
 
         // The spring holds the two where the joint was made, so a motor driven at
         // no speed keeps them together rather than letting them drift.
         t.params.append(hertzParam(QStringLiteral("linearHertz"),
-                                   QObject::tr("Frequency (Hz)"), springSection(), 0.0,
+                                   QObject::tr("Linear Hertz (Hz)"), springSection(), 0.0,
                                    QObject::tr("How stiffly body B is pulled back to where the"
                                                " joint holds it. Zero is no pull at all.")));
         t.params.append(ratioParam(QStringLiteral("linearDampingRatio"),
-                                   QObject::tr("Damping Ratio"), springSection(), 1.0,
+                                   QObject::tr("Linear Damping Ratio"), springSection(), 1.0,
                                    QObject::tr("How quickly that pull settles.")));
         t.params.append(forceParam(QStringLiteral("maxSpringForce"),
                                    QObject::tr("Max Spring Force (N)"), springSection(), 1.0,
                                    QObject::tr("The most force the spring may apply.")));
         t.params.append(hertzParam(QStringLiteral("angularHertz"),
-                                   QObject::tr("Angular Frequency (Hz)"), springSection(), 0.0,
+                                   QObject::tr("Angular Hertz (Hz)"), springSection(), 0.0,
                                    QObject::tr("How stiffly body B is turned back to the angle the"
                                                " joint holds it at. Zero is no pull at all.")));
         t.params.append(ratioParam(QStringLiteral("angularDampingRatio"),
@@ -532,6 +532,20 @@ QVector<JointType> Box2DEngine::jointTypes() const
         t.anchorCount = 0;
         t.visual = JointVisual::Link;
         types.append(t);
+    }
+
+    // Which parameters say "this one is a spring". The editor draws a coil
+    // where they do, and still names neither key.
+    for (JointType &type : types) {
+        for (JointParam &param : type.params) {
+            if (param.key == QLatin1String("enableSpring"))
+                param.role = PropertyRole::SpringEnabled;
+            else if (param.key == QLatin1String("hertz")
+                     || param.key == QLatin1String("linearHertz"))
+                param.role = PropertyRole::SpringStiffness;
+            else if (param.key == QLatin1String("length"))
+                param.role = PropertyRole::SpringRestLength;
+        }
     }
 
     return types;

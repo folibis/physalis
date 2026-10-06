@@ -9,6 +9,7 @@
 #include "PropertyPane/PropertyPaneFactory.h"
 #include "Icons.h"
 
+#include <QScrollBar>
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QVBoxLayout>
@@ -364,6 +365,11 @@ void PropertyPanel::rebuildRows()
                                     ? m_tabs->tabText(m_tabs->currentIndex())
                                     : QString();
 
+    for (auto it = m_sectionTables.cbegin(); it != m_sectionTables.cend(); ++it) {
+        if (const int at = it.value()->verticalScrollBar()->value(); at > 0)
+            m_sectionScroll.insert(it.key(), at);
+    }
+
     m_tabs->clear();
     qDeleteAll(m_sectionTables);
     m_sectionTables.clear();
@@ -397,6 +403,22 @@ void PropertyPanel::rebuildRows()
             }
         }
     }
+
+    // Put each table back where it was. Queued because a table that has not
+    // been shown yet has no scroll range to speak of, so setting it now would
+    // clamp to zero -- which is the very thing being avoided. A section that
+    // has grown shorter, or belongs to a different kind of object, simply
+    // clamps to whatever it does have.
+    QMetaObject::invokeMethod(
+        this,
+        [this] {
+            for (auto it = m_sectionTables.cbegin(); it != m_sectionTables.cend(); ++it) {
+                const int at = m_sectionScroll.value(it.key(), 0);
+                if (at > 0)
+                    it.value()->verticalScrollBar()->setValue(at);
+            }
+        },
+        Qt::QueuedConnection);
 
     refreshValues();
     updateWatchMarks();

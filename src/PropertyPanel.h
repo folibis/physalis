@@ -84,6 +84,11 @@ private:
 
     QTabWidget *m_tabs = nullptr;
     QHash<QString, QTableWidget *> m_sectionTables;
+    // How far each section was scrolled, by its name. Selecting another object
+    // throws every table away and builds new ones, and landing back at the top
+    // loses the row that was being worked on -- which is most of the table once
+    // an engine publishes forty of them.
+    QHash<QString, int> m_sectionScroll;
     QLabel *m_title = nullptr;
     EditorMode m_mode = EditorMode::Edit;
     QPointer<ShapeItem> m_item;

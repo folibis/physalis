@@ -42,6 +42,78 @@ function vals(owner) {
     return (owner && owner.physics) || {};
 }
 
+// Which of a joint type's parameters the engine tagged as saying it is a
+// spring, and what it rests at. Found by role, so no key is named here.
+function springKeysByType(scene) {
+    var byType = {};
+    var types = (scene.engine && scene.engine.jointTypes) || [];
+    for (var t = 0; t < types.length; ++t) {
+        var keys = { enabled: null, enabledDefault: false,
+                     stiffness: null, stiffnessDefault: 0,
+                     rest: null, restDefault: 0 };
+        var params = types[t].params || [];
+        for (var p = 0; p < params.length; ++p) {
+            var param = params[p];
+            if (param.role === "springEnabled") {
+                keys.enabled = param.key;
+                keys.enabledDefault = !!param["default"];
+            } else if (param.role === "springStiffness" && !keys.stiffness) {
+                keys.stiffness = param.key;
+                keys.stiffnessDefault = Number(param["default"]) || 0;
+            } else if (param.role === "springRestLength") {
+                keys.rest = param.key;
+                keys.restDefault = Number(param["default"]) || 0;
+            }
+        }
+        byType[types[t].id] = keys;
+    }
+    return byType;
+}
+
+// How many turns a joint is drawn with: its rest length over the pitch one
+// turn stands for, or zero where it is not a spring at all. Measured from the
+// anchors where the engine lets a rest length of zero mean "wherever they
+// start", which is what the editor does too.
+function springTurnsOf(joint, keys, pitch) {
+    if (!keys)
+        return 0;
+    var params = joint.params || {};
+    if (keys.enabled) {
+        var on = params[keys.enabled];
+        if (!(on === undefined ? keys.enabledDefault : on))
+            return 0;
+    } else if (keys.stiffness) {
+        var k = params[keys.stiffness];
+        if (!((k === undefined ? keys.stiffnessDefault : Number(k)) > 0))
+            return 0;
+    } else {
+        return 0;
+    }
+
+    var rest = 0;
+    if (keys.rest)
+        rest = Number(params[keys.rest] === undefined ? keys.restDefault : params[keys.rest]) || 0;
+    if (rest <= 0 && joint.anchorA && joint.anchorB) {
+        var dx = joint.anchorB.x - joint.anchorA.x, dy = joint.anchorB.y - joint.anchorA.y;
+        rest = Math.sqrt(dx * dx + dy * dy);
+    }
+    return Math.max(2, Math.min(60, Math.round(rest / Math.max(pitch, 1))));
+}
+
+// Whether this scene quotes its speeds at the engine's reference scale instead
+// of at its own. Found by role, so no key is named here.
+function keepsPaceAcrossScales(scene) {
+    var props = (scene.engine && scene.engine.worldProperties) || [];
+    var settings = vals(scene.world || {});
+    for (var i = 0; i < props.length; ++i) {
+        if (props[i].role === "paceAcrossScales") {
+            var set = settings[props[i].key];
+            return !!(set === undefined ? props[i]["default"] : set);
+        }
+    }
+    return false;
+}
+
 function exportScene(scene, io) {
     var world = scene.world || {};
     var field = scene.field || {};
@@ -67,7 +139,11 @@ function exportScene(scene, io) {
     var margin = Math.max(0.1, pickNumber(vals(world).contactMargin, 2));
     PPM = margin / (4.0 * 0.005);
     SCALE = SCENE_PPM / PPM;
-    MOTION = 50.0 / PPM;
+    // The page measures in its own metre, so a speed has to be converted into
+    // it. Where the scene quotes speeds at 50 px per metre that is 50 / PPM;
+    // where it means plain metres per second it is simply how much bigger a
+    // length is on the page.
+    MOTION = keepsPaceAcrossScales(scene) ? 50.0 / PPM : SCALE;
     TOLERANCE = 1.0;
 
     var cache = {};
@@ -168,6 +244,7 @@ function exportScene(scene, io) {
         DRAW_LOG: readout.call,
         JOINT_COLOR: cssColour(physics.jointColor, "rgba(232, 196, 106, 0.667)"),
         JOINT_ANCHOR_RADIUS: short(pickNumber(physics.jointAnchorRadius, 7)),
+        SPRING_WIDTH: short(pickNumber(physics.springWidth, 9)),
         CONTROLS: controlsCode(own),
         CONTROL_WIRING: controlWiring(own),
         WASM_SCRIPT: engine.wasmScript,
@@ -1731,8 +1808,17 @@ function qtColour(colour, fallback) {
 // What the debug view adds: joints, each body's axes, and the rays.
 function debugDrawing(scene) {
     var joints = [], bodies = [], rays = [];
-    for (var j = 0; j < scene.simulation.joints.length; ++j)
-        joints.push(NAMES["joint:" + j]);
+    var physics = (scene.settings && scene.settings.Physics) || {};
+    var coils = physics.springsAsCoils === undefined ? true : !!physics.springsAsCoils;
+    var pitch = pickNumber(physics.springPitch, 14);
+    var springKeys = springKeysByType(scene);
+    var sceneJoints = scene.joints || [];
+    for (var j = 0; j < scene.simulation.joints.length; ++j) {
+        var turns = coils && sceneJoints[j]
+                        ? springTurnsOf(sceneJoints[j], springKeys[sceneJoints[j].type], pitch)
+                        : 0;
+        joints.push("[" + NAMES["joint:" + j] + ", " + turns + "]");
+    }
     for (var b = 0; b < scene.simulation.bodies.length; ++b)
         bodies.push(NAMES["body:" + b]);
     var sceneRays = scene.rays || [];

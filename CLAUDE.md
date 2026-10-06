@@ -51,10 +51,27 @@ cards build an editor for something the catalogue never mentioned. They are run
 state: started from what the scene declares and gone when the run stops, like
 every position on the canvas.
 
-Two properties the *editor* also has to recognise, because it draws with them:
-whatever the engine tags `PropertyRole::Sensor` (hatched rather than filled) and
-`PropertyRole::Density` (where a body balances). It asks for the key by role --
-`CanvasScene::isSensorShape`, `shapeDensity` -- and still names neither.
+A few properties the *editor* also has to recognise, because it draws with
+them: whatever the engine tags `PropertyRole::Sensor` (hatched rather than
+filled), `PropertyRole::Density` (where a body balances), and the three that
+say a joint is a spring -- `SpringEnabled`, `SpringStiffness`, `SpringRestLength`
+-- which make it draw a coil rather than a shaft. It asks for the key by role
+-- `CanvasScene::isSensorShape`, `shapeDensity`, `isSpringJoint` -- and still
+names none of them.
+
+**A spring's turns come from its rest length, not from a number somebody
+picked.** The count is its rest length over Options -> Physics -> Coil pitch, so
+a long spring has more of them than a short one; from then on the count is
+fixed and the turns spread as it is pulled and pack together as it is squashed,
+which is what a spring does. Nothing has to know the joint's travel limits --
+most joints have none, `enableLimit` being off by default, and the length
+already obeys them where they are on. `CanvasScene::springTurns` works the
+count out only while the scene stands still, because that is when a joint is at
+rest, and holds it through the run. Only the kinds drawn between two anchors
+get a coil: a revolute's spring is rotational and a zigzag along its ring would
+mean nothing. The exported page does the same, from a turn count the converter
+writes into its drawing list -- which is why `SceneExporter` hands converters
+each property's `role`, by name rather than by number.
 
 ## Layout
 
@@ -286,141 +303,6 @@ that is what a rule names when it means the simulation itself. No engine knows
 a run is being watched, let alone how to end one. They cannot be carried out
 where a rule fires -- that is inside the step, with the solver on the stack --
 so `SimulationController` remembers one and acts on it once the step is over.
-
-## Things that have bitten before
-
-- **Everything is built `-fPIC`** (`CMAKE_POSITION_INDEPENDENT_CODE`). The
-  engines are shared libraries around static Box2D and Chipmunk, and a static
-  library built without it cannot go into a shared one -- the Linux build
-  stopped at "recompile with -fPIC".
-- **`PhysalisCore` is an OBJECT library, not STATIC.** A static library lets the
-  linker drop the compiled `.qrc`, and every icon comes out empty.
-- **Scale.** `pixelsPerMeter` is a world setting; forces and gravity are scaled
-  by `50 / pixelsPerMeter`. At the common `ppm: 1000` that is a factor of 0.05,
-  so sensible-looking force values do nothing and tiny ones are huge.
-- **Box2D's length unit.** Box2D's tolerances are lengths fixed for metre-sized
-  objects: 5 mm of slop, and a contact is made (and "begins contact" reported)
-  once shapes are within `4 × linearSlop` = 2 cm. At `ppm: 1000` that is 20 scene
-  px, so rules fired visibly before shapes touched. `createWorld` calls
-  `b2SetLengthUnitsPerMeter(50 / ppm)` -- the same reference the pace is quoted
-  at -- so the tolerances are what they would be at 50 px per metre. It is a
-  global, set before each world is made; the C++ export does the same.
-- **`collideConnected`.** A joint disables collision between the two bodies it
-  connects. If one of them is scenery, the other passes straight through it.
-- **Contact events are auto-enabled** for any shape named as a rule subject:
-  `SimulationController` sets `ShapePart::watchedByRules`, and each engine
-  switches on whatever it needs to report contacts -- so turning the flag off
-  in the file changes nothing for that shape.
-- **A sensor needs both sides to opt in.** Box2D reports an overlap only
-  when the sensor *and* the shape entering it have `enableSensorEvents`, and it
-  is off by default even for sensors -- so a pocket's rule never fired unless
-  every ball had been ticked by hand. Once a rule watches a sensor, the engine
-  gives every shape in the world sensor events, the ones already made and the
-  ones still to come. And a sensor never raises *contact* events at all: a rule
-  on one wants "is entered", not "begins contact".
-- **A property the editor shows is one the engine published.** Panes are built
-  by `rowsFromCatalogue` (stored values, editable) and `liveRowsFromCatalogue`
-  (what a run answers, read-only). A row the editor owns -- a name, the body
-  type, Enabled -- carries no engine key, and nothing else in `src/` may.
-- **Rebuilding widgets from their own signal handler crashes.** The rules panel
-  and the property panes both rebuild controls in response to a combo box
-  changing — that deletes the sender mid-signal. Queue it:
-  `QMetaObject::invokeMethod(this, [...]{...}, Qt::QueuedConnection)`.
-  See `RulesPanel::scheduleValueEditorRefresh`. This keeps finding new routes:
-  the and/or box between two conditions rebuilds the card so every gap shows
-  the same word, and took the application down until it was queued too. Read
-  what the control says synchronously, act on it afterwards.
-- **A cell widget swallows the clicks the table would have had.** Every cell of
-  the Variables tab holds a widget, so right-clicking one never reached the
-  table's viewport and the Add to Log menu could not be opened at all; clicking
-  a row never moved the selection either, so Remove stayed greyed out. The
-  widgets carry their row as a property and forward both. It is also why the
-  name is a caption that opens an editor on double-click rather than a box
-  always in edit mode.
-- **Everything a rule can name shares one namespace.** `takenNames()` once
-  collected shapes, bodies and joints but not rays or explosions -- so every ray
-  was called `ray_1`, and any rule naming one was ambiguous. A rule addresses
-  objects by name, so anything a rule can name has to be in there.
-- **Setting a body's position teleports it.** `b2Body_SetTransform` bypasses the
-  solver: no velocity, no contacts on the way, overlapping shapes left behind.
-  To move something smoothly use *Glide To X/Y* (`b2Body_SetTargetTransform`,
-  which sets the velocity that arrives there by the end of the step), or drive
-  a joint instead (a motor joint's `linearOffsetX`, a prismatic's
-  `targetTranslation`).
-- **`EngineEvent` is not safe to build positionally.** Two shape names sit
-  between the handles and `eventId`, so `{joint, body, other, "limitLower"}`
-  puts the id in `subjectShape` and the event reaches no rule at all. Joint
-  limit events were dead this way for a while, silently. Assign the fields.
-- **Torque and angular impulse come down by the scale twice.** A torque is a
-  force times a distance and both are quoted in scene units, so `setBodyParam`
-  divides by `pixelsPerMeter²` where a linear impulse divides by it once.
-  Without that, a number that looks sensible next to an impulse is a million
-  times too large.
-- **Joint limits lose to an overpowered motor.** They are constraints, not
-  walls; a `maxMotorForce` far beyond what the bodies weigh drives straight
-  through one. At `ppm: 1000` a 40×40 box weighs about two grams, so tenths of
-  a newton are already generous. Pushed far enough it stops being a bad-looking
-  run and becomes a broken one -- see the two entries below, which came out of
-  exactly that.
-- **A sliding joint's travel is measured from where it starts.** Box2D measures
-  a prismatic (and wheel) joint between its two anchors, so a joint whose
-  anchors sit 400 apart *starts* at 400 -- and limits written in the editor as
-  "0 to 400 units of travel" would then sit entirely behind it, with the motor
-  grinding against a limit it began the wrong side of. The editor means travel
-  from where the joint starts, so `Box2DEngine::m_travelOrigins` keeps that
-  offset per joint: added to the limits (and `targetTranslation`) going in,
-  taken back off `translation` coming out. It is zero for the usual case of two
-  anchors dropped on the same point, and for every other kind of joint.
-  The picture follows the same coordinate: `CanvasScene` hangs the travel band
-  off **anchor B**, since zero is where that anchor stands, and drawing it from
-  anchor A put the whole range somewhere the joint could never reach as soon as
-  the two anchors were apart.
-  Every exporter has to add the same offset (`travelOrigin(s)` in each
-  `export.js`) -- the C++ one once did not, and a lift set to
-  rise 0 to 430 had its whole range behind it.
-- **An engine may not end the process.** Box2D checks its own arithmetic and,
-  left alone, calls `abort()` when a check fails -- which used to take the
-  editor down mid-run, unsaved work and all. `createWorld` installs
-  `b2SetAssertFcn(rememberAssertion)`, which keeps the message and returns zero
-  (Box2D's "do not break"), and `collectWreckage()` after every step disables
-  any body the solver left holding a value that is no longer a number, naming
-  it once. Both come back through `IPhysicsEngine::takeProblems()` -- cleared by
-  the asking -- which `SimulationController` collects and the window shows in
-  place of running/paused. A scene is *allowed* to ask for the impossible; what
-  it gets is a sentence, not a crash.
-- **Playing faster never means stepping bigger.** The toolbar's speed chooser
-  (×¼ to ×8) multiplies the *wall-clock time* handed to
-  `SimulationController::advance`, and the solver keeps the same `timeStep()` --
-  a longer step is a different simulation, not a faster one. The catch-up
-  ceiling scales with it (`kMaxStepsPerTick × speed`), or ×4 would run
-  at ×1 and drop the rest. `advance()` exists so a test can hand over the
-  time a tick would have carried instead of waiting for it.
-- **`stop()` restores the snapshot**, so reading positions after it gives you
-  the pre-run state.
-- **Collision bits are 64-bit hex strings in a scene.** A JavaScript number
-  cannot hold them: all-ones read as a number came out as
-  18446744073709552000, which C++ wraps round to 384, and every shape in the
-  C++ export collided with nothing. Exporters turn them into literals from the
-  string (`bits64` in the Box2D/Qt one).
-- **An export runs the same Box2D the app does, and still has to be traced.**
-  The converter targets 3.2, so a number means the same on both sides -- but
-  that is exactly why a difference is worth chasing rather than explaining away.
-  Compare an export against the app by tracing both, step for step; building and
-  running it is not enough, and neither is grepping the output for a string you
-  put in the template yourself. Trace a scene with few bodies: a pile of thirty
-  amplifies the last bit of a float into pixels and tells you nothing.
-- **Box2D 3.2 is written but not tagged.** The newest tag upstream is v3.1.1, so
-  `engines/box2d` pins a commit of `main` instead. 3.2 defines a joint by a frame
-  on each body rather than by anchors, a reference angle and an axis; it replaced
-  `fixedRotation` with three motion locks, renamed `maxContactPushSpeed` to
-  `contactSpeed`, made speculative contacts compulsory, turned the motor joint
-  from position-offset into velocity-driven, and **deleted the mouse joint**.
-  All of that is the plugin's to absorb: the catalogue publishes what the engine
-  offers under the engine's own names, and nothing in `src/` changed for it.
-- **An open chain needs its ghost vertices set.** 3.2 fills `b2ChainDef::ghost1`
-  and `ghost2` with infinity on purpose, and refuses the whole def when a
-  non-loop chain leaves them -- so every polyline outline silently failed to be
-  created, with no shapes and no message. They carry straight on past each end.
 
 ## Exporting
 

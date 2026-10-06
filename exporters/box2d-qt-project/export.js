@@ -43,6 +43,20 @@ function vals(owner) {
     return (owner && owner.physics) || {};
 }
 
+// Whether this scene quotes its speeds at the engine's reference scale instead
+// of at its own. Found by role, so no key is named here.
+function keepsPaceAcrossScales(scene) {
+    var props = (scene.engine && scene.engine.worldProperties) || [];
+    var settings = vals(scene.world || {});
+    for (var i = 0; i < props.length; ++i) {
+        if (props[i].role === "paceAcrossScales") {
+            var set = settings[props[i].key];
+            return !!(set === undefined ? props[i]["default"] : set);
+        }
+    }
+    return false;
+}
+
 function exportScene(scene, io) {
     var world = scene.world || {};
     var field = scene.field || {};
@@ -50,7 +64,9 @@ function exportScene(scene, io) {
     var physics = (scene.settings && scene.settings.Physics) || {};
 
     PPM = world.pixelsPerMeter || 1000;
-    MOTION = 50.0 / PPM;
+    // The program measures in the scene's own metre, so where the scene means
+    // plain metres per second a speed carries over untouched.
+    MOTION = keepsPaceAcrossScales(scene) ? 50.0 / PPM : 1.0;
     // The world's Contact Margin, in scene units: Box2D makes a contact 4 x slop
     // away, so its length unit is the margin over 4 x 5 mm at this scale.
     TOLERANCE = Math.max(0.1, pickNumber(vals(world).contactMargin, 2)) / (4.0 * 0.005 * PPM);

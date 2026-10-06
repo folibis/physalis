@@ -137,6 +137,9 @@ public:
         // unlimited. A direction, not a measurement -- like the body axes.
         qreal jointAxisLength = 40.0;
         qreal jointWaistWidth = 3.5;
+        bool springsAsCoils = true;
+        qreal springPitch = 14.0;
+        qreal springWidth = 9.0;
         qreal jointOutlineWidth = 1.6;
 
         // Where the export converters live: one folder per converter, each

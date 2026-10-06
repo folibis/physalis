@@ -44,6 +44,24 @@ enum class PropertyRole {
     VelocityX,
     VelocityY,
     AngularVelocity,
+    // A joint parameter that says this joint is a spring, so the editor can
+    // draw it as one. Some engines have a switch and some have only a
+    // stiffness that is zero when there is no spring, so there are two: the
+    // editor takes the switch where there is one and falls back to asking
+    // whether the stiffness is above zero.
+    SpringEnabled,
+    SpringStiffness,
+    // The length the spring sits at with nothing pulling on it. How many
+    // turns it is drawn with comes from this and nothing else, so a long
+    // spring has more of them than a short one. Zero, where an engine uses
+    // that to mean "however far apart the anchors start", leaves the editor
+    // to measure it.
+    SpringRestLength,
+    // The world setting that decides whether speeds are quoted at the engine's
+    // reference scale rather than at the scene's own. The editor needs the key
+    // only to keep an old file moving the way it did, and still does not name
+    // it.
+    PaceAcrossScales,
 };
 
 // Where a parameter's starting value comes from. Most are a fixed number the

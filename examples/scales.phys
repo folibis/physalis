@@ -16,7 +16,7 @@
             "physics": {
             },
             "shapes": [
-                11
+                10
             ],
             "type": "static"
         },
@@ -70,7 +70,47 @@
             "physics": {
             },
             "shapes": [
-                10
+                11
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_12",
+            "physics": {
+            },
+            "shapes": [
+                13
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_13",
+            "physics": {
+            },
+            "shapes": [
+                12
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_14",
+            "physics": {
+            },
+            "shapes": [
+                14
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_15",
+            "physics": {
+            },
+            "shapes": [
+                15
             ],
             "type": "static"
         }
@@ -120,6 +160,72 @@
                 "upperAngle": 0
             },
             "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": -180,
+                "y": 40
+            },
+            "anchorB": {
+                "x": -280,
+                "y": -220
+            },
+            "axis": {
+                "x": -0.6246950475544243,
+                "y": -0.7808688094430304
+            },
+            "bodyA": "body_11",
+            "bodyB": "body_13",
+            "collideConnected": false,
+            "name": "distance_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0.3,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": true,
+                "hertz": 1,
+                "length": 0,
+                "maxLength": 0,
+                "maxMotorForce": 0,
+                "minLength": 0,
+                "motorSpeed": 0
+            },
+            "type": "distance"
+        },
+        {
+            "anchorA": {
+                "x": 180,
+                "y": 40
+            },
+            "anchorB": {
+                "x": 280,
+                "y": -220
+            },
+            "axis": {
+                "x": 0.6246950475544243,
+                "y": -0.7808688094430304
+            },
+            "bodyA": "body_11",
+            "bodyB": "body_12",
+            "collideConnected": false,
+            "name": "distance_2",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0.3,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": true,
+                "hertz": 1,
+                "length": 0,
+                "maxLength": 0,
+                "maxMotorForce": 0,
+                "minLength": 0,
+                "motorSpeed": 0
+            },
+            "type": "distance"
         }
     ],
     "log": [
@@ -162,9 +268,9 @@
             "action": "@clone",
             "actionParams": {
                 "x": {
-                    "from": -300,
+                    "from": -200,
                     "step": 10,
-                    "to": 300
+                    "to": 200
                 },
                 "y": -100
             },
@@ -550,53 +656,10 @@
         },
         {
             "capStyle": "round",
-            "closed": false,
-            "cornerRadius": 0,
-            "filled": true,
-            "id": 10,
-            "joinStyle": "round",
-            "name": "polyline_1",
-            "origin": {
-                "x": 180,
-                "y": 11.5
-            },
-            "outline": false,
-            "physics": {
-            },
-            "points": [
-                {
-                    "x": -19,
-                    "y": -19
-                },
-                {
-                    "x": 181,
-                    "y": -39
-                },
-                {
-                    "x": 381,
-                    "y": -19
-                }
-            ],
-            "pos": {
-                "x": -181,
-                "y": 139
-            },
-            "rect": {
-                "height": 20,
-                "width": 400,
-                "x": -19,
-                "y": -39
-            },
-            "rotation": 0,
-            "smoothChain": false,
-            "type": "polygon"
-        },
-        {
-            "capStyle": "round",
             "closed": true,
             "cornerRadius": 0,
             "filled": true,
-            "id": 11,
+            "id": 10,
             "joinStyle": "round",
             "name": "rectangle_1",
             "origin": {
@@ -645,6 +708,146 @@
             "rotation": 0,
             "smoothChain": false,
             "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 11,
+            "joinStyle": "round",
+            "name": "rectangle_10",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -100,
+                "y": 10
+            },
+            "rect": {
+                "height": 20,
+                "width": 400,
+                "x": -100,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 12,
+            "joinStyle": "round",
+            "name": "rectangle_11",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -200,
+                "y": -190
+            },
+            "rect": {
+                "height": 40,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 13,
+            "joinStyle": "round",
+            "name": "rectangle_12",
+            "origin": {
+                "x": -80,
+                "y": -30
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 360,
+                "y": -190
+            },
+            "rect": {
+                "height": 40,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 14,
+            "joinStyle": "round",
+            "name": "rectangle_13",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -580,
+                "y": 330
+            },
+            "rect": {
+                "height": 600,
+                "width": 20,
+                "x": 80,
+                "y": -550
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 15,
+            "joinStyle": "round",
+            "name": "rectangle_14",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 400,
+                "y": 330
+            },
+            "rect": {
+                "height": 600,
+                "width": 20,
+                "x": 80,
+                "y": -550
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
         }
     ],
     "variables": [

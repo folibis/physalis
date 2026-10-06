@@ -282,6 +282,25 @@ public:
     void setJointOutlineWidth(qreal width);
     qreal jointOutlineWidth() const { return m_jointOutlineWidth; }
 
+    // A joint that is a spring is drawn as one. How many turns it has comes
+    // from its rest length divided by the pitch below, so a long spring has
+    // more of them than a short one; from then on the count is fixed and the
+    // turns spread as it is pulled and pack together as it is squashed, which
+    // is what a real spring does. Nothing here needs the joint's travel
+    // limits -- most joints have none, and the length already obeys them.
+    void setSpringsAsCoils(bool asCoils);
+    bool springsAsCoils() const { return m_springsAsCoils; }
+
+    void setSpringPitch(qreal pitch);
+    qreal springPitch() const { return m_springPitch; }
+
+    void setSpringWidth(qreal width);
+    qreal springWidth() const { return m_springWidth; }
+
+    // Whether this joint is a spring at all -- answered by the engine, which
+    // marks the parameter that says so. The editor names no key.
+    bool isSpringJoint(const Joint *joint) const;
+
     // How solidly a joint's anchors and shaft are filled. An anchor sits on
     // top of the very place it is holding, and drawn solid it hides it -- most
     // of all where several joints meet on one body. The outline stays at full
@@ -689,6 +708,28 @@ private:
     // Filled from the engine on first use; cleared when the engine changes.
     mutable QHash<QString, physics::JointVisual> m_jointVisuals;
     mutable QString m_jointVisualsEngine;
+
+    // Per joint type, the keys the engine tagged as saying "this is a spring",
+    // with the defaults they carry -- a joint's own params hold only what
+    // differs from the default, so the default is what an absent key means.
+    struct SpringKeys {
+        QString enabledKey;
+        bool enabledDefault = false;
+        QString stiffnessKey;
+        qreal stiffnessDefault = 0.0;
+        QString restKey;
+        qreal restDefault = 0.0;
+    };
+    mutable QHash<QString, SpringKeys> m_jointSprings;
+
+    // How many turns each spring was drawn with, by joint name. Worked out
+    // while the scene is not running -- that is when a joint stands at rest --
+    // and held through the run, so the turns spread and pack rather than being
+    // counted afresh every frame.
+    mutable QHash<QString, int> m_springTurns;
+
+    int springTurns(const Joint *joint, qreal spanLength) const;
+    QPainterPath springPath(const Joint *joint, const QPointF &a, const QPointF &b) const;
     // The engine's names for the two properties above, asked for once.
     mutable QString m_sensorKey;
     mutable QString m_densityKey;
@@ -701,6 +742,9 @@ private:
     qreal m_jointAnchorRadius = 7.0;
     qreal m_jointAxisLength = 40.0;
     qreal m_jointWaistWidth = 3.5;
+    bool m_springsAsCoils = true;
+    qreal m_springPitch = 14.0;
+    qreal m_springWidth = 9.0;
     qreal m_jointOutlineWidth = 1.6;
     int m_jointFillAlpha = 170;
     int m_jointAnchorOpacity = 60;

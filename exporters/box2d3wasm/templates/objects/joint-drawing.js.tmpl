@@ -1,3 +1,5 @@
+// Each entry is the joint and how many turns to draw it with: zero where it
+// is not a spring, so the page needs to know nothing about what one is.
 var jointsDrawn = [{{JOINTS}}];
 for (var j = 0; j < jointsDrawn.length; ++j)
-    drawJoint(jointsDrawn[j]);
+    drawJoint(jointsDrawn[j][0], jointsDrawn[j][1]);

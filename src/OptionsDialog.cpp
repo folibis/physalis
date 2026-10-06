@@ -223,6 +223,9 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     m_ui->jointAnchorRadius->setValue(current.jointAnchorRadius);
     m_ui->jointAxisLength->setValue(current.jointAxisLength);
     m_ui->jointWaistWidth->setValue(current.jointWaistWidth);
+    m_ui->springsAsCoils->setChecked(current.springsAsCoils);
+    m_ui->springPitch->setValue(current.springPitch);
+    m_ui->springWidth->setValue(current.springWidth);
     m_ui->jointOutlineWidth->setValue(current.jointOutlineWidth);
     selectData(m_ui->jointSelectionLineStyle, current.jointSelectionLineStyle);
     m_ui->jointSelectionLineWidth->setValue(current.jointSelectionLineWidth);
@@ -374,7 +377,8 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     // Now that every row exists, including the ones added just above.
     for (QGroupBox *group : { m_ui->bodyColorsGroup, m_ui->jointTypeColorsGroup,
                               m_ui->defaultStyleGroup, m_ui->handleStyleGroup,
-                              m_ui->bodyAxesGroup, m_ui->jointDrawingGroup })
+                              m_ui->bodyAxesGroup, m_ui->jointDrawingGroup,
+                              m_ui->springGroup })
         compactColorGroup(group);
 
     // Capped at half the snap step, the largest value that still leaves a free
@@ -788,6 +792,9 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.jointAnchorRadius = m_ui->jointAnchorRadius->value();
     s.jointAxisLength = m_ui->jointAxisLength->value();
     s.jointWaistWidth = m_ui->jointWaistWidth->value();
+    s.springsAsCoils = m_ui->springsAsCoils->isChecked();
+    s.springPitch = m_ui->springPitch->value();
+    s.springWidth = m_ui->springWidth->value();
     s.jointOutlineWidth = m_ui->jointOutlineWidth->value();
     s.undoDepth = m_ui->undoDepth->value();
     s.converterPath = m_ui->converterPath->text().trimmed();

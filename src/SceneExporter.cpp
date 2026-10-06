@@ -141,7 +141,31 @@ QJsonObject engineCatalogue(const QString &engineName)
     if (!engine)
         return {};
 
-    const auto properties = [](const physics::PropertyList &list) {
+    // A role by name rather than by number: a converter reading this is
+    // written against a build it has never seen, and a number would quietly
+    // mean something else the next time one is added in the middle.
+    const auto roleName = [](physics::PropertyRole role) -> QString {
+        switch (role) {
+        case physics::PropertyRole::None:            return {};
+        case physics::PropertyRole::Sensor:          return QStringLiteral("sensor");
+        case physics::PropertyRole::Density:         return QStringLiteral("density");
+        case physics::PropertyRole::ImpulseX:        return QStringLiteral("impulseX");
+        case physics::PropertyRole::ImpulseY:        return QStringLiteral("impulseY");
+        case physics::PropertyRole::PositionX:       return QStringLiteral("positionX");
+        case physics::PropertyRole::PositionY:       return QStringLiteral("positionY");
+        case physics::PropertyRole::Angle:           return QStringLiteral("angle");
+        case physics::PropertyRole::VelocityX:       return QStringLiteral("velocityX");
+        case physics::PropertyRole::VelocityY:       return QStringLiteral("velocityY");
+        case physics::PropertyRole::AngularVelocity: return QStringLiteral("angularVelocity");
+        case physics::PropertyRole::SpringEnabled:   return QStringLiteral("springEnabled");
+        case physics::PropertyRole::SpringStiffness: return QStringLiteral("springStiffness");
+        case physics::PropertyRole::SpringRestLength: return QStringLiteral("springRestLength");
+        case physics::PropertyRole::PaceAcrossScales: return QStringLiteral("paceAcrossScales");
+        }
+        return {};
+    };
+
+    const auto properties = [&roleName](const physics::PropertyList &list) {
         QJsonArray out;
         for (const physics::JointParam &p : list) {
             out.append(QJsonObject {
@@ -157,6 +181,7 @@ QJsonObject engineCatalogue(const QString &engineName)
                 {"readable", p.liveReadable},
                 {"settable", p.liveSettable},
                 {"tooltip", p.tooltip},
+                {"role", roleName(p.role)},
             });
         }
         return out;

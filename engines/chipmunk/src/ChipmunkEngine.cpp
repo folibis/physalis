@@ -107,7 +107,11 @@ void ChipmunkEngine::createWorld(const WorldDesc &desc)
     // whatever the scene's scale.
     m_pixelsPerMeter = desc.pixelsPerMeter > 0.0 ? desc.pixelsPerMeter
                                                  : kReferencePixelsPerMeter;
-    m_motionScale = kReferencePixelsPerMeter / m_pixelsPerMeter;
+    // Off by default: gravity is an acceleration in metres, and a metre is a
+    // metre. See Box2DEngine::createWorld for the whole of why.
+    m_motionScale = flag(desc.params, "scaleIndependentPace", false)
+                        ? kReferencePixelsPerMeter / m_pixelsPerMeter
+                        : 1.0;
 
     const QVariantMap &world = desc.params;
     m_space = cpSpaceNew();

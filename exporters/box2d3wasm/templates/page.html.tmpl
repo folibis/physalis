@@ -126,7 +126,7 @@ function colourOf(type) {
 
 // A joint the way the editor draws it: a ring at each anchor, joined by a
 // waisted shaft. The anchors are the origins of the joint's two frames.
-function drawJoint(joint) {
+function drawJoint(joint, springTurns) {
     if (!b2.b2Joint_IsValid(joint))
         return;
     var a = b2.b2Body_GetWorldPoint(b2.b2Joint_GetBodyA(joint),
@@ -142,7 +142,37 @@ function drawJoint(joint) {
     ctx.lineWidth = 1 / camera.scale;
 
     var span = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
-    if (span > 1) {
+    // A spring is drawn as one: the turns it was given at rest, spread over
+    // however far apart its anchors have got. Stretched they flatten towards a
+    // line, squashed they pack together -- the same coil the editor draws.
+    if (springTurns > 0 && span > 1) {
+        var ux = (bx - ax) / span, uy = (by - ay) / span;
+        var nx = -uy, ny = ux;
+        var lead = Math.min(ring * 1.5, span * 0.3);
+        var body = span - lead * 2;
+        var steps = springTurns * 2;
+        ctx.strokeStyle = "{{JOINT_COLOR}}";
+        ctx.lineWidth = 3.5;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        if (body > 0) {
+            var sx = ax + ux * lead, sy = ay + uy * lead;
+            var pitch = body / steps, amp = {{SPRING_WIDTH}} / 2;
+            ctx.lineTo(sx, sy);
+            for (var i = 1; i < steps; ++i) {
+                var side = (i % 2) ? amp : -amp;
+                ctx.lineTo(sx + ux * (pitch * i) + nx * side,
+                           sy + uy * (pitch * i) + ny * side);
+            }
+            ctx.lineTo(sx + ux * body, sy + uy * body);
+        }
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+        ctx.strokeStyle = "#404040";
+        ctx.lineWidth = 1 / camera.scale;
+    } else if (span > 1) {
         var waist = 1.75 / span;
         var px = -(by - ay) * waist, py = (bx - ax) * waist;
         ctx.beginPath();

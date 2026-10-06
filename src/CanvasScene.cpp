@@ -1019,15 +1019,170 @@ physics::JointVisual CanvasScene::jointVisual(const QString &typeId) const
     {
         m_jointVisualsEngine = engineName;
         m_jointVisuals.clear();
+        m_jointSprings.clear();
         if (auto engine = physics::EngineRegistry::create(engineName))
         {
             for (const physics::JointType &type : engine->jointTypes())
             {
                 m_jointVisuals.insert(type.id, type.visual);
+
+                SpringKeys keys;
+                for (const physics::JointParam &param : type.params)
+                {
+                    if (param.role == physics::PropertyRole::SpringEnabled)
+                    {
+                        keys.enabledKey = param.key;
+                        keys.enabledDefault = param.defaultValue.toBool();
+                    }
+                    else if (param.role == physics::PropertyRole::SpringStiffness
+                             && keys.stiffnessKey.isEmpty())
+                    {
+                        keys.stiffnessKey = param.key;
+                        keys.stiffnessDefault = param.defaultValue.toDouble();
+                    }
+                    else if (param.role == physics::PropertyRole::SpringRestLength)
+                    {
+                        keys.restKey = param.key;
+                        keys.restDefault = param.defaultValue.toDouble();
+                    }
+                }
+                m_jointSprings.insert(type.id, keys);
             }
         }
     }
     return m_jointVisuals.value(typeId, physics::JointVisual::Pivot);
+}
+
+bool CanvasScene::isSpringJoint(const Joint *joint) const
+{
+    if (!joint)
+    {
+        return false;
+    }
+    jointVisual(joint->typeId()); // fills the cache for this engine
+    const SpringKeys keys = m_jointSprings.value(joint->typeId());
+    const QVariantMap &params = joint->params();
+
+    // A switch where the engine has one; otherwise a stiffness, where above
+    // zero is the only thing that can mean "there is a spring here".
+    if (!keys.enabledKey.isEmpty())
+    {
+        return params.value(keys.enabledKey, keys.enabledDefault).toBool();
+    }
+    if (!keys.stiffnessKey.isEmpty())
+    {
+        return params.value(keys.stiffnessKey, keys.stiffnessDefault).toDouble() > 0.0;
+    }
+    return false;
+}
+
+// How many turns this spring has: its rest length over the pitch a turn is
+// drawn at. Worked out only while the scene stands still, because that is when
+// the joint is at rest; through a run the answer is held, so the turns spread
+// and pack instead of being recounted as the spring moves. An engine that lets
+// a rest length of zero mean "wherever the anchors start" leaves the span to
+// say, which is the same thing while nothing is running.
+int CanvasScene::springTurns(const Joint *joint, qreal spanLength) const
+{
+    const QString name = joint->name();
+    if (simulationRunning())
+    {
+        const int held = m_springTurns.value(name, 0);
+        if (held > 0)
+        {
+            return held;
+        }
+    }
+
+    const SpringKeys keys = m_jointSprings.value(joint->typeId());
+    qreal rest = 0.0;
+    if (!keys.restKey.isEmpty())
+    {
+        rest = joint->params().value(keys.restKey, keys.restDefault).toDouble();
+    }
+    if (rest <= 0.0)
+    {
+        rest = spanLength;
+    }
+
+    const int turns = qBound(2, qRound(rest / qMax(m_springPitch, 1.0)), 60);
+    m_springTurns.insert(name, turns);
+    return turns;
+}
+
+// The turns, between two straight leads. Their count is fixed by the rest
+// length; the spacing comes from how far apart the anchors actually are, so
+// the coil flattens towards a line as it is pulled out and packs towards
+// touching strokes as it is squashed -- which is what a spring does, and needs
+// no travel limits to work.
+QPainterPath CanvasScene::springPath(const Joint *joint, const QPointF &a, const QPointF &b) const
+{
+    const QLineF span(a, b);
+    const qreal length = span.length();
+    QPainterPath path;
+    path.moveTo(a);
+    if (length < 0.01)
+    {
+        return path;
+    }
+
+    const QPointF along = (b - a) / length;
+    const QPointF across(-along.y(), along.x());
+    // Straight at each end so the turns do not start inside the anchor rings.
+    const qreal lead = qMin(m_jointAnchorRadius * 1.5, length * 0.3);
+    const qreal body = length - lead * 2.0;
+    const int steps = springTurns(joint, length) * 2;
+    if (body <= 0.0 || steps < 2)
+    {
+        path.lineTo(b);
+        return path;
+    }
+
+    const QPointF start = a + along * lead;
+    const qreal pitch = body / steps;
+    const qreal amplitude = m_springWidth / 2.0;
+    path.lineTo(start);
+    for (int i = 1; i < steps; ++i)
+    {
+        const qreal side = (i % 2) ? 1.0 : -1.0;
+        path.lineTo(start + along * (pitch * i) + across * (side * amplitude));
+    }
+    path.lineTo(start + along * body);
+    path.lineTo(b);
+    return path;
+}
+
+void CanvasScene::setSpringsAsCoils(bool asCoils)
+{
+    if (m_springsAsCoils == asCoils)
+    {
+        return;
+    }
+    m_springsAsCoils = asCoils;
+    update();
+}
+
+void CanvasScene::setSpringPitch(qreal pitch)
+{
+    const qreal wanted = qBound(1.0, pitch, 500.0);
+    if (qFuzzyCompare(m_springPitch, wanted))
+    {
+        return;
+    }
+    m_springPitch = wanted;
+    m_springTurns.clear();
+    update();
+}
+
+void CanvasScene::setSpringWidth(qreal width)
+{
+    const qreal wanted = qBound(0.0, width, 200.0);
+    if (qFuzzyCompare(m_springWidth, wanted))
+    {
+        return;
+    }
+    m_springWidth = wanted;
+    update();
 }
 
 void CanvasScene::setJointColor(const QColor &color)
@@ -2954,9 +3109,19 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
 
             const QLineF span(a, b);
             QPainterPath shaft;
+            // Only the kinds drawn between two anchors: a revolute's spring is
+            // rotational, and a zigzag along its ring would mean nothing.
+            const bool coil = m_springsAsCoils
+                              && (kind == physics::JointVisual::Segment
+                                  || kind == physics::JointVisual::Axis)
+                              && isSpringJoint(joint);
             if (span.length() > 0.01)
             {
-                if (kindStyle == JointStyle::Rod)
+                if (coil)
+                {
+                    shaft = springPath(joint, a, b);
+                }
+                else if (kindStyle == JointStyle::Rod)
                 {
                     const QPointF along = (b - a) / span.length();
                     const QPointF across(-along.y() * waist, along.x() * waist);
@@ -2987,8 +3152,10 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
             {
                 QPen shaftPen(kindColor);
                 shaftPen.setWidthF(qMax(m_jointWaistWidth, 1.0));
-                shaftPen.setStyle(penStyle(kindStyle));
-                shaftPen.setCapStyle(Qt::FlatCap);
+                // A dashed coil is a scattering of ticks, not a spring.
+                shaftPen.setStyle(coil ? Qt::SolidLine : penStyle(kindStyle));
+                shaftPen.setCapStyle(coil ? Qt::RoundCap : Qt::FlatCap);
+                shaftPen.setJoinStyle(Qt::RoundJoin);
                 painter->setPen(shaftPen);
                 painter->setBrush(Qt::NoBrush);
                 painter->drawPath(shaft);

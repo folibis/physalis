@@ -197,12 +197,21 @@ void everyReadingAnswers(const QString &engineName)
         Joint *joint = bench.join(type);
         ASSERT_TRUE(joint);
 
+        const physics::PropertyList readings = engine->jointReadables(type.id);
+
         SimulationController sim(&bench.scene, nullptr);
         sim.setEngineName(engineName);
         sim.start();
-        for (int i = 0; i < 5; ++i)
+        // Read on every step, the way the property table does while a run is
+        // going, rather than once at the end: a reading that upsets the solver
+        // upsets it once per frame, and reading it once would not show that.
+        for (int i = 0; i < 5; ++i) {
             sim.stepFrame();
-        for (const physics::JointParam &reading : engine->jointReadables(type.id)) {
+            for (const physics::JointParam &reading : readings)
+                sim.readValue(joint->name(), reading.key);
+        }
+
+        for (const physics::JointParam &reading : readings) {
             if (!reading.liveReadable)
                 continue;
             const std::string what =
@@ -210,6 +219,11 @@ void everyReadingAnswers(const QString &engineName)
             EXPECT_TRUE(sim.readValue(joint->name(), reading.key).isValid())
                 << what << " is offered as something to measure and the engine answers nothing";
         }
+        // Asking what a joint measures is not meant to cost the run anything.
+        EXPECT_TRUE(sim.problems().isEmpty())
+            << (engineName + QLatin1String(": ") + type.id).toStdString()
+            << " reported, while its readings were being polled: "
+            << sim.problems().join(QLatin1Char(',')).toStdString();
         sim.stop();
     }
 }
@@ -266,6 +280,69 @@ TEST(JointCatalogue, Box2DAnswersForEverythingItMeasures)
 TEST(JointCatalogue, ChipmunkAnswersForEverythingItMeasures)
 {
     everyReadingAnswers(QStringLiteral("Chipmunk2D"));
+}
+
+// A joint the engine says is a spring is drawn as one. The editor finds that
+// out by role, never by key, so what this really checks is that the roles are
+// on the parameters -- an engine that forgets them draws rods for springs and
+// nothing anywhere says so.
+void springsAreRecognised(const QString &engineName)
+{
+    auto engine = physics::EngineRegistry::create(engineName);
+    ASSERT_TRUE(engine) << engineName.toStdString() << " is not installed";
+
+    int springTypes = 0;
+    for (const physics::JointType &type : engine->jointTypes()) {
+        QString switchKey;
+        QString stiffnessKey;
+        for (const physics::JointParam &param : type.params) {
+            if (param.role == physics::PropertyRole::SpringEnabled)
+                switchKey = param.key;
+            else if (param.role == physics::PropertyRole::SpringStiffness
+                     && stiffnessKey.isEmpty())
+                stiffnessKey = param.key;
+        }
+        if (switchKey.isEmpty() && stiffnessKey.isEmpty())
+            continue;
+        ++springTypes;
+
+        const std::string what = (engineName + QLatin1String(": ") + type.id).toStdString();
+        TwoBodies bench(engineName);
+
+        QVariantMap on;
+        if (!switchKey.isEmpty())
+            on.insert(switchKey, true);
+        else
+            on.insert(stiffnessKey, 5.0);
+        Joint *springing = bench.join(type, on);
+        ASSERT_TRUE(springing) << what;
+        EXPECT_TRUE(bench.scene.isSpringJoint(springing))
+            << what << " marks a spring parameter, and the canvas does not see a spring";
+
+        // And off again, where the engine has a switch to turn off.
+        if (!switchKey.isEmpty()) {
+            TwoBodies plain(engineName);
+            QVariantMap off;
+            off.insert(switchKey, false);
+            Joint *rod = plain.join(type, off);
+            ASSERT_TRUE(rod) << what;
+            EXPECT_FALSE(plain.scene.isSpringJoint(rod))
+                << what << " has its spring switched off and is still drawn as one";
+        }
+    }
+
+    EXPECT_GT(springTypes, 0)
+        << engineName.toStdString() << " publishes no spring at all, which cannot be right";
+}
+
+TEST(JointCatalogue, Box2DSpringsAreDrawnAsSprings)
+{
+    springsAreRecognised(QStringLiteral("Box2D"));
+}
+
+TEST(JointCatalogue, ChipmunkSpringsAreDrawnAsSprings)
+{
+    springsAreRecognised(QStringLiteral("Chipmunk2D"));
 }
 
 // A joint of every type survives the file with its settings.

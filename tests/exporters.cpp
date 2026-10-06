@@ -18,7 +18,6 @@
 #include <QFile>
 #include <QJSEngine>
 #include <QJsonObject>
-#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <cmath>
 #include <gtest/gtest.h>
@@ -100,7 +99,12 @@ void buildEverything(CanvasScene *scene)
     // A joint whose reading is a length, driven from another object's position
     // with an offset: the one shape of action that makes a converter write a
     // bare length rather than a point, which is where the web one went wrong.
-    Joint *pull = scene->createJoint(QStringLiteral("distance"), crateBody, wheelBody, 1, {});
+    // Its spring is on, so the page has a joint it must draw as a coil as well
+    // as one it draws as a rod -- the turn count is worked out at export time
+    // and written into the drawing list.
+    Joint *pull = scene->createJoint(QStringLiteral("distance"), crateBody, wheelBody, 1,
+                                     {{QStringLiteral("enableSpring"), true},
+                                      {QStringLiteral("hertz"), 2.0}});
     if (pull)
         pull->setName(QStringLiteral("pull"));
 
@@ -833,6 +837,16 @@ TEST(Exporters, ABodyThatCanBeShotCanBeShotOnThePage)
         // The body is offered, with the two numbers that decide how hard it goes.
         EXPECT_TRUE(out.text.contains(QStringLiteral("shootable.push({ body: crateBody")))
             << "the page lists no body it can fling";
+
+        // The spring on the scene's distance joint reaches the drawing list as
+        // a turn count, and the revolute beside it as a zero: the page draws a
+        // coil for one and a plain shaft for the other, and knows what a spring
+        // is only from this number.
+        EXPECT_TRUE(out.text.contains(QStringLiteral("[pull, "))
+                    && !out.text.contains(QStringLiteral("[pull, 0]")))
+            << "the spring joint reached the page with no turns, so it is drawn as a rod";
+        EXPECT_TRUE(out.text.contains(QStringLiteral("jointsDrawn[j][0], jointsDrawn[j][1]")))
+            << "the page does not pass the turn count to drawJoint";
         EXPECT_TRUE(out.text.contains(QStringLiteral("maxPull: 300")))
             << "the pull distance did not reach the page";
         EXPECT_TRUE(out.text.contains(QStringLiteral("fullImpulse: 5")))
@@ -1204,12 +1218,10 @@ enum class Scaled { Raw, ByScale, AtTheReferencePace };
 
 Scaled scalingOf(const QString &key)
 {
-    static const QSet<QString> pace {
-        QStringLiteral("gravityX"), QStringLiteral("gravityY"),
-        QStringLiteral("maximumLinearSpeed"), QStringLiteral("contactSpeed"),
-        QStringLiteral("restitutionThreshold"), QStringLiteral("hitEventThreshold"),
-        QStringLiteral("sleepThreshold"),
-    };
+    // Gravity and the thresholds beside it used to be quoted at the engine's
+    // reference scale. They are plain metres and seconds now unless a scene
+    // asks otherwise, and this one does not.
+    static const QSet<QString> pace {};
     static const QSet<QString> byScale {
         QStringLiteral("velocityX"), QStringLiteral("velocityY"),
         QStringLiteral("tangentSpeed"),
@@ -1308,6 +1320,17 @@ TEST(Exporters, EveryPropertyIsExportedWithTheValueTheAppUses)
                 // difference here, which is what keeps every mass the editor's.
                 if (property.key == QLatin1String("density"))
                     appUses = wanted * (metre / ppm) * (metre / ppm);
+                // A speed or an acceleration is quoted per second at the
+                // scene's metre, so a converter working at its own has to
+                // restate it there -- the same motion, a different metre.
+                static const QSet<QString> perSecond {
+                    QStringLiteral("gravityX"), QStringLiteral("gravityY"),
+                    QStringLiteral("maximumLinearSpeed"), QStringLiteral("contactSpeed"),
+                    QStringLiteral("restitutionThreshold"),
+                    QStringLiteral("hitEventThreshold"), QStringLiteral("sleepThreshold"),
+                };
+                if (perSecond.contains(property.key))
+                    appUses = wanted * (ppm / metre);
                 EXPECT_TRUE(carriesTheNumber(out.text, appUses))
                     << converter.id.toStdString() << " writes the " << group.what << "'s "
                     << property.key.toStdString() << " as something other than the " << appUses

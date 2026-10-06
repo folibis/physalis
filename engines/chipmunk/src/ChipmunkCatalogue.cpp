@@ -117,39 +117,39 @@ PropertyList ChipmunkEngine::bodyProperties() const
 {
     PropertyList properties = {
         // cpBodyApplyImpulseAtWorldPoint, through the centre of mass.
-        number(QStringLiteral("impulseY"), QObject::tr("Impulse Up/Down"),
+        number(QStringLiteral("impulseY"), QObject::tr("Linear Impulse Y (N·s)"),
                false, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("A kick. Adds to whatever the body was already doing.")),
-        number(QStringLiteral("impulseX"), QObject::tr("Impulse Left/Right"),
+        number(QStringLiteral("impulseX"), QObject::tr("Linear Impulse X (N·s)"),
                false, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("A kick sideways. Adds to whatever the body was already doing.")),
-        number(QStringLiteral("angularImpulse"), QObject::tr("Spin Impulse"),
+        number(QStringLiteral("angularImpulse"), QObject::tr("Angular Impulse (N·m·s)"),
                false, true, -1e9, 1e9, 2, 1.0,
                QObject::tr("A twist. Sets something spinning, or adds to the spin it"
                            " already had.")),
 
         // cpBodyGetVelocity / SetVelocity.
-        number(QStringLiteral("velocityY"), QObject::tr("Velocity Y"),
+        number(QStringLiteral("velocityY"), QObject::tr("Velocity Y (px/s)"),
                true, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("How fast it is travelling. Setting it replaces the motion"
                            " outright, where an impulse adds to it.")),
-        number(QStringLiteral("velocityX"), QObject::tr("Velocity X"),
+        number(QStringLiteral("velocityX"), QObject::tr("Velocity X (px/s)"),
                true, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("How fast it is travelling. Setting it replaces the motion"
                            " outright, where an impulse adds to it.")),
-        number(QStringLiteral("speed"), QObject::tr("Speed"), true, false, 0.0, 1e6, 1, 10.0,
+        number(QStringLiteral("speed"), QObject::tr("Speed (px/s)"), true, false, 0.0, 1e6, 1, 10.0,
                QObject::tr("How fast it is going, whichever way. Read only.")),
         number(QStringLiteral("angularVelocity"), QObject::tr("Angular Velocity (deg/s)"),
                true, true, -1e5, 1e5, 1, 10.0,
                QObject::tr("How fast it turns, and which way.")),
 
         // cpBodySetPosition / SetAngle: a teleport, as in Box2D.
-        number(QStringLiteral("positionX"), QObject::tr("Position X"),
+        number(QStringLiteral("positionX"), QObject::tr("Position X (px)"),
                true, true, -1e7, 1e7, 1, 10.0,
                QObject::tr("Moving a body while it runs places it there outright, without"
                            " travelling -- so it can land inside something. Glide To X"
                            " arrives the long way instead.")),
-        number(QStringLiteral("positionY"), QObject::tr("Position Y"),
+        number(QStringLiteral("positionY"), QObject::tr("Position Y (px)"),
                true, true, -1e7, 1e7, 1, 10.0,
                QObject::tr("Moving a body while it runs places it there outright, without"
                            " travelling -- so it can land inside something. Glide To Y"
@@ -160,15 +160,15 @@ PropertyList ChipmunkEngine::bodyProperties() const
                            " Glide To Angle turns it the long way.")),
 
         // The velocity that arrives there by the end of the step.
-        number(QStringLiteral("targetX"), QObject::tr("Glide To X"),
+        number(QStringLiteral("targetX"), QObject::tr("Target X (px)"),
                false, true, -1e7, 1e7, 1, 10.0,
                QObject::tr("Travels there rather than appearing there, so it pushes what"
                            " is in the way. Meant for kinematic bodies.")),
-        number(QStringLiteral("targetY"), QObject::tr("Glide To Y"),
+        number(QStringLiteral("targetY"), QObject::tr("Target Y (px)"),
                false, true, -1e7, 1e7, 1, 10.0,
                QObject::tr("Travels there rather than appearing there, so it pushes what"
                            " is in the way. Meant for kinematic bodies.")),
-        number(QStringLiteral("targetAngle"), QObject::tr("Glide To Angle (deg)"),
+        number(QStringLiteral("targetAngle"), QObject::tr("Target Angle (deg)"),
                false, true, -1e5, 1e5, 1, 1.0,
                QObject::tr("Turns there rather than appearing turned.")),
 
@@ -206,29 +206,29 @@ PropertyList ChipmunkEngine::bodyProperties() const
                QObject::tr("The same, for spin.")),
 
         // cpBodyEachArbiter, counted: how many contacts this body is in.
-        number(QStringLiteral("contactCount"), QObject::tr("Contacts"), true, false,
+        number(QStringLiteral("contactCount"), QObject::tr("Contact Count"), true, false,
                0.0, 1e6, 0, 1.0,
                QObject::tr("How many contacts this body is in right now, across all its"
                            " shapes. Zero when nothing is touching it.")),
         // cpBodyEachConstraint, counted.
-        number(QStringLiteral("jointCount"), QObject::tr("Joints"), true, false,
+        number(QStringLiteral("jointCount"), QObject::tr("Joint Count"), true, false,
                0.0, 1e6, 0, 1.0,
                QObject::tr("How many joints hold this body. Drops when a rule breaks one.")),
 
         // The shapes' bounding boxes, together: the box the body takes up.
-        number(QStringLiteral("boundsMinX"), QObject::tr("Bounds Left"), true, false,
+        number(QStringLiteral("boundsMinX"), QObject::tr("Bounds Min X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box the body takes up right now, worked out from its"
                            " shapes where they have got to.")),
-        number(QStringLiteral("boundsMinY"), QObject::tr("Bounds Top"), true, false,
+        number(QStringLiteral("boundsMinY"), QObject::tr("Bounds Min Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box the body takes up right now, worked out from its"
                            " shapes where they have got to.")),
-        number(QStringLiteral("boundsMaxX"), QObject::tr("Bounds Right"), true, false,
+        number(QStringLiteral("boundsMaxX"), QObject::tr("Bounds Max X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box the body takes up right now, worked out from its"
                            " shapes where they have got to.")),
-        number(QStringLiteral("boundsMaxY"), QObject::tr("Bounds Bottom"), true, false,
+        number(QStringLiteral("boundsMaxY"), QObject::tr("Bounds Max Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box the body takes up right now, worked out from its"
                            " shapes where they have got to.")),
@@ -242,11 +242,11 @@ PropertyList ChipmunkEngine::bodyProperties() const
              QObject::tr("The same for hard knocks, across the whole body.")),
 
         // cpBodyGetCenterOfGravity, in the body's own frame.
-        number(QStringLiteral("localCenterOfMassX"), QObject::tr("Centre of Mass X (local)"),
+        number(QStringLiteral("localCenterOfMassX"), QObject::tr("Local Center of Gravity X (px)"),
                true, false, -1e7, 1e7, 1, 10.0,
                QObject::tr("Where the body balances, measured from its own origin rather"
                            " than in the scene.")),
-        number(QStringLiteral("localCenterOfMassY"), QObject::tr("Centre of Mass Y (local)"),
+        number(QStringLiteral("localCenterOfMassY"), QObject::tr("Local Center of Gravity Y (px)"),
                true, false, -1e7, 1e7, 1, 10.0,
                QObject::tr("Where the body balances, measured from its own origin rather"
                            " than in the scene.")),
@@ -256,13 +256,13 @@ PropertyList ChipmunkEngine::bodyProperties() const
                0.0, 1e9, 4, 0.1,
                QObject::tr("Worked out from the shapes and their density. Setting it"
                            " overrides that until a shape's density changes.")),
-        number(QStringLiteral("rotationalInertia"), QObject::tr("Moment of Inertia (kg·m²)"),
+        number(QStringLiteral("rotationalInertia"), QObject::tr("Moment (kg·m²)"),
                true, true, 0.0, 1e9, 6, 0.1,
                QObject::tr("How hard it is to start or stop the body spinning.")),
-        number(QStringLiteral("centerOfMassX"), QObject::tr("Centre of Mass X"),
+        number(QStringLiteral("centerOfMassX"), QObject::tr("Center of Gravity X (px)"),
                true, false, -1e7, 1e7, 1, 10.0,
                QObject::tr("A body turns about this point, not about its origin.")),
-        number(QStringLiteral("centerOfMassY"), QObject::tr("Centre of Mass Y"),
+        number(QStringLiteral("centerOfMassY"), QObject::tr("Center of Gravity Y (px)"),
                true, false, -1e7, 1e7, 1, 10.0,
                QObject::tr("A body turns about this point, not about its origin.")),
         // cpBodyKineticEnergy.
@@ -274,14 +274,14 @@ PropertyList ChipmunkEngine::bodyProperties() const
 
         // cpBodyApplyForceAtWorldPoint and SetTorque, which Chipmunk clears
         // after every step -- so, as in Box2D, a rule's force is one step long.
-        number(QStringLiteral("forceY"), QObject::tr("Force Up/Down (one step)"),
+        number(QStringLiteral("forceY"), QObject::tr("Force Y (N)"),
                false, true, -1e9, 1e9, 1, 10.0,
                QObject::tr("A force lasts only as long as it is applied, and a rule fires"
                            " for a single step. An impulse is usually what is wanted.")),
-        number(QStringLiteral("forceX"), QObject::tr("Force Left/Right (one step)"),
+        number(QStringLiteral("forceX"), QObject::tr("Force X (N)"),
                false, true, -1e9, 1e9, 1, 10.0,
                QObject::tr("Sideways, and just as brief.")),
-        number(QStringLiteral("torque"), QObject::tr("Torque (one step)"),
+        number(QStringLiteral("torque"), QObject::tr("Torque (N·m)"),
                false, true, -1e9, 1e9, 2, 1.0,
                QObject::tr("The turning equivalent, and just as brief.")),
     };
@@ -334,14 +334,14 @@ QVector<ActionType> ChipmunkEngine::bodyActions() const
         "Sets off a blast centred on the chosen object, pushing everything within reach "
         "away from it.");
     explode.params = {
-        actionParam(QStringLiteral("impulse"), QObject::tr("Impulse"), 3.0, -1e6, 1e6, 2, 1.0,
+        actionParam(QStringLiteral("impulse"), QObject::tr("Impulse (N·s)"), 3.0, -1e6, 1e6, 2, 1.0,
                     QObject::tr("How hard, per unit of width facing the blast. Negative pulls"
                                 " inward instead.")),
-        actionParam(QStringLiteral("radius"), QObject::tr("Radius"), 200.0, 0.0, 1e6, 0, 10.0,
+        actionParam(QStringLiteral("radius"), QObject::tr("Radius (px)"), 200.0, 0.0, 1e6, 0, 10.0,
                     QObject::tr("How far the blast reaches, in scene units.")),
         actionParam(QStringLiteral("falloff"), QObject::tr("Falloff"), 100.0, 0.0, 1e6, 0, 10.0,
                     QObject::tr("How far past the radius the push fades to nothing.")),
-        actionParam(QStringLiteral("maskBits"), QObject::tr("Affects Groups"), 0.0, 0.0,
+        actionParam(QStringLiteral("maskBits"), QObject::tr("Mask Bits"), 0.0, 0.0,
                     9.007199254740992e15, 0, 1.0,
                     QObject::tr("Which collision groups the blast reaches, as the sum of"
                                 " their bits. Zero means everything.")),
@@ -357,12 +357,12 @@ QVector<ActionType> ChipmunkEngine::bodyActions() const
     const QString offsetTip = QObject::tr("Where the kick lands, measured from the body's"
                                           " centre of mass in scene units.");
     push.params = {
-        actionParam(QStringLiteral("impulseX"), QObject::tr("Impulse X"), 0.0, -1e6, 1e6, 1, 10.0),
-        actionParam(QStringLiteral("impulseY"), QObject::tr("Impulse Y"), 0.0,
+        actionParam(QStringLiteral("impulseX"), QObject::tr("Impulse X (N·s)"), 0.0, -1e6, 1e6, 1, 10.0),
+        actionParam(QStringLiteral("impulseY"), QObject::tr("Impulse Y (N·s)"), 0.0,
                     -1e6, 1e6, 1, 10.0),
-        actionParam(QStringLiteral("offsetX"), QObject::tr("Offset X"), 0.0, -1e6, 1e6, 1, 10.0,
+        actionParam(QStringLiteral("offsetX"), QObject::tr("Offset X (px)"), 0.0, -1e6, 1e6, 1, 10.0,
                     offsetTip),
-        actionParam(QStringLiteral("offsetY"), QObject::tr("Offset Y"), 0.0, -1e6, 1e6, 1, 10.0,
+        actionParam(QStringLiteral("offsetY"), QObject::tr("Offset Y (px)"), 0.0, -1e6, 1e6, 1, 10.0,
                     offsetTip),
     };
     actions.append(push);
@@ -417,7 +417,7 @@ PropertyList ChipmunkEngine::shapeProperties() const
 {
     PropertyList properties = {
         // cpShapeSetDensity: the body's mass is worked out again at once.
-        number(QStringLiteral("density"), QObject::tr("Density"), true, true,
+        number(QStringLiteral("density"), QObject::tr("Density (kg/m²)"), true, true,
                0.0, 1e6, 2, 0.1,
                QObject::tr("Mass per unit area. The body's own mass is worked out from this"
                            " and the size of its shapes.")),
@@ -431,11 +431,11 @@ PropertyList ChipmunkEngine::shapeProperties() const
                QObject::tr("How much it bounces: 0 stops dead, 1 gives back all the speed."
                            " The bouncier of the two surfaces wins.")),
         // cpShapeSetSurfaceVelocity, along the body's own x axis.
-        number(QStringLiteral("tangentSpeed"), QObject::tr("Surface Speed"),
+        number(QStringLiteral("tangentSpeed"), QObject::tr("Surface Velocity (px/s)"),
                true, true, -1e6, 1e6, 1, 10.0,
                QObject::tr("The surface drags along what touches it, like a conveyor belt,"
                            " in the direction the body's x axis points.")),
-        number(QStringLiteral("radius"), QObject::tr("Radius"), true, true,
+        number(QStringLiteral("radius"), QObject::tr("Radius (px)"), true, true,
                0.0, 1e7, 1, 1.0,
                QObject::tr("Circles only. Changing it resizes the collision shape where it"
                            " stands; what is drawn does not follow.")),
@@ -444,49 +444,49 @@ PropertyList ChipmunkEngine::shapeProperties() const
                QObject::tr("What this shape alone contributes to its body -- its area times"
                            " its density.")),
         // cpShapeGetArea.
-        number(QStringLiteral("area"), QObject::tr("Area"), true, false,
+        number(QStringLiteral("area"), QObject::tr("Area (px²)"), true, false,
                0.0, 1e12, 0, 100.0,
                QObject::tr("How much it covers, in square scene units.")),
         // cpShapeGetMoment and cpShapeGetCenterOfGravity: this shape's own
         // share of what the body weighs, and where it sits.
-        number(QStringLiteral("rotationalInertia"), QObject::tr("Moment of Inertia (kg·m²)"),
+        number(QStringLiteral("rotationalInertia"), QObject::tr("Moment (kg·m²)"),
                true, false, 0.0, 1e9, 6, 0.1,
                QObject::tr("What this shape alone contributes to how hard the body is to"
                            " spin.")),
-        number(QStringLiteral("centerOfMassX"), QObject::tr("Centre of Mass X"), true, false,
+        number(QStringLiteral("centerOfMassX"), QObject::tr("Center of Gravity X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("Where this shape balances, in scene coordinates.")),
-        number(QStringLiteral("centerOfMassY"), QObject::tr("Centre of Mass Y"), true, false,
+        number(QStringLiteral("centerOfMassY"), QObject::tr("Center of Gravity Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("Where this shape balances, in scene coordinates.")),
 
         // cpShapeGetBB: the box it currently occupies.
-        number(QStringLiteral("boundsMinX"), QObject::tr("Bounds Left"), true, false,
+        number(QStringLiteral("boundsMinX"), QObject::tr("Bounds Min X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box this shape takes up right now, where it has got to.")),
-        number(QStringLiteral("boundsMinY"), QObject::tr("Bounds Top"), true, false,
+        number(QStringLiteral("boundsMinY"), QObject::tr("Bounds Min Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box this shape takes up right now, where it has got to.")),
-        number(QStringLiteral("boundsMaxX"), QObject::tr("Bounds Right"), true, false,
+        number(QStringLiteral("boundsMaxX"), QObject::tr("Bounds Max X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box this shape takes up right now, where it has got to.")),
-        number(QStringLiteral("boundsMaxY"), QObject::tr("Bounds Bottom"), true, false,
+        number(QStringLiteral("boundsMaxY"), QObject::tr("Bounds Max Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("The box this shape takes up right now, where it has got to.")),
 
         // The arbiters this shape is in, counted.
-        number(QStringLiteral("contactCount"), QObject::tr("Contacts"), true, false,
+        number(QStringLiteral("contactCount"), QObject::tr("Contact Count"), true, false,
                0.0, 1e6, 0, 1.0,
                QObject::tr("How many other shapes this one is touching right now.")),
 
-        number(QStringLiteral("lastHitSpeed"), QObject::tr("Last Hit Speed"), true, false,
+        number(QStringLiteral("lastHitSpeed"), QObject::tr("Last Hit Approach Speed (m/s)"), true, false,
                0.0, 1e7, 1, 10.0,
                QObject::tr("How fast the two were closing on the last impact above the"
                            " world's hit threshold. Zero until something hits it.")),
-        number(QStringLiteral("lastHitX"), QObject::tr("Last Hit X"), true, false,
+        number(QStringLiteral("lastHitX"), QObject::tr("Last Hit Point X (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("Where the last hard impact landed.")),
-        number(QStringLiteral("lastHitY"), QObject::tr("Last Hit Y"), true, false,
+        number(QStringLiteral("lastHitY"), QObject::tr("Last Hit Point Y (px)"), true, false,
                -1e7, 1e7, 1, 10.0,
                QObject::tr("Where the last hard impact landed.")),
         number(QStringLiteral("lastHitNormalX"), QObject::tr("Last Hit Normal X"), true, false,
@@ -500,7 +500,7 @@ PropertyList ChipmunkEngine::shapeProperties() const
         flag(QStringLiteral("isSensor"), QObject::tr("Sensor"), true, true,
              QObject::tr("A sensor is passed straight through: it reports what overlaps it"
                          " and stops nothing. Chipmunk can switch it while running.")),
-        number(QStringLiteral("sensorOverlapCount"), QObject::tr("Things Inside"),
+        number(QStringLiteral("sensorOverlapCount"), QObject::tr("Sensor Overlap Count"),
                true, false, 0.0, 1e6, 0, 1.0,
                QObject::tr("How many shapes are inside this sensor right now.")),
 
@@ -514,15 +514,15 @@ PropertyList ChipmunkEngine::shapeProperties() const
              QObject::tr("Reports the contact every step while it lasts, before it is"
                          " resolved.")),
 
-        number(QStringLiteral("categoryBits"), QObject::tr("Belongs To"), true, true,
+        number(QStringLiteral("categoryBits"), QObject::tr("Category Bits"), true, true,
                0.0, 9.007199254740992e15, 0, 1.0,
                QObject::tr("Which collision groups this shape is part of, as the sum of their"
                            " numbers: 1, 2, 4, 8 and so on.")),
-        number(QStringLiteral("maskBits"), QObject::tr("Collides With"), true, true,
+        number(QStringLiteral("maskBits"), QObject::tr("Mask Bits"), true, true,
                0.0, 9.007199254740992e15, 0, 1.0,
                QObject::tr("Which groups it will hit, as the sum of their numbers. Both sides"
                            " have to agree before two shapes collide.")),
-        number(QStringLiteral("groupIndex"), QObject::tr("Group Override"), true, true,
+        number(QStringLiteral("groupIndex"), QObject::tr("Group Index"), true, true,
                -32768.0, 32767.0, 0, 1.0,
                QObject::tr("Shapes sharing a number above zero always collide, and sharing one"
                            " below zero never do -- whatever the two rows above say. Zero"
@@ -578,7 +578,7 @@ PropertyList ChipmunkEngine::worldProperties() const
         number(QStringLiteral("hitEventThreshold"), QObject::tr("Hit Event Threshold (m/s)"),
                true, true, 0.0, 1000.0, 2, 0.1,
                QObject::tr("How hard a knock has to be before it counts as a hit.")),
-        number(QStringLiteral("maximumLinearSpeed"), QObject::tr("Max Speed (m/s)"),
+        number(QStringLiteral("maximumLinearSpeed"), QObject::tr("Maximum Linear Speed (m/s)"),
                true, true, 0.0, 100000.0, 1, 10.0,
                QObject::tr("Nothing in the world may travel faster than this.")),
 
@@ -586,11 +586,11 @@ PropertyList ChipmunkEngine::worldProperties() const
              QObject::tr("Whether any body may drop out of the simulation once it has"
                          " settled.")),
         // cpSpaceSetIdleSpeedThreshold / SetSleepTimeThreshold.
-        number(QStringLiteral("idleSpeedThreshold"), QObject::tr("Sleep Below Speed (m/s)"),
+        number(QStringLiteral("idleSpeedThreshold"), QObject::tr("Idle Speed Threshold (m/s)"),
                true, true, 0.0, 1000.0, 3, 0.01,
                QObject::tr("Slower than this counts as idle. Chipmunk has one for the whole"
                            " world rather than one per body.")),
-        number(QStringLiteral("sleepTimeThreshold"), QObject::tr("Sleep After (s)"),
+        number(QStringLiteral("sleepTimeThreshold"), QObject::tr("Sleep Time Threshold (s)"),
                true, true, 0.0, 1000.0, 2, 0.1,
                QObject::tr("How long a group of bodies has to stay idle before it is put to"
                            " sleep.")),
@@ -601,45 +601,52 @@ PropertyList ChipmunkEngine::worldProperties() const
                QObject::tr("How many times each step the solver works through the contacts"
                            " and joints. More holds a tall stack together; fewer is faster.")),
         // cpSpaceSetDamping.
-        number(QStringLiteral("damping"), QObject::tr("Velocity Kept per Second"), true, true,
+        number(QStringLiteral("damping"), QObject::tr("Damping"), true, true,
                0.0, 1.0, 3, 0.05,
                QObject::tr("Chipmunk's own damping, for the whole world at once: 0.9 means"
                            " every body keeps 90% of its speed each second.")),
         // cpSpaceSetCollisionSlop / Bias / Persistence.
-        number(QStringLiteral("collisionSlop"), QObject::tr("Collision Slop"), true, true,
+        number(QStringLiteral("collisionSlop"), QObject::tr("Collision Slop (px)"), true, true,
                0.0, 1000.0, 2, 0.05,
                QObject::tr("How far shapes may overlap before they are pushed apart, in scene"
                            " units. A little stops resting contacts jittering.")),
-        number(QStringLiteral("collisionBias"), QObject::tr("Overlap Left After 1 s"),
+        number(QStringLiteral("collisionBias"), QObject::tr("Collision Bias"),
                true, true, 0.0, 1.0, 6, 0.0001,
                QObject::tr("How much of an overlap is still there after a second of pushing"
                            " apart. Smaller pushes harder.")),
-        number(QStringLiteral("collisionPersistence"), QObject::tr("Contact Memory (steps)"),
+        number(QStringLiteral("collisionPersistence"), QObject::tr("Collision Persistence (steps)"),
                true, true, 0.0, 1000.0, 0, 1.0,
                QObject::tr("How many steps a contact is remembered after the shapes part,"
                            " so a jiggling pair does not begin and end every step.")),
 
-        number(QStringLiteral("awakeBodyCount"), QObject::tr("Awake Bodies"), true, false,
+        number(QStringLiteral("awakeBodyCount"), QObject::tr("Awake Body Count"), true, false,
                0.0, 1e9, 0, 1.0,
                QObject::tr("Reaches zero when everything has settled.")),
-        number(QStringLiteral("bodyCount"), QObject::tr("Bodies"), true, false,
+        number(QStringLiteral("bodyCount"), QObject::tr("Body Count"), true, false,
                0.0, 1e9, 0, 1.0,
                QObject::tr("How many bodies the world holds, asleep or not.")),
-        number(QStringLiteral("contactCount"), QObject::tr("Contacts"), true, false,
+        number(QStringLiteral("contactCount"), QObject::tr("Contact Count"), true, false,
                0.0, 1e9, 0, 1.0,
                QObject::tr("How many pairs of shapes are touching right now.")),
-        number(QStringLiteral("jointCount"), QObject::tr("Joints"), true, false,
+        number(QStringLiteral("jointCount"), QObject::tr("Joint Count"), true, false,
                0.0, 1e9, 0, 1.0,
                QObject::tr("How many joints the world holds.")),
-        number(QStringLiteral("shapeCount"), QObject::tr("Shapes"), true, false,
+        number(QStringLiteral("shapeCount"), QObject::tr("Shape Count"), true, false,
                0.0, 1e9, 0, 1.0,
                QObject::tr("How many shapes the world holds, across every body.")),
     };
 
+    properties.push_back(flag(QStringLiteral("scaleIndependentPace"),
+                              QObject::tr("Keep Pace Across Scales"), false, false,
+                              QObject::tr("Quotes gravity and the speed thresholds at 50 px per metre rather than at this scene's own scale, so changing Pixels Per Metre leaves the motion on screen alone. Off, a metre is a metre: 9.81 is 9.81, and small objects fall as fast as small objects do. Scenes saved before this setting existed carry it on, so they still move the way they did.")));
+
     markStored(&properties, {
         {QStringLiteral("gravityX"), 0.0},
         {QStringLiteral("gravityY"), 9.81},
+        {QStringLiteral("scaleIndependentPace"), false},
     }, QObject::tr("World"));
+    markRole(&properties, QStringLiteral("scaleIndependentPace"),
+             PropertyRole::PaceAcrossScales);
     markStored(&properties, {
         {QStringLiteral("restitutionThreshold"), 1.0},
         {QStringLiteral("hitEventThreshold"), 1.0},
@@ -669,17 +676,17 @@ PropertyList ChipmunkEngine::jointReadables(const QString &typeId) const
                                   " the run started."));
     };
     const auto angularSpeed = [] {
-        return number(QStringLiteral("angularSpeed"), QObject::tr("Turn Rate (deg/s)"),
+        return number(QStringLiteral("angularSpeed"), QObject::tr("Angular Speed (deg/s)"),
                       true, false, -1e5, 1e5, 1, 10.0,
                       QObject::tr("How fast the second body is turning against the first."));
     };
     const auto currentLength = [] {
-        return number(QStringLiteral("currentLength"), QObject::tr("Current Length"),
+        return number(QStringLiteral("currentLength"), QObject::tr("Current Length (px)"),
                       true, false, 0.0, 1e7, 1, 10.0,
                       QObject::tr("How far apart the two ends are right now."));
     };
     const auto springNumbers = [&result] {
-        result.push_back(number(QStringLiteral("stiffness"), QObject::tr("Stiffness"), true, false,
+        result.push_back(number(QStringLiteral("stiffness"), QObject::tr("Stiffness (N/px)"), true, false,
                                 0.0, 1e12, 6, 1.0,
                                 QObject::tr("What the frequency came to for the masses on the"
                                             " spring, in Chipmunk's own terms.")));
@@ -694,10 +701,10 @@ PropertyList ChipmunkEngine::jointReadables(const QString &typeId) const
         result = { currentLength() };
     } else if (typeId == QLatin1String("groove")) {
         result = {
-            number(QStringLiteral("translation"), QObject::tr("Translation"), true, false,
+            number(QStringLiteral("translation"), QObject::tr("Translation (px)"), true, false,
                    -1e7, 1e7, 1, 10.0,
                    QObject::tr("How far along the slot the pin is from where it started.")),
-            number(QStringLiteral("speed"), QObject::tr("Speed"), true, false,
+            number(QStringLiteral("speed"), QObject::tr("Speed (px/s)"), true, false,
                    -1e6, 1e6, 1, 10.0,
                    QObject::tr("How fast it is sliding along the slot right now.")),
             number(QStringLiteral("axisAngle"), QObject::tr("Axis Angle (deg)"), true, true,
@@ -716,7 +723,7 @@ PropertyList ChipmunkEngine::jointReadables(const QString &typeId) const
     } else if (typeId == QLatin1String("ratchet")) {
         result = {
             angle(),
-            number(QStringLiteral("ratchetAngle"), QObject::tr("Caught At (deg)"), true, false,
+            number(QStringLiteral("ratchetAngle"), QObject::tr("Ratchet Angle (deg)"), true, false,
                    -1e5, 1e5, 1, 1.0,
                    QObject::tr("The angle the ratchet last caught at -- the furthest it has"
                                " been turned.")),
@@ -725,10 +732,10 @@ PropertyList ChipmunkEngine::jointReadables(const QString &typeId) const
         result = { angularSpeed() };
     } else if (typeId == QLatin1String("mouse")) {
         result = {
-            number(QStringLiteral("targetX"), QObject::tr("Target X"), true, true,
+            number(QStringLiteral("targetX"), QObject::tr("Target X (px)"), true, true,
                    -1e7, 1e7, 1, 10.0,
                    QObject::tr("The point the joint is dragging the body towards.")),
-            number(QStringLiteral("targetY"), QObject::tr("Target Y"), true, true,
+            number(QStringLiteral("targetY"), QObject::tr("Target Y (px)"), true, true,
                    -1e7, 1e7, 1, 10.0,
                    QObject::tr("The point the joint is dragging the body towards.")),
         };
@@ -750,7 +757,7 @@ PropertyList ChipmunkEngine::jointReadables(const QString &typeId) const
     }
 
     // cpConstraintGetImpulse, over the step it was applied in.
-    result.push_back(number(QStringLiteral("constraintForce"), QObject::tr("Constraint Force"),
+    result.push_back(number(QStringLiteral("constraintForce"), QObject::tr("Constraint Force (N)"),
                             true, false, 0.0, 1e12, 4, 1.0,
                             QObject::tr("The load the joint carried last step -- a torque, for"
                                         " the ones that act on angles. Watch it to break"
@@ -772,15 +779,15 @@ PropertyList ChipmunkEngine::jointReadables(const QString &typeId) const
     const bool pointB = pointA || typeId == QLatin1String("groove")
                         || typeId == QLatin1String("mouse");
     if (pointA) {
-        result.push_back(number(QStringLiteral("anchorAX"), QObject::tr("Anchor A X"),
+        result.push_back(number(QStringLiteral("anchorAX"), QObject::tr("Anchor A X (px)"),
                                 true, true, -1e7, 1e7, 1, 10.0, moved));
-        result.push_back(number(QStringLiteral("anchorAY"), QObject::tr("Anchor A Y"),
+        result.push_back(number(QStringLiteral("anchorAY"), QObject::tr("Anchor A Y (px)"),
                                 true, true, -1e7, 1e7, 1, 10.0, moved));
     }
     if (pointB) {
-        result.push_back(number(QStringLiteral("anchorBX"), QObject::tr("Anchor B X"),
+        result.push_back(number(QStringLiteral("anchorBX"), QObject::tr("Anchor B X (px)"),
                                 true, true, -1e7, 1e7, 1, 10.0, moved));
-        result.push_back(number(QStringLiteral("anchorBY"), QObject::tr("Anchor B Y"),
+        result.push_back(number(QStringLiteral("anchorBY"), QObject::tr("Anchor B Y (px)"),
                                 true, true, -1e7, 1e7, 1, 10.0, moved));
     }
     return result;

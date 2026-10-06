@@ -341,41 +341,56 @@ TEST(Physics, TheSameSceneTwiceGivesTheSameAnswer)
     }
 }
 
-// The same scene at a different scale behaves the same: the scene's own units
-// are what the user works in, and pixels per metre is meant to change what a
-// metre means, not how the scene plays.
-TEST(Physics, TheSceneScaleDoesNotChangeHowItPlays)
+// Gravity is an acceleration in metres, so it reaches the solver as it stands:
+// a metre drawn with ten times as many pixels is ten times as many pixels
+// fallen. A scene may ask for the other bargain instead -- speeds quoted at the
+// engine's reference scale, so the motion on screen does not move with the
+// scale -- and that is what every scene written before format 2 is loaded with,
+// which is the only thing keeping those files moving as they did.
+TEST(Physics, GravityIsAnAccelerationNotAScaleFactor)
 {
+    const auto fallAt = [](const char *engineName, qreal ppm, bool keepPace) {
+        CanvasScene scene;
+        scene.setSimulationEngineName(QString::fromLatin1(engineName));
+        scene.setPixelsPerMeter(ppm);
+        scene.world().params["gravityY"] = kGravity;
+        if (keepPace)
+            scene.world().params["scaleIndependentPace"] = true;
+        scene.setEditorMode(EditorMode::Physics);
+
+        auto *shape = new RectangleItem;
+        shape->setRect(QRectF(0, 0, 40, 40));
+        shape->setPos(0, 0);
+        shape->setName(QStringLiteral("faller"));
+        scene.addItem(shape);
+        scene.notifyShapesChanged();
+        scene.selectForPhysics(shape, true);
+        scene.createBodyFromSelection()->props().type = physics::BodyType::Dynamic;
+        scene.clearPhysicsSelection();
+
+        SimulationController sim(&scene, nullptr);
+        sim.setEngineName(QString::fromLatin1(engineName));
+        sim.start();
+        for (int i = 0; i < 60; ++i)
+            sim.stepFrame();
+        const qreal fell = shape->pos().y();
+        sim.stop();
+        return fell;
+    };
+
     for (const char *engineName : kEngines) {
-        QVector<qreal> fell;
-        for (qreal ppm : { 50.0, 500.0 }) {
-            CanvasScene scene;
-            scene.setSimulationEngineName(QString::fromLatin1(engineName));
-            scene.setPixelsPerMeter(ppm);
-            scene.world().params["gravityY"] = kGravity;
-            scene.setEditorMode(EditorMode::Physics);
+        const qreal small = fallAt(engineName, 50.0, false);
+        const qreal large = fallAt(engineName, 500.0, false);
+        EXPECT_NEAR(large, small * 10.0, qAbs(small) * 0.2)
+            << engineName << ": fell " << small << " at 50 px per metre and " << large
+            << " at 500 -- ten times the pixels in a metre is ten times the pixels fallen";
 
-            auto *shape = new RectangleItem;
-            shape->setRect(QRectF(0, 0, 40, 40));
-            shape->setPos(0, 0);
-            shape->setName(QStringLiteral("faller"));
-            scene.addItem(shape);
-            scene.notifyShapesChanged();
-            scene.selectForPhysics(shape, true);
-            scene.createBodyFromSelection()->props().type = physics::BodyType::Dynamic;
-            scene.clearPhysicsSelection();
-
-            SimulationController sim(&scene, nullptr);
-            sim.setEngineName(QString::fromLatin1(engineName));
-            sim.start();
-            for (int i = 0; i < 60; ++i)
-                sim.stepFrame();
-            fell.append(shape->pos().y());
-            sim.stop();
-        }
-        EXPECT_NEAR(fell[0], fell[1], qAbs(fell[0]) * 0.02)
-            << engineName << ": the same scene fell " << fell[0] << " at 50 px per metre and "
-            << fell[1] << " at 500 -- the scale changed the physics";
+        // Turned on, the two cancel again and the scene moves as it always did.
+        const qreal heldSmall = fallAt(engineName, 50.0, true);
+        const qreal heldLarge = fallAt(engineName, 500.0, true);
+        EXPECT_NEAR(heldSmall, heldLarge, qAbs(heldSmall) * 0.02)
+            << engineName << ": with the pace held across scales it fell " << heldSmall
+            << " at 50 px per metre and " << heldLarge << " at 500";
     }
 }
 

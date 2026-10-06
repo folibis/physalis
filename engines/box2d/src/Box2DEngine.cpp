@@ -84,11 +84,20 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
     m_pixelsPerMeter = desc.pixelsPerMeter > 0.0 ? desc.pixelsPerMeter
                                                  : kReferencePixelsPerMeter;
 
-    // ... but the *pace* must not depend on that. Gravity and velocity are
-    // quoted at kReferencePixelsPerMeter, so scaling them by the ratio keeps
-    // pixels-per-second on screen identical at every scale: the shrinking
-    // world and the shrinking gravity cancel exactly.
-    m_motionScale = kReferencePixelsPerMeter / m_pixelsPerMeter;
+    // Gravity is an acceleration in metres, so by default it is handed over
+    // as it stands and a scene at 1000 px per metre really is full of
+    // centimetre-sized things falling the way centimetre-sized things do.
+    //
+    // A scene may ask for the other bargain instead: quote gravity and the
+    // speed thresholds at kReferencePixelsPerMeter, and the shrinking world
+    // and the shrinking gravity cancel exactly, so pixels-per-second on screen
+    // come out the same at every scale. That makes Pixels Per Metre a weight
+    // knob rather than a scale one -- and makes the "m/s^2" on the gravity row
+    // true only at the reference scale, which is why it is no longer the
+    // default.
+    m_motionScale = flag(desc.params, "scaleIndependentPace", false)
+                        ? kReferencePixelsPerMeter / m_pixelsPerMeter
+                        : 1.0;
 
     // Box2D's tolerances are lengths too, and fixed for a world measured in
     // metres: 5 mm of slop, and a contact made once two shapes are within

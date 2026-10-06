@@ -2211,6 +2211,9 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.jointAnchorRadius = m_scene->jointAnchorRadius();
     current.jointAxisLength = m_scene->jointAxisLength();
     current.jointWaistWidth = m_scene->jointWaistWidth();
+    current.springsAsCoils = m_scene->springsAsCoils();
+    current.springPitch = m_scene->springPitch();
+    current.springWidth = m_scene->springWidth();
     current.jointOutlineWidth = m_scene->jointOutlineWidth();
     if (m_simulation) {
         current.simulationStepsPerSecond = m_simulation->stepsPerSecond();
@@ -2298,6 +2301,9 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_scene->setJointAnchorRadius(s.jointAnchorRadius);
     m_scene->setJointAxisLength(s.jointAxisLength);
     m_scene->setJointWaistWidth(s.jointWaistWidth);
+    m_scene->setSpringsAsCoils(s.springsAsCoils);
+    m_scene->setSpringPitch(s.springPitch);
+    m_scene->setSpringWidth(s.springWidth);
     m_scene->setJointOutlineWidth(s.jointOutlineWidth);
     if (m_simulation) {
         m_simulation->setStepsPerSecond(s.simulationStepsPerSecond);
@@ -2406,6 +2412,9 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
     s.jointAnchorRadius = settings.value("jointAnchorRadius", s.jointAnchorRadius).toDouble();
     s.jointAxisLength = settings.value("jointAxisLength", s.jointAxisLength).toDouble();
     s.jointWaistWidth = settings.value("jointWaistWidth", s.jointWaistWidth).toDouble();
+    s.springsAsCoils = settings.value("springsAsCoils", s.springsAsCoils).toBool();
+    s.springPitch = settings.value("springPitch", s.springPitch).toDouble();
+    s.springWidth = settings.value("springWidth", s.springWidth).toDouble();
     s.jointOutlineWidth = settings.value("jointOutlineWidth", s.jointOutlineWidth).toDouble();
 
     s.undoDepth = settings.value("undoDepth", s.undoDepth).toInt();
@@ -2569,6 +2578,9 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("jointAnchorRadius", s.jointAnchorRadius);
     settings.setValue("jointAxisLength", s.jointAxisLength);
     settings.setValue("jointWaistWidth", s.jointWaistWidth);
+    settings.setValue("springsAsCoils", s.springsAsCoils);
+    settings.setValue("springPitch", s.springPitch);
+    settings.setValue("springWidth", s.springWidth);
     settings.setValue("jointOutlineWidth", s.jointOutlineWidth);
 
     settings.setValue("undoDepth", s.undoDepth);

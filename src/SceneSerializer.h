@@ -10,7 +10,12 @@ class ShapeItem;
 
 namespace SceneSerializer {
 
-inline constexpr int kFormatVersion = 1;
+// 2: gravity is an acceleration in metres and is handed to the engine as it
+// stands. Version 1 scenes were run with it quoted at 50 px per metre instead,
+// so they are loaded with the world setting that still does that turned on --
+// otherwise every one of them would move at a different speed than it was
+// built at.
+inline constexpr int kFormatVersion = 2;
 
 QJsonObject save(const CanvasScene *scene);
 
