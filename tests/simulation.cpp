@@ -6,6 +6,7 @@
 #include "RectangleItem.h"
 #include "Rule.h"
 #include "ShapeItem.h"
+#include "SceneSerializer.h"
 #include "SimulationController.h"
 
 #include <gtest/gtest.h>
@@ -400,4 +401,73 @@ TEST(JointActions, StoppingARunHandsTheJointButtonsBack)
     selectEverything(scene);
     EXPECT_TRUE(add->isEnabled())
         << "selecting bodies after a run left Add Joint greyed out";
+}
+
+// A watch marked for plotting is recorded every step, and one that is not is
+// not recorded at all. The samples belong to the run: a second Play starts a
+// fresh trace rather than continuing the last one.
+TEST(Simulation, APlottedWatchIsRecordedEveryStep)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setEditorMode(EditorMode::Physics);
+
+    auto *shape = new RectangleItem;
+    shape->setRect(QRectF(0, 0, 40, 40));
+    shape->setName(QStringLiteral("faller"));
+    scene.addItem(shape);
+    scene.notifyShapesChanged();
+    scene.selectForPhysics(shape, true);
+    PhysicsBody *body = scene.createBodyFromSelection();
+    body->props().type = physics::BodyType::Dynamic;
+    scene.clearPhysicsSelection();
+
+    scene.addWatch({body->name(), QStringLiteral("positionY"), QStringLiteral("Y"), true});
+    scene.addWatch({body->name(), QStringLiteral("mass"), QStringLiteral("Mass"), false});
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+    for (int i = 0; i < 90; ++i)
+        sim.stepFrame();
+
+    const QString plotted = SimulationController::plotKey(body->name(),
+                                                          QStringLiteral("positionY"));
+    const QString ignored = SimulationController::plotKey(body->name(), QStringLiteral("mass"));
+    ASSERT_TRUE(sim.plots().contains(plotted)) << "the plotted watch recorded nothing";
+    EXPECT_FALSE(sim.plots().contains(ignored))
+        << "a watch that is only logged was recorded as well";
+
+    const auto &points = sim.plots().value(plotted).points;
+    EXPECT_EQ(points.size(), 90) << "one sample a step, not one a frame";
+    EXPECT_GT(points.constLast().y(), points.constFirst().y())
+        << "the trace did not follow the body down";
+    // The clock is the run's, and it starts one step in rather than at zero.
+    EXPECT_GT(points.constFirst().x(), 0.0);
+    EXPECT_LT(points.constFirst().x(), points.constLast().x());
+
+    sim.stop();
+    sim.start();
+    EXPECT_TRUE(sim.plots().isEmpty()) << "a new run kept the last one's trace";
+    sim.stop();
+}
+
+// What is plotted is part of the scene, not of the session.
+TEST(Simulation, WhatIsPlottedSurvivesTheFile)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.addWatch({QStringLiteral("@world"), QStringLiteral("time"),
+                    QStringLiteral("Elapsed"), true});
+    scene.addWatch({QStringLiteral("@world"), QStringLiteral("frame"),
+                    QStringLiteral("Frame"), false});
+
+    CanvasScene reopened;
+    QString error;
+    ASSERT_TRUE(SceneSerializer::load(&reopened, SceneSerializer::save(&scene), &error))
+        << error.toStdString();
+
+    ASSERT_EQ(reopened.watches().size(), 2);
+    EXPECT_TRUE(reopened.isPlotted(QStringLiteral("@world"), QStringLiteral("time")));
+    EXPECT_FALSE(reopened.isPlotted(QStringLiteral("@world"), QStringLiteral("frame")));
 }

@@ -8,6 +8,7 @@
 #include <QString>
 #include <QStringList>
 #include <QHash>
+#include <QMap>
 #include <QVector>
 #include <functional>
 #include <memory>
@@ -45,6 +46,24 @@ public:
     // the scene and never stepped. During a run it is readValue.
     QVariant initialValue(const QString &name, const QString &key);
     void setEngineName(const QString &name);
+
+    // Every step of each watch marked for plotting, as (seconds, value).
+    // Taken here rather than where the readout is drawn, because that happens
+    // once a frame and a frame is not a step -- at x4 it is four of them, and
+    // a scene that cannot keep up drops some. Keyed object + property, the way
+    // a watch names one.
+    struct Series {
+        QString object;
+        QString label;
+        QVector<QPointF> points;
+    };
+    const QMap<QString, Series> &plots() const { return m_plots; }
+    // Throw the traces away without touching the run.
+    void clearPlots();
+    static QString plotKey(const QString &objectName, const QString &propertyKey)
+    {
+        return objectName + QChar(0x1f) + propertyKey;
+    }
 
     QStringList skippedBodies() const { return m_skippedBodies; }
     // What went wrong while it ran, in the engine's words: a body the solver
@@ -252,6 +271,16 @@ private:
     void syncRays();
 
     // Counted from the moment the run started, not from when the app did.
+    QMap<QString, Series> m_plots;
+    // How many steps are skipped between samples. One to start with; it
+    // doubles whenever a series fills up, and the samples already taken are
+    // thinned to match -- so a run of any length stays in memory and keeps its
+    // whole shape, rather than stopping at an arbitrary minute.
+    int m_plotStride = 1;
+    qint64 m_plotStep = 0;
+
+    void samplePlots();
+
     qreal m_elapsedSeconds = 0.0;
     qint64 m_frameCount = 0;
     QVector<Snapshot> m_snapshot;

@@ -10,6 +10,7 @@
 #include "ObjectIcons.h"
 #include "EngineRegistry.h"
 
+#include <QMenu>
 #include <QApplication>
 #include <QCheckBox>
 #include <QMouseEvent>
@@ -633,6 +634,7 @@ QWidget *RulesPanel::buildConditionBlock(int index, int slot)
 
     cond.source = new ObjectComboBox([this] { return sourceChoices(); }, block);
     cond.source->setEmptyText(tr("(no objects yet)"));
+    offerToReveal(cond.source);
     cond.source->selectData(condition.subjectName);
     connect(cond.source, qOverload<int>(&QComboBox::currentIndexChanged), this,
             [this, index, slot](int) {
@@ -1801,8 +1803,43 @@ void RulesPanel::finishRename(int index, bool keep)
     row.heading->setVisible(true);
 }
 
+// A card names objects, and the one it names is usually what you want to look
+// at next. Double-click the box, or take it from its menu; the panel only says
+// which name, and the window decides what showing it means.
+void RulesPanel::offerToReveal(ObjectComboBox *box)
+{
+    if (!box)
+    {
+        return;
+    }
+    box->setToolTip(tr("Double-click to show this object's properties."));
+    box->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(box, &QWidget::customContextMenuRequested, this, [this, box](const QPoint &where) {
+        const QString name = box->currentData().toString();
+        if (name.isEmpty())
+        {
+            return;
+        }
+        QMenu menu;
+        menu.addAction(tr("Show %1").arg(name), this,
+                       [this, name] { emit revealRequested(name); });
+        menu.exec(box->mapToGlobal(where));
+    });
+    box->installEventFilter(this);
+}
+
 bool RulesPanel::eventFilter(QObject *watched, QEvent *event)
 {
+    if (event->type() == QEvent::MouseButtonDblClick) {
+        if (auto *box = dynamic_cast<ObjectComboBox *>(watched)) {
+            const QString name = box->currentData().toString();
+            if (!name.isEmpty()) {
+                emit revealRequested(name);
+                return true;
+            }
+        }
+    }
+
     auto *widget = qobject_cast<QWidget *>(watched);
     const QVariant which = widget ? widget->property("ruleIndex") : QVariant();
     if (which.isValid()) {

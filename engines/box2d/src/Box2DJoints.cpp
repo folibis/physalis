@@ -1,3 +1,4 @@
+#include <cfloat>
 #include "Box2DEngine.h"
 
 #include <QLineF>
@@ -12,6 +13,19 @@
 namespace physics {
 
 namespace {
+
+// The editor's spring-force range runs to a finite end; Box2D's own default is
+// the whole float range, so the ends are handed over as that.
+constexpr qreal kSpringForceBound = 1e6;
+
+float springForce(qreal value)
+{
+    if (value <= -kSpringForceBound)
+        return -FLT_MAX;
+    if (value >= kSpringForceBound)
+        return FLT_MAX;
+    return static_cast<float>(value);
+}
 
 // Values arrive in a bag keyed by JointParam::key. A key that isn't there
 // means the joint was made before that parameter existed -- fall back rather
@@ -194,6 +208,12 @@ JointHandle Box2DEngine::addJoint(const JointDesc &desc)
         def.enableSpring = boolValue(desc.params, "enableSpring");
         def.hertz = static_cast<float>(realValue(desc.params, "hertz"));
         def.dampingRatio = static_cast<float>(realValue(desc.params, "dampingRatio"));
+        // b2DistanceJoint_SetSpringForceRange. At the ends of the editor's range
+        // these mean what Box2D's own default means: no limit at all.
+        def.lowerSpringForce =
+            springForce(realValue(desc.params, "lowerSpringForce", -kSpringForceBound));
+        def.upperSpringForce =
+            springForce(realValue(desc.params, "upperSpringForce", kSpringForceBound));
         def.enableLimit = boolValue(desc.params, "enableLimit");
         def.minLength = metres(realValue(desc.params, "minLength"));
         // Zero maxLength means unbounded. Box2D's own default is its internal
@@ -462,6 +482,16 @@ void Box2DEngine::setJointParam(JointHandle handle, const QString &key, const QV
         else if (key == QLatin1String("hertz"))          b2DistanceJoint_SetSpringHertz(joint, number);
         else if (key == QLatin1String("dampingRatio"))   b2DistanceJoint_SetSpringDampingRatio(joint, number);
         else if (key == QLatin1String("length"))         b2DistanceJoint_SetLength(joint, metres);
+        // One call carries both ends, so the one not being written is read back.
+        else if (key == QLatin1String("lowerSpringForce")
+                 || key == QLatin1String("upperSpringForce")) {
+            float lower = 0.0f;
+            float upper = 0.0f;
+            b2DistanceJoint_GetSpringForceRange(joint, &lower, &upper);
+            (key == QLatin1String("lowerSpringForce") ? lower : upper) =
+                springForce(value.toDouble());
+            b2DistanceJoint_SetSpringForceRange(joint, lower, upper);
+        }
         else if (key == QLatin1String("minLength") || key == QLatin1String("maxLength")) {
             float lower = b2DistanceJoint_GetMinLength(joint);
             float upper = b2DistanceJoint_GetMaxLength(joint);
@@ -647,7 +677,7 @@ void Box2DEngine::setBodyParam(BodyHandle handle, const QString &key, const QVar
 
     // A speed, so quoted at the reference scale like gravity and velocity.
     if (key == QLatin1String("sleepThreshold")) {
-        b2Body_SetSleepThreshold(body, static_cast<float>(value.toDouble() * m_motionScale));
+        b2Body_SetSleepThreshold(body, static_cast<float>(value.toDouble()));
         return;
     }
 

@@ -100,19 +100,6 @@ function springTurnsOf(joint, keys, pitch) {
     return Math.max(2, Math.min(60, Math.round(rest / Math.max(pitch, 1))));
 }
 
-// Whether this scene quotes its speeds at the engine's reference scale instead
-// of at its own. Found by role, so no key is named here.
-function keepsPaceAcrossScales(scene) {
-    var props = (scene.engine && scene.engine.worldProperties) || [];
-    var settings = vals(scene.world || {});
-    for (var i = 0; i < props.length; ++i) {
-        if (props[i].role === "paceAcrossScales") {
-            var set = settings[props[i].key];
-            return !!(set === undefined ? props[i]["default"] : set);
-        }
-    }
-    return false;
-}
 
 function exportScene(scene, io) {
     var world = scene.world || {};
@@ -139,11 +126,7 @@ function exportScene(scene, io) {
     var margin = Math.max(0.1, pickNumber(vals(world).contactMargin, 2));
     PPM = margin / (4.0 * 0.005);
     SCALE = SCENE_PPM / PPM;
-    // The page measures in its own metre, so a speed has to be converted into
-    // it. Where the scene quotes speeds at 50 px per metre that is 50 / PPM;
-    // where it means plain metres per second it is simply how much bigger a
-    // length is on the page.
-    MOTION = keepsPaceAcrossScales(scene) ? 50.0 / PPM : SCALE;
+    MOTION = 50.0 / PPM;
     TOLERANCE = 1.0;
 
     var cache = {};

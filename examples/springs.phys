@@ -1,0 +1,477 @@
+{
+    "bodies": [
+        {
+            "isEnabled": true,
+            "name": "body_1",
+            "physics": {
+            },
+            "shapes": [
+                5
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_2",
+            "physics": {
+            },
+            "shapes": [
+                4
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_3",
+            "physics": {
+            },
+            "shapes": [
+                2
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_4",
+            "physics": {
+            },
+            "shapes": [
+                3
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_5",
+            "physics": {
+            },
+            "shapes": [
+                1
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_6",
+            "physics": {
+            },
+            "shapes": [
+                6
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_7",
+            "physics": {
+            },
+            "shapes": [
+                7
+            ],
+            "type": "dynamic"
+        }
+    ],
+    "engine": "Box2D",
+    "field": {
+        "backgroundColor": "#ffffffff",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 600,
+        "showGrid": true,
+        "width": 2000
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+        {
+            "anchorA": {
+                "x": 260,
+                "y": 59.99999999999999
+            },
+            "anchorB": {
+                "x": 260,
+                "y": 59.99999999999999
+            },
+            "axis": {
+                "x": 0.894427190999916,
+                "y": -0.44721359549995787
+            },
+            "bodyA": "body_5",
+            "bodyB": "body_4",
+            "collideConnected": false,
+            "name": "revolute_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": false,
+                "enableMotor": true,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerAngle": 0,
+                "maxMotorTorque": 3,
+                "motorSpeed": 60,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": 380,
+                "y": 59.99999999999999
+            },
+            "anchorB": {
+                "x": 380,
+                "y": 59.99999999999999
+            },
+            "axis": {
+                "x": -0.894427190999916,
+                "y": -0.44721359549995787
+            },
+            "bodyA": "body_3",
+            "bodyB": "body_4",
+            "collideConnected": false,
+            "name": "revolute_2",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": false,
+                "enableMotor": true,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerAngle": 0,
+                "maxMotorTorque": 3,
+                "motorSpeed": 60,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": 420,
+                "y": 40
+            },
+            "anchorB": {
+                "x": 540,
+                "y": 40
+            },
+            "axis": {
+                "x": 0.996240588195683,
+                "y": 0.086629616364842
+            },
+            "bodyA": "body_4",
+            "bodyB": "body_2",
+            "collideConnected": false,
+            "name": "distance_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0.05,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": true,
+                "hertz": 1,
+                "length": 0,
+                "lowerSpringForce": -1000000,
+                "maxLength": 0,
+                "maxMotorForce": 0,
+                "minLength": 0,
+                "motorSpeed": 0,
+                "upperSpringForce": 1000000
+            },
+            "type": "distance"
+        },
+        {
+            "anchorA": {
+                "x": -380,
+                "y": 40
+            },
+            "anchorB": {
+                "x": -280,
+                "y": 40
+            },
+            "axis": {
+                "x": 1,
+                "y": 0
+            },
+            "bodyA": "body_1",
+            "bodyB": "body_6",
+            "collideConnected": false,
+            "name": "prismatic_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0.09999999999999999,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": true,
+                "hertz": 1,
+                "lowerTranslation": 0,
+                "maxMotorForce": 0,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetTranslation": 0,
+                "upperTranslation": 0
+            },
+            "type": "prismatic"
+        }
+    ],
+    "log": [
+        {
+            "label": "Spring Force (N)",
+            "object": "distance_1",
+            "plotted": true,
+            "property": "springForce"
+        },
+        {
+            "label": "Motor Torque (N·m)",
+            "object": "revolute_1",
+            "plotted": true,
+            "property": "motorTorque"
+        },
+        {
+            "label": "Constraint Force Y (N)",
+            "object": "prismatic_1",
+            "plotted": true,
+            "property": "constraintForceY"
+        }
+    ],
+    "shapes": [
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "friction": 0.8000000000000002
+            },
+            "pos": {
+                "x": 260,
+                "y": 60
+            },
+            "rect": {
+                "height": 80,
+                "width": 80,
+                "x": -40,
+                "y": -40
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "circle_2",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "friction": 0.8000000000000002
+            },
+            "pos": {
+                "x": 380,
+                "y": 60
+            },
+            "rect": {
+                "height": 80,
+                "width": 80,
+                "x": -40,
+                "y": -40
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "rectangle_2",
+            "origin": {
+                "x": 0,
+                "y": 20
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 320,
+                "y": 10
+            },
+            "rect": {
+                "height": 60,
+                "width": 200,
+                "x": -100,
+                "y": -10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 4,
+            "joinStyle": "round",
+            "name": "rectangle_3",
+            "origin": {
+                "x": -60,
+                "y": -10
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 600,
+                "y": 50
+            },
+            "rect": {
+                "height": 120,
+                "width": 120,
+                "x": -120,
+                "y": -70
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 5,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": 300,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": -200,
+                    "y": -50
+                },
+                {
+                    "x": 300,
+                    "y": -50
+                },
+                {
+                    "x": 800,
+                    "y": -50
+                },
+                {
+                    "x": 800,
+                    "y": 50
+                },
+                {
+                    "x": -200,
+                    "y": 50
+                }
+            ],
+            "pos": {
+                "x": -200,
+                "y": 150
+            },
+            "rect": {
+                "height": 100,
+                "width": 1000,
+                "x": -200,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 6,
+            "joinStyle": "round",
+            "name": "rectangle_4",
+            "origin": {
+                "x": -80,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "friction": 0.2
+            },
+            "pos": {
+                "x": -200,
+                "y": 50
+            },
+            "rect": {
+                "height": 100,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 7,
+            "joinStyle": "round",
+            "name": "rectangle_5",
+            "origin": {
+                "x": -60,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 660,
+                "y": -70
+            },
+            "rect": {
+                "height": 40,
+                "width": 80,
+                "x": -100,
+                "y": 10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        }
+    ],
+    "version": 1,
+    "world": {
+        "physics": {
+        },
+        "pixelsPerMeter": 100,
+        "randomSeed": 0,
+        "solidBounds": false
+    }
+}

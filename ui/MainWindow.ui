@@ -124,7 +124,13 @@
     </property>
     <addaction name="actionAbout"/>
    </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title">
+     <string>&amp;View</string>
+    </property>
+   </widget>
    <addaction name="menuShapes"/>
+   <addaction name="menuView"/>
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
@@ -215,6 +221,11 @@
        <widget class="VariablesPanel" name="variablesPanel">
         <attribute name="title">
          <string>Variables</string>
+        </attribute>
+       </widget>
+       <widget class="PlotPanel" name="plotPanel">
+        <attribute name="title">
+         <string>Plot</string>
         </attribute>
        </widget>
       </widget>
@@ -600,6 +611,12 @@
    <class>VariablesPanel</class>
    <extends>QWidget</extends>
    <header>VariablesPanel.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>PlotPanel</class>
+   <extends>QWidget</extends>
+   <header>PlotPanel.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

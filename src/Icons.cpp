@@ -33,6 +33,11 @@ QIcon warning() { return QIcon(QStringLiteral(":/icons/warning.svg")); }
 QIcon variable() { return QIcon(QStringLiteral(":/icons/variable.svg")); }
 QIcon log() { return QIcon(QStringLiteral(":/icons/log.svg")); }
 
+QIcon properties() { return QIcon(QStringLiteral(":/icons/properties.svg")); }
+QIcon objects() { return QIcon(QStringLiteral(":/icons/objects.svg")); }
+QIcon rules() { return QIcon(QStringLiteral(":/icons/rules.svg")); }
+QIcon plot() { return QIcon(QStringLiteral(":/icons/plot.svg")); }
+
 QIcon align() { return QIcon(QStringLiteral(":/icons/align.svg")); }
 QIcon alignLeft() { return QIcon(QStringLiteral(":/icons/align_left.svg")); }
 QIcon alignHorizontalCentre() { return QIcon(QStringLiteral(":/icons/align_hcentre.svg")); }

@@ -57,11 +57,6 @@ enum class PropertyRole {
     // that to mean "however far apart the anchors start", leaves the editor
     // to measure it.
     SpringRestLength,
-    // The world setting that decides whether speeds are quoted at the engine's
-    // reference scale rather than at the scene's own. The editor needs the key
-    // only to keep an old file moving the way it did, and still does not name
-    // it.
-    PaceAcrossScales,
 };
 
 // Where a parameter's starting value comes from. Most are a fixed number the

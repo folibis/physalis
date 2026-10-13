@@ -124,7 +124,11 @@ inline constexpr qreal kReferencePixelsPerMeter = 50.0;
 struct WorldDesc {
     // How many scene units make a metre. The scene's own scale rather than a
     // physics setting: the editor draws, measures and exports with it.
-    qreal pixelsPerMeter = 1000.0;
+    // 100 px to the metre: a shape drawn a few hundred pixels across is then a
+    // few metres, which is the size most scenes are really about. At 1000 the
+    // same drawing is a few centimetres, and a few centimetres falls, bounces
+    // and sags like the toy it then is.
+    qreal pixelsPerMeter = 100.0;
 
     // Everything the world itself is set up with -- gravity, the solver's
     // tuning, whether bodies may sleep -- keyed by

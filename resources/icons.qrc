@@ -45,6 +45,10 @@
         <file alias="align_bottom.svg">icons/align_bottom.svg</file>
         <file alias="value.svg">icons/value.svg</file>
         <file alias="random.svg">icons/random.svg</file>
+        <file alias="properties.svg">icons/properties.svg</file>
+        <file alias="objects.svg">icons/objects.svg</file>
+        <file alias="rules.svg">icons/rules.svg</file>
+        <file alias="plot.svg">icons/plot.svg</file>
     </qresource>
     <qresource prefix="/app">
         <file alias="icon.svg">physalis.svg</file>

@@ -107,17 +107,13 @@ void ChipmunkEngine::createWorld(const WorldDesc &desc)
     // whatever the scene's scale.
     m_pixelsPerMeter = desc.pixelsPerMeter > 0.0 ? desc.pixelsPerMeter
                                                  : kReferencePixelsPerMeter;
-    // Off by default: gravity is an acceleration in metres, and a metre is a
-    // metre. See Box2DEngine::createWorld for the whole of why.
-    m_motionScale = flag(desc.params, "scaleIndependentPace", false)
-                        ? kReferencePixelsPerMeter / m_pixelsPerMeter
-                        : 1.0;
+
 
     const QVariantMap &world = desc.params;
     m_space = cpSpaceNew();
     cpSpaceSetUserData(m_space, this);
-    cpSpaceSetGravity(m_space, cpv(number(world, "gravityX", 0.0) * m_motionScale,
-                                   number(world, "gravityY", 9.81) * m_motionScale));
+    cpSpaceSetGravity(m_space, cpv(number(world, "gravityX", 0.0),
+                                   number(world, "gravityY", 9.81)));
 
     // How many times the whole step is relaxed. Chipmunk's own default is 10.
     cpSpaceSetIterations(m_space, qMax(1, static_cast<int>(number(world, "iterations", 10))));
@@ -134,9 +130,9 @@ void ChipmunkEngine::createWorld(const WorldDesc &desc)
 
     // Box2D's thresholds and top speed, which Chipmunk does not have. Speeds,
     // so quoted at the reference scale.
-    m_restitutionThreshold = number(world, "restitutionThreshold", 1.0) * m_motionScale;
-    m_hitEventThreshold = number(world, "hitEventThreshold", 1.0) * m_motionScale;
-    m_maximumSpeed = number(world, "maximumLinearSpeed", 400.0) * m_motionScale;
+    m_restitutionThreshold = number(world, "restitutionThreshold", 1.0);
+    m_hitEventThreshold = number(world, "hitEventThreshold", 1.0);
+    m_maximumSpeed = number(world, "maximumLinearSpeed", 400.0);
 
     m_enableSleep = flag(world, "enableSleep", true);
     m_sleepTime = qMax(0.0, number(world, "sleepTimeThreshold", 0.5));
@@ -144,7 +140,7 @@ void ChipmunkEngine::createWorld(const WorldDesc &desc)
     // Chipmunk would otherwise estimate it from gravity. One idle speed for the
     // whole world, quoted like any other speed.
     cpSpaceSetIdleSpeedThreshold(m_space,
-                                 number(world, "idleSpeedThreshold", 0.05) * m_motionScale);
+                                 number(world, "idleSpeedThreshold", 0.05));
 
     // One handler for every pair: the events, the filter and the way surfaces
     // combine are the same whatever is touching.

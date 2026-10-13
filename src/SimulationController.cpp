@@ -247,6 +247,9 @@ void SimulationController::start()
     m_watchedNow.clear();
     m_watchedBefore.clear();
     m_problems.clear();
+    m_plots.clear();
+    m_plotStride = 1;
+    m_plotStep = 0;
     m_pendingRunAction.clear();
     m_elapsedSeconds = 0.0;
     m_frameCount = 0;
@@ -831,6 +834,58 @@ void SimulationController::stepWorld(qreal dt)
     ++m_frameCount;
     advanceTimers(dt);
     applyRules();
+    samplePlots();
+}
+
+// The most points one series keeps. Beyond it the stride doubles and what is
+// already there is halved, which costs the odd sample and nothing else.
+static constexpr int kMaxPlotSamples = 20000;
+
+void SimulationController::clearPlots()
+{
+    m_plots.clear();
+    m_plotStride = 1;
+    m_plotStep = 0;
+}
+
+void SimulationController::samplePlots()
+{
+    if (!m_scene)
+        return;
+
+    if (++m_plotStep % m_plotStride != 0)
+        return;
+
+    for (const CanvasScene::Watch &watch : m_scene->watches()) {
+        if (!watch.plotted)
+            continue;
+
+        QVariant value = readValue(watch.objectName, watch.propertyKey);
+        if (!value.isValid())
+            value = m_scene->readSceneValue(watch.objectName, watch.propertyKey);
+        if (!value.isValid())
+            continue;
+
+        Series &series = m_plots[plotKey(watch.objectName, watch.propertyKey)];
+        series.object = watch.objectName;
+        series.label = watch.label;
+        series.points.append(QPointF(m_elapsedSeconds, value.toDouble()));
+    }
+
+    // Thin everything together, so the series stay on the same time base.
+    bool full = false;
+    for (const Series &series : std::as_const(m_plots))
+        full = full || series.points.size() >= kMaxPlotSamples;
+    if (full) {
+        for (Series &series : m_plots) {
+            QVector<QPointF> kept;
+            kept.reserve(series.points.size() / 2 + 1);
+            for (int i = 0; i < series.points.size(); i += 2)
+                kept.append(series.points.at(i));
+            series.points = kept;
+        }
+        m_plotStride *= 2;
+    }
 }
 
 void SimulationController::advanceTimers(qreal dt)

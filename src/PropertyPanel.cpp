@@ -499,24 +499,37 @@ void PropertyPanel::showRowMenu(const Row &row, const QPoint &globalPos)
 
     QMenu menu;
     const bool watched = m_scene->isWatched(object, row.key);
+    // With the group. A joint has a Spring, a Limit and a Motor, and the
+    // switch on each of them is called "Enabled" -- on its own that names none
+    // of them, and the log had three rows saying the same word about
+    // different things.
+    const QString label = row.group.isEmpty() ? row.label
+                                              : tr("%1 · %2").arg(row.group, row.label);
+    const auto watchFor = [object, row, label](bool plotted) {
+        CanvasScene::Watch watch;
+        watch.objectName = object;
+        watch.propertyKey = row.key;
+        watch.label = label;
+        watch.plotted = plotted;
+        return watch;
+    };
+
     if (watched) {
         menu.addAction(tr("Remove from Log"), this, [this, object, row] {
             m_scene->removeWatch(object, row.key);
         });
+        // Already logged: the only thing left to say is whether it is also
+        // kept, which is the whole difference between a number and a trace.
+        const bool plotted = m_scene->isPlotted(object, row.key);
+        menu.addAction(plotted ? tr("Stop Plotting") : tr("Plot as Well"), this,
+                       [this, object, row, plotted] {
+                           m_scene->setWatchPlotted(object, row.key, !plotted);
+                       });
     } else {
-        menu.addAction(tr("Add to Log"), this, [this, object, row] {
-            CanvasScene::Watch watch;
-            watch.objectName = object;
-            watch.propertyKey = row.key;
-            // With the group. A joint has a Spring, a Limit and a Motor, and
-            // the switch on each of them is called "Enabled" -- on its own
-            // that names none of them, and the log had three rows saying the
-            // same word about different things.
-            watch.label = row.group.isEmpty()
-                              ? row.label
-                              : tr("%1 · %2").arg(row.group, row.label);
-            m_scene->addWatch(watch);
-        });
+        menu.addAction(tr("Add to Log"), this,
+                       [this, watchFor] { m_scene->addWatch(watchFor(false)); });
+        menu.addAction(tr("Add to Log as Plot"), this,
+                       [this, watchFor] { m_scene->addWatch(watchFor(true)); });
     }
     if (!m_scene->watches().isEmpty()) {
         menu.addSeparator();
@@ -616,17 +629,26 @@ void PropertyPanel::updateActivePane()
         return;
     }
 
-    if (m_mode != EditorMode::Edit) {
+    // A ray, an explosion or a joint is shown whenever one is selected. They
+    // are drawn in Edit mode too, so they can be clicked there, and showing
+    // the world's settings instead of the thing just clicked reads as nothing
+    // having happened at all.
+    if (m_scene->selectedRay() || m_scene->selectedExplosion() || m_scene->selectedJoint()) {
         if (m_scene->selectedRay()) {
             setTitle(tr("Ray"));
             setActivePane(m_factory->paneForRay(m_scene));
         } else if (m_scene->selectedExplosion()) {
             setTitle(tr("Point"));
             setActivePane(m_factory->paneForExplosion(m_scene));
-        } else if (m_scene->selectedJoint()) {
+        } else {
             setTitle(tr("Joint"));
             setActivePane(m_factory->paneForJoints(m_scene));
-        } else {
+        }
+        return;
+    }
+
+    if (m_mode != EditorMode::Edit) {
+        {
             setTitle(EditorModes::name(m_mode));
             // A sensor is an area, not a body with a shape on it, and
             // nearly nothing in the physics vocabulary applies to one.

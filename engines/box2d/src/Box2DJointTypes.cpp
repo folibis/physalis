@@ -35,6 +35,10 @@ namespace {
 // turns each change of section into a header row.
 QString jointSection()  { return QObject::tr("Joint"); }
 QString springSection() { return QObject::tr("Spring"); }
+
+// Where a spring force stops being a number and becomes "no limit". Box2D's
+// own default for the range is the whole float range, which no spin box holds.
+constexpr qreal kSpringForceBound = 1e6;
 QString limitSection()  { return QObject::tr("Limit"); }
 QString motorSection()  { return QObject::tr("Motor"); }
 QString solverSection() { return QObject::tr("Solver"); }
@@ -56,6 +60,7 @@ bool isLiveSettable(const QString &key)
         QStringLiteral("maxMotorTorque"), QStringLiteral("targetAngle"),
         QStringLiteral("targetTranslation"),
         QStringLiteral("maxVelocityForce"),  QStringLiteral("maxVelocityTorque"),
+        QStringLiteral("lowerSpringForce"),  QStringLiteral("upperSpringForce"),
         QStringLiteral("maxSpringForce"),    QStringLiteral("maxSpringTorque"),
         QStringLiteral("linearVelocityX"),   QStringLiteral("linearVelocityY"),
         QStringLiteral("angularVelocity"),
@@ -110,7 +115,10 @@ JointParam realParam(const QString &key, const QString &label, const QString &se
 JointParam hertzParam(const QString &key, const QString &label, const QString &section,
                       qreal defaultValue, const QString &tooltip)
 {
-    return realParam(key, label, section, defaultValue, 0.0, 1000.0, 2, 0.5, tooltip);
+    // A useful spring is between about 1 and 10 Hz -- 0.1 Hz has a ten-second
+    // period, which reads as no spring at all -- so one click is half a hertz
+    // and lands somewhere that does something.
+    return realParam(key, label, section, defaultValue, 0.0, 100.0, 2, 0.5, tooltip);
 }
 
 JointParam ratioParam(const QString &key, const QString &label, const QString &section,
@@ -136,7 +144,9 @@ JointParam lengthParam(const QString &key, const QString &label, const QString &
 JointParam forceParam(const QString &key, const QString &label, const QString &section,
                       qreal defaultValue, const QString &tooltip)
 {
-    return realParam(key, label, section, defaultValue, 0.0, 1e9, 2, 10.0, tooltip);
+    // A square metre of the default density weighs about 10 N, so a tenth of
+    // that is one useful click.
+    return realParam(key, label, section, defaultValue, 0.0, 1e9, 2, 1.0, tooltip);
 }
 
 // The constraint softness every joint has, whatever its type. Not part of any
@@ -274,6 +284,23 @@ QVector<JointType> Box2DEngine::jointTypes() const
         t.params.append(ratioParam(QStringLiteral("dampingRatio"), QObject::tr("Spring Damping Ratio"),
                                    springSection(), 0.0,
                                    QObject::tr("How quickly the spring settles.")));
+
+        // b2DistanceJoint_SetSpringForceRange, and what it is measured along:
+        // the line from anchor A to anchor B, so pulling in reads negative.
+        t.params.append(realParam(QStringLiteral("lowerSpringForce"),
+                                  QObject::tr("Lower Spring Force (N)"), springSection(),
+                                  -kSpringForceBound, -kSpringForceBound, kSpringForceBound,
+                                  2, 10.0,
+                                  QObject::tr("The most the spring may pull in with. Tension is"
+                                              " negative, so this is the floor; at the bottom of"
+                                              " its range there is no limit at all.")));
+        t.params.append(realParam(QStringLiteral("upperSpringForce"),
+                                  QObject::tr("Upper Spring Force (N)"), springSection(),
+                                  kSpringForceBound, -kSpringForceBound, kSpringForceBound,
+                                  2, 10.0,
+                                  QObject::tr("The most it may push out with, compression being"
+                                              " positive. At the top of its range there is no"
+                                              " limit.")));
 
         t.params.append(boolParam(QStringLiteral("enableLimit"), QObject::tr("Enabled"),
                                   limitSection(), false,

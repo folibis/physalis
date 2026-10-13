@@ -46,8 +46,13 @@ public:
 
 signals:
     void incompleteCountChanged(int count);
+    // A rule names objects; this is the way back to one. Sent when a card's
+    // object box is asked to show what it is pointing at.
+    void revealRequested(const QString &objectName);
 
 private:
+    // Lets a card's object box be followed back to the thing it names.
+    void offerToReveal(ObjectComboBox *box);
     void setCollapsed(int index, bool collapsed);
     // Fold or unfold every card at once, from the two buttons beside the title.
     void setAllCollapsed(bool collapsed);

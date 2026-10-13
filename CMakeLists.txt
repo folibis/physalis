@@ -174,6 +174,7 @@ add_library(PhysalisCore OBJECT
     src/RulesPanel.cpp
     src/VariablesPanel.h
     src/VariablesPanel.cpp
+    src/PlotPanel.cpp
     src/UndoStack.h
     src/UndoStack.cpp
     src/PropertyPane/PropertyPane.h

@@ -79,6 +79,10 @@ public:
     ExplosionItem *addExplosion(const QPointF &scenePos = QPointF(0, 0));
     void removeExplosion(ExplosionItem *explosion);
     ExplosionItem *explosionNamed(const QString &name) const;
+    // Select whatever answers to this name -- a shape, a body, a joint, a ray
+    // or an explosion -- so a rule can be followed back to the thing it talks
+    // about. False where nothing does.
+    bool revealObjectNamed(const QString &name);
     void selectExplosion(ExplosionItem *explosion);
 
     // Rangefinders. Like explosions they never enter the physics world; the
@@ -399,6 +403,10 @@ public:
         QString objectName;
         QString propertyKey;
         QString label;
+        // Kept as well as shown: the run records every step of it, and the
+        // Plot tab draws the lot against time. Reading one number as it goes
+        // says what a value is; the trace says what it did.
+        bool plotted = false;
         bool operator==(const Watch &other) const
         {
             return objectName == other.objectName && propertyKey == other.propertyKey;
@@ -406,6 +414,8 @@ public:
     };
     const QVector<Watch> &watches() const { return m_watches; }
     void addWatch(const Watch &watch);
+    void setWatchPlotted(const QString &objectName, const QString &propertyKey, bool plotted);
+    bool isPlotted(const QString &objectName, const QString &propertyKey) const;
     void removeWatch(const QString &objectName, const QString &propertyKey);
     bool isWatched(const QString &objectName, const QString &propertyKey) const;
     void clearWatches();

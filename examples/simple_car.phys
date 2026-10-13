@@ -190,7 +190,7 @@
                 "enableLimit": false,
                 "enableMotor": true,
                 "enableSpring": true,
-                "hertz": 2,
+                "hertz": 2.5,
                 "lowerTranslation": 0,
                 "maxMotorTorque": 10,
                 "motorSpeed": -360,
@@ -200,12 +200,12 @@
         },
         {
             "anchorA": {
-                "x": 492.09208084877093,
-                "y": 113.4144816236112
+                "x": 492.09208084877116,
+                "y": 113.41448162361122
             },
             "anchorB": {
-                "x": 492.0920808487708,
-                "y": 113.41448162361118
+                "x": 492.09208084877105,
+                "y": 113.41448162361122
             },
             "axis": {
                 "x": 6.114900252818245e-17,
@@ -222,7 +222,7 @@
                 "enableLimit": false,
                 "enableMotor": false,
                 "enableSpring": true,
-                "hertz": 2,
+                "hertz": 2.5,
                 "lowerTranslation": 0,
                 "maxMotorTorque": 0,
                 "motorSpeed": 0,
@@ -595,7 +595,8 @@
             "gravityX": 0,
             "gravityY": 9.81
         },
-        "pixelsPerMeter": 1000,
+        "pixelsPerMeter": 100,
+        "randomSeed": 0,
         "solidBounds": false
     }
 }

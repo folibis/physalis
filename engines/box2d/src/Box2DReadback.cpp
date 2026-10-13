@@ -68,7 +68,7 @@ QVariant Box2DEngine::bodyValue(BodyHandle handle, const QString &key) const
     // A speed, so it comes back out of the reference scale the same way it
     // went in.
     if (key == QLatin1String("sleepThreshold"))
-        return b2Body_GetSleepThreshold(body) / m_motionScale;
+        return b2Body_GetSleepThreshold(body);
     // b2BodyType is an enum in the same order the catalogue lists its choices,
     // and the editor stores a choice as its index.
     if (key == QLatin1String("bodyType"))
@@ -291,6 +291,13 @@ QVariant Box2DEngine::jointValue(JointHandle handle, const QString &key) const
             return b2DistanceJoint_GetMotorForce(joint);
         if (key == QLatin1String("springForce"))
             return b2DistanceJoint_GetSpringForce(joint);
+        if (key == QLatin1String("lowerSpringForce")
+            || key == QLatin1String("upperSpringForce")) {
+            float lower = 0.0f;
+            float upper = 0.0f;
+            b2DistanceJoint_GetSpringForceRange(joint, &lower, &upper);
+            return key == QLatin1String("lowerSpringForce") ? lower : upper;
+        }
         if (key == QLatin1String("springEnabled"))
             return b2DistanceJoint_IsSpringEnabled(joint);
         if (key == QLatin1String("limitEnabled"))
@@ -324,21 +331,16 @@ QVariant Box2DEngine::worldValue(const QString &key) const
     if (!b2World_IsValid(m_worldId))
         return {};
 
-    // Speeds and accelerations were scaled on the way in so that changing
-    // pixelsPerMeter leaves the pace on screen alone; they come back out the
-    // same way, so a rule reads the number the world settings show.
-    const auto unscaled = [this](float value) { return value / m_motionScale; };
-
     if (key == QLatin1String("gravityX"))
-        return unscaled(b2World_GetGravity(m_worldId).x);
+        return b2World_GetGravity(m_worldId).x;
     if (key == QLatin1String("gravityY"))
-        return unscaled(b2World_GetGravity(m_worldId).y);
+        return b2World_GetGravity(m_worldId).y;
     if (key == QLatin1String("restitutionThreshold"))
-        return unscaled(b2World_GetRestitutionThreshold(m_worldId));
+        return b2World_GetRestitutionThreshold(m_worldId);
     if (key == QLatin1String("hitEventThreshold"))
-        return unscaled(b2World_GetHitEventThreshold(m_worldId));
+        return b2World_GetHitEventThreshold(m_worldId);
     if (key == QLatin1String("maximumLinearSpeed"))
-        return unscaled(b2World_GetMaximumLinearSpeed(m_worldId));
+        return b2World_GetMaximumLinearSpeed(m_worldId);
 
     // No getters for these three: what the world was last told is what it has.
     if (key == QLatin1String("contactHertz"))
@@ -346,7 +348,7 @@ QVariant Box2DEngine::worldValue(const QString &key) const
     if (key == QLatin1String("contactDampingRatio"))
         return m_contactTuning.dampingRatio;
     if (key == QLatin1String("contactSpeed"))
-        return unscaled(m_contactTuning.pushSpeed);
+        return m_contactTuning.pushSpeed;
 
     if (key == QLatin1String("enableSleep"))
         return b2World_IsSleepingEnabled(m_worldId);
@@ -387,9 +389,7 @@ void Box2DEngine::setWorldParam(const QString &key, const QVariant &value)
         return;
 
     const bool flag = value.toBool();
-    // The mirror of worldValue's unscaling: a speed given in the world
-    // settings' units becomes one in the solver's.
-    const float scaled = static_cast<float>(value.toDouble() * m_motionScale);
+    const float scaled = static_cast<float>(value.toDouble());
 
     if (key == QLatin1String("gravityX") || key == QLatin1String("gravityY")) {
         b2Vec2 gravity = b2World_GetGravity(m_worldId);

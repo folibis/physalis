@@ -92,8 +92,17 @@ void SceneTree::buildUi()
 
     connect(m_tree, &QTreeWidget::itemClicked, this,
             [this](QTreeWidgetItem *item, int) { onItemActivated(item); });
+    // Picking a row points the panels at that object, and brings the table
+    // that shows it to the front -- otherwise the properties change behind the
+    // tree you are still looking at, which reads as the click doing nothing.
+    // Selection made from elsewhere comes through syncSelection with the
+    // tree's signals blocked, so this only follows a row the user picked.
     connect(m_tree, &QTreeWidget::currentItemChanged, this,
-            [this](QTreeWidgetItem *item, QTreeWidgetItem *) { onItemActivated(item); });
+            [this](QTreeWidgetItem *item, QTreeWidgetItem *) {
+                onItemActivated(item);
+                if (item && kindOf(item) != NodeKind::Group)
+                    emit propertiesRequested();
+            });
     connect(m_tree, &QTreeWidget::itemDoubleClicked, this,
             [this](QTreeWidgetItem *item, int) {
                 onItemActivated(item);

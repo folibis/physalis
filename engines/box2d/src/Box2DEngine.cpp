@@ -84,20 +84,7 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
     m_pixelsPerMeter = desc.pixelsPerMeter > 0.0 ? desc.pixelsPerMeter
                                                  : kReferencePixelsPerMeter;
 
-    // Gravity is an acceleration in metres, so by default it is handed over
-    // as it stands and a scene at 1000 px per metre really is full of
-    // centimetre-sized things falling the way centimetre-sized things do.
-    //
-    // A scene may ask for the other bargain instead: quote gravity and the
-    // speed thresholds at kReferencePixelsPerMeter, and the shrinking world
-    // and the shrinking gravity cancel exactly, so pixels-per-second on screen
-    // come out the same at every scale. That makes Pixels Per Metre a weight
-    // knob rather than a scale one -- and makes the "m/s^2" on the gravity row
-    // true only at the reference scale, which is why it is no longer the
-    // default.
-    m_motionScale = flag(desc.params, "scaleIndependentPace", false)
-                        ? kReferencePixelsPerMeter / m_pixelsPerMeter
-                        : 1.0;
+
 
     // Box2D's tolerances are lengths too, and fixed for a world measured in
     // metres: 5 mm of slop, and a contact made once two shapes are within
@@ -122,20 +109,17 @@ void Box2DEngine::createWorld(const WorldDesc &desc)
     b2WorldDef worldDef = b2DefaultWorldDef();
     // Box2D already works in meters and seconds, so an m/s^2 acceleration
     // needs no conversion -- unlike the geometry, which is in scene units.
-    worldDef.gravity = b2Vec2 { static_cast<float>(number(world, "gravityX", 0.0) * m_motionScale),
-                                static_cast<float>(number(world, "gravityY", 9.81) * m_motionScale) };
+    worldDef.gravity = b2Vec2 { static_cast<float>(number(world, "gravityX", 0.0)),
+                                static_cast<float>(number(world, "gravityY", 9.81)) };
 
-    // Box2D's own tuning thresholds are speeds in m/s, so they have to move
-    // with the scale as well -- otherwise a small scene trips every one of
-    // them at once and a large scene trips none.
     worldDef.maximumLinearSpeed =
-        static_cast<float>(number(world, "maximumLinearSpeed", 400.0) * m_motionScale);
+        static_cast<float>(number(world, "maximumLinearSpeed", 400.0));
     worldDef.contactSpeed =
-        static_cast<float>(number(world, "contactSpeed", 3.0) * m_motionScale);
+        static_cast<float>(number(world, "contactSpeed", 3.0));
     worldDef.restitutionThreshold =
-        static_cast<float>(number(world, "restitutionThreshold", 1.0) * m_motionScale);
+        static_cast<float>(number(world, "restitutionThreshold", 1.0));
     worldDef.hitEventThreshold =
-        static_cast<float>(number(world, "hitEventThreshold", 1.0) * m_motionScale);
+        static_cast<float>(number(world, "hitEventThreshold", 1.0));
 
     // Stiffness and damping are not speeds, so the scale leaves them alone.
     worldDef.contactHertz = static_cast<float>(number(world, "contactHertz", 30.0));
@@ -379,7 +363,7 @@ BodyHandle Box2DEngine::addBody(const BodyDesc &desc)
     // default 0.05 m/s threshold is never exceeded when the whole world is
     // only centimetres across, so everything "stops moving" while falling.
     bodyDef.sleepThreshold =
-        static_cast<float>(number(body, "sleepThreshold", 0.05) * m_motionScale);
+        static_cast<float>(number(body, "sleepThreshold", 0.05));
     bodyDef.motionLocks.linearX = flag(body, "lockLinearX", false);
     bodyDef.motionLocks.linearY = flag(body, "lockLinearY", false);
     bodyDef.motionLocks.angularZ = flag(body, "lockAngularZ", false);

@@ -144,6 +144,14 @@ private:
     // Not in the form: filled from the engine at run time.
     QMenu *m_jointTypeMenu = nullptr;
     void rebuildJointMenu();
+    // The side panel's tabs: their icon, the name that became a tooltip, and
+    // the settings key that remembers whether the user wants it at all.
+    void buildSidePanelTabs();
+    void applyVisibleTabs();
+    // Only the tab you are on spells its name; the rest keep to their icon.
+    void updateSidePanelTabLabels();
+    QStringList m_hiddenTabs;
+
     CanvasScene *m_scene = nullptr;
     UndoStack *m_undo = nullptr;
     // What the canvas draws -- see the kLayer* keys in MainWindow.cpp.

@@ -334,6 +334,7 @@ void CanvasScene::selectExplosion(ExplosionItem *explosion)
     {
         clearPhysicsSelection();
         selectJoint(nullptr);
+        selectRay(nullptr);
     }
     if (m_selectedExplosion)
     {
@@ -345,6 +346,70 @@ void CanvasScene::selectExplosion(ExplosionItem *explosion)
         m_selectedExplosion->setSelectedForPhysics(true);
     }
     emit selectedExplosionChanged(explosion);
+}
+
+bool CanvasScene::revealObjectNamed(const QString &name)
+{
+    if (name.isEmpty())
+    {
+        return false;
+    }
+
+    // A rule names one namespace, so the first thing that answers is the one
+    // meant -- see takenNames(), which is what keeps them apart.
+    for (Joint *joint : std::as_const(m_joints))
+    {
+        if (joint->name() != name)
+        {
+            continue;
+        }
+        clearPhysicsSelection();
+        selectExplosion(nullptr);
+        selectRay(nullptr);
+        selectJoint(joint);
+        return true;
+    }
+    if (RayItem *ray = rayNamed(name))
+    {
+        clearPhysicsSelection();
+        selectJoint(nullptr);
+        selectExplosion(nullptr);
+        selectRay(ray);
+        return true;
+    }
+    if (ExplosionItem *explosion = explosionNamed(name))
+    {
+        clearPhysicsSelection();
+        selectJoint(nullptr);
+        selectRay(nullptr);
+        selectExplosion(explosion);
+        return true;
+    }
+    for (ShapeItem *shape : shapes())
+    {
+        if (shape->name() == name)
+        {
+            selectJoint(nullptr);
+            selectRay(nullptr);
+            selectExplosion(nullptr);
+            clearPhysicsSelection();
+            selectForPhysics(shape, true);
+            return true;
+        }
+    }
+    for (PhysicsBody *body : m_bodies)
+    {
+        if (body->name() == name && !body->shapes().isEmpty())
+        {
+            selectJoint(nullptr);
+            selectRay(nullptr);
+            selectExplosion(nullptr);
+            clearPhysicsSelection();
+            selectForPhysics(body->shapes().first(), true);
+            return true;
+        }
+    }
+    return false;
 }
 
 ExplosionItem *CanvasScene::explosionNamed(const QString &name) const
@@ -1594,6 +1659,32 @@ void CanvasScene::addWatch(const Watch &watch)
                                                                  : watch.label));
 }
 
+void CanvasScene::setWatchPlotted(const QString &objectName, const QString &propertyKey,
+                                  bool plotted)
+{
+    for (Watch &watch : m_watches)
+    {
+        if (watch.objectName == objectName && watch.propertyKey == propertyKey
+            && watch.plotted != plotted)
+        {
+            watch.plotted = plotted;
+            emit watchesChanged();
+            notifyEdit(tr("Change log"));
+            return;
+        }
+    }
+}
+
+bool CanvasScene::isPlotted(const QString &objectName, const QString &propertyKey) const
+{
+    for (const Watch &watch : m_watches)
+    {
+        if (watch.objectName == objectName && watch.propertyKey == propertyKey)
+            return watch.plotted;
+    }
+    return false;
+}
+
 void CanvasScene::removeWatch(const QString &objectName, const QString &propertyKey)
 {
     const int before = m_watches.size();
@@ -2041,6 +2132,7 @@ void CanvasScene::setPixelsPerMeter(qreal pixelsPerMeter)
     {
         return;
     }
+
     m_world.pixelsPerMeter = pixelsPerMeter;
     emit fieldPropertyChanged();
 }

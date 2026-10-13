@@ -160,7 +160,6 @@ QJsonObject engineCatalogue(const QString &engineName)
         case physics::PropertyRole::SpringEnabled:   return QStringLiteral("springEnabled");
         case physics::PropertyRole::SpringStiffness: return QStringLiteral("springStiffness");
         case physics::PropertyRole::SpringRestLength: return QStringLiteral("springRestLength");
-        case physics::PropertyRole::PaceAcrossScales: return QStringLiteral("paceAcrossScales");
         }
         return {};
     };

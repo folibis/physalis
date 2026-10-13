@@ -439,7 +439,7 @@
         {
             "name": "explosion_1",
             "params": {
-                "impulse": 5
+                "impulse": 50
             },
             "x": 15.714285714285717,
             "y": 81.42857142857143
@@ -585,7 +585,7 @@
                 "enableSpring": false,
                 "hertz": 0,
                 "lowerTranslation": -277,
-                "maxMotorForce": 1,
+                "maxMotorForce": 20,
                 "motorSpeed": -90,
                 "referenceAngle": 0,
                 "targetTranslation": 0,
@@ -653,7 +653,7 @@
             "property": "impulseY",
             "subject": "rectangle_31",
             "target": "body_34",
-            "value": -5,
+            "value": -300,
             "when": "circle_4"
         },
         {
@@ -665,19 +665,6 @@
             "target": "prismatic_2",
             "value": true,
             "when": "circle_4"
-        },
-        {
-            "action": "removeBody",
-            "actionParams": {
-            },
-            "event": "contactBegin",
-            "name": "end",
-            "op": "set",
-            "property": "",
-            "subject": "circle_4",
-            "target": "body_34",
-            "value": false,
-            "when": "polyline_2"
         },
         {
             "event": "contactBegin",
@@ -2198,7 +2185,8 @@
     "world": {
         "physics": {
         },
-        "pixelsPerMeter": 1000,
+        "pixelsPerMeter": 100,
+        "randomSeed": 0,
         "solidBounds": false
     }
 }

@@ -19,6 +19,8 @@
 #include <QSet>
 #include <cmath>
 #include <cstdio>
+#include "PropertyPanel.h"
+#include <QTabWidget>
 #include <gtest/gtest.h>
 #include "EditorMode.h"
 
@@ -1220,4 +1222,71 @@ TEST(RandomValues, ARangeIsWrittenAndReadBack)
     EXPECT_FALSE(SceneSerializer::save(&plain).value(QStringLiteral("rules")).toArray()
                      .at(0).toObject().value(QStringLiteral("value")).isObject())
         << "a plain value was written as a range";
+}
+
+// A rule names objects, and the panel offers a way back to the one it names:
+// whatever kind it is, the scene selects it.
+TEST(Rules, ARuleCanBeFollowedBackToWhatItNames)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setEditorMode(EditorMode::Physics);
+
+    auto *shape = new RectangleItem;
+    shape->setRect(QRectF(0, 0, 40, 40));
+    shape->setName(QStringLiteral("crate"));
+    scene.addItem(shape);
+    scene.notifyShapesChanged();
+    scene.selectForPhysics(shape, true);
+    PhysicsBody *body = scene.createBodyFromSelection();
+    scene.clearPhysicsSelection();
+
+    ExplosionItem *boom = scene.addExplosion(QPointF(100, 100));
+    ASSERT_TRUE(boom);
+    RayItem *ray = scene.addRay(QPointF(-100, 0));
+
+    EXPECT_TRUE(scene.revealObjectNamed(boom->name()));
+    EXPECT_EQ(scene.selectedExplosion(), boom) << "naming an explosion did not select it";
+
+    if (ray) {
+        EXPECT_TRUE(scene.revealObjectNamed(ray->name()));
+        EXPECT_EQ(scene.selectedExplosion(), nullptr)
+            << "the explosion stayed selected beside the ray";
+    }
+
+    EXPECT_TRUE(scene.revealObjectNamed(shape->name()));
+    EXPECT_TRUE(scene.physicsSelection().contains(shape)) << "naming a shape did not select it";
+
+    EXPECT_TRUE(scene.revealObjectNamed(body->name())) << "a body is nameable too";
+    EXPECT_FALSE(scene.revealObjectNamed(QStringLiteral("nothing_called_this")));
+}
+
+// A ray and an explosion are drawn in both modes, so clicking one shows it in
+// both: before this the Edit-mode panel answered with the world's settings,
+// which reads as the click having done nothing.
+TEST(Rules, ClickingARayOrExplosionShowsItInEitherMode)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    ExplosionItem *boom = scene.addExplosion(QPointF(50, 50));
+    ASSERT_TRUE(boom);
+
+    PropertyPanel panel;
+    panel.setScene(&scene);
+
+    for (EditorMode mode : { EditorMode::Physics, EditorMode::Edit }) {
+        scene.setEditorMode(mode);
+        panel.setEditorMode(mode);
+        scene.selectExplosion(nullptr);
+        scene.selectExplosion(boom);
+
+        QStringList sections;
+        if (auto *tabs = panel.findChild<QTabWidget *>())
+            for (int i = 0; i < tabs->count(); ++i)
+                sections << tabs->tabText(i);
+        EXPECT_TRUE(sections.contains(QStringLiteral("Explosion")))
+            << (mode == EditorMode::Edit ? "Edit" : "Physics")
+            << " mode showed " << sections.join(QLatin1Char(',')).toStdString()
+            << " instead of the explosion";
+    }
 }

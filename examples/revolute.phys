@@ -1170,8 +1170,8 @@
                 "enableSpring": true,
                 "hertz": 2,
                 "lowerAngle": 0,
-                "maxMotorTorque": 10,
-                "motorSpeed": -15,
+                "maxMotorTorque": 70,
+                "motorSpeed": -20,
                 "referenceAngle": 0,
                 "targetAngle": 0,
                 "upperAngle": 0
@@ -1253,11 +1253,13 @@
         {
             "label": "open_hatch",
             "object": "@variables",
+            "plotted": false,
             "property": "open_hatch"
         },
         {
             "label": "Angle (deg)",
             "object": "dumper",
+            "plotted": false,
             "property": "angle"
         }
     ],
@@ -1299,7 +1301,7 @@
                     "compare": "<",
                     "subject": "dumper",
                     "watch": "angle",
-                    "when": -3
+                    "when": -5
                 },
                 {
                     "compare": "=",
@@ -1316,7 +1318,7 @@
             "target": "hatch",
             "value": -20,
             "watch": "angle",
-            "when": -3
+            "when": -5
         },
         {
             "actions": [
@@ -2281,7 +2283,8 @@
     "world": {
         "physics": {
         },
-        "pixelsPerMeter": 1000,
+        "pixelsPerMeter": 100,
+        "randomSeed": 0,
         "solidBounds": false
     }
 }

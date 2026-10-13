@@ -475,6 +475,7 @@ QJsonObject save(const CanvasScene *scene)
             {"object", watch.objectName},
             {"property", watch.propertyKey},
             {"label", watch.label},
+            {"plotted", watch.plotted},
         });
     }
     if (!watches.isEmpty())
@@ -527,19 +528,6 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
     const QJsonObject world = document.value("world").toObject();
     scene->setPixelsPerMeter(world.value("pixelsPerMeter").toDouble(scene->pixelsPerMeter()));
     scene->world().params = world.value("physics").toObject().toVariantMap();
-
-    // Everything written before format 2 ran with gravity quoted at the
-    // engine's reference scale, so it keeps doing that and moves as it always
-    // has. Which key says so is the engine's business: it is asked for the one
-    // it tagged, and named here no more than any other.
-    if (version < 2) {
-        if (auto engine = physics::EngineRegistry::create(scene->simulationEngineName())) {
-            for (const physics::JointParam &property : engine->worldProperties()) {
-                if (property.role == physics::PropertyRole::PaceAcrossScales)
-                    scene->world().params.insert(property.key, true);
-            }
-        }
-    }
 
     // A scene written before the engine described its own world kept those
     // settings loose in the world object, under the names Box2D uses -- which
@@ -764,6 +752,7 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
         watch.objectName = o.value("object").toString();
         watch.propertyKey = o.value("property").toString();
         watch.label = o.value("label").toString();
+        watch.plotted = o.value("plotted").toBool(false);
         if (!watch.objectName.isEmpty() && !watch.propertyKey.isEmpty())
             watches.append(watch);
     }

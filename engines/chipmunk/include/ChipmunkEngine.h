@@ -221,7 +221,6 @@ private:
     QHash<QString, HitRecord> m_lastHit;
 
     qreal m_pixelsPerMeter = kReferencePixelsPerMeter;
-    qreal m_motionScale = 1.0;
     cpFloat m_lastStep = 1.0 / 60.0;
 
     // Box2D's world settings that Chipmunk has no counterpart for, applied by

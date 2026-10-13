@@ -73,6 +73,16 @@ mean nothing. The exported page does the same, from a turn count the converter
 writes into its drawing list -- which is why `SceneExporter` hands converters
 each property's `role`, by name rather than by number.
 
+**The log says what a value is; a plot says what it did.** A `CanvasScene::Watch`
+carries `plotted`, and `SimulationController::samplePlots` takes one sample of
+each marked watch per *step* -- not per frame, because a frame is not a step:
+at x4 it is four of them, and a scene that cannot keep up drops some. The
+samples belong to the run and go when it stops. A series fills at 20000 points,
+and then every series is halved and the stride doubled, so a run of any length
+keeps its whole shape rather than stopping at an arbitrary minute. `PlotPanel`
+keeps nothing and only draws; each trace carries its own vertical scale, since
+a force in newtons and a position in scene units share no axis worth sharing.
+
 ## Layout
 
 ```
@@ -94,6 +104,7 @@ src/              the application (Qt widgets, canvas, panels, serialization)
     RulesPanel        the rule cards
     VariablesPanel    the Variables tab beside them
     PropertyPanel + PropertyPane/*   property tables, one pane per selection kind
+    PlotPanel         the Plot tab: what the log kept, drawn against the run
     SimulationController   drives the engine, polls events, applies rules
     SceneSerializer   *.phys read/write
     SceneExporter     finds export converters and runs one

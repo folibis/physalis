@@ -636,17 +636,10 @@ PropertyList ChipmunkEngine::worldProperties() const
                QObject::tr("How many shapes the world holds, across every body.")),
     };
 
-    properties.push_back(flag(QStringLiteral("scaleIndependentPace"),
-                              QObject::tr("Keep Pace Across Scales"), false, false,
-                              QObject::tr("Quotes gravity and the speed thresholds at 50 px per metre rather than at this scene's own scale, so changing Pixels Per Metre leaves the motion on screen alone. Off, a metre is a metre: 9.81 is 9.81, and small objects fall as fast as small objects do. Scenes saved before this setting existed carry it on, so they still move the way they did.")));
-
     markStored(&properties, {
         {QStringLiteral("gravityX"), 0.0},
         {QStringLiteral("gravityY"), 9.81},
-        {QStringLiteral("scaleIndependentPace"), false},
     }, QObject::tr("World"));
-    markRole(&properties, QStringLiteral("scaleIndependentPace"),
-             PropertyRole::PaceAcrossScales);
     markStored(&properties, {
         {QStringLiteral("restitutionThreshold"), 1.0},
         {QStringLiteral("hitEventThreshold"), 1.0},

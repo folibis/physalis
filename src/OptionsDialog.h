@@ -150,7 +150,7 @@ public:
         // them mean -- the same bargain it has with the engine plugins.
         QHash<QString, QVariantMap> converterSettings;
 
-        qreal pixelsPerMeter = 1000.0;
+        qreal pixelsPerMeter = 100.0;
         bool fieldBoundsSolid = false;
     };
 

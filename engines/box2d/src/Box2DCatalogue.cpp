@@ -157,11 +157,11 @@ PropertyList Box2DEngine::bodyProperties() const
         // Applied, not assigned: b2Body_ApplyLinearImpulseToCenter. Nothing to
         // read back, which is why these are write-only.
         number(QStringLiteral("impulseY"), QObject::tr("Linear Impulse Y (N·s)"),
-               false, true, -1e6, 1e6, 1, 10.0,
+               false, true, -1e6, 1e6, 2, 1.0,
                QObject::tr("A kick. Adds to whatever the body was already doing,"
                            " so something arriving fast leaves faster.")),
         number(QStringLiteral("impulseX"), QObject::tr("Linear Impulse X (N·s)"),
-               false, true, -1e6, 1e6, 1, 10.0,
+               false, true, -1e6, 1e6, 2, 1.0,
                QObject::tr("A kick sideways. Adds to whatever the body was already"
                            " doing.")),
         // b2Body_ApplyAngularImpulse -- the same kick, about the centre of
@@ -360,12 +360,12 @@ PropertyList Box2DEngine::bodyProperties() const
         // rule fires for one step and anything applied for one step is nearly
         // nothing.
         number(QStringLiteral("forceY"), QObject::tr("Force Y (N)"),
-               false, true, -1e9, 1e9, 1, 10.0,
+               false, true, -1e9, 1e9, 2, 1.0,
                QObject::tr("A force lasts only as long as it is applied, and a rule"
                            " fires for a single step. An impulse is usually what"
                            " is wanted.")),
         number(QStringLiteral("forceX"), QObject::tr("Force X (N)"),
-               false, true, -1e9, 1e9, 1, 10.0,
+               false, true, -1e9, 1e9, 2, 1.0,
                QObject::tr("Sideways, and just as brief. An impulse is usually what"
                            " is wanted.")),
         number(QStringLiteral("torque"), QObject::tr("Torque (N·m)"),
@@ -849,17 +849,10 @@ PropertyList Box2DEngine::worldProperties() const
                            " touch. In scene units, whatever the scale.")),
     };
 
-    properties.push_back(flag(QStringLiteral("scaleIndependentPace"),
-                              QObject::tr("Keep Pace Across Scales"), false, false,
-                              QObject::tr("Quotes gravity and the speed thresholds at 50 px per metre rather than at this scene's own scale, so changing Pixels Per Metre leaves the motion on screen alone. It makes that setting a weight knob rather than a scale one, and gravity is then only m/s\u00b2 where the scene is at 50 px per metre. Off, a metre is a metre: 9.81 is 9.81, and small objects fall as fast as small objects do. Scenes saved before this setting existed carry it on, so they still move the way they did.")));
-
     markStored(&properties, {
         {QStringLiteral("gravityX"), 0.0},
         {QStringLiteral("gravityY"), 9.81},
-        {QStringLiteral("scaleIndependentPace"), false},
     }, QObject::tr("World"));
-    markRole(&properties, QStringLiteral("scaleIndependentPace"),
-             PropertyRole::PaceAcrossScales);
     markStored(&properties, {
         {QStringLiteral("restitutionThreshold"), 1.0},
         {QStringLiteral("hitEventThreshold"), 1.0},
@@ -944,6 +937,14 @@ PropertyList Box2DEngine::jointReadables(const QString &typeId) const
                                " them apart.")),
             // b2DistanceJoint_GetSpringForce -- the spring's own pull, which is
             // not the motor's and not the joint's total.
+            // b2DistanceJoint_GetSpringForceRange -- what the spring is allowed
+            // to do, as against what it is doing.
+            number(QStringLiteral("lowerSpringForce"), QObject::tr("Lower Spring Force (N)"),
+                   true, false, -1e9, 1e9, 2, 10.0,
+                   QObject::tr("The most it may pull in with right now.")),
+            number(QStringLiteral("upperSpringForce"), QObject::tr("Upper Spring Force (N)"),
+                   true, false, -1e9, 1e9, 2, 10.0,
+                   QObject::tr("The most it may push out with right now.")),
             number(QStringLiteral("springForce"), QObject::tr("Spring Force (N)"), true, false,
                    -1e9, 1e9, 2, 1.0,
                    QObject::tr("What the spring is pulling with this step, as against the"

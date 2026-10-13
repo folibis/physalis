@@ -42,6 +42,12 @@ QIcon variable();
 // The readout of watched values, pinned to the canvas during a run.
 QIcon log();
 
+// The side panel's tabs, which show these instead of their names.
+QIcon properties();
+QIcon objects();
+QIcon rules();
+QIcon plot();
+
 // Lining shapes up: the toolbar button, and one for each edge the menu offers.
 QIcon align();
 QIcon alignLeft();

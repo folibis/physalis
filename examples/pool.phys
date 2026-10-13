@@ -213,7 +213,7 @@
             ],
             "shot": {
                 "enabled": true,
-                "fullImpulse": 5,
+                "fullImpulse": 300,
                 "maxPull": 300
             },
             "type": "dynamic"
@@ -235,6 +235,7 @@
         {
             "label": "balls",
             "object": "@variables",
+            "plotted": false,
             "property": "balls"
         }
     ],
@@ -1057,7 +1058,8 @@
         "physics": {
             "gravityY": 0
         },
-        "pixelsPerMeter": 1000,
+        "pixelsPerMeter": 100,
+        "randomSeed": 0,
         "solidBounds": false
     }
 }

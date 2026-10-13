@@ -1218,10 +1218,12 @@ enum class Scaled { Raw, ByScale, AtTheReferencePace };
 
 Scaled scalingOf(const QString &key)
 {
-    // Gravity and the thresholds beside it used to be quoted at the engine's
-    // reference scale. They are plain metres and seconds now unless a scene
-    // asks otherwise, and this one does not.
-    static const QSet<QString> pace {};
+    static const QSet<QString> pace {
+        QStringLiteral("gravityX"), QStringLiteral("gravityY"),
+        QStringLiteral("maximumLinearSpeed"), QStringLiteral("contactSpeed"),
+        QStringLiteral("restitutionThreshold"), QStringLiteral("hitEventThreshold"),
+        QStringLiteral("sleepThreshold"),
+    };
     static const QSet<QString> byScale {
         QStringLiteral("velocityX"), QStringLiteral("velocityY"),
         QStringLiteral("tangentSpeed"),
@@ -1320,17 +1322,6 @@ TEST(Exporters, EveryPropertyIsExportedWithTheValueTheAppUses)
                 // difference here, which is what keeps every mass the editor's.
                 if (property.key == QLatin1String("density"))
                     appUses = wanted * (metre / ppm) * (metre / ppm);
-                // A speed or an acceleration is quoted per second at the
-                // scene's metre, so a converter working at its own has to
-                // restate it there -- the same motion, a different metre.
-                static const QSet<QString> perSecond {
-                    QStringLiteral("gravityX"), QStringLiteral("gravityY"),
-                    QStringLiteral("maximumLinearSpeed"), QStringLiteral("contactSpeed"),
-                    QStringLiteral("restitutionThreshold"),
-                    QStringLiteral("hitEventThreshold"), QStringLiteral("sleepThreshold"),
-                };
-                if (perSecond.contains(property.key))
-                    appUses = wanted * (ppm / metre);
                 EXPECT_TRUE(carriesTheNumber(out.text, appUses))
                     << converter.id.toStdString() << " writes the " << group.what << "'s "
                     << property.key.toStdString() << " as something other than the " << appUses

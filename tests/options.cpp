@@ -9,6 +9,10 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QSpinBox>
+#include <QDirIterator>
+#include <QIcon>
+#include <QImage>
+#include <QPixmap>
 #include <gtest/gtest.h>
 #include "MainWindow.h"
 #include <QAction>
@@ -362,4 +366,35 @@ TEST(RecentFiles, AMissingSceneDropsOffTheList)
 
     EXPECT_FALSE(offered(&window).contains(QDir::fromNativeSeparators(path)))
         << "a scene that no longer opens is still being offered";
+}
+
+// Qt's SVG renderer is not the whole of SVG: an icon that is perfectly valid
+// XML can still draw nothing at all -- an arc command once left the Rules tab
+// with a blank square. Valid is not the question; pixels are.
+TEST(Options, EveryIconActuallyDraws)
+{
+    QDirIterator walk(QStringLiteral(":/icons"), QDirIterator::Subdirectories);
+    int checked = 0;
+    while (walk.hasNext()) {
+        const QString path = walk.next();
+        if (!path.endsWith(QLatin1String(".svg")))
+            continue;
+        ++checked;
+
+        const QPixmap pixmap = QIcon(path).pixmap(20, 20);
+        ASSERT_FALSE(pixmap.isNull()) << path.toStdString() << " produced no pixmap";
+
+        const QImage image = pixmap.toImage();
+        int painted = 0;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                if (qAlpha(image.pixel(x, y)) > 20)
+                    ++painted;
+            }
+        }
+        EXPECT_GT(painted, 20)
+            << path.toStdString() << " draws only " << painted
+            << " pixels at 20px -- Qt could not render it";
+    }
+    EXPECT_GT(checked, 20) << "the icon resource looks empty";
 }

@@ -208,10 +208,6 @@ private:
     // Scene units per metre, straight from WorldDesc: what the solver is told
     // the shapes measure.
     qreal m_pixelsPerMeter = kReferencePixelsPerMeter;
-    // kReferencePixelsPerMeter / m_pixelsPerMeter. Applied to gravity and
-    // velocity so that changing the scale changes the sizes the solver sees
-    // without changing anything on screen.
-    qreal m_motionScale = 1.0;
 
     // Joints, indexed by the JointHandle handed back.
     QVector<b2JointId> m_joints;

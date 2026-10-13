@@ -12,6 +12,7 @@
 #include "Rule.h"
 #include "ShapeItem.h"
 #include "RulerWidget.h"
+#include "PlotPanel.h"
 #include "PropertyPanel.h"
 #include "SceneTree.h"
 #include "RulesPanel.h"
@@ -145,12 +146,19 @@ MainWindow::MainWindow(QWidget *parent)
     m_ui->leftRuler->setOrientation(RulerWidget::Orientation::Vertical);
     m_ui->leftRuler->setView(m_ui->canvasView);
 
+    buildSidePanelTabs();
     m_ui->propertyPanel->setScene(m_scene);
     m_ui->sceneTree->setScene(m_scene);
     m_ui->rulesPanel->setScene(m_scene);
     m_ui->variablesPanel->setScene(m_scene);
     connect(m_ui->rulesPanel, &RulesPanel::incompleteCountChanged, this,
             &MainWindow::showIncompleteRules);
+    // Following a rule back to what it names: the scene selects it, and the
+    // panel that shows a selection comes to the front.
+    connect(m_ui->rulesPanel, &RulesPanel::revealRequested, this, [this](const QString &name) {
+        if (m_scene->revealObjectNamed(name))
+            m_ui->sidePanel->setCurrentWidget(m_ui->propertyPanel);
+    });
     showIncompleteRules(m_ui->rulesPanel->incompleteCount());
 
     // Kept, because the transport controls do not exist yet: they are built
@@ -166,8 +174,11 @@ MainWindow::MainWindow(QWidget *parent)
 
     const QRect availableGeometry = QGuiApplication::primaryScreen()->availableGeometry();
     resize(availableGeometry.width() * 0.75, availableGeometry.height() * 0.8);
-    m_ui->propertyDock->setMinimumWidth(static_cast<int>(width() * 0.17));
-    resizeDocks({m_ui->propertyDock}, {static_cast<int>(width() * 0.25)}, Qt::Horizontal);
+    // The extra 30 px is for the panel's own furniture -- the tab strip's
+    // icons and the plot's left gutter -- which a plain fraction of the window
+    // does not account for.
+    m_ui->propertyDock->setMinimumWidth(static_cast<int>(width() * 0.17) + 30);
+    resizeDocks({m_ui->propertyDock}, {static_cast<int>(width() * 0.25) + 30}, Qt::Horizontal);
 
     QToolBar *toolBar = m_ui->toolBar;
     toolBar->setIconSize(QSize(kIconSize, kIconSize));
@@ -455,6 +466,10 @@ MainWindow::MainWindow(QWidget *parent)
                 if (!m_scene->physicsSelection().isEmpty())
                     showProperties();
             });
+    connect(m_scene, &CanvasScene::selectedRayChanged, this,
+            [showProperties](RayItem *ray) { if (ray) showProperties(); });
+    connect(m_scene, &CanvasScene::selectedExplosionChanged, this,
+            [showProperties](ExplosionItem *explosion) { if (explosion) showProperties(); });
     connect(m_scene, &CanvasScene::activeItemChanged, this,
             [showProperties](ShapeItem *item) { if (item) showProperties(); });
 
@@ -482,6 +497,19 @@ MainWindow::MainWindow(QWidget *parent)
     // does, so they are refreshed on the same beat.
     connect(m_simulation, &SimulationController::stepped,
             m_ui->propertyPanel, &PropertyPanel::refreshValues);
+    // The plot is fed by the run, not by this beat -- a sample a step is taken
+    // in the controller. All that happens here is a repaint, and only while
+    // the tab is the one showing.
+    m_ui->plotPanel->attach(m_scene, m_simulation);
+    const auto redrawPlot = [this] {
+        if (m_ui->sidePanel->currentWidget() == m_ui->plotPanel)
+            m_ui->plotPanel->refresh();
+    };
+    connect(m_simulation, &SimulationController::stepped, this, redrawPlot);
+    connect(m_simulation, &SimulationController::stateChanged, this, redrawPlot);
+    connect(m_scene, &CanvasScene::watchesChanged, this, redrawPlot);
+    connect(m_ui->sidePanel, &QTabWidget::currentChanged, this,
+            [this](int) { m_ui->plotPanel->refresh(); });
     updateLogOverlay();
 
     m_statusHelpLabel = new QLabel(this);
@@ -1392,6 +1420,117 @@ void MainWindow::applyLogStyle()
     placeLogOverlay();
 }
 
+// The tabs carry an icon and keep their name in a tooltip: five words across
+// a narrow panel left no room for any of them, and the names are only needed
+// while you are learning which is which.
+void MainWindow::buildSidePanelTabs()
+{
+    QTabWidget *tabs = m_ui->sidePanel;
+    const struct { QWidget *page; QIcon icon; } wanted[] = {
+        {m_ui->propertyPanel, Icons::properties()},
+        {m_ui->sceneTree, Icons::objects()},
+        {m_ui->rulesPanel, Icons::rules()},
+        {m_ui->variablesPanel, Icons::variable()},
+        {m_ui->plotPanel, Icons::plot()},
+    };
+    for (const auto &one : wanted) {
+        const int at = tabs->indexOf(one.page);
+        if (at < 0)
+            continue;
+        const QString name = tabs->tabText(at);
+        one.page->setProperty("tabName", name);
+        one.page->setProperty("tabIcon", QVariant::fromValue(one.icon));
+        tabs->setTabIcon(at, one.icon);
+        tabs->setTabText(at, QString());
+        tabs->setTabToolTip(at, name);
+    }
+    tabs->setIconSize(QSize(20, 20));
+
+    // View says which panels to keep. Built when it opens rather than once,
+    // so it cannot drift from what is actually on the strip.
+    connect(m_ui->menuView, &QMenu::aboutToShow, this, [this] {
+        m_ui->menuView->clear();
+        for (QWidget *page : { static_cast<QWidget *>(m_ui->propertyPanel),
+                               static_cast<QWidget *>(m_ui->sceneTree),
+                               static_cast<QWidget *>(m_ui->rulesPanel),
+                               static_cast<QWidget *>(m_ui->variablesPanel),
+                               static_cast<QWidget *>(m_ui->plotPanel) }) {
+            const QString name = page->property("tabName").toString();
+            if (name.isEmpty())
+                continue;
+            QAction *action = m_ui->menuView->addAction(name);
+            action->setCheckable(true);
+            action->setChecked(!m_hiddenTabs.contains(name));
+            connect(action, &QAction::toggled, this, [this, name](bool on) {
+                if (on)
+                    m_hiddenTabs.removeAll(name);
+                else if (!m_hiddenTabs.contains(name))
+                    m_hiddenTabs.append(name);
+                applyVisibleTabs();
+            });
+        }
+    });
+
+    m_hiddenTabs = QSettings(settingsFilePath(), QSettings::IniFormat)
+                       .value(QStringLiteral("Panels/hidden"))
+                       .toStringList();
+    if (!m_hiddenTabs.isEmpty())
+        applyVisibleTabs();
+
+    connect(tabs, &QTabWidget::currentChanged, this,
+            [this](int) { updateSidePanelTabLabels(); });
+    updateSidePanelTabLabels();
+}
+
+// Rebuilt rather than hidden: QTabWidget has no "hide one tab", so the ones
+// that are not wanted are taken out and put back in their old order.
+// The tab you are looking at says what it is; the others are icons only. Five
+// names across a narrow panel left no room for any of them, and one name is
+// all that is ever being read.
+void MainWindow::updateSidePanelTabLabels()
+{
+    QTabWidget *tabs = m_ui->sidePanel;
+    for (int at = 0; at < tabs->count(); ++at) {
+        const QString name = tabs->widget(at)->property("tabName").toString();
+        tabs->setTabText(at, at == tabs->currentIndex() ? name : QString());
+    }
+}
+
+void MainWindow::applyVisibleTabs()
+{
+    QSettings(settingsFilePath(), QSettings::IniFormat)
+        .setValue(QStringLiteral("Panels/hidden"), m_hiddenTabs);
+
+    QTabWidget *tabs = m_ui->sidePanel;
+    QWidget *was = tabs->currentWidget();
+    const QVector<QWidget *> order = { m_ui->propertyPanel, m_ui->sceneTree, m_ui->rulesPanel,
+                                       m_ui->variablesPanel, m_ui->plotPanel };
+    for (QWidget *page : order) {
+        const int at = tabs->indexOf(page);
+        if (at >= 0)
+            tabs->removeTab(at);
+    }
+    for (QWidget *page : order) {
+        const QString name = page->property("tabName").toString();
+        if (m_hiddenTabs.contains(name)) {
+            page->hide();
+            continue;
+        }
+        const int at = tabs->addTab(page, QString());
+        tabs->setTabIcon(at, page->property("tabIcon").value<QIcon>());
+        tabs->setTabToolTip(at, name);
+    }
+    // Never leave none of them: a panel with no tabs cannot be got back.
+    if (tabs->count() == 0) {
+        m_hiddenTabs.removeAll(m_ui->propertyPanel->property("tabName").toString());
+        applyVisibleTabs();
+        return;
+    }
+    if (was && tabs->indexOf(was) >= 0)
+        tabs->setCurrentWidget(was);
+    updateSidePanelTabLabels();
+}
+
 void MainWindow::updateLogOverlay()
 {
     if (!m_logOverlay)
@@ -1616,12 +1755,16 @@ void MainWindow::showIncompleteRules(int count)
     if (tab < 0)
         return;
 
-    m_ui->sidePanel->setTabText(tab, count > 0 ? tr("Rules (%1)").arg(count) : tr("Rules"));
-    m_ui->sidePanel->setTabIcon(tab, count > 0 ? Icons::warning() : QIcon());
+    // The tabs carry icons, not names, so an unfinished rule swaps the icon
+    // for the warning rather than writing a count into a label that is not
+    // there -- and says how many in the tooltip, which is where the name went.
+    const QString name = m_ui->rulesPanel->property("tabName").toString();
+    m_ui->sidePanel->setTabIcon(tab, count > 0 ? Icons::warning() : Icons::rules());
+    updateSidePanelTabLabels();
     m_ui->sidePanel->setTabToolTip(
         tab,
-        count > 0 ? tr("%n rule(s) are unfinished and will not run.", nullptr, count)
-                  : QString());
+        count > 0 ? tr("%1 — %n rule(s) unfinished and will not run.", nullptr, count).arg(name)
+                  : name);
 }
 
 void MainWindow::onEditorModeChanged(EditorMode mode)

@@ -465,7 +465,7 @@ QVariant ChipmunkEngine::worldValue(const QString &key) const
 
     // Speeds and accelerations went in scaled so that the scene's scale leaves
     // the pace on screen alone; they come back out the same way.
-    const auto unscaled = [this](cpFloat value) { return value / m_motionScale; };
+    const auto unscaled = [this](cpFloat value) { return value; };
 
     if (key == QLatin1String("gravityX"))  return unscaled(cpSpaceGetGravity(m_space).x);
     if (key == QLatin1String("gravityY"))  return unscaled(cpSpaceGetGravity(m_space).y);
@@ -535,7 +535,7 @@ void ChipmunkEngine::setWorldParam(const QString &key, const QVariant &value)
     if (!m_space)
         return;
     const double number = value.toDouble();
-    const cpFloat scaled = number * m_motionScale;
+    const cpFloat scaled = number;
 
     if (key == QLatin1String("gravityX") || key == QLatin1String("gravityY")) {
         cpVect gravity = cpSpaceGetGravity(m_space);
