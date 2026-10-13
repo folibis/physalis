@@ -186,10 +186,20 @@ Click an empty part of the canvas to show the scene's own properties.
 
 - **Field Width**, **Field Height**, the background colour and the grid set
   the size and look of the field.
-- **Pixels per Meter** sets the scale: how many canvas units make one metre
-  in the simulation. It matters because real physics works in metres and
-  kilograms. At the common setting of 1000, a 40×40 box is 4 cm wide and weighs
-  a couple of grams, so small forces already move things a lot.
+- **Pixels per Meter** sets the scale: how many canvas units make one metre in
+  the simulation. It is the only thing that says how big your drawing is, so it
+  decides every size, mass and distance in the scene. **Choose it for the size
+  of thing you are building, and leave it alone afterwards** -- changing it on a
+  finished scene re-declares everything in it.
+
+  At the default of 100, a 300-pixel shape is 3 metres. At 1000 the same shape
+  is 30 centimetres, weighs a hundredth as much, and behaves like the small
+  object it then is: it falls through the scene in a fraction of a second and
+  bounces quickly, because a short drop takes less time than a long one. If a
+  scene looks like it is running in fast-forward, it is almost always because
+  the scale says it is much smaller than it looks. Lower the number.
+
+  Gravity is not adjusted to match. 9.81 means 9.81 at every scale.
 - **Solid Field Bounds** puts invisible walls around the edge of the field,
   so nothing can fall out of it.
 - **Gravity X** and **Gravity Y** set the direction and strength of gravity.

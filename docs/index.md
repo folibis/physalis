@@ -43,7 +43,10 @@ simulation controls and the zoom. On its right is the **Edit / Physics**
 switch, which chooses the mode you are working in. The toolbar only shows the
 tools that make sense in that mode.
 
-**The side panel** on the right has four tabs:
+**The side panel** on the right has five tabs. Each shows an icon; hover one
+to see its name, and the tab you are on shows its name beside the icon. Use
+**View** on the menu bar to hide any panel you do not use -- the choice is
+remembered.
 
 - **Properties** is where you inspect and change whatever is selected. Its
   contents follow the selection: a shape shows its size, position and
@@ -63,6 +66,9 @@ tools that make sense in that mode.
   rule starts and reads. Rules read and write them, and they can be watched in
   the log. See
   [Variables](rules.md#variables).
+- **Plot** draws the values you have marked for plotting against the run's own
+  clock, so you can see what a force or a position *did* rather than what it is
+  at this instant. See [Plotting values](running.md#plotting-values).
 
 **The status bar** at the bottom always describes the current selection and
 what can be done with it next. When you are unsure what to do, look there.
@@ -97,7 +103,8 @@ example, has **Body**, **Shape** and **Collision** pages.
   During a simulation they show the live value and update as it runs.
 - **Hover over a name** to see an explanation of the property.
 - **Right-click a name** and choose **Add to Log** to watch that value during a
-  simulation. Logged values are listed in the top-left corner of the canvas
+  simulation, or **Add to Log as Plot** to record it and draw it on the **Plot**
+  tab as well. Logged values are listed in the top-left corner of the canvas
   while the simulation runs. See [Watching values](running.md#watching-values).
 
 ## A scene from start to finish

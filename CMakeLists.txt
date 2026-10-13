@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(Physalis VERSION 0.1.4 LANGUAGES C CXX)
+project(Physalis VERSION 0.1.5 LANGUAGES C CXX)
 
 # windres is beside the compiler but rarely on PATH; the bare name fails at build time.
 if(WIN32 AND MINGW)

@@ -133,3 +133,10 @@ engine it uses: **turning** joints (hinges), joints that **hold a length**
 **without anchors** (such as gears). Each kind's colour and line style, and how
 transparent the anchors are, can be changed in
 [Options → Joints](options.md).
+
+**A joint whose spring is switched on is drawn as a coil** rather than a plain
+shaft, so you can see at a glance which joints give and which hold. How many
+turns it has comes from its rest length, so a long spring has more of them than
+a short one; from then on the count stays put, and the turns spread as the
+joint is pulled and pack together as it is squashed, the way a real spring
+does. Set the pitch and width of the coil in [Options → Joints](options.md).

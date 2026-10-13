@@ -74,14 +74,62 @@ writes into its drawing list -- which is why `SceneExporter` hands converters
 each property's `role`, by name rather than by number.
 
 **The log says what a value is; a plot says what it did.** A `CanvasScene::Watch`
-carries `plotted`, and `SimulationController::samplePlots` takes one sample of
-each marked watch per *step* -- not per frame, because a frame is not a step:
-at x4 it is four of them, and a scene that cannot keep up drops some. The
-samples belong to the run and go when it stops. A series fills at 20000 points,
-and then every series is halved and the stride doubled, so a run of any length
-keeps its whole shape rather than stopping at an arbitrary minute. `PlotPanel`
-keeps nothing and only draws; each trace carries its own vertical scale, since
-a force in newtons and a position in scene units share no axis worth sharing.
+carries `plotted` -- "Add to Log as Plot", or "Plot as Well" on one already
+logged -- and `SimulationController::samplePlots` takes one sample of each
+marked watch per *step*, not per frame: a frame is not a step, at x4 it is four
+of them, and a scene that cannot keep up drops some. The samples belong to the
+run and go when it stops. A series fills at 20000 points, and then every series
+is halved and the stride doubled, so a run of any length keeps its whole shape
+rather than stopping at an arbitrary minute.
+
+`PlotPanel` keeps nothing and only draws. One band per trace, each with its own
+vertical axis: a force in newtons and a position in scene units share no axis
+worth sharing. **That axis spans the whole trace, not the part on screen** --
+scoped to the window it moved under every new sample, and a scale that shifts
+as you watch is one you cannot read a value off. The time axis is the one they
+do share and is drawn once, under the last band. It shows **five seconds and
+scrolls with the run**, since a minute squeezed into a tab is a solid block:
+the wheel widens or narrows that window, dragging walks back through the run,
+and the right-click menu clears the traces, fits the whole run, or writes them
+out as CSV (one shared time column, since every series is sampled on the same
+step) or as a PNG.
+
+
+**`pixelsPerMeter` converts, and does nothing else.** Scene units to metres on
+the way into the engine, metres back to scene units on the way out. Gravity is
+handed over as it stands -- 9.81 is 9.81 -- and so are the speed thresholds.
+
+There was a `m_motionScale` of `50 / pixelsPerMeter` on gravity and five
+thresholds, so that changing the scale left the motion on screen alone. It is
+gone. It made the scale a clock as well as a ruler and made the "m/s^2" on the
+gravity row true only at 50 px per metre. What it bought is real and is now
+yours to manage: `pixelsPerMeter` says how big the drawing *is*, so changing it
+on a finished scene re-declares every size, mass and distance in it. A 425 px
+gap is 4.25 m at 100 and 0.425 m at 1000, and the second one falls in a third
+of the time -- correctly. Pick the scale for the size of thing being built and
+leave it: **100 is the default**, which makes a few hundred pixels a few
+metres. At 1000 the same drawing is a tabletop, and a tabletop bounces like one.
+
+The steps in the catalogues are sized for that default -- a square metre of the
+default density weighs about 10 N, so a force steps by 1 and a spring frequency
+by half a hertz, which is a spring you can see. They are static: the catalogue
+is built without knowing the scene's scale, so a scene at a very different one
+wants different numbers. Making them follow `pixelsPerMeter` needs the scale to
+reach the engine before the catalogue is asked.
+
+**The side panel's tabs are icons.** Five names across a narrow panel left no
+room for any of them, so each tab keeps its name in a tooltip and only the one
+you are on spells it out (`MainWindow::updateSidePanelTabLabels`). **View** on
+the menu bar is a checkbox per panel; unchecking one takes its tab out --
+`QTabWidget` cannot hide a tab, so `applyVisibleTabs` removes them all and puts
+back the ones wanted, in order -- and the choice is remembered under
+`Panels/hidden`. It refuses to leave none.
+
+**A rule can be followed back to what it names.** Double-click an object box on
+a rule card, or take it from its context menu, and `CanvasScene::revealObjectNamed`
+selects whatever answers to that name -- shape, body, joint, ray or explosion --
+and the Properties tab comes forward. Selecting any of those on the canvas or
+in the Objects tree does the same.
 
 ## Layout
 

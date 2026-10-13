@@ -56,8 +56,12 @@ shapes.
 - **Joint Drawing** sets how joints are drawn: their colours, the size of the
   anchor rings, and how transparent the anchors are (**Anchor opacity**), so
   the shapes under them stay visible.
-- **Joint Type Colors** gives each kind of joint its own colour and line
+- **Joint Type** gives each kind of joint its own colour and line
   style: turning, holding a length, sliding, fixed, and without anchors.
+- **Springs** controls joints whose spring is on, which are drawn as coils:
+  whether to draw them that way at all, the **Coil pitch** (how much rest
+  length one turn stands for -- smaller gives a finer spring with more turns)
+  and the **Coil width**.
 - **Joint Selection** sets how a selected joint is outlined.
 
 ## Export

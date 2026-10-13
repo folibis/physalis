@@ -75,6 +75,34 @@ to watch a score count up, or a timer count on, while the scene runs.
 The log is also the quickest way to find out why a [rule](rules.md) does or
 does not fire: watch the value the rule compares.
 
+## Plotting values
+
+A logged value shows one number at a time. To see what it did over the whole
+run, right-click its name and choose **Add to Log as Plot** -- or, if it is
+already logged, **Plot as Well**. It is then drawn on the **Plot** tab.
+
+Each value gets a band of its own, with its own vertical scale: a force in
+newtons and a position in scene units share no scale worth sharing. The band is
+labelled with the object and property it belongs to and the value at the end of
+the trace. The vertical scale covers everything the value has reached since the
+run started, so it does not shift under you as new samples arrive.
+
+The plot shows the last **five seconds** and scrolls along with the run, since
+a whole minute squeezed into the panel is a solid block. To look elsewhere:
+
+- **Mouse wheel** -- show more or less time at once.
+- **Drag sideways** -- walk back through the run.
+- **Right-click** for **Show Whole Run**, to fit all of it at once; **Clear
+  Traces**, to start recording again from here; and **Save as CSV...** or
+  **Save as Image...**.
+
+The CSV has one time column and a column per value, so it opens in a
+spreadsheet as it stands. A sample is taken on every simulation step rather
+than every drawn frame, so the trace is the same whatever speed the run was
+played at, and a scene too heavy to draw smoothly still records every step.
+
+Traces belong to the run: pressing **Simulate** again starts fresh ones.
+
 ## The slingshot
 
 Any dynamic body can be flung with the mouse during a run, like a ball hit with

@@ -27,6 +27,11 @@ are carried out in the order they are listed.
 
 Below that, the card has three parts: **When**, **Then** and **Do**.
 
+A rule names objects, and those names are the way back to them: **double-click**
+any object box on a card -- or right-click it and choose **Show** -- to select
+that object and bring up its properties. It works for whatever the rule names:
+a shape, a body, a joint, a ray or an explosion.
+
 ## More than one condition, more than one action
 
 The **+** beside the **When** row adds another condition, and a small **and**
