@@ -276,18 +276,17 @@
             "physics": {
             },
             "shapes": [
-                30,
-                29
+                2
             ],
             "type": "dynamic"
         },
         {
             "isEnabled": true,
-            "name": "body_46",
+            "name": "body_45",
             "physics": {
             },
             "shapes": [
-                2
+                29
             ],
             "type": "dynamic"
         }
@@ -1145,56 +1144,21 @@
         },
         {
             "anchorA": {
-                "x": -100,
-                "y": 200
+                "x": 151.875,
+                "y": 399.375
             },
             "anchorB": {
-                "x": -100,
-                "y": 200
+                "x": 151.875,
+                "y": 399.375
             },
             "axis": {
-                "x": 0.855505943429372,
-                "y": -0.5177929902548122
+                "x": -0.7071067811865476,
+                "y": -0.7071067811865476
             },
-            "bodyA": "body_1",
-            "bodyB": "body_44",
-            "collideConnected": false,
-            "name": "dumper",
-            "params": {
-                "constraintDampingRatio": 2,
-                "constraintHertz": 60,
-                "dampingRatio": 0.45,
-                "drawSize": 0.25,
-                "enableLimit": false,
-                "enableMotor": false,
-                "enableSpring": true,
-                "hertz": 2,
-                "lowerAngle": 0,
-                "maxMotorTorque": 70,
-                "motorSpeed": -20,
-                "referenceAngle": 0,
-                "targetAngle": 0,
-                "upperAngle": 0
-            },
-            "type": "revolute"
-        },
-        {
-            "anchorA": {
-                "x": 149.52380952380952,
-                "y": 400.9523809523809
-            },
-            "anchorB": {
-                "x": 149.52380952380952,
-                "y": 400.9523809523809
-            },
-            "axis": {
-                "x": 0.3511234415883925,
-                "y": 0.9363291775690442
-            },
-            "bodyA": "body_43",
-            "bodyB": "body_46",
+            "bodyA": "body_44",
+            "bodyB": "body_43",
             "collideConnected": true,
-            "name": "revolute_41",
+            "name": "revolute_39",
             "params": {
                 "constraintDampingRatio": 2,
                 "constraintHertz": 60,
@@ -1215,6 +1179,40 @@
         },
         {
             "anchorA": {
+                "x": 40,
+                "y": 320
+            },
+            "anchorB": {
+                "x": -20,
+                "y": 320
+            },
+            "axis": {
+                "x": 1,
+                "y": 0
+            },
+            "bodyA": "body_44",
+            "bodyB": "body_45",
+            "collideConnected": false,
+            "name": "dumper",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0.1,
+                "enableLimit": true,
+                "enableMotor": false,
+                "enableSpring": true,
+                "hertz": 2,
+                "lowerTranslation": 1,
+                "maxMotorForce": 0,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetTranslation": 3,
+                "upperTranslation": 47
+            },
+            "type": "prismatic"
+        },
+        {
+            "anchorA": {
                 "x": 400,
                 "y": 440
             },
@@ -1223,13 +1221,13 @@
                 "y": 440
             },
             "axis": {
-                "x": -0.9068346612107668,
-                "y": -0.4214865326754271
+                "x": -0.894427190999916,
+                "y": -0.447213595499958
             },
             "bodyA": "body_20",
-            "bodyB": "body_46",
+            "bodyB": "body_44",
             "collideConnected": true,
-            "name": "revolute_43",
+            "name": "revolute_40",
             "params": {
                 "constraintDampingRatio": 2,
                 "constraintHertz": 60,
@@ -1251,16 +1249,10 @@
     ],
     "log": [
         {
-            "label": "open_hatch",
-            "object": "@variables",
-            "plotted": false,
-            "property": "open_hatch"
-        },
-        {
-            "label": "Angle (deg)",
+            "label": "Translation (px)",
             "object": "dumper",
-            "plotted": false,
-            "property": "angle"
+            "plotted": true,
+            "property": "translation"
         }
     ],
     "rules": [
@@ -1281,27 +1273,13 @@
             "when": 200
         },
         {
-            "actions": [
-                {
-                    "op": "set",
-                    "property": "motorSpeed",
-                    "target": "hatch",
-                    "value": -20
-                },
-                {
-                    "op": "set",
-                    "property": "open_hatch",
-                    "target": "@variables",
-                    "value": true
-                }
-            ],
-            "compare": "<",
+            "compare": ">",
             "conditions": [
                 {
-                    "compare": "<",
+                    "compare": ">",
                     "subject": "dumper",
-                    "watch": "angle",
-                    "when": -5
+                    "watch": "translation",
+                    "when": 18
                 },
                 {
                     "compare": "=",
@@ -1311,78 +1289,36 @@
                 }
             ],
             "join": "all",
+            "name": "dumper full",
+            "op": "set",
+            "property": "open_hatch",
+            "subject": "dumper",
+            "target": "@variables",
+            "value": true,
+            "watch": "translation",
+            "when": 18
+        },
+        {
+            "compare": "->",
             "name": "hatch open",
             "op": "set",
             "property": "motorSpeed",
-            "subject": "dumper",
+            "subject": "@variables",
             "target": "hatch",
-            "value": -20,
-            "watch": "angle",
-            "when": -5
+            "value": -10,
+            "watch": "open_hatch",
+            "when": true
         },
         {
-            "actions": [
-                {
-                    "op": "set",
-                    "property": "motorSpeed",
-                    "target": "hatch",
-                    "value": 0
-                },
-                {
-                    "op": "set",
-                    "property": "enableMotor",
-                    "target": "dumper",
-                    "value": true
-                }
-            ],
             "compare": "<",
-            "name": "hatch stop",
+            "name": "hatch closing",
             "op": "set",
             "property": "motorSpeed",
             "subject": "hatch",
             "target": "hatch",
-            "value": 0,
+            "value": 10,
             "watch": "angle",
-            "when": -160
-        },
-        {
-            "compare": "<",
-            "name": "dumper close",
-            "op": "negate",
-            "property": "motorSpeed",
-            "subject": "dumper",
-            "target": "dumper",
-            "watch": "angle",
-            "when": -60
-        },
-        {
-            "actions": [
-                {
-                    "op": "negate",
-                    "property": "motorSpeed",
-                    "target": "dumper"
-                },
-                {
-                    "op": "set",
-                    "property": "enableMotor",
-                    "target": "dumper",
-                    "value": false
-                },
-                {
-                    "op": "set",
-                    "property": "motorSpeed",
-                    "target": "hatch",
-                    "value": 20
-                }
-            ],
-            "compare": ">",
-            "name": "dumper stop",
-            "op": "negate",
-            "property": "motorSpeed",
-            "subject": "dumper",
-            "target": "dumper",
-            "watch": "angle",
-            "when": 1
+            "when": -165
         },
         {
             "actions": [
@@ -1502,7 +1438,7 @@
             ],
             "pos": {
                 "x": -459,
-                "y": 339
+                "y": 299
             },
             "rect": {
                 "height": 100,
@@ -2221,51 +2157,23 @@
             "filled": true,
             "id": 29,
             "joinStyle": "round",
-            "name": "circle_38",
+            "name": "rectangle_4",
             "origin": {
-                "x": 0,
-                "y": 0
+                "x": -90,
+                "y": -20
             },
             "outline": false,
             "physics": {
             },
             "pos": {
-                "x": -100,
-                "y": 200
+                "x": 60,
+                "y": 350
             },
             "rect": {
-                "height": 80,
-                "width": 80,
-                "x": -40,
-                "y": -40
-            },
-            "rotation": 0,
-            "smoothChain": false,
-            "type": "circle"
-        },
-        {
-            "capStyle": "round",
-            "cornerRadius": 10,
-            "filled": true,
-            "id": 30,
-            "joinStyle": "round",
-            "name": "rectangle_3",
-            "origin": {
-                "x": 0,
-                "y": 0
-            },
-            "outline": false,
-            "physics": {
-            },
-            "pos": {
-                "x": -199,
-                "y": 290
-            },
-            "rect": {
-                "height": 160,
+                "height": 140,
                 "width": 20,
-                "x": 89,
-                "y": -50
+                "x": -100,
+                "y": -90
             },
             "rotation": 0,
             "smoothChain": false,

@@ -21,6 +21,8 @@
 #include <cstdio>
 #include "PropertyPanel.h"
 #include <QTabWidget>
+#include "PropertyPane/ExplosionPropertyPane.h"
+#include "Joint.h"
 #include <gtest/gtest.h>
 #include "EditorMode.h"
 
@@ -1289,4 +1291,98 @@ TEST(Rules, ClickingARayOrExplosionShowsItInEitherMode)
             << " mode showed " << sections.join(QLatin1Char(',')).toStdString()
             << " instead of the explosion";
     }
+}
+
+// Anything a rule can name can be watched. Explosions and rays were in the
+// object lists but nothing they carry could be put in the log: their rows went
+// out with no engine key, and the scene could not read one back by name.
+TEST(Rules, AnExplosionAndARayCanBeLogged)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setEditorMode(EditorMode::Physics);
+
+    ExplosionItem *boom = scene.addExplosion(QPointF(40, 40));
+    ASSERT_TRUE(boom);
+    RayItem *ray = scene.addRay(QPointF(-60, 0));
+    ASSERT_TRUE(ray);
+
+    // Every row the explosion offers that carries an engine key reads back.
+    scene.selectExplosion(boom);
+    ExplosionPropertyPane pane;
+    pane.attach(&scene);
+    int readable = 0;
+    for (const PropertyRow &row : pane.rows(EditorMode::Physics)) {
+        if (row.key.isEmpty())
+            continue;
+        ++readable;
+        EXPECT_TRUE(scene.readSceneValue(boom->name(), row.key).isValid())
+            << "explosion " << row.key.toStdString() << " cannot be read for the log";
+    }
+    EXPECT_GT(readable, 0) << "no explosion row carries a key, so none can be logged";
+
+    scene.selectExplosion(nullptr);
+    scene.selectRay(ray);
+    ray->setAngleDegrees(30.0);
+    ray->setLength(250.0);
+    EXPECT_TRUE(scene.readSceneValue(ray->name(), QStringLiteral("angle")).isValid());
+    EXPECT_NEAR(scene.readSceneValue(ray->name(), QStringLiteral("length")).toDouble(), 250.0, 1e-6);
+}
+
+// A watch outlives nothing: when its object goes, or when the joint that bears
+// its name no longer has that reading, it goes too. A log row reading "--"
+// for the rest of the scene's life is worse than no row.
+TEST(Rules, TheLogForgetsWhatIsNoLongerThere)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setEditorMode(EditorMode::Physics);
+
+    auto *topShape = new RectangleItem;
+    topShape->setRect(QRectF(0, 0, 40, 40));
+    topShape->setName(QStringLiteral("top"));
+    scene.addItem(topShape);
+    auto *lowShape = new RectangleItem;
+    lowShape->setRect(QRectF(0, 0, 40, 40));
+    lowShape->setPos(0, 120);
+    lowShape->setName(QStringLiteral("low"));
+    scene.addItem(lowShape);
+    scene.notifyShapesChanged();
+
+    scene.selectForPhysics(topShape, true);
+    PhysicsBody *top = scene.createBodyFromSelection();
+    scene.clearPhysicsSelection();
+    scene.selectForPhysics(lowShape, true);
+    PhysicsBody *low = scene.createBodyFromSelection();
+    scene.clearPhysicsSelection();
+
+    Joint *hinge = scene.createJoint(QStringLiteral("revolute"), top, low, 1, {});
+    ASSERT_TRUE(hinge);
+    ExplosionItem *boom = scene.addExplosion(QPointF(80, 80));
+    ASSERT_TRUE(boom);
+
+    scene.addWatch({hinge->name(), QStringLiteral("angle"), QStringLiteral("Angle"), false});
+    // A hinge has no translation; a sliding joint does.
+    scene.addWatch({hinge->name(), QStringLiteral("translation"), QStringLiteral("Travel"), false});
+    scene.addWatch({boom->name(), QStringLiteral("radius"), QStringLiteral("Radius"), false});
+    scene.addWatch({Rule::world(), QStringLiteral("time"), QStringLiteral("Elapsed"), false});
+
+    scene.pruneWatches();
+    EXPECT_TRUE(scene.isWatched(hinge->name(), QStringLiteral("angle")))
+        << "a hinge's angle was thrown away";
+    EXPECT_FALSE(scene.isWatched(hinge->name(), QStringLiteral("translation")))
+        << "a hinge has no translation, and the log kept watching one";
+    EXPECT_TRUE(scene.isWatched(Rule::world(), QStringLiteral("time")))
+        << "the world is not an object and outlives every one of them";
+
+    // And when the object itself goes.
+    const QString gone = hinge->name();
+    scene.destroyJoint(hinge);
+    EXPECT_FALSE(scene.isWatched(gone, QStringLiteral("angle")))
+        << "the joint was deleted and its log row stayed";
+
+    scene.removeExplosion(boom);
+    EXPECT_FALSE(scene.isWatched(QStringLiteral("explosion_1"), QStringLiteral("radius")))
+        << "the explosion was deleted and its log row stayed";
+    EXPECT_TRUE(scene.isWatched(Rule::world(), QStringLiteral("time")));
 }

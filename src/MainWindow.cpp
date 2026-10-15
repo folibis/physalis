@@ -1,3 +1,5 @@
+#include "AssetFolder.h"
+#include "HelpWindow.h"
 #include "MainWindow.h"
 
 #include "AboutDialog.h"
@@ -206,6 +208,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     buildAlignMenu();
     rebuildRecentMenu();
+    buildExamplesMenu();
+    buildDocumentationMenu();
 
     // The dividers travel with their group, so a hidden group leaves no line.
     m_editModeActions << m_ui->actionAddShape << m_ui->actionDelete
@@ -1874,6 +1878,87 @@ void MainWindow::rememberRecent(const QString &path)
     rebuildRecentMenu();
 }
 
+// The examples are read from beside the program, the same place the export
+// converters come from. A copy built from source has them there too, and one
+// without them shows no menu at all -- an "Examples" that opens onto nothing
+// is worse than no entry.
+void MainWindow::buildExamplesMenu()
+{
+    if (!m_ui->menuExamples)
+        return;
+
+    m_ui->menuExamples->clear();
+    const QFileInfoList found =
+        QDir(assetFolder(QStringLiteral("examples")))
+            .entryInfoList({QStringLiteral("*.phys")}, QDir::Files, QDir::Name);
+    if (found.isEmpty()) {
+        m_ui->menuExamples->menuAction()->setVisible(false);
+        return;
+    }
+
+    m_ui->menuExamples->menuAction()->setVisible(true);
+    for (const QFileInfo &file : found) {
+        // By its file name, tidied: "ball_catcher" reads as "Ball catcher".
+        QString label = file.completeBaseName();
+        label.replace(QLatin1Char('_'), QLatin1Char(' '));
+        if (!label.isEmpty())
+            label[0] = label[0].toUpper();
+
+        const QString path = file.absoluteFilePath();
+        QAction *action = m_ui->menuExamples->addAction(label);
+        action->setStatusTip(QDir::toNativeSeparators(path));
+        action->setToolTip(QDir::toNativeSeparators(path));
+        connect(action, &QAction::triggered, this, [this, path] {
+            if (confirmDiscardChanges(tr("Load Scene")))
+                openScene(path);
+        });
+    }
+}
+
+// The same rule as the examples: the pages ship beside the program, and a copy
+// without them says nothing rather than offering an empty menu.
+void MainWindow::buildDocumentationMenu()
+{
+    if (!m_ui->menuDocumentation)
+        return;
+
+    m_ui->menuDocumentation->clear();
+    const QString folder = HelpWindow::documentationFolder();
+    if (folder.isEmpty()) {
+        m_ui->menuDocumentation->menuAction()->setVisible(false);
+        return;
+    }
+
+    m_ui->menuDocumentation->menuAction()->setVisible(true);
+    for (const QFileInfo &file : QDir(folder).entryInfoList({QStringLiteral("*.md")},
+                                                            QDir::Files, QDir::Name)) {
+        // Named by the page's own title where it has one, so the menu reads
+        // the way the documentation does.
+        QFile source(file.absoluteFilePath());
+        QString title = file.completeBaseName();
+        if (source.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream in(&source);
+            if (in.readLine().trimmed() == QLatin1String("---")) {
+                while (!in.atEnd()) {
+                    const QString line = in.readLine();
+                    if (line.trimmed() == QLatin1String("---"))
+                        break;
+                    if (line.startsWith(QLatin1String("title:")))
+                        title = line.mid(6).trimmed();
+                }
+            }
+        }
+
+        const QString name = file.fileName();
+        connect(m_ui->menuDocumentation->addAction(title), &QAction::triggered, this,
+                [this, name] {
+                    if (!m_help)
+                        m_help = new HelpWindow(this);
+                    m_help->showPage(name);
+                });
+    }
+}
+
 void MainWindow::rebuildRecentMenu()
 {
     if (!m_ui->menuRecent)
@@ -2563,10 +2648,9 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
     s.undoDepth = settings.value("undoDepth", s.undoDepth).toInt();
     // An installed copy ships the converters beside the program, so that is
     // where a settings file with nothing to say about them points.
-    const QString besideTheProgram =
-        QCoreApplication::applicationDirPath() + QStringLiteral("/exporters");
-    if (QFileInfo::exists(besideTheProgram))
-        s.converterPath = besideTheProgram;
+    const QString shipped = assetFolder(QStringLiteral("exporters"));
+    if (!shipped.isEmpty())
+        s.converterPath = shipped;
     s.converterPath = settings.value("converterPath", s.converterPath).toString();
 
     // One group per converter, keyed by its folder name. Read back whole

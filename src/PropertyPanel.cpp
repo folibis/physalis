@@ -481,6 +481,12 @@ QString PropertyPanel::objectNameFor(const QString &section) const
         return QString();
     }
 
+    if (section == QLatin1String("Explosion")) {
+        if (ExplosionItem *explosion = m_scene->selectedExplosion())
+            return explosion->name();
+        return QString();
+    }
+
     if (section == QLatin1String("Shape") || section == QLatin1String("Collision")) {
         if (!m_scene->physicsSelection().isEmpty())
             return m_scene->physicsSelection().first()->name();

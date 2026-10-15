@@ -415,6 +415,10 @@ public:
     const QVector<Watch> &watches() const { return m_watches; }
     void addWatch(const Watch &watch);
     void setWatchPlotted(const QString &objectName, const QString &propertyKey, bool plotted);
+    // Drops every watch whose object has gone, and every watch on a property
+    // its object no longer has -- a joint that changes type keeps its name and
+    // loses half its readings. Called wherever either can happen.
+    void pruneWatches();
     bool isPlotted(const QString &objectName, const QString &propertyKey) const;
     void removeWatch(const QString &objectName, const QString &propertyKey);
     bool isWatched(const QString &objectName, const QString &propertyKey) const;

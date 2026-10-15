@@ -18,6 +18,7 @@ namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
 class CanvasScene;
+class HelpWindow;
 class ShapeItem;
 class QGraphicsView;
 class QAction;
@@ -152,6 +153,8 @@ private:
     void updateSidePanelTabLabels();
     QStringList m_hiddenTabs;
 
+    HelpWindow *m_help = nullptr;
+
     CanvasScene *m_scene = nullptr;
     UndoStack *m_undo = nullptr;
     // What the canvas draws -- see the kLayer* keys in MainWindow.cpp.
@@ -227,6 +230,9 @@ private:
     QStringList m_recentFiles;
     void rememberRecent(const QString &path);
     void rebuildRecentMenu();
+    // The scenes shipped with the program. Nothing there, nothing offered.
+    void buildExamplesMenu();
+    void buildDocumentationMenu();
     // Where the last screenshot went, so the next one is offered beside it.
     QString m_lastScreenshotPath;
     int m_pasteCount = 0;

@@ -79,6 +79,7 @@ std::vector<PropertyRow> ExplosionPropertyPane::rows(EditorMode mode) const
                 row.maxValue = param.maxValue;
                 row.decimals = param.decimals;
                 row.step = param.step;
+                row.key = key;
                 row.section = section;
                 row.defaultValue = param.defaultValue;
                 row.tooltip = param.tooltip;

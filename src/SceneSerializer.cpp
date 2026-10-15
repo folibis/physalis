@@ -757,6 +757,10 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
             watches.append(watch);
     }
     scene->setWatches(watches);
+    // A file can name a property its object no longer has -- a joint replaced
+    // by one of another kind under the same name keeps the log row and loses
+    // the reading behind it, which then shows as a permanent "--".
+    scene->pruneWatches();
 
     return true;
 }

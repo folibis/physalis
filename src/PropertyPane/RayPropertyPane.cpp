@@ -64,6 +64,7 @@ std::vector<PropertyRow> RayPropertyPane::rows(EditorMode mode) const
     angle.maxValue = 3600.0;
     angle.decimals = 1;
     angle.step = 5.0;
+    angle.key = QStringLiteral("angle");
     angle.section = section;
     angle.defaultValue = 0.0;
     angle.tooltip = QObject::tr("Which way it looks. 0 points right, 90 points down.");
@@ -78,6 +79,7 @@ std::vector<PropertyRow> RayPropertyPane::rows(EditorMode mode) const
     length.maxValue = 1e6;
     length.decimals = 0;
     length.step = 10.0;
+    length.key = QStringLiteral("length");
     length.section = section;
     length.defaultValue = 300.0;
     length.tooltip = QObject::tr("How far it can see. Beyond this it reports nothing.");

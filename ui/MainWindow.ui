@@ -64,6 +64,7 @@
     <addaction name="actionNewScene"/>
     <addaction name="actionLoadScene"/>
     <addaction name="menuRecent"/>
+    <addaction name="menuExamples"/>
     <addaction name="actionSaveScene"/>
     <addaction name="actionSaveSceneAs"/>
     <addaction name="separator"/>
@@ -72,6 +73,11 @@
     <addaction name="actionOptions"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
+   </widget>
+   <widget class="QMenu" name="menuExamples">
+    <property name="title">
+     <string>&amp;Examples</string>
+    </property>
    </widget>
    <widget class="QMenu" name="menuRecent">
     <property name="title">
@@ -122,7 +128,14 @@
     <property name="title">
      <string>&amp;Help</string>
     </property>
+    <addaction name="menuDocumentation"/>
+    <addaction name="separator"/>
     <addaction name="actionAbout"/>
+   </widget>
+   <widget class="QMenu" name="menuDocumentation">
+    <property name="title">
+     <string>&amp;Documentation</string>
+    </property>
    </widget>
    <widget class="QMenu" name="menuView">
     <property name="title">

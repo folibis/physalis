@@ -108,6 +108,8 @@ option(WITH_BOX2D "Build the Box2D engine plugin" ON)
 option(WITH_CHIPMUNK "Build the Chipmunk2D engine plugin" ON)
 option(WITH_EXPORTER_BOX2D_QT "Install the box2d/Qt export converter" ON)
 option(WITH_EXPORTER_WASM "Install the box2d3wasm web page export converter" ON)
+option(WITH_EXAMPLES "Install the example scenes" ON)
+option(WITH_DOCS "Install the documentation" ON)
 
 option(WITH_TESTS "Build the test suite" ON)
 
@@ -174,6 +176,7 @@ add_library(PhysalisCore OBJECT
     src/RulesPanel.cpp
     src/VariablesPanel.h
     src/VariablesPanel.cpp
+    src/HelpWindow.cpp
     src/PlotPanel.cpp
     src/UndoStack.h
     src/UndoStack.cpp
@@ -284,6 +287,29 @@ endif()
 foreach(exporter IN LISTS PHYSALIS_EXPORTERS)
     install(DIRECTORY exporters/${exporter} DESTINATION ${PHYSALIS_INSTALL_DIR}/exporters)
 endforeach()
+
+# The example scenes go beside the program, where File -> Examples looks for
+# them. Copied into the build tree as well, so a development build offers the
+# same menu as an installed one rather than nothing at all.
+# The documentation is the same Markdown the website is built from, read by
+# Help -> Documentation. Pages and their pictures, nothing else.
+# Beside the program on Windows, where everything is flat; under share on a
+# Linux package, which is where read-only data belongs.
+if(WIN32 OR APPLE)
+    set(PHYSALIS_ASSET_DIR "${PHYSALIS_INSTALL_DIR}")
+else()
+    set(PHYSALIS_ASSET_DIR "${CMAKE_INSTALL_DATAROOTDIR}/physalis")
+endif()
+
+if(WITH_DOCS)
+    install(DIRECTORY docs/ DESTINATION ${PHYSALIS_ASSET_DIR}/docs
+            FILES_MATCHING PATTERN "*.md" PATTERN "images/*")
+endif()
+
+if(WITH_EXAMPLES)
+    install(DIRECTORY examples/ DESTINATION ${PHYSALIS_ASSET_DIR}/examples
+            FILES_MATCHING PATTERN "*.phys")
+endif()
 
 if(WIN32)
     get_target_property(PHYSALIS_QMAKE Qt${QT_VERSION_MAJOR}::qmake IMPORTED_LOCATION)

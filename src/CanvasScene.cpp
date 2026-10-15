@@ -254,6 +254,7 @@ void CanvasScene::removeExplosion(ExplosionItem *explosion)
     removeItem(explosion);
     delete explosion;
     emit explosionsChanged();
+    pruneWatches();
 }
 
 RayItem *CanvasScene::addRay(const QPointF &scenePos)
@@ -286,6 +287,7 @@ void CanvasScene::removeRay(RayItem *ray)
     removeItem(ray);
     delete ray;
     emit raysChanged();
+    pruneWatches();
 }
 
 RayItem *CanvasScene::rayNamed(const QString &name) const
@@ -803,6 +805,7 @@ void CanvasScene::destroyJoint(Joint *joint)
         emit selectedJointChanged(nullptr);
     }
     delete joint;
+    pruneWatches();
     update();
     emit jointsChanged();
 }
@@ -1519,6 +1522,7 @@ void CanvasScene::destroyBody(PhysicsBody *body, bool announce)
         emit bodiesChanged();
         emit physicsSelectionChanged();
     }
+    pruneWatches();
 }
 
 PhysicsBody *CanvasScene::commonSelectedBody() const
@@ -1657,6 +1661,98 @@ void CanvasScene::addWatch(const Watch &watch)
     // The loader uses setWatches() and so does not come through here.
     notifyEdit(tr("Add %1 to the log").arg(watch.label.isEmpty() ? watch.propertyKey
                                                                  : watch.label));
+}
+
+void CanvasScene::pruneWatches()
+{
+    if (m_watches.isEmpty())
+    {
+        return;
+    }
+
+    // What each joint type still answers to, asked once rather than per watch.
+    QHash<QString, QSet<QString>> keysByType;
+    if (auto engine = physics::EngineRegistry::create(describingEngineName()))
+    {
+        for (const physics::JointType &type : engine->jointTypes())
+        {
+            QSet<QString> keys;
+            for (const physics::JointParam &param : type.params)
+            {
+                keys.insert(param.key);
+            }
+            for (const physics::JointParam &param : engine->jointReadables(type.id))
+            {
+                keys.insert(param.key);
+            }
+            keysByType.insert(type.id, keys);
+        }
+    }
+
+    const auto stillThere = [&](const Watch &watch) {
+        // The world and the scene's own variables are not objects and outlive
+        // anything on the canvas.
+        if (watch.objectName == Rule::world() || watch.objectName == Rule::variables())
+        {
+            return true;
+        }
+        for (Joint *joint : std::as_const(m_joints))
+        {
+            if (joint->name() != watch.objectName)
+            {
+                continue;
+            }
+            const auto keys = keysByType.constFind(joint->typeId());
+            // An engine that says nothing about the type is no reason to throw
+            // the watch away; only a type that plainly lacks the key is.
+            return keys == keysByType.constEnd() || keys->contains(watch.propertyKey);
+        }
+        for (PhysicsBody *body : std::as_const(m_bodies))
+        {
+            if (body->name() == watch.objectName)
+            {
+                return true;
+            }
+        }
+        for (ShapeItem *shape : shapes())
+        {
+            if (shape->name() == watch.objectName)
+            {
+                return true;
+            }
+        }
+        for (RayItem *ray : std::as_const(m_rays))
+        {
+            if (ray->name() == watch.objectName)
+            {
+                return true;
+            }
+        }
+        for (ExplosionItem *explosion : std::as_const(m_explosions))
+        {
+            if (explosion->name() == watch.objectName)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    QVector<Watch> kept;
+    kept.reserve(m_watches.size());
+    for (const Watch &watch : std::as_const(m_watches))
+    {
+        if (stillThere(watch))
+        {
+            kept.append(watch);
+        }
+    }
+    if (kept.size() == m_watches.size())
+    {
+        return;
+    }
+    m_watches = kept;
+    emit watchesChanged();
 }
 
 void CanvasScene::setWatchPlotted(const QString &objectName, const QString &propertyKey,
@@ -1839,6 +1935,57 @@ QVariant CanvasScene::readSceneValue(const QString &objectName, const QString &k
 
     if (anyKind)
     {
+        // An explosion and a ray are named like everything else a rule can
+        // name, and what they carry is worth watching: how hard it goes off,
+        // how far it reaches, what the ray last hit.
+        for (ExplosionItem *explosion : m_explosions)
+        {
+            if (explosion->name() != objectName)
+            {
+                continue;
+            }
+            const auto it = explosion->params().constFind(what);
+            if (it != explosion->params().constEnd())
+            {
+                return *it;
+            }
+            // An explosion stores only what differs from the default, so an
+            // untouched setting is not in the map at all. The default is the
+            // engine's to state, the same way the property table gets it.
+            if (auto engine = physics::EngineRegistry::create(simulationEngineName()))
+            {
+                for (const physics::ActionType &action : engine->bodyActions())
+                {
+                    if (action.id != QLatin1String("explode"))
+                    {
+                        continue;
+                    }
+                    for (const physics::JointParam &param : action.params)
+                    {
+                        if (param.key == what)
+                        {
+                            return param.defaultValue;
+                        }
+                    }
+                }
+            }
+        }
+        for (RayItem *ray : m_rays)
+        {
+            if (ray->name() != objectName)
+            {
+                continue;
+            }
+            if (what == QLatin1String("angle"))
+            {
+                return ray->angleDegrees();
+            }
+            if (what == QLatin1String("length"))
+            {
+                return ray->length();
+            }
+        }
+
         for (Joint *joint : m_joints)
         {
             if (joint->name() != objectName)
