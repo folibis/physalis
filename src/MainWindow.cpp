@@ -30,6 +30,7 @@
 #include "SceneScreenshot.h"
 
 #include <QJsonArray>
+#include <QStringList>
 #include <QJsonObject>
 #include <QJsonValue>
 #include "SceneSerializer.h"
@@ -1937,10 +1938,12 @@ void MainWindow::buildToolsMenu()
             all = all.isNull() ? box : all.united(box);
         }
         const QVector<ToolOption> options {
-            { QStringLiteral("rows"), tr("Rows"), 1, 1, 200, 1, 0, {} },
-            { QStringLiteral("columns"), tr("Columns"), 2, 1, 200, 1, 0, {} },
-            { QStringLiteral("gapX"), tr("Gap across"), 20, -10000, 10000, 5, 1, {} },
-            { QStringLiteral("gapY"), tr("Gap down"), 20, -10000, 10000, 5, 1, {} },
+            { QStringLiteral("rows"), tr("Rows"), 1.0, 1.0, 200.0, 1.0, 0, {}, {} },
+            { QStringLiteral("columns"), tr("Columns"), 2.0, 1.0, 200.0, 1.0, 0, {}, {} },
+            { QStringLiteral("gapX"), tr("Gap across"), 20.0, -10000.0, 10000.0, 5.0, 1,
+              {}, {} },
+            { QStringLiteral("gapY"), tr("Gap down"), 20.0, -10000.0, 10000.0, 5.0, 1,
+              {}, {} },
         };
         beginTool(tr("Clone"), tr("Clone %1").arg(source.size() == 1
                                                       ? source.first()->name()
@@ -1963,11 +1966,13 @@ void MainWindow::buildToolsMenu()
         if (source.isEmpty())
             return;
         QVector<ToolOption> options {
-            { QStringLiteral("side"), tr("Side"), 0, 0, 3, 1, 0, {}, {} },
-            { QStringLiteral("margin"), tr("Margin"), 20, -10000, 10000, 5, 1, {}, {} },
+            { QStringLiteral("side"), tr("Side"), 0.0, 0.0, 3.0, 1.0, 0, {}, {} },
+            { QStringLiteral("margin"), tr("Margin"), 20.0, -10000.0, 10000.0, 5.0, 1,
+              {}, {} },
         };
         // In the order MirrorSide takes them.
-        options[0].choices = { tr("Right"), tr("Left"), tr("Top"), tr("Bottom") };
+        options[0].choices =
+            QStringList { tr("Right"), tr("Left"), tr("Top"), tr("Bottom") };
         beginTool(tr("Mirror"), tr("Mirror"), options, [this, source] {
             m_toolCreated.clear();
             const QVector<ShapeItem *> made =
@@ -2132,10 +2137,11 @@ void MainWindow::shapeToSegments(ShapeItem *item)
 
     QVector<ToolOption> options {
         { QStringLiteral("segments"), round ? tr("Segments") : tr("Per side"),
-          round ? 12 : 1, round ? 3 : 1, 400, 1, 0, {}, {} },
+          round ? 12.0 : 1.0, round ? 3.0 : 1.0, 400.0, 1.0, 0, {}, {} },
     };
     if (round) {
-        options.append({ QStringLiteral("angle"), tr("Start angle"), 0, -360, 360, 5, 1,
+        options.append({ QStringLiteral("angle"), tr("Start angle"), 0.0, -360.0, 360.0,
+                         5.0, 1,
                          QStringLiteral("\u00b0"), {} });
     }
 
@@ -2168,8 +2174,8 @@ void MainWindow::circleToChain(ShapeItem *item)
     m_toolShape = item;
 
     const QVector<ToolOption> options {
-        { QStringLiteral("segments"), tr("Segments"), 12, 3, 400, 1, 0, {}, {} },
-        { QStringLiteral("angle"), tr("Start angle"), 0, -360, 360, 5, 1,
+        { QStringLiteral("segments"), tr("Segments"), 12.0, 3.0, 400.0, 1.0, 0, {}, {} },
+        { QStringLiteral("angle"), tr("Start angle"), 0.0, -360.0, 360.0, 5.0, 1,
           QStringLiteral("°"), {} },
     };
     beginTool(tr("Circle to Chain"), tr("Convert %1 to a chain").arg(item->name()), options,
@@ -2310,7 +2316,8 @@ void MainWindow::buildAlignMenu()
             const qreal start =
                 spread ? m_scene->evenGap(edge == CanvasScene::Align::DistributeAcross) : 0.0;
             const QVector<ToolOption> options {
-                { QStringLiteral("gap"), tr("Gap"), start, -10000, 10000, 1, 1, {} },
+                { QStringLiteral("gap"), tr("Gap"), start, -10000.0, 10000.0, 1.0, 1,
+                  {}, {} },
             };
             QString title = text;
             title.remove(QLatin1Char('&'));
