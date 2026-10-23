@@ -57,6 +57,14 @@ enum class PropertyRole {
     // that to mean "however far apart the anchors start", leaves the editor
     // to measure it.
     SpringRestLength,
+    // How far a joint is allowed to travel, and whether that is enforced at
+    // all. What the two numbers measure is the joint's own business: the
+    // editor reads them as a distance along the shaft for the kinds drawn
+    // between two anchors, and as an angle about the hub for a pivot -- which
+    // is the same thing it already decides by kind rather than by type.
+    LimitEnabled,
+    LowerLimit,
+    UpperLimit,
 };
 
 // Where a parameter's starting value comes from. Most are a fixed number the

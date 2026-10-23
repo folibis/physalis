@@ -368,6 +368,15 @@ QVector<JointType> ChipmunkEngine::jointTypes() const
                 param.role = PropertyRole::SpringStiffness;
             else if (param.key == QLatin1String("restLength"))
                 param.role = PropertyRole::SpringRestLength;
+            // How far it may travel. Chipmunk has no switch here either: a
+            // slide joint and a rotary limit are their own constraint types,
+            // so the pair of numbers is always in force where it exists.
+            else if (param.key == QLatin1String("minLength")
+                     || param.key == QLatin1String("lowerAngle"))
+                param.role = PropertyRole::LowerLimit;
+            else if (param.key == QLatin1String("maxLength")
+                     || param.key == QLatin1String("upperAngle"))
+                param.role = PropertyRole::UpperLimit;
         }
     }
 

@@ -56,6 +56,14 @@ QIcon alignRight();
 QIcon alignTop();
 QIcon alignVerticalCentre();
 QIcon alignBottom();
+QIcon distributeAcross();
+QIcon distributeDown();
+QIcon flipHorizontal();
+QIcon flipVertical();
+QIcon tools();
+QIcon clone();
+QIcon alignRingOutside();
+QIcon alignRingInside();
 
 // The two kinds of number a rule can carry: one you type, or one it rolls.
 QIcon value();

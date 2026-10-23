@@ -259,6 +259,21 @@ std::vector<PropertyRow> JointPropertyPane::parameterRows(Joint *joint,
 {
     std::vector<PropertyRow> result;
 
+    // The pair that says how far this joint may travel, found by role so no
+    // engine's key names appear here. They have to stay in order: a lower stop
+    // above its upper one is not a narrow limit, it is a contradiction, and an
+    // engine handed one either locks the joint solid or quietly ignores it.
+    // Either way the scene stops behaving and nothing says why, so typing one
+    // past the other pushes the other along instead.
+    QString lowerKey;
+    QString upperKey;
+    for (const physics::JointParam &param : type.params) {
+        if (param.role == physics::PropertyRole::LowerLimit)
+            lowerKey = param.key;
+        else if (param.role == physics::PropertyRole::UpperLimit)
+            upperKey = param.key;
+    }
+
     for (const physics::JointParam &param : type.params) {
         const QString key = param.key;
         const QVariant fallback = param.defaultValue;
@@ -280,8 +295,17 @@ std::vector<PropertyRow> JointPropertyPane::parameterRows(Joint *joint,
             const auto it = joint->params().constFind(key);
             return it == joint->params().constEnd() ? fallback : *it;
         };
-        row.setter = [joint, key](const QVariant &value) {
+        const bool isLower = !lowerKey.isEmpty() && key == lowerKey;
+        const bool isUpper = !upperKey.isEmpty() && key == upperKey;
+        const QString other = isLower ? upperKey : lowerKey;
+        row.setter = [joint, key, isLower, isUpper, other](const QVariant &value) {
             joint->params().insert(key, value);
+            if ((isLower || isUpper) && !other.isEmpty()) {
+                const qreal mine = value.toDouble();
+                const qreal theirs = joint->params().value(other).toDouble();
+                if (isLower ? mine > theirs : mine < theirs)
+                    joint->params().insert(other, mine);
+            }
             joint->notifyPropertyChanged();
         };
 

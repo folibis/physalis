@@ -45,6 +45,14 @@ QIcon alignRight() { return QIcon(QStringLiteral(":/icons/align_right.svg")); }
 QIcon alignTop() { return QIcon(QStringLiteral(":/icons/align_top.svg")); }
 QIcon alignVerticalCentre() { return QIcon(QStringLiteral(":/icons/align_vcentre.svg")); }
 QIcon alignBottom() { return QIcon(QStringLiteral(":/icons/align_bottom.svg")); }
+QIcon distributeAcross() { return QIcon(QStringLiteral(":/icons/distribute_across.svg")); }
+QIcon distributeDown() { return QIcon(QStringLiteral(":/icons/distribute_down.svg")); }
+QIcon flipHorizontal() { return QIcon(QStringLiteral(":/icons/mirror_across.svg")); }
+QIcon flipVertical() { return QIcon(QStringLiteral(":/icons/mirror_down.svg")); }
+QIcon tools() { return QIcon(QStringLiteral(":/icons/tools.svg")); }
+QIcon clone() { return QIcon(QStringLiteral(":/icons/clone.svg")); }
+QIcon alignRingOutside() { return QIcon(QStringLiteral(":/icons/align_ring_out.svg")); }
+QIcon alignRingInside() { return QIcon(QStringLiteral(":/icons/align_ring_in.svg")); }
 
 QIcon value() { return QIcon(QStringLiteral(":/icons/value.svg")); }
 QIcon random() { return QIcon(QStringLiteral(":/icons/random.svg")); }

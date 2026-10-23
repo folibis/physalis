@@ -13,13 +13,21 @@
 #include "OptionsDialog.h"
 #include "EditorMode.h"
 
+#include <QJsonObject>
+#include "ToolOptionsBar.h"
+
+#include <functional>
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
 
+class QToolBar;
 class CanvasScene;
 class HelpWindow;
 class ShapeItem;
+class PhysicsBody;
+class Joint;
 class QGraphicsView;
 class QAction;
 class QMenu;
@@ -84,6 +92,8 @@ private slots:
     void addAnchorActions(QMenu *menu, Joint *joint, bool simulating);
     void updatePasteAction();
     bool clipboardHasShape() const;
+    QVector<ShapeItem *> clipboardShapes() const;
+    QVector<ShapeItem *> selectedShapes() const;
     void on_actionCopy_triggered();
     void on_actionPaste_triggered();
     void on_actionSaveScreenshot_triggered();
@@ -145,6 +155,28 @@ private:
     // Not in the form: filled from the engine at run time.
     QMenu *m_jointTypeMenu = nullptr;
     void rebuildJointMenu();
+
+    QMenu *m_toolsMenu = nullptr;
+    QAction *m_toolsAction = nullptr;
+    ToolOptionsBar *m_toolOptions = nullptr;
+    // Where the shapes the open tool moves stood before it first ran, so each
+    // run starts from there instead of compounding on the last one.
+    struct ToolSubject {
+        QPointer<ShapeItem> shape;
+        QPointF pos;
+        qreal rotation = 0.0;
+    };
+    QVector<ToolSubject> m_toolSubjects;
+    QVector<QPointer<ShapeItem>> m_toolCreated;
+    // The shape the open tool is rewriting, and what it was before: every run
+    // starts again from that, and Cancel puts it back.
+    QPointer<ShapeItem> m_toolShape;
+    QJsonObject m_toolOriginal;
+    // A tool that turns one shape into several hides the original instead,
+    // since there is nothing left to rewrite in place.
+    QPointer<ShapeItem> m_toolHidden;
+    std::function<void()> m_toolRun;
+    QString m_toolLabel;
     // The side panel's tabs: their icon, the name that became a tooltip, and
     // the settings key that remembers whether the user wants it at all.
     void buildSidePanelTabs();
@@ -200,6 +232,29 @@ public:
     bool openScene(const QString &path);
     bool saveSceneAs(QString path);
 
+    int cloneForTest(int rows, int columns, qreal gapX, qreal gapY)
+    {
+        return cloneSelection(selectedShapes(), rows, columns, gapX, gapY).size();
+    }
+    int mirrorForTest(int side, qreal margin)
+    {
+        return mirrorSelection(selectedShapes(), side, margin).size();
+    }
+    ShapeItem *circleToChainForTest(ShapeItem *circle, int segments, qreal startAngle = 0.0)
+    {
+        return m_scene->convertCircleToChain(circle, segments, startAngle);
+    }
+    QVector<ShapeItem *> toSegmentsForTest(ShapeItem *shape, int segments,
+                                           qreal startAngle = 0.0)
+    {
+        return m_scene->convertToSegments(shape, segments, startAngle);
+    }
+    void createBodyForTest(bool asStatic) { onCreateBody(asStatic); }
+    void openSegmentsToolForTest(ShapeItem *shape) { shapeToSegments(shape); }
+    void openChainToolForTest(ShapeItem *shape) { circleToChain(shape); }
+    void runToolForTest() { runTool(); }
+    void applyToolForTest() { applyTool(); }
+    void cancelToolForTest() { cancelTool(); }
     bool openSceneForTest(const QString &path) { return openScene(path); }
     bool adoptEngineForTest(const QString &name) { return adoptEngine(name); }
     bool saveSceneForTest() { return onSaveScene(); }
@@ -207,7 +262,28 @@ public:
 
 private:
     void buildAlignMenu();
+    void buildToolsMenu();
     void updateAlignActions();
+
+    // A tool runs the moment it is picked and then stays open: the strip under
+    // the toolbar carries the numbers it guessed at, every change runs it
+    // again from the state it found, and Apply is what finally records it.
+    void beginTool(const QString &title, const QString &label,
+                   const QVector<ToolOption> &options, std::function<void()> run);
+    void placeToolOptions();
+    void runTool();
+    void undoTool();
+    void applyTool();
+    void cancelTool();
+    bool toolIsOpen() const { return m_toolRun != nullptr; }
+    QVector<ShapeItem *> cloneSelection(const QVector<ShapeItem *> &source, int rows, int columns,
+                                        qreal gapX, qreal gapY);
+    // The side the reflected copy lands on, in the order the panel lists them.
+    enum MirrorSide { MirrorRight, MirrorLeft, MirrorTop, MirrorBottom };
+    QVector<ShapeItem *> mirrorSelection(const QVector<ShapeItem *> &source, int side,
+                                         qreal margin);
+    void circleToChain(ShapeItem *item);
+    void shapeToSegments(ShapeItem *item);
     void duplicateShape(ShapeItem *item);
     void flipShape(ShapeItem *item, bool horizontally);
     void convertToPolygon(ShapeItem *item);

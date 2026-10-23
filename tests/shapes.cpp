@@ -8,7 +8,15 @@
 #include "SceneSerializer.h"
 #include "ShapeItem.h"
 #include "SimulationController.h"
+#include "EngineRegistry.h"
+#include "Joint.h"
+#include "UndoStack.h"
 
+#include "ToolOptionsBar.h"
+#include <QDoubleSpinBox>
+#include <QPainter>
+#include <QImage>
+#include <QPainterPath>
 #include <QJsonObject>
 #include <gtest/gtest.h>
 #include "EditorMode.h"
@@ -739,4 +747,672 @@ TEST(Subdivide, ShiftEnterSplitsAndPlainEnterDoesNot)
     enterWith(&scene, Qt::ShiftModifier);
     EXPECT_EQ(shape->nodeCount(), 6)
         << "three nodes in a row span two edges and Shift+Enter added none";
+}
+
+namespace {
+
+// The smallest distance between any two corners of shapes that end up next to
+// each other on a ring -- which is the gap the ring left between them.
+qreal closestNeighbours(const QVector<ShapeItem *> &made)
+{
+    QVector<ShapeItem *> round = made;
+    QRectF all;
+    for (ShapeItem *shape : round) {
+        const QRectF box = shape->mapToScene(shape->rect()).boundingRect();
+        all = all.isNull() ? box : all.united(box);
+    }
+    const QPointF centre = all.center();
+    const auto bearing = [&](ShapeItem *shape) {
+        const QPointF from = shape->mapToScene(shape->rect()).boundingRect().center() - centre;
+        return std::atan2(from.y(), from.x());
+    };
+    std::sort(round.begin(), round.end(),
+              [&](ShapeItem *a, ShapeItem *b) { return bearing(a) < bearing(b); });
+
+    qreal worst = std::numeric_limits<qreal>::max();
+    for (int i = 0; i < round.size(); ++i) {
+        const QPolygonF a = round.at(i)->mapToScene(QPolygonF(
+            static_cast<PolygonItem *>(round.at(i))->points()));
+        const QPolygonF b = round.at((i + 1) % round.size())->mapToScene(QPolygonF(
+            static_cast<PolygonItem *>(round.at((i + 1) % round.size()))->points()));
+        qreal best = std::numeric_limits<qreal>::max();
+        for (const QPointF &p : a)
+            for (const QPointF &q : b)
+                best = qMin(best, QLineF(p, q).length());
+        worst = qMin(worst, best);
+    }
+    return worst;
+}
+
+// Teeth: triangles, drawn point up and point down in turn, since which way one
+// was drawn must make no difference to the ring it ends up in.
+QVector<ShapeItem *> teeth(CanvasScene *scene, int count)
+{
+    QVector<ShapeItem *> made;
+    for (int i = 0; i < count; ++i) {
+        QPolygonF points;
+        if (i % 2)
+            points << QPointF(-20, 50) << QPointF(0, -50) << QPointF(20, 50);
+        else
+            points << QPointF(-20, -50) << QPointF(0, 50) << QPointF(20, -50);
+        auto *tooth = new PolygonItem(points, true);
+        tooth->setPos(300 * std::cos(i * 2 * M_PI / count), 300 * std::sin(i * 2 * M_PI / count));
+        tooth->setName(QStringLiteral("tooth%1").arg(i));
+        scene->addItem(tooth);
+        made.append(tooth);
+    }
+    scene->notifyShapesChanged();
+    scene->selectShape(made.first());
+    for (int i = 1; i < made.size(); ++i)
+        scene->addToEditSelection(made.at(i));
+    return made;
+}
+
+} // namespace
+
+// A ring packs its shapes edge to edge, and the gap it is given is the gap it
+// leaves -- measured between the shapes themselves, not between the slices of
+// the turn they were given.
+TEST(Alignment, ARingLeavesTheGapItWasGiven)
+{
+    for (const qreal gap : { 0.0, 10.0, 30.0 }) {
+        CanvasScene scene;
+        scene.setEditorMode(EditorMode::Edit);
+        const QVector<ShapeItem *> made = teeth(&scene, 10);
+        scene.alignSelection(CanvasScene::Align::RingOutside, gap);
+        EXPECT_NEAR(closestNeighbours(made), gap, 0.01)
+            << "a ring asked for a gap of " << gap << " did not leave one";
+    }
+}
+
+// Which way up a tooth was drawn is the shape's business and not the ring's:
+// every one of them ends up pointing away from the centre.
+TEST(Alignment, EveryToothPointsTheSameWayWhicheverWayItWasDrawn)
+{
+    CanvasScene scene;
+    scene.setEditorMode(EditorMode::Edit);
+    const QVector<ShapeItem *> made = teeth(&scene, 8);
+    scene.alignSelection(CanvasScene::Align::RingOutside);
+
+    QRectF all;
+    for (ShapeItem *shape : made) {
+        const QRectF box = shape->mapToScene(shape->rect()).boundingRect();
+        all = all.isNull() ? box : all.united(box);
+    }
+    const QPointF centre = all.center();
+
+    for (ShapeItem *shape : made) {
+        // The apex is the corner on its own; the other two are the base. The
+        // apex has to be the one furthest out.
+        const QPolygonF corners =
+            shape->mapToScene(QPolygonF(static_cast<PolygonItem *>(shape)->points()));
+        QVector<qreal> reach;
+        for (const QPointF &corner : corners)
+            reach << QLineF(centre, corner).length();
+        std::sort(reach.begin(), reach.end());
+        EXPECT_GT(reach.last(), reach.at(reach.size() - 2) + 10.0)
+            << shape->name().toStdString() << " went into the ring the wrong way up";
+    }
+}
+
+// Clone lays a grid of copies out from whatever is picked, the original
+// standing in for the first row and column, and the spacing is the gap left
+// between neighbours rather than the step from one to the next.
+TEST(Clone, AGridOfCopiesLeavesTheSpacingItWasGiven)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Edit);
+    ShapeItem *first = scene->addRectangle(QPointF(100, 100));
+    scene->selectShape(first);
+    const QRectF one = first->mapToScene(first->rect()).boundingRect();
+
+    EXPECT_EQ(window.cloneForTest(2, 3, 10.0, 5.0), 5)
+        << "two rows of three leaves five copies beside the original";
+    ASSERT_EQ(scene->shapes().size(), 6);
+
+    QVector<QPointF> corners;
+    for (ShapeItem *shape : scene->shapes())
+        corners << shape->mapToScene(shape->rect()).boundingRect().topLeft();
+    std::sort(corners.begin(), corners.end(), [](const QPointF &a, const QPointF &b) {
+        return a.y() == b.y() ? a.x() < b.x() : a.y() < b.y();
+    });
+
+    for (int row = 0; row < 2; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            const QPointF want = one.topLeft()
+                                 + QPointF(column * (one.width() + 10.0),
+                                           row * (one.height() + 5.0));
+            const QPointF got = corners.at(row * 3 + column);
+            EXPECT_NEAR(got.x(), want.x(), 0.001) << "copy " << row << "," << column;
+            EXPECT_NEAR(got.y(), want.y(), 0.001) << "copy " << row << "," << column;
+        }
+    }
+}
+
+// Clicking a shape presses and releases on it, which looked to the undo stack
+// like a move of nothing: the scene came out marked as edited, and Save lit up
+// over a selection. Only a drag that went somewhere is an edit.
+TEST(Selection, ClickingAShapeIsNotAnEdit)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    UndoStack *undo = window.findChild<UndoStack *>();
+    ASSERT_TRUE(scene);
+    ASSERT_TRUE(undo);
+    scene->setEditorMode(EditorMode::Edit);
+
+    ShapeItem *box = scene->addRectangle(QPointF(100, 100));
+    ASSERT_TRUE(box);
+    undo->markClean();
+    ASSERT_TRUE(undo->isClean()) << "the test did not start from a saved scene";
+
+    const QPointF on = box->mapToScene(box->rect().center());
+    press(scene, on, Qt::NoModifier);
+    release(scene, on, Qt::NoModifier);
+
+    EXPECT_EQ(scene->activeItem(), box) << "the click did not select the shape";
+    EXPECT_TRUE(undo->isClean()) << "selecting a shape marked the scene as edited";
+
+    // A drag that goes somewhere still counts.
+    press(scene, on, Qt::NoModifier);
+    moveTo(scene, on + QPointF(30, 20), Qt::NoModifier);
+    release(scene, on + QPointF(30, 20), Qt::NoModifier);
+    EXPECT_FALSE(undo->isClean()) << "moving a shape was not recorded as an edit";
+}
+
+// Spacing evenly leaves the two end shapes where they are and the span alone:
+// that is what the default gap is for. The other direction is untouched.
+TEST(Alignment, SpacingEvenlyLeavesTheSpanAlone)
+{
+    CanvasScene scene;
+    scene.setEditorMode(EditorMode::Edit);
+    const QVector<ShapeItem *> shapes = threeShapes(&scene);
+    scene.selectShape(shapes.at(0));
+    for (int i = 1; i < shapes.size(); ++i)
+        scene.addToEditSelection(shapes.at(i));
+
+    QRectF before;
+    QVector<qreal> tops;
+    for (ShapeItem *shape : shapes) {
+        before = before.isNull() ? boxOf(shape) : before.united(boxOf(shape));
+        tops << boxOf(shape).top();
+    }
+
+    const qreal gap = scene.evenGap(true);
+    scene.alignSelection(CanvasScene::Align::DistributeAcross, gap);
+
+    QRectF after;
+    for (int i = 0; i < shapes.size(); ++i) {
+        after = after.isNull() ? boxOf(shapes.at(i)) : after.united(boxOf(shapes.at(i)));
+        EXPECT_NEAR(boxOf(shapes.at(i)).top(), tops.at(i), 0.001)
+            << shapes.at(i)->name().toStdString() << " moved down as well as across";
+    }
+    EXPECT_NEAR(after.left(), before.left(), 0.001) << "spacing moved the leftmost shape";
+    EXPECT_NEAR(after.right(), before.right(), 0.001) << "spacing changed the span";
+
+    // Every gap the same, which is the whole point.
+    QVector<QRectF> boxes;
+    for (ShapeItem *shape : shapes)
+        boxes << boxOf(shape);
+    std::sort(boxes.begin(), boxes.end(),
+              [](const QRectF &a, const QRectF &b) { return a.left() < b.left(); });
+    for (int i = 0; i + 1 < boxes.size(); ++i) {
+        EXPECT_NEAR(boxes.at(i + 1).left() - boxes.at(i).right(), gap, 0.001)
+            << "gap " << i << " is not the one asked for";
+    }
+}
+
+// Mirror leaves a reflected copy a whole gap from the selection's edge, and
+// reflects it -- a copy that is merely moved is not a mirror.
+TEST(Clone, MirrorPutsAReflectedCopyBesideTheOriginal)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Edit);
+
+    QPolygonF points;
+    points << QPointF(0, 0) << QPointF(80, 0) << QPointF(0, 60);
+    auto *wedge = new PolygonItem(points, true);
+    wedge->setPos(100, 100);
+    wedge->setName(QStringLiteral("wedge"));
+    scene->addItem(wedge);
+    scene->notifyShapesChanged();
+    scene->selectShape(wedge);
+
+    const QRectF was = wedge->mapToScene(wedge->rect()).boundingRect();
+
+    // Every side the panel offers, in the order it offers them.
+    const char *names[] = { "right", "left", "top", "bottom" };
+    for (int side = 0; side < 4; ++side) {
+        ASSERT_EQ(window.mirrorForTest(side, 20.0), 1) << names[side];
+        ASSERT_EQ(scene->shapes().size(), 2) << names[side];
+        ShapeItem *one = scene->shapes().at(0) == wedge ? scene->shapes().at(1)
+                                                        : scene->shapes().at(0);
+        const QRectF box = one->mapToScene(one->rect()).boundingRect();
+        EXPECT_NEAR(box.size().width(), was.width(), 0.001) << names[side] << " changed size";
+        switch (side) {
+        case 0: EXPECT_NEAR(box.left(), was.right() + 20.0, 0.001) << "not a margin to the right";
+            break;
+        case 1: EXPECT_NEAR(box.right(), was.left() - 20.0, 0.001) << "not a margin to the left";
+            break;
+        case 2: EXPECT_NEAR(box.bottom(), was.top() - 20.0, 0.001) << "not a margin above";
+            break;
+        default: EXPECT_NEAR(box.top(), was.bottom() + 20.0, 0.001) << "not a margin below";
+            break;
+        }
+        delete one;
+    }
+
+    ASSERT_EQ(window.mirrorForTest(0, 20.0), 1);
+    ASSERT_EQ(scene->shapes().size(), 2);
+
+    ShapeItem *copy = scene->shapes().at(0) == wedge ? scene->shapes().at(1)
+                                                     : scene->shapes().at(0);
+    const QRectF now = copy->mapToScene(copy->rect()).boundingRect();
+
+    // The wedge's point is on the left; reflected, it has to be on the right.
+    const auto furthestRight = [](ShapeItem *shape) {
+        const QPolygonF corners =
+            shape->mapToScene(QPolygonF(static_cast<PolygonItem *>(shape)->points()));
+        qreal best = -1e9;
+        for (const QPointF &corner : corners) {
+            if (qAbs(corner.y() - corners.boundingRect().bottom()) < 0.001)
+                best = qMax(best, corner.x());
+        }
+        return best;
+    };
+    EXPECT_NEAR(furthestRight(wedge) - was.left(), 0.0, 0.001)
+        << "the test has the original the wrong way round";
+    EXPECT_NEAR(furthestRight(copy) - now.left(), now.width(), 0.001)
+        << "the copy was moved but never reflected";
+}
+
+// A circle becomes the run of segments round its rim -- a chain is a shape, in
+// the way Convert to Polygon makes one, and it keeps the name and body of what
+// it replaced.
+TEST(Shapes, ACircleConvertsToAChainOfSegments)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Edit);
+
+    ShapeItem *circle = scene->addCircle(QPointF(100, 100));
+    ASSERT_TRUE(circle);
+    const QString name = circle->name();
+    const QRectF own = circle->rect();
+    const QPointF middle = own.center();
+    const qreal radius = qMin(own.width(), own.height()) / 2.0;
+
+    constexpr int kSegments = 12;
+    ShapeItem *chain = window.circleToChainForTest(circle, kSegments);
+    ASSERT_TRUE(chain) << "the circle did not convert";
+    EXPECT_EQ(scene->shapes().size(), 1) << "converting left the circle behind as well";
+    EXPECT_EQ(chain->name(), name) << "the chain did not keep the circle's name";
+    EXPECT_EQ(chain->typeName(), QLatin1String("polygon"));
+    ASSERT_EQ(chain->nodeCount(), kSegments);
+
+    // Every corner on the circle, and the sides all the same length: a chain
+    // of segments round a circle is a regular polygon inscribed in it.
+    qreal first = -1.0;
+    for (int i = 0; i < kSegments; ++i) {
+        const QPointF a = chain->nodePosition(i);
+        const QPointF b = chain->nodePosition((i + 1) % kSegments);
+        EXPECT_NEAR(QLineF(middle, a).length(), radius, 0.001) << "corner " << i
+            << " is not on the circle";
+        const qreal side = QLineF(a, b).length();
+        if (first < 0)
+            first = side;
+        EXPECT_NEAR(side, first, 0.001) << "segment " << i << " is a different length";
+    }
+
+    // Hollow, at any count. A closed convex outline within the vertex limit is
+    // otherwise built solid, which would make a six-segment chain a filled
+    // hexagon with no inside for anything to fall into.
+    EXPECT_FALSE(chain->hasInterior()) << "a twelve-segment chain came out solid";
+    ShapeItem *few = window.circleToChainForTest(chain, 6);
+    ASSERT_TRUE(few);
+    EXPECT_FALSE(few->hasInterior()) << "a six-segment chain came out solid";
+
+    // The start angle turns the corners without turning the shape.
+    ShapeItem *turned = window.circleToChainForTest(few, 6, 30.0);
+    ASSERT_TRUE(turned);
+    EXPECT_DOUBLE_EQ(turned->rotation(), 0.0) << "the start angle rotated the shape itself";
+    const QPointF corner = turned->nodePosition(0) - middle;
+    EXPECT_NEAR(qRadiansToDegrees(std::atan2(corner.y(), corner.x())), 30.0, 0.001)
+        << "the first corner did not move to the start angle";
+
+    // Fewer than three is not a ring and is refused.
+    EXPECT_EQ(window.circleToChainForTest(turned, 2), nullptr);
+}
+
+// Convert to Segments leaves one line per side, each a shape of its own and in
+// no body -- which is the point: a joint connects bodies, so the pieces have
+// to be separable. A rectangle keeps its corners, however finely it is split.
+TEST(Shapes, ACircleAndARectangleComeApartIntoSegments)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Edit);
+
+    ShapeItem *circle = scene->addCircle(QPointF(100, 100));
+    const QRectF own = circle->rect();
+    const QPointF middle = circle->mapToScene(own.center());
+    const qreal radius = qMin(own.width(), own.height()) / 2.0;
+
+    constexpr int kSegments = 12;
+    const QVector<ShapeItem *> round = window.toSegmentsForTest(circle, kSegments);
+    ASSERT_EQ(round.size(), kSegments);
+
+    for (ShapeItem *piece : round) {
+        EXPECT_EQ(piece->nodeCount(), 2) << "a segment is a line, not a shape with corners";
+        EXPECT_FALSE(piece->hasInterior()) << "a segment enclosed something";
+        EXPECT_EQ(piece->body(), nullptr) << "a segment came out already in a body";
+        for (int i = 0; i < piece->nodeCount(); ++i) {
+            EXPECT_NEAR(QLineF(middle, piece->mapToScene(piece->nodePosition(i))).length(),
+                        radius, 0.001)
+                << "a segment end is not on the circle";
+        }
+    }
+
+    // Four sides split three ways each, and the corners still corners: every
+    // one of the rectangle's own four is an end of some segment.
+    ShapeItem *box = scene->addRectangle(QPointF(600, 100));
+    const QRectF boxOwn = box->rect();
+    QVector<QPointF> wanted;
+    for (const QPointF &corner : { boxOwn.topLeft(), boxOwn.topRight(), boxOwn.bottomRight(),
+                                   boxOwn.bottomLeft() })
+        wanted << box->mapToScene(corner);
+
+    const QVector<ShapeItem *> sides = window.toSegmentsForTest(box, 3);
+    ASSERT_EQ(sides.size(), 12) << "four sides split three ways is twelve segments";
+
+    for (const QPointF &corner : wanted) {
+        qreal nearest = std::numeric_limits<qreal>::max();
+        for (ShapeItem *piece : sides) {
+            for (int i = 0; i < piece->nodeCount(); ++i)
+                nearest = qMin(nearest,
+                               QLineF(corner, piece->mapToScene(piece->nodePosition(i))).length());
+        }
+        EXPECT_NEAR(nearest, 0.0, 0.001) << "a corner of the rectangle is not a segment end";
+    }
+
+    // Every segment meets the next: a ring of lines with a hole in it is not
+    // an outline.
+    for (ShapeItem *piece : sides) {
+        for (int i = 0; i < piece->nodeCount(); ++i) {
+            const QPointF end = piece->mapToScene(piece->nodePosition(i));
+            qreal nearest = std::numeric_limits<qreal>::max();
+            for (ShapeItem *other : sides) {
+                if (other == piece)
+                    continue;
+                for (int j = 0; j < other->nodeCount(); ++j)
+                    nearest = qMin(nearest,
+                                   QLineF(end, other->mapToScene(other->nodePosition(j))).length());
+            }
+            EXPECT_NEAR(nearest, 0.0, 0.001) << "a segment end meets no other segment";
+        }
+    }
+}
+
+// Driving a tool the way the window does, not by calling the conversion
+// underneath it: the panel opens, its numbers are typed into, and Apply keeps
+// what is on screen. Converting deletes the shape that was selected, and a
+// shape deleted out from under the scene left the active item pointing at
+// freed memory -- the crash came on the next paint or the next click, not on
+// the conversion.
+TEST(Shapes, ConvertingTheSelectedShapeLeavesNothingDangling)
+{
+    for (const bool toSegments : { true, false }) {
+        MainWindow window;
+        CanvasScene *scene = window.findChild<CanvasScene *>();
+        ASSERT_TRUE(scene);
+        scene->setEditorMode(EditorMode::Edit);
+
+        ShapeItem *circle = scene->addCircle(QPointF(300, 300));
+        scene->selectShape(circle);
+        ASSERT_EQ(scene->activeItem(), circle);
+
+        if (toSegments)
+            window.openSegmentsToolForTest(circle);
+        else
+            window.openChainToolForTest(circle);
+        QCoreApplication::processEvents();
+
+        ToolOptionsBar *panel = window.findChild<ToolOptionsBar *>();
+        ASSERT_TRUE(panel);
+        QDoubleSpinBox *count = panel->findChildren<QDoubleSpinBox *>().value(0);
+        ASSERT_TRUE(count) << "the panel offers no segment count";
+        count->setValue(20);
+        QCoreApplication::processEvents();
+
+        window.applyToolForTest();
+        QCoreApplication::processEvents();
+
+        // Whatever the scene still points at has to be something it still has.
+        const QVector<ShapeItem *> left = scene->shapes();
+        EXPECT_EQ(left.size(), toSegments ? 20 : 1);
+        EXPECT_TRUE(scene->activeItem() == nullptr || left.contains(scene->activeItem()))
+            << "the active item was deleted and not forgotten";
+        for (ShapeItem *picked : scene->editSelection()) {
+            EXPECT_TRUE(left.contains(picked)) << "a deleted shape is still co-selected";
+        }
+
+        // The paint that used to be the crash.
+        QImage image(400, 400, QImage::Format_ARGB32);
+        QPainter painter(&image);
+        scene->render(&painter);
+        painter.end();
+    }
+}
+
+// Picking several things in Physics mode and dragging one of them moves all of
+// them. Taking only the body under the pointer made a multiple selection
+// pointless: they could be picked together and then only moved one at a time.
+TEST(Selection, DraggingOneOfSeveralPickedBodiesMovesThemAll)
+{
+    CanvasScene scene;
+    scene.setEditorMode(EditorMode::Edit);
+
+    QVector<ShapeItem *> made;
+    for (int i = 0; i < 3; ++i) {
+        auto *box = new RectangleItem;
+        box->setRect(QRectF(0, 0, 40, 40));
+        box->setPos(i * 120, 0);
+        box->setName(QStringLiteral("box%1").arg(i));
+        scene.addItem(box);
+        made.append(box);
+    }
+    scene.notifyShapesChanged();
+
+    scene.setEditorMode(EditorMode::Physics);
+    scene.selectForPhysics(made.at(0), false);
+    scene.selectForPhysics(made.at(1), true);
+    scene.selectForPhysics(made.at(2), true);
+    ASSERT_EQ(scene.physicsSelection().size(), 3);
+
+    QVector<QPointF> before;
+    for (ShapeItem *box : made)
+        before << box->pos();
+
+    // Grab the middle one and drag. The others are not under the pointer.
+    const QPointF on = made.at(1)->mapToScene(made.at(1)->rect().center());
+    const QPointF to = on + QPointF(70, 45);
+    press(&scene, on, Qt::NoModifier);
+    moveTo(&scene, to, Qt::NoModifier);
+    release(&scene, to, Qt::NoModifier);
+
+    for (int i = 0; i < made.size(); ++i) {
+        EXPECT_NEAR(made.at(i)->pos().x(), before.at(i).x() + 70, 0.001)
+            << made.at(i)->name().toStdString() << " did not travel with the selection";
+        EXPECT_NEAR(made.at(i)->pos().y(), before.at(i).y() + 45, 0.001)
+            << made.at(i)->name().toStdString() << " did not travel with the selection";
+    }
+
+    // One picked on its own still moves on its own.
+    scene.selectForPhysics(made.at(0), false);
+    const QPointF alone = made.at(0)->pos();
+    const QPointF others = made.at(1)->pos();
+    const QPointF grab = made.at(0)->mapToScene(made.at(0)->rect().center());
+    press(&scene, grab, Qt::NoModifier);
+    moveTo(&scene, grab + QPointF(30, 0), Qt::NoModifier);
+    release(&scene, grab + QPointF(30, 0), Qt::NoModifier);
+    EXPECT_NEAR(made.at(0)->pos().x(), alone.x() + 30, 0.001);
+    EXPECT_EQ(made.at(1)->pos(), others) << "an unpicked body travelled with the dragged one";
+}
+
+// The other half of that: a press that never moves is a click, and a click
+// without a modifier narrows a selection of several to the one clicked.
+TEST(Selection, ClickingOneOfSeveralPickedBodiesNarrowsToIt)
+{
+    CanvasScene scene;
+    scene.setEditorMode(EditorMode::Edit);
+
+    QVector<ShapeItem *> made;
+    for (int i = 0; i < 3; ++i) {
+        auto *box = new RectangleItem;
+        box->setRect(QRectF(0, 0, 40, 40));
+        box->setPos(i * 120, 0);
+        box->setName(QStringLiteral("box%1").arg(i));
+        scene.addItem(box);
+        made.append(box);
+    }
+    scene.notifyShapesChanged();
+
+    scene.setEditorMode(EditorMode::Physics);
+    scene.selectForPhysics(made.at(0), false);
+    scene.selectForPhysics(made.at(1), true);
+    scene.selectForPhysics(made.at(2), true);
+    ASSERT_EQ(scene.physicsSelection().size(), 3);
+
+    const QPointF on = made.at(2)->mapToScene(made.at(2)->rect().center());
+    press(&scene, on, Qt::NoModifier);
+    release(&scene, on, Qt::NoModifier);
+
+    ASSERT_EQ(scene.physicsSelection().size(), 1) << "a click did not narrow the selection";
+    EXPECT_EQ(scene.physicsSelection().first(), made.at(2));
+}
+
+// One rule about mass, said once. An outline has no area and so no mass, and a
+// body of outlines starts Kinematic -- but that is a default, not a refusal:
+// the Body panel sets it Dynamic afterwards, and a body gains area the moment
+// a filled shape joins it. Creating used to refuse what the panel then allowed.
+TEST(BodyTypes, AnOutlineBodyDefaultsToKinematicAndIsNotStuckThere)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Edit);
+
+    // A segment: two nodes, no interior.
+    QPolygonF line;
+    line << QPointF(0, 0) << QPointF(80, 0);
+    auto *segment = new PolygonItem(line, false);
+    segment->setPreferOutline(true);
+    segment->setPos(100, 100);
+    segment->setName(QStringLiteral("segment"));
+    scene->addItem(segment);
+    scene->notifyShapesChanged();
+    ASSERT_FALSE(segment->hasInterior());
+
+    scene->setEditorMode(EditorMode::Physics);
+    scene->selectForPhysics(segment, false);
+    // A plain double-click, which is the canvas asking for the body that moves.
+    window.createBodyForTest(false);
+
+    PhysicsBody *body = segment->body();
+    ASSERT_TRUE(body) << "no body was made";
+    EXPECT_EQ(body->props().type, physics::BodyType::Kinematic)
+        << "an outline body should default to the type that can still be driven";
+
+    // Nothing stops it being Dynamic afterwards -- which is what the Body
+    // panel does, and what made the refusal at creation incoherent.
+    body->props().type = physics::BodyType::Dynamic;
+    body->notifyPropertyChanged();
+    EXPECT_EQ(body->props().type, physics::BodyType::Dynamic);
+
+    // Asking for Static gives Static: the default only stands in for Dynamic.
+    CanvasScene second;
+    second.setEditorMode(EditorMode::Edit);
+    auto *other = new PolygonItem(line, false);
+    other->setPreferOutline(true);
+    other->setName(QStringLiteral("segment"));
+    second.addItem(other);
+    second.notifyShapesChanged();
+    second.setEditorMode(EditorMode::Physics);
+    second.selectForPhysics(other, false);
+    PhysicsBody *made = second.createBodyFromSelection();
+    ASSERT_TRUE(made);
+    made->props().type = physics::BodyType::Static;
+    EXPECT_EQ(made->props().type, physics::BodyType::Static);
+}
+
+// A ring closes on rounded boxes too. The packing takes each shape's share as
+// the chord its face subtends, which is exact only while the corners are
+// square: rounding cuts away the very material that was doing the touching, so
+// a ring of rounded boxes stood with a gap at every joint, wider the rounder
+// they were.
+TEST(Alignment, ARingOfRoundedBoxesStillCloses)
+{
+    // The drawn outline, rounded corners and all.
+    const auto drawn = [](ShapeItem *shape) {
+        QPainterPath path;
+        const QRectF own = shape->rect();
+        if (shape->cornerRadius() > 0.0)
+            path.addRoundedRect(own, shape->cornerRadius(), shape->cornerRadius());
+        else
+            path.addRect(own);
+        return shape->mapToScene(path.toFillPolygon());
+    };
+
+    for (const qreal rho : { 0.0, 5.0, 12.0, 20.0 }) {
+        CanvasScene scene;
+        scene.setEditorMode(EditorMode::Edit);
+
+        QVector<ShapeItem *> made;
+        for (int i = 0; i < 12; ++i) {
+            auto *box = new RectangleItem;
+            box->setRect(QRectF(0, 0, 60, 40));
+            box->setCornerRadius(rho);
+            box->setPos(300 * std::cos(i * M_PI / 6), 300 * std::sin(i * M_PI / 6));
+            box->setName(QStringLiteral("box%1").arg(i));
+            scene.addItem(box);
+            made.append(box);
+        }
+        scene.notifyShapesChanged();
+        scene.selectShape(made.first());
+        for (int i = 1; i < made.size(); ++i)
+            scene.addToEditSelection(made.at(i));
+
+        scene.alignSelection(CanvasScene::Align::RingOutside);
+
+        QRectF all;
+        for (ShapeItem *box : made)
+            all = all.isNull() ? drawn(box).boundingRect()
+                               : all.united(drawn(box).boundingRect());
+        const QPointF centre = all.center();
+        std::sort(made.begin(), made.end(), [&](ShapeItem *a, ShapeItem *b) {
+            const QPointF pa = drawn(a).boundingRect().center() - centre;
+            const QPointF pb = drawn(b).boundingRect().center() - centre;
+            return std::atan2(pa.y(), pa.x()) < std::atan2(pb.y(), pb.x());
+        });
+
+        for (int i = 0; i < made.size(); ++i) {
+            const QPolygonF a = drawn(made.at(i));
+            const QPolygonF b = drawn(made.at((i + 1) % made.size()));
+            qreal nearest = std::numeric_limits<qreal>::max();
+            for (const QPointF &p : a)
+                for (const QPointF &q : b)
+                    nearest = qMin(nearest, QLineF(p, q).length());
+            // Not zero to the micron: the arcs are measured as the flattened
+            // polygons Qt draws them with, so the sampled points sit a little
+            // off the tangent point. A real gap is a hundred times this.
+            EXPECT_LT(nearest, 0.25) << "corner radius " << rho << " left a gap of " << nearest
+                                     << " between box " << i << " and the next";
+        }
+    }
 }

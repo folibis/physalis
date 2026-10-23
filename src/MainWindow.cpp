@@ -29,6 +29,7 @@
 #include "SceneExporter.h"
 #include "SceneScreenshot.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include "SceneSerializer.h"
@@ -207,6 +208,7 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     buildAlignMenu();
+    buildToolsMenu();
     rebuildRecentMenu();
     buildExamplesMenu();
     buildDocumentationMenu();
@@ -214,7 +216,7 @@ MainWindow::MainWindow(QWidget *parent)
     // The dividers travel with their group, so a hidden group leaves no line.
     m_editModeActions << m_ui->actionAddShape << m_ui->actionDelete
                       << m_ui->actionMoveScale << m_ui->actionEditNodes << m_ui->actionRotate
-                      << m_ui->actionAlign
+                      << m_ui->actionAlign << m_toolsAction
                       << separatorBefore(toolBar, m_ui->actionMoveScale)
                       << separatorBefore(toolBar, m_ui->actionCreateBody);
     // Listed in the order they sit on the bar, so this reads like the toolbar.
@@ -243,7 +245,7 @@ MainWindow::MainWindow(QWidget *parent)
                          << m_ui->actionAlign << m_ui->menuAlign->menuAction()
                          << m_ui->actionCreateBody << m_ui->actionDissolveBody
                          << m_ui->actionAddJoint << m_ui->actionDeleteJoint
-                         << m_ui->menuAddShape->menuAction();
+                         << m_ui->menuAddShape->menuAction() << m_toolsAction;
     for (QAction *action : std::as_const(m_lockedWhileRunning)) {
         connect(action, &QAction::changed, this, [this, action] {
             if (action->isEnabled() && m_simulation && m_simulation->isActive())
@@ -492,6 +494,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_logOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
     applyLogStyle();
     m_ui->canvasView->installEventFilter(this);
+    m_ui->canvasView->viewport()->installEventFilter(this);
     placeLogOverlay();
     m_logOverlay->hide();
     connect(m_scene, &CanvasScene::watchesChanged, this, &MainWindow::updateLogOverlay);
@@ -787,26 +790,34 @@ void MainWindow::createBodyOfType(physics::BodyType type)
     if (!body)
         return;
 
-    // Only area gives mass, so a body made of outlines cannot be dynamic
-    // however plainly it was asked for. It is made static instead, and says so
-    // -- quietly handing back something that will not move is worse.
-    const bool refused = type == physics::BodyType::Dynamic && !problems.isEmpty();
-    body->props().type = refused ? physics::BodyType::Static : type;
+    // Only area gives mass, and a body without mass is dropped at the start of
+    // every run. The scene has already defaulted such a body to Kinematic --
+    // the useful kind, driven rather than pushed -- and that is a default and
+    // not a rule: the Body panel will set it Dynamic afterwards, and a body
+    // gains area the moment a filled shape joins it. So the type asked for is
+    // honoured wherever it can be, and where the default stood in, the status
+    // bar says so rather than a dialog refusing the request.
+    const bool defaulted = type == physics::BodyType::Dynamic
+                           && body->props().type == physics::BodyType::Kinematic;
+    if (!defaulted) {
+        body->props().type = type;
+    }
     body->notifyPropertyChanged();
 
-    if (refused) {
-        QMessageBox::warning(
-            this, tr("Create Body"),
-            tr("%1 was made Static because it can't be a solid, movable body:\n\n%2\n\n"
-               "Shapes like these still collide as outlines, which works for walls and ramps,"
-               " but an outline has no area and so no mass. Split them into convex pieces to"
-               " make the body Dynamic.")
-                .arg(body->name(), problems.join(QStringLiteral("\n"))));
-    }
-
     m_scene->notifyEdit(tr("Create %1").arg(body->name()));
-    statusBar()->showMessage(tr("Created %1 from %2 shape(s)")
-                                 .arg(body->name()).arg(body->shapes().size()), 4000);
+    if (defaulted) {
+        statusBar()->showMessage(
+            problems.isEmpty()
+                ? tr("Created %1 as Kinematic — an outline has no area, so no mass."
+                     " The Body panel will make it Dynamic.")
+                      .arg(body->name())
+                : tr("Created %1 as Kinematic — %2. The Body panel will make it Dynamic.")
+                      .arg(body->name(), problems.join(QStringLiteral("; "))),
+            8000);
+    } else {
+        statusBar()->showMessage(tr("Created %1 from %2 shape(s)")
+                                     .arg(body->name()).arg(body->shapes().size()), 4000);
+    }
 
     m_ui->propertyPanel->showSection(tr("Body"));
 }
@@ -903,17 +914,38 @@ const char *kSceneFilter =
     QT_TR_NOOP("Physalis Scene (*.phys);;Older Scenes (*.scene *.scene.json *.json);;All Files (*)");
 }
 
-bool MainWindow::clipboardHasShape() const
+// What the clipboard holds, as shapes nobody owns yet -- the caller takes
+// them. A copy writes an array even for a single shape; a bare shape object is
+// what an older build wrote, and is still read.
+QVector<ShapeItem *> MainWindow::clipboardShapes() const
 {
-    // Asked of the same code paste itself uses, rather than sniffing the JSON.
+    QVector<ShapeItem *> shapes;
     QJsonParseError parseError {};
     const QJsonDocument document =
         QJsonDocument::fromJson(QGuiApplication::clipboard()->text().toUtf8(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject())
-        return false;
+        return shapes;
 
-    std::unique_ptr<ShapeItem> shape(SceneSerializer::shapeFromJson(document.object()));
-    return shape != nullptr;
+    const QJsonObject root = document.object();
+    const QJsonArray array = root.value(QStringLiteral("shapes")).toArray();
+    if (array.isEmpty()) {
+        if (ShapeItem *one = SceneSerializer::shapeFromJson(root))
+            shapes.append(one);
+        return shapes;
+    }
+    for (const QJsonValue &value : array) {
+        if (ShapeItem *shape = SceneSerializer::shapeFromJson(value.toObject()))
+            shapes.append(shape);
+    }
+    return shapes;
+}
+
+bool MainWindow::clipboardHasShape() const
+{
+    // Asked of the same code paste itself uses, rather than sniffing the JSON.
+    const QVector<ShapeItem *> shapes = clipboardShapes();
+    qDeleteAll(shapes);
+    return !shapes.isEmpty();
 }
 
 void MainWindow::updatePasteAction()
@@ -1032,16 +1064,24 @@ void MainWindow::updateUndoActions()
 
 void MainWindow::on_actionCopy_triggered()
 {
-    ShapeItem *item = m_scene->activeItem();
-    if (!item)
+    const QVector<ShapeItem *> picked = selectedShapes();
+    if (picked.isEmpty())
         return;
 
-    const QJsonDocument document(SceneSerializer::shapeToJson(item));
+    QJsonArray array;
+    for (ShapeItem *item : picked)
+        array.append(SceneSerializer::shapeToJson(item));
+    QJsonObject root;
+    root.insert(QStringLiteral("shapes"), array);
+    const QJsonDocument document(root);
     QGuiApplication::clipboard()->setText(QString::fromUtf8(document.toJson(QJsonDocument::Compact)));
 
     m_pasteCount = 0;
     updatePasteAction();
-    statusBar()->showMessage(tr("Copied %1").arg(item->name()), 4000);
+    statusBar()->showMessage(picked.size() == 1
+                                 ? tr("Copied %1").arg(picked.first()->name())
+                                 : tr("Copied %n shapes", nullptr, int(picked.size())),
+                             4000);
 }
 
 void MainWindow::on_actionSaveScreenshot_triggered()
@@ -1085,23 +1125,31 @@ void MainWindow::on_actionPaste_triggered()
     if (parseError.error != QJsonParseError::NoError || !document.isObject())
         return; // clipboard holds something else entirely; not an error
 
-    ShapeItem *shape = SceneSerializer::shapeFromJson(document.object());
-    if (!shape)
+    const QVector<ShapeItem *> shapes = clipboardShapes();
+    if (shapes.isEmpty())
         return;
 
+    // The same offset for every one of them, so a group pasted keeps the
+    // arrangement it was copied in.
     constexpr qreal kPasteOffset = 20.0;
     const qreal offset = kPasteOffset * ++m_pasteCount;
-    shape->setPos(shape->pos() + QPointF(offset, offset));
-
-    // Named after it joins the scene, and against what the scene already
-    // holds: a name chosen beforehand cannot be checked for collisions, which
-    // is how two shapes end up sharing one.
-    m_scene->addItem(shape);
-    shape->setName(Naming::nextName(shape->typeName(), m_scene->takenNames(shape)));
+    for (ShapeItem *shape : shapes) {
+        shape->setPos(shape->pos() + QPointF(offset, offset));
+        // Named after it joins the scene, and against what the scene already
+        // holds: a name chosen beforehand cannot be checked for collisions,
+        // which is how two shapes end up sharing one.
+        m_scene->addItem(shape);
+        shape->setName(Naming::nextName(shape->typeName(), m_scene->takenNames(shape)));
+    }
     m_scene->notifyShapesChanged();
-    m_scene->selectShape(shape);
-    m_scene->notifyEdit(tr("Paste %1").arg(shape->name()));
-    statusBar()->showMessage(tr("Pasted %1").arg(shape->name()), 4000);
+    m_scene->selectShape(shapes.first());
+    for (ShapeItem *shape : shapes.mid(1))
+        m_scene->addToEditSelection(shape);
+
+    const QString what = shapes.size() == 1 ? shapes.first()->name()
+                                            : tr("%n shapes", nullptr, int(shapes.size()));
+    m_scene->notifyEdit(tr("Paste %1").arg(what));
+    statusBar()->showMessage(tr("Pasted %1").arg(what), 4000);
 }
 
 bool MainWindow::confirmDiscardChanges(const QString &title)
@@ -1248,26 +1296,62 @@ bool MainWindow::saveSceneAs(QString path)
     return onSaveScene();
 }
 
+// The shapes an Edit-mode command acts on: everything picked, with the one
+// carrying the handles first.
+QVector<ShapeItem *> MainWindow::selectedShapes() const
+{
+    QVector<ShapeItem *> picked;
+    if (ShapeItem *active = m_scene->activeItem())
+        picked.append(active);
+    for (ShapeItem *other : m_scene->editSelection()) {
+        if (!picked.contains(other))
+            picked.append(other);
+    }
+    return picked;
+}
+
 void MainWindow::duplicateShape(ShapeItem *item)
 {
     if (!item)
         return;
 
-    // Through the same JSON the clipboard uses, so a duplicate and a paste
-    // cannot drift apart in what they carry.
-    ShapeItem *copy = SceneSerializer::shapeFromJson(SceneSerializer::shapeToJson(item));
-    if (!copy)
-        return;
+    // Asked of one shape, but a shape that is part of a selection stands for
+    // the whole of it -- the same as copy does.
+    QVector<ShapeItem *> source = selectedShapes();
+    if (!source.contains(item))
+        source = {item};
 
     constexpr qreal kOffset = 20.0;
-    copy->setPos(item->pos() + QPointF(kOffset, kOffset));
-    m_scene->addItem(copy);
-    // A copy is a new object: its own name, and in no body until grouped.
-    copy->setName(Naming::nextName(item->typeName(), m_scene->takenNames(copy)));
+    QVector<ShapeItem *> copies;
+    for (ShapeItem *one : std::as_const(source)) {
+        // Through the same JSON the clipboard uses, so a duplicate and a paste
+        // cannot drift apart in what they carry.
+        ShapeItem *copy = SceneSerializer::shapeFromJson(SceneSerializer::shapeToJson(one));
+        if (!copy)
+            continue;
+        copy->setPos(one->pos() + QPointF(kOffset, kOffset));
+        m_scene->addItem(copy);
+        // A copy is a new object: its own name, and in no body until grouped.
+        copy->setName(Naming::nextName(one->typeName(), m_scene->takenNames(copy)));
+        copies.append(copy);
+    }
+    if (copies.isEmpty())
+        return;
+
     m_scene->notifyShapesChanged();
-    m_scene->selectShape(copy);
-    m_scene->notifyEdit(tr("Duplicate %1").arg(item->name()));
-    statusBar()->showMessage(tr("Duplicated %1 as %2").arg(item->name(), copy->name()), 4000);
+    m_scene->selectShape(copies.first());
+    for (ShapeItem *copy : copies.mid(1))
+        m_scene->addToEditSelection(copy);
+
+    if (copies.size() == 1) {
+        m_scene->notifyEdit(tr("Duplicate %1").arg(source.first()->name()));
+        statusBar()->showMessage(
+            tr("Duplicated %1 as %2").arg(source.first()->name(), copies.first()->name()), 4000);
+        return;
+    }
+    const QString what = tr("%n shapes", nullptr, int(copies.size()));
+    m_scene->notifyEdit(tr("Duplicate %1").arg(what));
+    statusBar()->showMessage(tr("Duplicated %1").arg(what), 4000);
 }
 
 void MainWindow::convertToPolygon(ShapeItem *item)
@@ -1386,8 +1470,15 @@ static QString formatLogNumber(double v)
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_ui->canvasView && event->type() == QEvent::Resize)
+    if (watched == m_ui->canvasView && event->type() == QEvent::Resize) {
         placeLogOverlay();
+        placeToolOptions();
+    }
+    // The panel is a child of the view, so a press that reaches the viewport
+    // landed somewhere else -- which means the user has moved on, and the tool
+    // they did not keep is called off.
+    if (watched == m_ui->canvasView->viewport() && event->type() == QEvent::MouseButtonPress)
+        cancelTool();
     return QMainWindow::eventFilter(watched, event);
 }
 
@@ -1825,6 +1916,356 @@ void MainWindow::onEditorModeChanged(EditorMode mode)
 // Lining shapes up: one button with the six edges under it, used from the
 // toolbar and from the Edit menu. The scene does the work -- it owns the
 // selection, and the move is an edit like any other.
+
+// The strip under the toolbar, empty and hidden until a tool opens it.
+void MainWindow::buildToolsMenu()
+{
+    m_toolsMenu = new QMenu(tr("Tools"), this);
+    m_toolsMenu->setIcon(Icons::tools());
+    m_toolsAction = new QAction(Icons::tools(), tr("Tools"), this);
+    m_toolsAction->setMenu(m_toolsMenu);
+    m_toolsAction->setToolTip(tr("Tools that work on the selection"));
+
+    auto *clone = m_toolsMenu->addAction(Icons::clone(), tr("&Clone…"));
+    connect(clone, &QAction::triggered, this, [this] {
+        const QVector<ShapeItem *> source = selectedShapes();
+        if (source.isEmpty())
+            return;
+        QRectF all;
+        for (ShapeItem *shape : source) {
+            const QRectF box = shape->mapToScene(shape->rect()).boundingRect();
+            all = all.isNull() ? box : all.united(box);
+        }
+        const QVector<ToolOption> options {
+            { QStringLiteral("rows"), tr("Rows"), 1, 1, 200, 1, 0, {} },
+            { QStringLiteral("columns"), tr("Columns"), 2, 1, 200, 1, 0, {} },
+            { QStringLiteral("gapX"), tr("Gap across"), 20, -10000, 10000, 5, 1, {} },
+            { QStringLiteral("gapY"), tr("Gap down"), 20, -10000, 10000, 5, 1, {} },
+        };
+        beginTool(tr("Clone"), tr("Clone %1").arg(source.size() == 1
+                                                      ? source.first()->name()
+                                                      : tr("%n shapes", nullptr, source.size())),
+                  options, [this, source] {
+                      m_toolCreated.clear();
+                      const QVector<ShapeItem *> made = cloneSelection(
+                          source, int(m_toolOptions->value(QStringLiteral("rows"))),
+                          int(m_toolOptions->value(QStringLiteral("columns"))),
+                          m_toolOptions->value(QStringLiteral("gapX")),
+                          m_toolOptions->value(QStringLiteral("gapY")));
+                      for (ShapeItem *shape : made)
+                          m_toolCreated.append(shape);
+                  });
+    });
+
+    auto *mirror = m_toolsMenu->addAction(Icons::flipHorizontal(), tr("&Mirror…"));
+    connect(mirror, &QAction::triggered, this, [this] {
+        const QVector<ShapeItem *> source = selectedShapes();
+        if (source.isEmpty())
+            return;
+        QVector<ToolOption> options {
+            { QStringLiteral("side"), tr("Side"), 0, 0, 3, 1, 0, {}, {} },
+            { QStringLiteral("margin"), tr("Margin"), 20, -10000, 10000, 5, 1, {}, {} },
+        };
+        // In the order MirrorSide takes them.
+        options[0].choices = { tr("Right"), tr("Left"), tr("Top"), tr("Bottom") };
+        beginTool(tr("Mirror"), tr("Mirror"), options, [this, source] {
+            m_toolCreated.clear();
+            const QVector<ShapeItem *> made =
+                mirrorSelection(source, int(m_toolOptions->value(QStringLiteral("side"))),
+                                m_toolOptions->value(QStringLiteral("margin")));
+            for (ShapeItem *shape : made)
+                m_toolCreated.append(shape);
+        });
+    });
+
+    if (auto *toolBar = m_ui->toolBar) {
+        // Straight after Align, which is the other thing on the bar that works
+        // on whatever is picked.
+        const QList<QAction *> actions = toolBar->actions();
+        const int at = actions.indexOf(m_ui->actionAlign);
+        toolBar->insertAction(at >= 0 && at + 1 < actions.size() ? actions.at(at + 1) : nullptr,
+                              m_toolsAction);
+        if (auto *button = qobject_cast<QToolButton *>(toolBar->widgetForAction(m_toolsAction)))
+            button->setPopupMode(QToolButton::InstantPopup);
+    }
+
+    // On the canvas rather than on the toolbar: it belongs to what is being
+    // drawn, and a bar across the top pushes the whole scene down.
+    m_toolOptions = new ToolOptionsBar(m_ui->canvasView);
+    m_toolOptions->hide();
+
+    connect(m_toolOptions, &ToolOptionsBar::valueChanged, this, &MainWindow::runTool);
+    connect(m_toolOptions, &ToolOptionsBar::applied, this, &MainWindow::applyTool);
+    connect(m_toolOptions, &ToolOptionsBar::cancelled, this, &MainWindow::cancelTool);
+}
+
+// Bottom left of the canvas, clear of the edges -- the same corner rule the
+// log overlay follows.
+void MainWindow::placeToolOptions()
+{
+    if (!m_toolOptions || m_toolOptions->isHidden())
+        return;
+    constexpr int kMargin = 10;
+    const QSize view = m_ui->canvasView->viewport()->size();
+    m_toolOptions->adjustSize();
+    m_toolOptions->move(kMargin,
+                        qMax(kMargin, view.height() - m_toolOptions->height() - kMargin));
+}
+
+void MainWindow::beginTool(const QString &title, const QString &label,
+                           const QVector<ToolOption> &options, std::function<void()> run)
+{
+    cancelTool();
+
+    m_toolLabel = label;
+    m_toolRun = std::move(run);
+    m_toolSubjects.clear();
+    m_toolCreated.clear();
+    for (ShapeItem *shape : selectedShapes())
+        m_toolSubjects.append({ shape, shape->pos(), shape->rotation() });
+
+    m_toolOptions->begin(title, options);
+    m_toolOptions->show();
+    m_toolOptions->raise();
+    placeToolOptions();
+    runTool();
+}
+
+// Back to what the tool found, so the next run is not laid on top of the last.
+void MainWindow::undoTool()
+{
+    for (const QPointer<ShapeItem> &shape : std::as_const(m_toolCreated)) {
+        if (shape)
+            m_scene->destroyShape(shape.data());
+    }
+    m_toolCreated.clear();
+
+    for (const ToolSubject &subject : std::as_const(m_toolSubjects)) {
+        if (!subject.shape)
+            continue;
+        subject.shape->setPos(subject.pos);
+        subject.shape->setRotation(subject.rotation);
+    }
+}
+
+void MainWindow::runTool()
+{
+    if (!m_toolRun)
+        return;
+
+    // Every run but the kept one is a guess, and the undo stack is not shown
+    // guesses.
+    m_scene->muteEdits(true);
+    undoTool();
+    m_toolRun();
+    m_scene->muteEdits(false);
+    m_scene->update();
+}
+
+void MainWindow::applyTool()
+{
+    if (!m_toolRun)
+        return;
+    const QString label = m_toolLabel;
+    m_toolRun = nullptr;
+    m_toolSubjects.clear();
+    m_toolCreated.clear();
+    m_toolShape = nullptr;
+    m_toolOriginal = QJsonObject();
+    if (m_toolHidden)
+        m_scene->destroyShape(m_toolHidden.data());
+    m_toolHidden = nullptr;
+    m_toolOptions->hide();
+    m_scene->notifyShapesChanged();
+    m_scene->notifyEdit(label);
+}
+
+void MainWindow::cancelTool()
+{
+    if (!m_toolRun)
+        return;
+    m_scene->muteEdits(true);
+    undoTool();
+    m_scene->muteEdits(false);
+    m_toolRun = nullptr;
+    m_toolSubjects.clear();
+    m_toolCreated.clear();
+    if (m_toolShape && !m_toolOriginal.isEmpty())
+        m_scene->replaceShape(m_toolShape.data(), m_toolOriginal);
+    m_toolShape = nullptr;
+    m_toolOriginal = QJsonObject();
+    if (m_toolHidden)
+        m_toolHidden->setVisible(true);
+    m_toolHidden = nullptr;
+    m_toolOptions->hide();
+    m_scene->notifyShapesChanged();
+    m_scene->update();
+}
+
+// A grid of copies of whatever is picked, the original standing in for row and
+// column nought. Spacing is the gap left between neighbours, so it is read off
+// the whole selection's box rather than off each shape.
+
+// A reflected copy of the selection on the side asked for, the margin being
+// the distance between the two boxes. The mirror line sits half a margin past
+// that edge, so the copy lands a whole margin away however far each shape in
+// the selection is from the edge.
+
+
+// A circle turned into the chain that runs round it: the links are the sides
+// of the polygon inscribed in it, so each one ends exactly where the next
+// begins and the corners sit on the circle that was drawn.
+// A circle redrawn as the run of segments round its rim -- the same kind of
+// conversion a rectangle's Convert to Polygon is, and nothing to do with
+// bodies or joints. The shape keeps its name, its body and its physics.
+
+// A circle or a rectangle taken apart into the lines its outline is made of.
+// Unlike Convert to Chain, which leaves one shape, this leaves one per side:
+// each can be a body of its own, which is what joints connect.
+void MainWindow::shapeToSegments(ShapeItem *item)
+{
+    if (!item)
+        return;
+    const bool round = item->typeName() == QLatin1String("circle");
+    if (!round && item->typeName() != QLatin1String("rectangle"))
+        return;
+
+    QVector<ToolOption> options {
+        { QStringLiteral("segments"), round ? tr("Segments") : tr("Per side"),
+          round ? 12 : 1, round ? 3 : 1, 400, 1, 0, {}, {} },
+    };
+    if (round) {
+        options.append({ QStringLiteral("angle"), tr("Start angle"), 0, -360, 360, 5, 1,
+                         QStringLiteral("\u00b0"), {} });
+    }
+
+    // Out of sight while the segments stand in for it, back if the tool is
+    // called off, and gone once it is kept.
+    item->setVisible(false);
+    m_toolHidden = item;
+
+    beginTool(tr("Convert to Segments"), tr("Convert %1 to segments").arg(item->name()), options,
+              [this, round] {
+                  if (!m_toolHidden)
+                      return;
+                  const QVector<ShapeItem *> made = m_scene->convertToSegments(
+                      m_toolHidden.data(),
+                      int(m_toolOptions->value(QStringLiteral("segments"))),
+                      round ? m_toolOptions->value(QStringLiteral("angle")) : 0.0);
+                  for (ShapeItem *segment : made)
+                      m_toolCreated.append(segment);
+              });
+}
+
+void MainWindow::circleToChain(ShapeItem *item)
+{
+    if (!item || item->typeName() != QLatin1String("circle"))
+        return;
+
+    // What it was, so every re-run starts from the circle rather than from
+    // the polygon the last one left, and Cancel can put it back.
+    m_toolOriginal = SceneSerializer::shapeToJson(item);
+    m_toolShape = item;
+
+    const QVector<ToolOption> options {
+        { QStringLiteral("segments"), tr("Segments"), 12, 3, 400, 1, 0, {}, {} },
+        { QStringLiteral("angle"), tr("Start angle"), 0, -360, 360, 5, 1,
+          QStringLiteral("°"), {} },
+    };
+    beginTool(tr("Circle to Chain"), tr("Convert %1 to a chain").arg(item->name()), options,
+              [this] {
+                  if (!m_toolShape)
+                      return;
+                  ShapeItem *was = m_toolShape.data();
+                  ShapeItem *now = m_scene->replaceShape(was, m_toolOriginal);
+                  m_toolShape = now ? now : was;
+                  if (!m_toolShape)
+                      return;
+                  if (ShapeItem *chain = m_scene->convertCircleToChain(
+                          m_toolShape.data(),
+                          int(m_toolOptions->value(QStringLiteral("segments"))),
+                          m_toolOptions->value(QStringLiteral("angle"))))
+                      m_toolShape = chain;
+              });
+}
+
+QVector<ShapeItem *> MainWindow::mirrorSelection(const QVector<ShapeItem *> &source, int side,
+                                                 qreal margin)
+{
+    QVector<ShapeItem *> made;
+    if (source.isEmpty())
+        return made;
+
+    QRectF all;
+    for (ShapeItem *shape : source) {
+        const QRectF box = shape->mapToScene(shape->rect()).boundingRect();
+        all = all.isNull() ? box : all.united(box);
+    }
+    // Right, Left, Top, Bottom -- the order the panel lists them in.
+    const bool horizontally = side == MirrorRight || side == MirrorLeft;
+    const bool ahead = side == MirrorRight || side == MirrorBottom;
+    const qreal edge = side == MirrorRight    ? all.right()
+                       : side == MirrorLeft   ? all.left()
+                       : side == MirrorTop    ? all.top()
+                                              : all.bottom();
+    const qreal axis = edge + (ahead ? margin / 2.0 : -margin / 2.0);
+
+    for (ShapeItem *one : source) {
+        ShapeItem *copy = SceneSerializer::shapeFromJson(SceneSerializer::shapeToJson(one));
+        if (!copy)
+            continue;
+        m_scene->addItem(copy);
+        copy->setName(Naming::nextName(one->typeName(), m_scene->takenNames(copy)));
+        flipShape(copy, horizontally);
+
+        // Measured after the flip, since flipping is about the shape's own
+        // origin and moves whatever it covers.
+        const QPointF was = one->mapToScene(one->rect()).boundingRect().center();
+        const QPointF now = copy->mapToScene(copy->rect()).boundingRect().center();
+        const QPointF wanted = horizontally ? QPointF(2.0 * axis - was.x(), was.y())
+                                            : QPointF(was.x(), 2.0 * axis - was.y());
+        copy->setPos(copy->pos() + (wanted - now));
+        made.append(copy);
+    }
+    return made;
+}
+
+QVector<ShapeItem *> MainWindow::cloneSelection(const QVector<ShapeItem *> &source, int rows,
+                                                int columns, qreal gapX, qreal gapY)
+{
+    QVector<ShapeItem *> made;
+    if (source.isEmpty() || rows < 1 || columns < 1)
+        return made;
+
+    QRectF all;
+    for (ShapeItem *shape : source) {
+        const QRectF box = shape->mapToScene(shape->rect()).boundingRect();
+        all = all.isNull() ? box : all.united(box);
+    }
+    const qreal pitchX = all.width() + gapX;
+    const qreal pitchY = all.height() + gapY;
+
+    for (int row = 0; row < rows; ++row) {
+        for (int column = 0; column < columns; ++column) {
+            if (row == 0 && column == 0)
+                continue;
+            const QPointF offset(column * pitchX, row * pitchY);
+            for (ShapeItem *one : source) {
+                // Through the same JSON the clipboard uses, so a clone and a
+                // paste cannot drift apart in what they carry.
+                ShapeItem *copy = SceneSerializer::shapeFromJson(SceneSerializer::shapeToJson(one));
+                if (!copy)
+                    continue;
+                copy->setPos(one->pos() + offset);
+                m_scene->addItem(copy);
+                copy->setName(Naming::nextName(one->typeName(), m_scene->takenNames(copy)));
+                made.append(copy);
+            }
+        }
+    }
+    return made;
+}
+
 void MainWindow::buildAlignMenu()
 {
     struct Entry {
@@ -1841,17 +2282,44 @@ void MainWindow::buildAlignMenu()
         { CanvasScene::Align::VerticalCentre, tr("Align C&entres Down"),
           Icons::alignVerticalCentre() },
         { CanvasScene::Align::Bottom, tr("Align &Bottom"), Icons::alignBottom() },
+        { CanvasScene::Align::DistributeAcross, tr("&Distribute Across"),
+          Icons::distributeAcross() },
+        { CanvasScene::Align::DistributeDown, tr("D&istribute Down"),
+          Icons::distributeDown() },
+        { CanvasScene::Align::RingOutside, tr("Ring &Outside"), Icons::alignRingOutside() },
+        { CanvasScene::Align::RingInside, tr("Ring &Inside"), Icons::alignRingInside() },
     };
 
     for (int i = 0; i < entries.size(); ++i) {
         const Entry &entry = entries.at(i);
         auto *action = m_ui->menuAlign->addAction(entry.icon, entry.text);
         const CanvasScene::Align edge = entry.edge;
-        connect(action, &QAction::triggered, this, [this, edge] {
-            m_scene->alignSelection(edge);
+        const QString text = entry.text;
+        connect(action, &QAction::triggered, this, [this, edge, text] {
+            const bool ring =
+                edge == CanvasScene::Align::RingOutside || edge == CanvasScene::Align::RingInside;
+            const bool spread = edge == CanvasScene::Align::DistributeAcross
+                                || edge == CanvasScene::Align::DistributeDown;
+            if (!ring && !spread) {
+                m_scene->alignSelection(edge);
+                return;
+            }
+            // Spacing opens on the gap that leaves the selection spanning what
+            // it spans now, so Apply without touching anything is the plain
+            // "space these evenly" everyone expects.
+            const qreal start =
+                spread ? m_scene->evenGap(edge == CanvasScene::Align::DistributeAcross) : 0.0;
+            const QVector<ToolOption> options {
+                { QStringLiteral("gap"), tr("Gap"), start, -10000, 10000, 1, 1, {} },
+            };
+            QString title = text;
+            title.remove(QLatin1Char('&'));
+            beginTool(title, title, options, [this, edge] {
+                m_scene->alignSelection(edge, m_toolOptions->value(QStringLiteral("gap")));
+            });
         });
-        if (i == 2)
-            m_ui->menuAlign->addSeparator();   // across, then down
+        if (i == 2 || i == 5 || i == 7)
+            m_ui->menuAlign->addSeparator();   // across, down, evenly, round
     }
 
     m_ui->actionAlign->setIcon(Icons::align());
@@ -2002,6 +2470,15 @@ void MainWindow::updateAlignActions()
     const bool can = m_scene->canAlignSelection();
     m_ui->actionAlign->setEnabled(can);
     m_ui->menuAlign->setEnabled(can);
+
+    // Aligning needs two shapes to line up against each other; cloning needs
+    // only the one. Said here because nothing else ever turned Tools back on,
+    // so one run left it greyed out for good.
+    if (m_toolsAction) {
+        const bool running = m_simulation && m_simulation->isActive();
+        m_toolsAction->setEnabled(!running && m_scene->editorMode() == EditorMode::Edit
+                                  && m_scene->activeItem() != nullptr);
+    }
 }
 
 void MainWindow::onActiveItemChanged(ShapeItem *item)
@@ -2153,6 +2630,24 @@ void MainWindow::on_canvasView_customContextMenuRequested(const QPoint &pos)
 
         menu.addAction(tr("Flip Horizontally"), this, [this, item] { flipShape(item, true); });
         menu.addAction(tr("Flip Vertically"), this, [this, item] { flipShape(item, false); });
+
+        if (item->typeName() == QLatin1String("circle")) {
+            QAction *toChain = menu.addAction(tr("Convert to Chain…"), this,
+                                              [this, item] { circleToChain(item); });
+            toChain->setToolTip(tr("Replaces it with a closed chain of links round its rim,"
+                                   " each one its own body, jointed to its neighbours."));
+            toChain->setEnabled(!(m_simulation && m_simulation->isActive()));
+        }
+
+        if (item->typeName() == QLatin1String("circle")
+            || item->typeName() == QLatin1String("rectangle")) {
+            QAction *toSegments = menu.addAction(tr("Convert to Segments…"), this,
+                                                 [this, item] { shapeToSegments(item); });
+            toSegments->setToolTip(tr("Replaces it with one line per side of its outline, each"
+                                      " its own shape and in no body -- so they can be made"
+                                      " into bodies and jointed together."));
+            toSegments->setEnabled(!(m_simulation && m_simulation->isActive()));
+        }
 
         if (item->typeName() == QLatin1String("rectangle")) {
             QAction *toPolygon = menu.addAction(tr("Convert to Polygon"), this,

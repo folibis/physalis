@@ -49,6 +49,14 @@
         <file alias="objects.svg">icons/objects.svg</file>
         <file alias="rules.svg">icons/rules.svg</file>
         <file alias="plot.svg">icons/plot.svg</file>
+        <file alias="distribute_across.svg">icons/distribute_across.svg</file>
+        <file alias="distribute_down.svg">icons/distribute_down.svg</file>
+        <file alias="mirror_across.svg">icons/mirror_across.svg</file>
+        <file alias="mirror_down.svg">icons/mirror_down.svg</file>
+        <file alias="tools.svg">icons/tools.svg</file>
+        <file alias="clone.svg">icons/clone.svg</file>
+        <file alias="align_ring_out.svg">icons/align_ring_out.svg</file>
+        <file alias="align_ring_in.svg">icons/align_ring_in.svg</file>
     </qresource>
     <qresource prefix="/app">
         <file alias="icon.svg">physalis.svg</file>

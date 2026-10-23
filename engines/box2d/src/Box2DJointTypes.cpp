@@ -572,6 +572,19 @@ QVector<JointType> Box2DEngine::jointTypes() const
                 param.role = PropertyRole::SpringStiffness;
             else if (param.key == QLatin1String("length"))
                 param.role = PropertyRole::SpringRestLength;
+            // How far it may travel. A length on the ones drawn between two
+            // anchors, an angle on the ones drawn about a hub -- the editor
+            // tells those apart by the joint's kind, not by these keys.
+            else if (param.key == QLatin1String("enableLimit"))
+                param.role = PropertyRole::LimitEnabled;
+            else if (param.key == QLatin1String("minLength")
+                     || param.key == QLatin1String("lowerTranslation")
+                     || param.key == QLatin1String("lowerAngle"))
+                param.role = PropertyRole::LowerLimit;
+            else if (param.key == QLatin1String("maxLength")
+                     || param.key == QLatin1String("upperTranslation")
+                     || param.key == QLatin1String("upperAngle"))
+                param.role = PropertyRole::UpperLimit;
         }
     }
 

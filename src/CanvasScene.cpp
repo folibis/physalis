@@ -169,6 +169,76 @@ ShapeItem *CanvasScene::convertToPolygon(ShapeItem *shape)
     // out square, so the number goes rather than lingering with no effect.
     json.insert(QStringLiteral("cornerRadius"), 0.0);
 
+    return replaceShape(shape, json);
+}
+
+// One shape in another's place: its name, its body, its physics and whatever
+// was holding it all carry over, because the document says so -- the new one
+// is built from the old one's own JSON with the geometry changed.
+
+// Taking one shape out, with everything that was holding on to it let go
+// first. A raw delete leaves the scene pointing at freed memory -- the active
+// item above all, which is read on the next paint and the next click -- so
+// nothing deletes a shape itself.
+void CanvasScene::destroyShape(ShapeItem *shape)
+{
+    if (!shape || shape->scene() != this)
+    {
+        return;
+    }
+
+    PhysicsBody *body = shape->body();
+    if (body)
+    {
+        body->removeShape(shape);
+    }
+
+    const bool wasActive = m_active == shape;
+    if (wasActive)
+    {
+        m_active = nullptr;
+        m_selectedNodes.clear();
+    }
+    const bool wasCoSelected = m_editSelection.removeOne(shape);
+    const bool wasPicked = m_physicsSelection.removeOne(shape);
+    m_bodyDragShapes.removeAll(shape);
+    if (m_groupClickCandidate == shape)
+    {
+        m_groupClickCandidate = nullptr;
+    }
+    m_dragMode = DragMode::None;
+
+    removeItem(shape);
+    delete shape;
+
+    if (wasActive)
+    {
+        emit activeItemChanged(nullptr);
+    }
+    if (wasCoSelected || wasActive)
+    {
+        refreshGroupOrigin();
+        emit editSelectionChanged();
+    }
+    if (wasPicked)
+    {
+        emit physicsSelectionChanged();
+    }
+    emit shapesChanged();
+    if (body)
+    {
+        emit bodiesChanged();
+    }
+    pruneWatches();
+}
+
+ShapeItem *CanvasScene::replaceShape(ShapeItem *shape, const QJsonObject &json)
+{
+    if (!shape || shape->scene() != this)
+    {
+        return nullptr;
+    }
+
     ShapeItem *polygon = SceneSerializer::shapeFromJson(json);
     if (!polygon)
     {
@@ -231,6 +301,154 @@ ShapeItem *CanvasScene::convertToPolygon(ShapeItem *shape)
     }
 
     return polygon;
+}
+
+// A circle is not a shape an engine can round off into segments on its own --
+// how many is the scene's business, not the engine's -- so the editor picks
+// the count and hands over the polygon it makes.
+
+// The corners the outline of a circle or a rectangle is made of, in the
+// shape's own coordinates and in the order they run. A circle has as many as
+// it is asked for; a rectangle keeps its four and splits each side that many
+// ways, so a corner never falls in the middle of a segment.
+QVector<QPointF> CanvasScene::outlineCorners(ShapeItem *shape, int segments,
+                                             qreal startAngle) const
+{
+    QVector<QPointF> corners;
+    if (!shape || segments < 1)
+    {
+        return corners;
+    }
+
+    const QRectF own = shape->rect();
+    if (shape->typeName() == QLatin1String("circle"))
+    {
+        if (segments < 3)
+        {
+            return corners;
+        }
+        const QPointF middle = own.center();
+        const qreal radius = qMin(own.width(), own.height()) / 2.0;
+        const qreal from = qDegreesToRadians(startAngle);
+        for (int i = 0; i < segments; ++i)
+        {
+            const qreal angle = from + i * 2.0 * M_PI / segments;
+            corners.append(middle + QPointF(radius * std::cos(angle), radius * std::sin(angle)));
+        }
+        return corners;
+    }
+
+    const QPointF side[4] { own.topLeft(), own.topRight(), own.bottomRight(), own.bottomLeft() };
+    for (int i = 0; i < 4; ++i)
+    {
+        const QPointF from = side[i];
+        const QPointF to = side[(i + 1) % 4];
+        for (int step = 0; step < segments; ++step)
+        {
+            const qreal t = qreal(step) / segments;
+            corners.append(from + (to - from) * t);
+        }
+    }
+    return corners;
+}
+
+// One shape per side of that outline, each a line of its own, in no body and
+// free to be jointed to its neighbours. The shape they came from goes.
+QVector<ShapeItem *> CanvasScene::convertToSegments(ShapeItem *shape, int segments,
+                                                    qreal startAngle)
+{
+    QVector<ShapeItem *> made;
+    if (!shape || shape->scene() != this)
+    {
+        return made;
+    }
+    const QVector<QPointF> corners = outlineCorners(shape, segments, startAngle);
+    if (corners.size() < 2)
+    {
+        return made;
+    }
+
+    // Built from the shape's own JSON, so each segment keeps its friction and
+    // the rest of what the engine was told about it.
+    const QJsonObject source = SceneSerializer::shapeToJson(shape);
+    const QString stem = shape->name();
+    const qreal z = shape->zValue();
+
+    for (int i = 0; i < corners.size(); ++i)
+    {
+        const QPointF a = shape->mapToScene(corners.at(i));
+        const QPointF b = shape->mapToScene(corners.at((i + 1) % corners.size()));
+        const QPointF middle = (a + b) / 2.0;
+
+        QJsonObject json = source;
+        json.insert(QStringLiteral("type"), QStringLiteral("polygon"));
+        json.insert(QStringLiteral("closed"), false);
+        json.insert(QStringLiteral("outline"), true);
+        json.insert(QStringLiteral("cornerRadius"), 0.0);
+        // Laid out about its own middle with no turn of its own, so the two
+        // ends say where it is and nothing else has to agree with them.
+        json.insert(QStringLiteral("rotation"), 0.0);
+        json.insert(QStringLiteral("origin"), QJsonObject { { "x", 0.0 }, { "y", 0.0 } });
+        json.insert(QStringLiteral("pos"),
+                    QJsonObject { { "x", middle.x() }, { "y", middle.y() } });
+        json.insert(QStringLiteral("points"),
+                    QJsonArray { QJsonObject { { "x", a.x() - middle.x() },
+                                               { "y", a.y() - middle.y() } },
+                                 QJsonObject { { "x", b.x() - middle.x() },
+                                               { "y", b.y() - middle.y() } } });
+
+        ShapeItem *segment = SceneSerializer::shapeFromJson(json);
+        if (!segment)
+        {
+            continue;
+        }
+        segment->setZValue(z);
+        addItem(segment);
+        segment->setName(Naming::nextName(stem, takenNames(segment)));
+        made.append(segment);
+    }
+
+    if (!made.isEmpty())
+    {
+        emit shapesChanged();
+    }
+    return made;
+}
+
+ShapeItem *CanvasScene::convertCircleToChain(ShapeItem *shape, int segments, qreal startAngle)
+{
+    if (!shape || shape->scene() != this || segments < 3)
+    {
+        return nullptr;
+    }
+
+    const QRectF own = shape->rect();
+    const QPointF middle = own.center();
+    const qreal radius = qMin(own.width(), own.height()) / 2.0;
+
+    // Where the first corner sits. Turning the corners is not the same as
+    // turning the shape: the shape's own rotation is what its body is built
+    // with, and a chain wanted flat side down should not have to carry one.
+    const qreal from = qDegreesToRadians(startAngle);
+
+    QJsonArray points;
+    for (int i = 0; i < segments; ++i)
+    {
+        const qreal angle = from + i * 2.0 * M_PI / segments;
+        points.append(QJsonObject { { "x", middle.x() + radius * std::cos(angle) },
+                                    { "y", middle.y() + radius * std::sin(angle) } });
+    }
+
+    QJsonObject json = SceneSerializer::shapeToJson(shape);
+    json.insert(QStringLiteral("type"), QStringLiteral("polygon"));
+    json.insert(QStringLiteral("closed"), true);
+    json.insert(QStringLiteral("points"), points);
+    json.insert(QStringLiteral("cornerRadius"), 0.0);
+    // A chain is hollow, and a closed convex outline within the vertex limit
+    // would otherwise be built as a solid shape -- so eight segments or fewer
+    // came out a filled polygon rather than a ring with an inside.
+    json.insert(QStringLiteral("outline"), true);
+    return replaceShape(shape, json);
 }
 
 ExplosionItem *CanvasScene::addExplosion(const QPointF &scenePos)
@@ -533,6 +751,67 @@ void CanvasScene::selectForPhysics(ShapeItem *shape, bool additive)
     emit physicsSelectionChanged();
 }
 
+// Everything the swept box touches, by its outline rather than by the box it
+// covers: a circle a corner of the band clips is caught, one it only passes
+// near is not.
+void CanvasScene::applyRubberBand(const QRectF &band, bool additive)
+{
+    QVector<ShapeItem *> caught;
+    const QList<QGraphicsItem *> under = items(band, Qt::IntersectsItemShape, Qt::AscendingOrder);
+    for (QGraphicsItem *candidate : under)
+    {
+        if (auto *shape = qgraphicsitem_cast<ShapeItem *>(candidate))
+        {
+            caught.append(shape);
+        }
+    }
+    if (caught.isEmpty())
+    {
+        return;
+    }
+
+    if (m_editorMode != EditorMode::Edit)
+    {
+        // A body comes whole: one of its shapes swept up brings the rest, as
+        // a Shift+click on it does.
+        QVector<ShapeItem *> wanted = additive ? m_physicsSelection : QVector<ShapeItem *>();
+        for (ShapeItem *shape : std::as_const(caught))
+        {
+            const QVector<ShapeItem *> group =
+                shape->body() ? shape->body()->shapes() : QVector<ShapeItem *> { shape };
+            for (ShapeItem *member : group)
+            {
+                if (!wanted.contains(member))
+                {
+                    wanted.append(member);
+                }
+            }
+        }
+        if (wanted == m_physicsSelection)
+        {
+            return;
+        }
+        selectRay(nullptr);
+        selectExplosion(nullptr);
+        m_physicsSelection = wanted;
+        update();
+        emit physicsSelectionChanged();
+        return;
+    }
+
+    for (ShapeItem *shape : std::as_const(caught))
+    {
+        // addToEditSelection() toggles, which is what a Shift+click wants and
+        // not what a box does: a shape the box covers ends up picked whether
+        // it was before or not.
+        if (shape == m_active || m_editSelection.contains(shape))
+        {
+            continue;
+        }
+        addToEditSelection(shape);
+    }
+}
+
 void CanvasScene::clearPhysicsSelection()
 {
     if (m_physicsSelection.isEmpty())
@@ -651,7 +930,12 @@ ShapeItem *CanvasScene::looseShapeAt(const QPointF &scenePos) const
 
 PhysicsBody *CanvasScene::createBodyFromSelection()
 {
-    if (m_physicsSelection.isEmpty())
+    return createBodyFromShapes(m_physicsSelection);
+}
+
+PhysicsBody *CanvasScene::createBodyFromShapes(const QVector<ShapeItem *> &shapes)
+{
+    if (shapes.isEmpty())
     {
         return nullptr;
     }
@@ -659,7 +943,7 @@ PhysicsBody *CanvasScene::createBodyFromSelection()
     PhysicsBody *body = createEmptyBody();
 
     QVector<PhysicsBody *> vacated;
-    for (ShapeItem *shape : m_physicsSelection)
+    for (ShapeItem *shape : shapes)
     {
         if (PhysicsBody *previous = shape->body())
         {
@@ -1088,6 +1372,7 @@ physics::JointVisual CanvasScene::jointVisual(const QString &typeId) const
         m_jointVisualsEngine = engineName;
         m_jointVisuals.clear();
         m_jointSprings.clear();
+        m_jointLimits.clear();
         if (auto engine = physics::EngineRegistry::create(engineName))
         {
             for (const physics::JointType &type : engine->jointTypes())
@@ -1115,10 +1400,56 @@ physics::JointVisual CanvasScene::jointVisual(const QString &typeId) const
                     }
                 }
                 m_jointSprings.insert(type.id, keys);
+
+                LimitKeys stops;
+                for (const physics::JointParam &param : type.params)
+                {
+                    if (param.role == physics::PropertyRole::LimitEnabled)
+                    {
+                        stops.enabledKey = param.key;
+                        stops.enabledDefault = param.defaultValue.toBool();
+                    }
+                    else if (param.role == physics::PropertyRole::LowerLimit)
+                    {
+                        stops.lowerKey = param.key;
+                        stops.lowerDefault = param.defaultValue.toDouble();
+                    }
+                    else if (param.role == physics::PropertyRole::UpperLimit)
+                    {
+                        stops.upperKey = param.key;
+                        stops.upperDefault = param.defaultValue.toDouble();
+                    }
+                }
+                m_jointLimits.insert(type.id, stops);
             }
         }
     }
     return m_jointVisuals.value(typeId, physics::JointVisual::Pivot);
+}
+
+CanvasScene::JointLimits CanvasScene::jointLimits(const Joint *joint) const
+{
+    JointLimits stops;
+    if (!joint)
+    {
+        return stops;
+    }
+    jointVisual(joint->typeId()); // fills the cache for this engine
+    const LimitKeys keys = m_jointLimits.value(joint->typeId());
+    if (keys.lowerKey.isEmpty() || keys.upperKey.isEmpty())
+    {
+        return stops;
+    }
+    const QVariantMap &params = joint->params();
+
+    // A switch where the engine has one. Where there is none the pair of
+    // numbers is the whole of it -- some engines make a limited joint its own
+    // type rather than a setting -- so it is in force wherever it exists.
+    stops.enforced = keys.enabledKey.isEmpty()
+                     || params.value(keys.enabledKey, keys.enabledDefault).toBool();
+    stops.lower = params.value(keys.lowerKey, keys.lowerDefault).toDouble();
+    stops.upper = params.value(keys.upperKey, keys.upperDefault).toDouble();
+    return stops;
 }
 
 bool CanvasScene::isSpringJoint(const Joint *joint) const
@@ -2655,7 +2986,241 @@ bool CanvasScene::canAlignSelection() const
     return m_editorMode == EditorMode::Edit && selectedShapes().size() > 1;
 }
 
-void CanvasScene::alignSelection(Align edge)
+// A ring is a wheel, not a scattering: each shape is turned so the side facing
+// the circle lies along it, and they are packed edge to edge with the ring
+// sized to hold exactly that many of them.
+//
+// The radius is what makes the packing exact. A shape of width w standing on a
+// circle of radius r covers an angle of 2*asin(w / 2r) -- the chord, not the
+// arc, because it is the flat side that touches its neighbours. The whole ring
+// closes when those angles add to a full turn, which is one equation in r;
+// there is no closed form, so it is bisected. Using the arc instead is the
+// obvious shortcut and leaves a visible gap at every joint.
+void CanvasScene::ringSelection(const QVector<ShapeItem *> &shapes,
+                                const QVector<QRectF> &boxes, const QRectF &all, bool outside,
+                                qreal gap)
+{
+    const QPointF centre = all.center();
+
+    // Measured from the shape itself rather than from the box it covers now:
+    // every one of them is about to be turned, so what it covers is about to
+    // change. Width runs along the ring, height out from it.
+    QVector<qreal> widths;
+    QVector<qreal> heights;
+    QVector<qreal> rounds;
+    QVector<bool> upended;
+    qreal widest = 0.0;
+    qreal total = 0.0;
+    for (ShapeItem *shape : shapes)
+    {
+        const QRectF own = shape->rect();
+        widths.append(qAbs(own.width()));
+        heights.append(qAbs(own.height()));
+        widest = qMax(widest, qAbs(own.width()));
+        total += qAbs(own.width());
+        rounds.append(qBound(0.0, shape->cornerRadius(),
+                             qMin(qAbs(own.width()), qAbs(own.height())) / 2.0));
+
+        // Which end of the shape is the broad one, since that is the end that
+        // meets the circle and the narrow one is the tooth. A bounding box
+        // cannot say -- two triangles drawn point up and point down have the
+        // same one -- so it is asked of the area: the centroid of a triangle
+        // sits a third of the way from its base, so whichever side of centre
+        // it falls on is the side the width is on. Dead centre, as a rectangle
+        // and a circle are, leaves it as drawn.
+        qreal twiceArea = 0.0;
+        qreal sum = 0.0;
+        const int corners = shape->nodeCount();
+        for (int i = 0; i < corners; ++i)
+        {
+            const QPointF a = shape->nodePosition(i);
+            const QPointF b = shape->nodePosition((i + 1) % corners);
+            const qreal cross = a.x() * b.y() - b.x() * a.y();
+            twiceArea += cross;
+            sum += (a.y() + b.y()) * cross;
+        }
+        const qreal lean = corners < 3 || qFuzzyIsNull(twiceArea)
+                               ? 0.0
+                               : sum / (3.0 * twiceArea) - own.center().y();
+        upended.append(lean < 0.0);
+    }
+
+    // Somewhere between "every shape flat against the circle" and a ring so
+    // large the chords are the widths; the answer is always between them.
+    qreal low = qMax(widest, qAbs(gap)) / 2.0 + 0.001;
+    qreal high = qMax(total + qAbs(gap) * shapes.size(), widest) + 1.0;
+    // Half the turn one shape takes up on a ring of this size. With square
+    // corners that is the chord: half the face subtends asin(w / 2r). Rounding
+    // the corners cuts away exactly the material that was doing the touching,
+    // which is why a ring of rounded boxes came out with a gap at every joint.
+    //
+    // What touches then is the two corner arcs, and they touch when their
+    // centres are 2*rho apart. Each centre sits a rho in from the end of the
+    // face and a rho out from the face itself, so it stands at (ax, ay) from
+    // the ring's centre, and the share works out as the angle to that centre
+    // plus the angle the arc adds beyond it. At rho = 0 both terms collapse
+    // back to asin(w / 2r), which is how the square-cornered case stays exact.
+    const auto halfAngle = [&](int i, qreal radius) {
+        const qreal w = widths.at(i);
+        const qreal rho = rounds.at(i);
+        const qreal middle = std::sqrt(qMax(0.0, radius * radius - w * w / 4.0));
+        if (rho <= 0.0 || middle <= 0.0)
+        {
+            return std::asin(qMin(1.0, w / (2.0 * radius)));
+        }
+        const qreal ax = w / 2.0 - rho;
+        const qreal ay = middle + rho;
+        const qreal reach = std::hypot(ax, ay);
+        return std::atan2(ax, ay) + std::asin(qBound(-1.0, rho / reach, 1.0));
+    };
+
+    // Every shape's own share plus one gap each, which is what has to add to a
+    // whole turn. A gap pushed negative is an overlap and the equation holds.
+    const auto turnAt = [&](qreal radius) {
+        qreal turn = 2.0 * std::asin(qBound(-1.0, gap / (2.0 * radius), 1.0)) * widths.size();
+        for (int i = 0; i < widths.size(); ++i)
+        {
+            turn += 2.0 * halfAngle(i, radius);
+        }
+        return turn;
+    };
+    for (int step = 0; step < 60; ++step)
+    {
+        const qreal mid = (low + high) / 2.0;
+        // A bigger ring subtends less, so the two ends move the way they do.
+        if (turnAt(mid) > 2.0 * M_PI)
+        {
+            low = mid;
+        }
+        else
+        {
+            high = mid;
+        }
+    }
+    // The ring is exactly the size that holds them edge to edge. Keeping the
+    // radius they happen to stand at was the obvious kindness and it is wrong:
+    // any circle bigger than this one leaves a gap at every joint, and the
+    // whole point of the arrangement is that there are none.
+    const qreal path = (low + high) / 2.0;
+
+    // Kept in the order they already stand around the centre, so nothing jumps
+    // across the ring, and started where the first of them is, so asking twice
+    // does not spin it.
+    QVector<int> order;
+    for (int i = 0; i < shapes.size(); ++i)
+    {
+        order.append(i);
+    }
+    const auto bearing = [&](int i) {
+        const QPointF from = boxes.at(i).center() - centre;
+        return std::atan2(from.y(), from.x());
+    };
+    std::sort(order.begin(), order.end(),
+              [&](int a, int b) { return bearing(a) < bearing(b); });
+
+    // Each shape takes the share its own width needs, not an even slice: a
+    // ring of shapes of different sizes has to give the big ones more of the
+    // turn or the small ones stand apart. It still comes out exact, because
+    // the radius above was chosen to make these shares add to a whole turn.
+    const qreal gapAngle = 2.0 * std::asin(qBound(-1.0, gap / (2.0 * path), 1.0));
+    qreal angle = order.isEmpty() ? 0.0 : bearing(order.first());
+    for (const int i : std::as_const(order))
+    {
+        const qreal half = halfAngle(i, path);
+        // Half its own share before it and half after, so neighbours meet.
+        angle += half;
+        ShapeItem *shape = shapes.at(i);
+        // Turned so its height lies along the radius, which puts the width --
+        // the side that meets its neighbours -- along the ring. Outward or
+        // inward is half a turn apart, and for anything but a plain rectangle
+        // that is the difference between a tooth pointing out and one
+        // pointing in.
+        // A shape is drawn with its top at the low end of its own height, so the
+        // side that meets the circle is the bottom one. Turning its local
+        // downward axis towards the centre puts that side on the ring and
+        // whatever is at the top -- the point of a tooth -- out beyond it.
+        // Half a turn more for a shape drawn the other way up, so that every
+        // tooth in the ring points the same way whichever way each was drawn.
+        shape->setRotation(qRadiansToDegrees(angle) + (outside ? 90.0 : -90.0)
+                           + (upended.at(i) ? 180.0 : 0.0));
+
+        // The near face is a chord of the circle, not a tangent to it: its two
+        // corners sit on the circle and its middle falls short of it by the
+        // sagitta. Placing the middle on the circle instead leaves every pair
+        // of neighbours meeting outside it, which is a visible gap at each of
+        // the joints and the whole ring failing to close.
+        const qreal faceMiddle =
+            std::sqrt(qMax(0.0, path * path - widths.at(i) * widths.at(i) / 4.0));
+        // Outward from the ring, or inward from it -- the face stays on the
+        // circle either way, and only what hangs off it changes sides.
+        const qreal radius =
+            outside ? faceMiddle + heights.at(i) / 2.0 : faceMiddle - heights.at(i) / 2.0;
+        const QPointF wanted(centre.x() + radius * std::cos(angle),
+                             centre.y() + radius * std::sin(angle));
+        // After the turn, since turning moves what the shape covers.
+        const QPointF now = shape->mapToScene(shape->rect()).boundingRect().center();
+        shape->setPos(shape->pos() + (wanted - now));
+
+        angle += half + gapAngle;
+    }
+
+    refreshGroupOrigin();
+    update();
+    notifyEdit(outside ? tr("Ring outside") : tr("Ring inside"));
+}
+
+
+// Even gaps in one direction, the other left alone. The shapes keep the order
+// they already stand in, so distributing does not shuffle them, and the first
+// one does not move -- everything is measured from where it already is.
+void CanvasScene::distributeSelection(const QVector<ShapeItem *> &shapes,
+                                      const QVector<QRectF> &boxes, const QRectF &all,
+                                      bool horizontal, qreal gap)
+{
+    QVector<int> order;
+    for (int i = 0; i < shapes.size(); ++i)
+    {
+        order.append(i);
+    }
+    std::sort(order.begin(), order.end(), [&](int a, int b) {
+        return horizontal ? boxes.at(a).left() < boxes.at(b).left()
+                          : boxes.at(a).top() < boxes.at(b).top();
+    });
+
+    qreal at = horizontal ? all.left() : all.top();
+    for (const int i : std::as_const(order))
+    {
+        const QRectF &box = boxes.at(i);
+        const QPointF wanted = horizontal ? QPointF(at, box.top()) : QPointF(box.left(), at);
+        shapes.at(i)->setPos(shapes.at(i)->pos() + (wanted - box.topLeft()));
+        at += (horizontal ? box.width() : box.height()) + gap;
+    }
+
+    refreshGroupOrigin();
+    update();
+    notifyEdit(horizontal ? tr("Distribute across") : tr("Distribute down"));
+}
+
+qreal CanvasScene::evenGap(bool horizontal) const
+{
+    QVector<ShapeItem *> picked = selectedShapes();
+    if (picked.size() < 2)
+    {
+        return 0.0;
+    }
+    QRectF all;
+    qreal filled = 0.0;
+    for (ShapeItem *shape : std::as_const(picked))
+    {
+        const QRectF box = shape->mapToScene(shape->rect()).boundingRect();
+        all = all.isNull() ? box : all.united(box);
+        filled += horizontal ? box.width() : box.height();
+    }
+    const qreal span = horizontal ? all.width() : all.height();
+    return (span - filled) / (picked.size() - 1);
+}
+
+void CanvasScene::alignSelection(Align edge, qreal gap)
 {
     const QVector<ShapeItem *> shapes = selectedShapes();
     if (!canAlignSelection())
@@ -2674,6 +3239,18 @@ void CanvasScene::alignSelection(Align edge)
         const QRectF box = shape->mapToScene(shape->rect()).boundingRect();
         boxes.append(box);
         all = all.isNull() ? box : all.united(box);
+    }
+
+    if (edge == Align::RingOutside || edge == Align::RingInside)
+    {
+        ringSelection(shapes, boxes, all, edge == Align::RingOutside, gap);
+        return;
+    }
+
+    if (edge == Align::DistributeAcross || edge == Align::DistributeDown)
+    {
+        distributeSelection(shapes, boxes, all, edge == Align::DistributeAcross, gap);
+        return;
     }
 
     QString what;
@@ -3106,6 +3683,23 @@ void CanvasScene::cancelPolygonDrawing()
 
 void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
 {
+    if (m_dragMode == DragMode::RubberBand && !m_bandRect.isNull())
+    {
+        const QColor colour =
+            m_editorMode == EditorMode::Edit ? m_selectionColor : m_physicsSelectionColor;
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, false);
+        QPen pen(colour);
+        pen.setStyle(Qt::DashLine);
+        pen.setCosmetic(true);
+        painter->setPen(pen);
+        QColor wash = colour;
+        wash.setAlpha(40);
+        painter->setBrush(wash);
+        painter->drawRect(m_bandRect);
+        painter->restore();
+    }
+
     // The pivot a multi-shape selection turns about. It belongs to no single
     // shape, so the scene draws it rather than any item.
     if (editSelectionRotating() && !simulationRunning())
@@ -3398,6 +3992,61 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
                 painter->setPen(shaftPen);
                 painter->setBrush(Qt::NoBrush);
                 painter->drawPath(shaft);
+            }
+
+            // How far it is allowed to travel, where the engine says it has a
+            // limit at all. The two numbers are read by the joint's kind and
+            // not by their names: a distance along the shaft for the ones
+            // drawn between two anchors, an angle about the hub for a pivot.
+            const JointLimits stops = jointLimits(joint);
+            if (stops.enforced && !qFuzzyCompare(stops.lower, stops.upper))
+            {
+                QPen limitPen(kindColor);
+                limitPen.setWidthF(qMax(1.0, m_jointWaistWidth * 0.6));
+                limitPen.setCapStyle(Qt::FlatCap);
+                painter->setPen(limitPen);
+                painter->setBrush(Qt::NoBrush);
+
+                const qreal tick = qMax(5.0, ring * 1.6);
+                if ((kind == physics::JointVisual::Segment
+                     || kind == physics::JointVisual::Axis)
+                    && span.length() > 0.01)
+                {
+                    const QPointF along = (b - a) / span.length();
+                    const QPointF across(-along.y(), along.x());
+                    for (const qreal at : { stops.lower, stops.upper })
+                    {
+                        const QPointF stop = a + along * at;
+                        painter->drawLine(stop - across * tick, stop + across * tick);
+                    }
+                    // The run between them, set off to one side so it is not
+                    // lost in the shaft -- or in the coil, which is the case
+                    // the limits are worth seeing in.
+                    const QPointF side = across * (tick * 0.6);
+                    painter->drawLine(a + along * stops.lower + side,
+                                      a + along * stops.upper + side);
+                }
+                else if (kind == physics::JointVisual::Pivot)
+                {
+                    // Measured from the line between the anchors, which is
+                    // what the joint's axis was taken from. An engine that
+                    // counts its angles from the bodies' own reference frame
+                    // will have the sector turned by however far they have
+                    // since moved.
+                    const qreal reach = qMax(ring * 2.6, 15.0);
+                    const qreal base = span.length() > 0.01 ? QLineF(a, b).angle() : 0.0;
+                    painter->drawArc(QRectF(a.x() - reach, a.y() - reach, reach * 2, reach * 2),
+                                     qRound((base + stops.lower) * 16.0),
+                                     qRound((stops.upper - stops.lower) * 16.0));
+                    for (const qreal at : { stops.lower, stops.upper })
+                    {
+                        const qreal radians = qDegreesToRadians(base + at);
+                        // Qt measures its angles the other way up from its
+                        // coordinates, which is why the sine is negated.
+                        const QPointF out(std::cos(radians), -std::sin(radians));
+                        painter->drawLine(a + out * (reach * 0.7), a + out * (reach * 1.15));
+                    }
+                }
             }
 
             // The anchors, outline and all, at the opacity the settings ask
@@ -3981,6 +4630,14 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
         return;
     }
 
+    if (event->button() == Qt::MiddleButton)
+    {
+        m_dragMode = DragMode::PanField;
+        m_panLastScreenPos = event->screenPos();
+        event->accept();
+        return;
+    }
+
     if (event->button() != Qt::LeftButton)
     {
         QGraphicsScene::mousePressEvent(event);
@@ -4087,14 +4744,30 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
             // can still be dragged, or double-clicked into a body.
             hit = current && under.contains(current) ? current : under.value(0, nullptr);
         }
-        selectForPhysics(hit, event->modifiers().testFlag(Qt::ShiftModifier));
-        // Dragging empty field pans it, the same as in Edit mode. Without this
-        // a click outside every shape only cleared the selection, so the field
-        // could not be moved at all once out of Edit mode.
+        const bool additive = event->modifiers().testFlag(Qt::ShiftModifier);
+        // A press on something already picked keeps the whole selection, so
+        // several bodies can be dragged together -- narrowing to the one under
+        // the pointer happens on release, if the press turned out to be a
+        // click. Without this, pressing to drag threw the rest away first.
+        m_physicsClickCandidate = nullptr;
+        const bool keepGroup = hit && !additive && m_physicsSelection.size() > 1
+                               && m_physicsSelection.contains(hit);
+        if (keepGroup)
+        {
+            m_physicsClickCandidate = hit;
+            m_pressScenePos = scenePos;
+        }
+        // Shift on empty field keeps what is already picked, since the box
+        // about to be swept adds to it.
+        else if (hit || !additive)
+        {
+            selectForPhysics(hit, additive);
+        }
         if (!hit)
         {
-            m_dragMode = DragMode::PanField;
-            m_panLastScreenPos = event->screenPos();
+            m_dragMode = DragMode::RubberBand;
+            m_bandStart = scenePos;
+            m_bandRect = QRectF(scenePos, scenePos);
         }
         else if (event->button() == Qt::LeftButton)
         {
@@ -4102,14 +4775,57 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
             // once, since moving one shape out of a body would deform it.
             m_bodyDragShapes.clear();
             m_bodyDragStartPositions.clear();
-            if (PhysicsBody *body = hit->body())
+
+            // Everything picked travels together. Taking only the shape under
+            // the pointer made picking several of them pointless: they could
+            // be selected and then moved one at a time.
+            QVector<ShapeItem *> dragging;
+            // The one under the pointer leads, whatever order they were picked
+            // in: snapping measures from the leading piece, and it is the one
+            // being dragged that should land on the grid.
+            QVector<ShapeItem *> leads { hit };
+            if (m_physicsSelection.contains(hit))
             {
-                m_bodyDragShapes = body->shapes();
+                for (ShapeItem *picked : std::as_const(m_physicsSelection))
+                {
+                    if (picked != hit)
+                    {
+                        leads.append(picked);
+                    }
+                }
+            }
+            int bodies = 0;
+            for (ShapeItem *lead : leads)
+            {
+                PhysicsBody *body = lead->body();
+                const QVector<ShapeItem *> group =
+                    body ? body->shapes() : QVector<ShapeItem *> { lead };
+                bool fresh = false;
+                for (ShapeItem *member : group)
+                {
+                    if (dragging.contains(member))
+                    {
+                        continue;
+                    }
+                    dragging.append(member);
+                    fresh = true;
+                }
+                if (fresh)
+                {
+                    ++bodies;
+                }
+            }
+            m_bodyDragShapes = dragging;
+            if (bodies > 1)
+            {
+                m_bodyDragLabel = tr("%n bodies", nullptr, bodies);
+            }
+            else if (PhysicsBody *body = hit->body())
+            {
                 m_bodyDragLabel = body->name();
             }
             else
             {
-                m_bodyDragShapes = {hit};
                 m_bodyDragLabel = hit->name();
             }
             for (ShapeItem *shape : std::as_const(m_bodyDragShapes))
@@ -4190,6 +4906,11 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
                 event->accept();
                 return;
             }
+            m_dragMode = DragMode::RubberBand;
+            m_bandStart = scenePos;
+            m_bandRect = QRectF(scenePos, scenePos);
+            event->accept();
+            return;
         }
 
         // The group's own handles sit on top of the shapes, so they are tested
@@ -4318,6 +5039,7 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
                 m_dragMode = DragMode::Move;
                 m_lastScenePos = scenePos;
                 m_moveDragVirtualPos = m_active->pos();
+                m_moveStartPos = m_active->pos();
                 beginGroupDrag();
                 return;
             }
@@ -4333,12 +5055,14 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
         m_dragMode = DragMode::Move;
         m_lastScenePos = scenePos;
         m_moveDragVirtualPos = shape->pos();
+        m_moveStartPos = shape->pos();
         beginGroupDrag();
         return;
     }
 
-    m_dragMode = DragMode::PanField;
-    m_panLastScreenPos = event->screenPos();
+    m_dragMode = DragMode::RubberBand;
+    m_bandStart = scenePos;
+    m_bandRect = QRectF(scenePos, scenePos);
 }
 
 void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
@@ -4367,6 +5091,16 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         {
             update();
         }
+        return;
+    }
+
+    if (m_dragMode == DragMode::RubberBand)
+    {
+        const QRectF was = m_bandRect;
+        m_bandRect = QRectF(m_bandStart, event->scenePos()).normalized();
+        // Both boxes, and a little over: the outgoing one has to be painted
+        // out wherever it reached past the new one.
+        update(was.united(m_bandRect).adjusted(-2, -2, 2, 2));
         return;
     }
 
@@ -4581,6 +5315,23 @@ void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         return;
     }
 
+    if (m_dragMode == DragMode::RubberBand)
+    {
+        const QRectF band = m_bandRect;
+        m_dragMode = DragMode::None;
+        m_bandRect = QRectF();
+        update(band.adjusted(-2, -2, 2, 2));
+        // A press that never moved is a click on empty field, which has
+        // already cleared the selection; sweeping nothing must not be made to
+        // mean "pick everything the point touches".
+        if (band.width() > 0.0 || band.height() > 0.0)
+        {
+            applyRubberBand(band, event->modifiers().testFlag(Qt::ShiftModifier));
+        }
+        event->accept();
+        return;
+    }
+
     if (m_dragMode != DragMode::None)
     {
         const DragMode finished = m_dragMode;
@@ -4619,6 +5370,17 @@ void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                                                      : (m_bodyDragShapes.isEmpty() ? m_bodyDragStartPositions.value(0)
                                                                                    : m_bodyDragShapes.first()->pos());
             const bool moved = now != m_bodyDragStartPositions.value(0);
+            // Pressed and released on one of several without moving: that is a
+            // click, and a click without a modifier picks the one thing, the
+            // same as it does everywhere else.
+            if (!moved && m_physicsClickCandidate
+                && QLineF(m_pressScenePos, event->scenePos()).length() < 3.0)
+            {
+                ShapeItem *only = m_physicsClickCandidate;
+                m_physicsClickCandidate = nullptr;
+                selectForPhysics(only, false);
+            }
+            m_physicsClickCandidate = nullptr;
             m_draggedExplosion = nullptr;
             m_draggedRay = nullptr;
             m_bodyDragShapes.clear();
@@ -4659,8 +5421,15 @@ void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             switch (finished)
             {
             case DragMode::Move:
-                notifyEdit(m_editSelection.isEmpty() ? tr("Move %1").arg(m_active->name())
-                                                     : tr("Move %n shapes", nullptr, int(m_editSelection.size()) + 1));
+                // Selecting a shape presses and releases on it, which is a
+                // move of nothing. Recorded, it left the scene looking edited
+                // and lit Save up over a click.
+                if (m_active->pos() != m_moveStartPos)
+                {
+                    notifyEdit(m_editSelection.isEmpty()
+                                   ? tr("Move %1").arg(m_active->name())
+                                   : tr("Move %n shapes", nullptr, int(m_editSelection.size()) + 1));
+                }
                 break;
             case DragMode::Rotate:
                 notifyEdit(m_editSelection.isEmpty()
@@ -4681,6 +5450,7 @@ void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                 break;
             case DragMode::GroupOrigin:
             case DragMode::PanField:
+            case DragMode::RubberBand:
             case DragMode::None:
                 break;
             }

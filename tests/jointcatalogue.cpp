@@ -389,3 +389,117 @@ TEST(JointCatalogue, ChipmunkJointsSurviveTheFile)
 {
     everyTypeSurvivesTheFile(QStringLiteral("Chipmunk2D"));
 }
+
+// The editor can only draw what it can ask for by role. It draws a spring
+// because three parameters are tagged with the spring roles; the travel limits
+// were in every catalogue under the engine's own names and tagged with
+// nothing, so the canvas could not see them and drew none.
+void everyLimitIsTagged(const QString &engineName)
+{
+    auto engine = physics::EngineRegistry::create(engineName);
+    ASSERT_TRUE(engine) << engineName.toStdString() << " is not installed";
+
+    int withLimits = 0;
+    for (const physics::JointType &type : engine->jointTypes()) {
+        QStringList lower;
+        QStringList upper;
+        for (const physics::JointParam &param : type.params) {
+            if (param.role == physics::PropertyRole::LowerLimit)
+                lower << param.key;
+            else if (param.role == physics::PropertyRole::UpperLimit)
+                upper << param.key;
+        }
+        // Either it has a pair or it has neither: one half of a limit is
+        // nothing the editor can draw.
+        EXPECT_EQ(lower.size(), upper.size())
+            << type.id.toStdString() << " tags " << lower.size() << " lower limits and "
+            << upper.size() << " upper";
+        EXPECT_LE(lower.size(), 1) << type.id.toStdString() << " tags more than one lower limit";
+        if (!lower.isEmpty())
+            ++withLimits;
+    }
+    EXPECT_GT(withLimits, 0) << engineName.toStdString()
+                             << " publishes no joint whose travel is limited";
+}
+
+TEST(JointCatalogue, Box2DTagsItsTravelLimits)
+{
+    everyLimitIsTagged(QStringLiteral("Box2D"));
+}
+
+TEST(JointCatalogue, ChipmunkTagsItsTravelLimits)
+{
+    everyLimitIsTagged(QStringLiteral("Chipmunk2D"));
+}
+
+// A lower stop above its upper one is a contradiction, not a narrow limit: an
+// engine handed one either locks the joint solid or ignores the pair, and the
+// scene stops behaving with nothing to say why. Typing one past the other
+// pushes the other along, for every joint that has a pair, found by role.
+void limitsStayInOrder(const QString &engineName)
+{
+    auto engine = physics::EngineRegistry::create(engineName);
+    ASSERT_TRUE(engine) << engineName.toStdString() << " is not installed";
+
+    int checked = 0;
+    for (const physics::JointType &type : engine->jointTypes()) {
+        QString lowerKey;
+        QString upperKey;
+        for (const physics::JointParam &param : type.params) {
+            if (param.role == physics::PropertyRole::LowerLimit)
+                lowerKey = param.key;
+            else if (param.role == physics::PropertyRole::UpperLimit)
+                upperKey = param.key;
+        }
+        if (lowerKey.isEmpty() || upperKey.isEmpty())
+            continue;
+        ++checked;
+
+        TwoBodies bench(engineName);
+        Joint *joint = bench.join(type);
+        ASSERT_TRUE(joint);
+        bench.scene.selectJoint(joint);
+
+        JointPropertyPane pane;
+        pane.attach(&bench.scene);
+
+        const PropertyRow *lower = nullptr;
+        const PropertyRow *upper = nullptr;
+        const std::vector<PropertyRow> rows = pane.rows(EditorMode::Physics);
+        for (const PropertyRow &row : rows) {
+            if (row.key == lowerKey)
+                lower = &row;
+            else if (row.key == upperKey)
+                upper = &row;
+        }
+        ASSERT_TRUE(lower) << type.id.toStdString() << " has no lower-limit row";
+        ASSERT_TRUE(upper) << type.id.toStdString() << " has no upper-limit row";
+
+        // Settle the pair somewhere sane, then push the lower past the upper.
+        lower->setter(-50.0);
+        upper->setter(50.0);
+        lower->setter(80.0);
+        EXPECT_GE(upper->getter().toDouble(), lower->getter().toDouble())
+            << engineName.toStdString() << ": " << type.id.toStdString()
+            << " kept a lower stop above its upper one";
+
+        // And the other way about.
+        lower->setter(-50.0);
+        upper->setter(50.0);
+        upper->setter(-90.0);
+        EXPECT_LE(lower->getter().toDouble(), upper->getter().toDouble())
+            << engineName.toStdString() << ": " << type.id.toStdString()
+            << " kept an upper stop below its lower one";
+    }
+    EXPECT_GT(checked, 0) << engineName.toStdString() << " publishes no limited joint";
+}
+
+TEST(JointCatalogue, Box2DKeepsItsLimitsInOrder)
+{
+    limitsStayInOrder(QStringLiteral("Box2D"));
+}
+
+TEST(JointCatalogue, ChipmunkKeepsItsLimitsInOrder)
+{
+    limitsStayInOrder(QStringLiteral("Chipmunk2D"));
+}

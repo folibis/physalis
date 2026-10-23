@@ -55,6 +55,13 @@ public:
     // rules and joints that named it go on naming it. Returns the shape that
     // replaced it, or nullptr if it was not a rectangle to begin with.
     ShapeItem *convertToPolygon(ShapeItem *shape);
+    ShapeItem *convertCircleToChain(ShapeItem *shape, int segments, qreal startAngle);
+    ShapeItem *replaceShape(ShapeItem *shape, const QJsonObject &json);
+    void destroyShape(ShapeItem *shape);
+    // A circle or a rectangle broken into one line per side, each its own
+    // shape and in no body, ready to be jointed together.
+    QVector<ShapeItem *> convertToSegments(ShapeItem *shape, int segments, qreal startAngle);
+    QVector<QPointF> outlineCorners(ShapeItem *shape, int segments, qreal startAngle) const;
 
     // Moves whatever is picked by `delta` scene units, whichever mode we are
     // in. Returns false if there was nothing to move, so the key that asked
@@ -132,9 +139,24 @@ public:
     enum class Align {
         Left, HorizontalCentre, Right,
         Top, VerticalCentre, Bottom,
+        // Even gaps along one direction, the other left alone.
+        DistributeAcross, DistributeDown,
+        // Spread around a circle drawn inside the selection, each shape
+        // clearing the path on the outside of it or on the inside.
+        RingOutside, RingInside,
     };
-    void alignSelection(Align edge);
+    // The gap is the distance left between neighbours on a ring, and does
+    // nothing to the other kinds of alignment.
+    void alignSelection(Align edge, qreal gap = 0.0);
+    void ringSelection(const QVector<ShapeItem *> &shapes, const QVector<QRectF> &boxes,
+                       const QRectF &all, bool outside, qreal gap);
+    void distributeSelection(const QVector<ShapeItem *> &shapes, const QVector<QRectF> &boxes,
+                             const QRectF &all, bool horizontal, qreal gap);
+    void applyRubberBand(const QRectF &band, bool additive);
     bool canAlignSelection() const;
+    // The gap that would leave the selection spanning exactly what it spans
+    // now, which is what "distribute evenly" has always meant.
+    qreal evenGap(bool horizontal) const;
     // True while the selection is being turned rather than moved -- which is
     // what decides between showing handles and showing the pivot.
     bool editSelectionRotating() const;
@@ -160,6 +182,7 @@ public:
     const QVector<PhysicsBody *> &bodies() const { return m_bodies; }
 
     PhysicsBody *createBodyFromSelection();
+    PhysicsBody *createBodyFromShapes(const QVector<ShapeItem *> &shapes);
 
     // `announce` false for a body a run makes and takes away again: the panels
     // listing bodies would otherwise rebuild for every clone a rule makes.
@@ -305,6 +328,17 @@ public:
     // marks the parameter that says so. The editor names no key.
     bool isSpringJoint(const Joint *joint) const;
 
+    // How far a joint may travel. What the two numbers measure is the joint's
+    // own business -- scene units along the shaft for the kinds drawn between
+    // two anchors, degrees about the hub for a pivot -- and the editor tells
+    // those apart by the joint's kind, never by the engine's key names.
+    struct JointLimits {
+        bool enforced = false;
+        qreal lower = 0.0;
+        qreal upper = 0.0;
+    };
+    JointLimits jointLimits(const Joint *joint) const;
+
     // How solidly a joint's anchors and shaft are filled. An anchor sits on
     // top of the very place it is holding, and drawn solid it hides it -- most
     // of all where several joints meet on one body. The outline stays at full
@@ -354,8 +388,15 @@ public:
 
     void notifyEdit(const QString &label, const QString &mergeKey = QString())
     {
+        if (m_editsMuted)
+            return;
         emit editCommitted(label, mergeKey);
     }
+
+    // A tool being set up re-runs itself on every keystroke, and each run is a
+    // guess rather than an edit. Muted, the undo stack sees only the one the
+    // user keeps.
+    void muteEdits(bool muted) { m_editsMuted = muted; }
 
     physics::WorldDesc toWorldDesc() const;
 
@@ -649,7 +690,11 @@ private:
                           GroupScale,
                           // Physics mode: drags a whole body, not one shape of
                           // it, and without Edit mode's handles.
-                          MoveBody };
+                          MoveBody,
+                          // A box swept over empty field, picking what it
+                          // covers. Left-dragging nothing used to pan, which
+                          // is now the middle button.
+                          RubberBand };
 
     void activate(ShapeItem *item);
     void deactivate();
@@ -657,6 +702,7 @@ private:
     QPointF snapScenePoint(const QPointF &scenePoint) const;
 
     bool m_snapSuspended = false;
+    bool m_editsMuted = false;
 
     void finishPolygonDrawing(bool closed);
     void cancelPolygonDrawing();
@@ -736,6 +782,16 @@ private:
     };
     mutable QHash<QString, SpringKeys> m_jointSprings;
 
+    struct LimitKeys {
+        QString enabledKey;
+        bool enabledDefault = false;
+        QString lowerKey;
+        qreal lowerDefault = 0.0;
+        QString upperKey;
+        qreal upperDefault = 0.0;
+    };
+    mutable QHash<QString, LimitKeys> m_jointLimits;
+
     // How many turns each spring was drawn with, by joint name. Worked out
     // while the scene is not running -- that is when a joint stands at rest --
     // and held through the run, so the turns spread and pack rather than being
@@ -778,6 +834,17 @@ private:
     QPointF m_lastScenePos;
 
     QPoint m_panLastScreenPos;
+
+    // Where the shape being dragged stood when the drag began, so a press and
+    // release that moved it nowhere records nothing.
+    QPointF m_moveStartPos;
+
+    // Physics mode: pressed on one of several picked things. It only narrows
+    // the selection if the press turns out to be a click.
+    ShapeItem *m_physicsClickCandidate = nullptr;
+
+    QPointF m_bandStart;
+    QRectF m_bandRect;
 
     // The body being aimed with the slingshot, and where the pull has got to.
     // Left set if a run ends mid-aim; isAimingShot() is what is asked.
