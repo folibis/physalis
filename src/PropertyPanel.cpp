@@ -86,9 +86,26 @@ QTableWidget *PropertyPanel::tableForSection(const QString &section)
     // zero -- and called that the place to remember.
     connect(table->verticalScrollBar(), &QScrollBar::valueChanged, this,
             [this, section](int at) {
-                if (!m_rebuilding)
-                    m_sectionScroll.insert(section, at);
+                if (m_rebuilding)
+                    return;
+                QScrollBar *bar = m_sectionTables.value(section)->verticalScrollBar();
+                // A bar that lands where this panel would have put it anyway --
+                // the place it remembers, or as near as the range allows -- is
+                // not somebody scrolling. It is the table being laid out under
+                // a position it cannot hold yet, and taking that for a scroll
+                // is what lost the place on a machine slow enough to show it.
+                if (at == qBound(bar->minimum(), m_sectionScroll.value(section, 0),
+                                 bar->maximum())) {
+                    return;
+                }
+                m_sectionScroll.insert(section, at);
             });
+    // A table that has not been laid out has no range to scroll in, so putting
+    // it back lands at the top however long the panel waits first. This is the
+    // moment it finds out how tall it is, so it goes back then -- and the wait
+    // stops being something the restore depends on.
+    connect(table->verticalScrollBar(), &QScrollBar::rangeChanged, this,
+            [this, section](int, int) { putTableBack(section); });
     table->setHorizontalHeaderLabels({tr("Property"), tr("Value")});
     table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
     table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
@@ -410,23 +427,38 @@ void PropertyPanel::rebuildRows()
         }
     }
 
-    // Put each table back where it was. Queued because a table that has not
-    // been shown yet has no scroll range to speak of, so setting it now would
-    // clamp to zero -- which is the very thing being avoided. A section that
-    // has grown shorter, or belongs to a different kind of object, simply
-    // clamps to whatever it does have.
+    // Put each table back where it was, and again once the event loop has been
+    // round -- a table only shown at the end of this pass has nowhere to go
+    // yet. A section that has grown shorter, or belongs to a different kind of
+    // object, simply clamps to whatever it does have.
+    for (auto it = m_sectionTables.cbegin(); it != m_sectionTables.cend(); ++it)
+        putTableBack(it.key());
     QMetaObject::invokeMethod(
         this,
         [this] {
             for (auto it = m_sectionTables.cbegin(); it != m_sectionTables.cend(); ++it)
-                it.value()->verticalScrollBar()->setValue(m_sectionScroll.value(it.key(), 0));
-            m_rebuilding = false;
+                putTableBack(it.key());
         },
         Qt::QueuedConnection);
 
     refreshValues();
     updateWatchMarks();
     updateEditable();
+
+    // From here anything that moves a scroll bar is the user doing it.
+    m_rebuilding = false;
+}
+
+void PropertyPanel::putTableBack(const QString &section)
+{
+    QTableWidget *table = m_sectionTables.value(section);
+    if (!table)
+        return;
+
+    const bool ours = m_rebuilding;
+    m_rebuilding = true;
+    table->verticalScrollBar()->setValue(m_sectionScroll.value(section, 0));
+    m_rebuilding = ours;
 }
 
 void PropertyPanel::setActivePane(PropertyPane *pane)

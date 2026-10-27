@@ -81,6 +81,9 @@ private:
     void updateWatchMarks();
     void setTitle(const QString &subject);
     void rebuildRows();
+    // Puts one section's table back where it was left, which is not somebody
+    // scrolling it.
+    void putTableBack(const QString &section);
     void updateModifiedMarks();
     void addRow(QTableWidget *table, const PropertyRow &row);
     void addGroupHeader(QTableWidget *table, const QString &title);
@@ -100,9 +103,12 @@ private:
     CanvasScene *m_scene = nullptr;
     PropertyPaneFactory *m_factory;
     PropertyPane *m_activePane = nullptr;
-    // True while the table is being torn down and put back, so the scroll
-    // bars settling at zero on the way through are not mistaken for somebody
-    // scrolling to the top.
+    // True while the panel itself is moving a scroll bar -- tearing the tables
+    // down, or putting one back -- so its own writes are not mistaken for
+    // somebody scrolling. It marks those moments and nothing wider: held
+    // across a wait for the event loop instead, it swallowed whatever the
+    // user did while the panel was settling, and on a slow machine that is
+    // long enough to lose a scroll.
     bool m_rebuilding = false;
     std::vector<Row> m_rows;
     bool m_updating = false; // guards against editor->setter->refresh feedback loops
