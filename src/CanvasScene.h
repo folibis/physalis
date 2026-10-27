@@ -2,6 +2,8 @@
 // Copyright (c) 2026 Ruslan Muhlinin. See LICENSE.
 #pragma once
 
+#include <cmath>
+
 #include <QGraphicsScene>
 #include <QPolygonF>
 #include <QSet>
@@ -13,6 +15,7 @@
 
 #include <functional>
 #include "Rule.h"
+#include "SceneControl.h"
 #include "SceneVariable.h"
 #include "ShapeStyle.h"
 #include "PhysicsTypes.h"
@@ -127,6 +130,34 @@ public:
     // What the whole selection covers, in scene coordinates. The group's box
     // and its corner handles are drawn on this.
     QRectF editSelectionBounds() const;
+
+    // Words a rule put on the canvas. Run state: it goes when the run does,
+    // like every position on the canvas. Rich text, because the editor behind
+    // the rule card writes rich text.
+    QString caption() const { return m_caption; }
+    bool captionShown() const { return m_captionShown; }
+    void setCaption(const QString &text, bool shown);
+
+    // The whole selection turned as one piece, the way dragging it round turns
+    // it: every shape gains the same angle and orbits the group's pivot. The
+    // argument is where the lead shape ends up, so the table can show one
+    // number and mean the arrangement.
+    void turnSelectionTo(qreal degrees);
+    void moveSelectionBy(const QPointF &by);
+    // About the selection's pivot, so the arrangement keeps its shape.
+    void scaleSelectionBy(qreal across, qreal down);
+    // An angle brought back into 0..360. A shape that has been dragged round
+    // four times carries 1663 degrees, which is the same way up as 223 and
+    // reads like a mistake.
+    static qreal normalisedDegrees(qreal degrees)
+    {
+        qreal turn = std::fmod(degrees, 360.0);
+        if (turn < 0.0)
+            turn += 360.0;
+        return turn;
+    }
+    // Where that one number stands now.
+    qreal selectionRotation() const;
     // The frame drawn round that, held clear of the shapes' own outlines so
     // the two do not sit on top of each other and read as one thick line.
     QRectF editSelectionBox() const;
@@ -207,6 +238,35 @@ public:
     // A name not already taken by another variable, from the one asked for.
     QString uniqueVariableName(const QString &desired, int except = -1) const;
 
+    // --- controls ---------------------------------------------------------
+    // Things to work the scene with while it runs. See SceneControl.
+    const QVector<SceneControl> &controls() const { return m_controls; }
+    void setControls(const QVector<SceneControl> &controls);
+    void replaceControls(const QVector<SceneControl> &controls) { m_controls = controls; }
+    const SceneControl *controlWithId(const QString &id) const;
+    QString uniqueControlId(const QString &desired, int except = -1) const;
+    void renameControlInRules(const QString &previous, const QString &current);
+
+    // What each control is set to now, and whether it can be worked at all.
+    // Run state: back to what the scene declares when a run stops.
+    QVariant controlValue(const QString &name) const;
+    bool controlEnabled(const QString &name) const;
+    void setControlValue(const QString &name, const QVariant &value);
+    void setControlEnabled(const QString &name, bool enabled);
+    // What the control says: what a rule last set it to, else what the scene
+    // declared, else its id.
+    QString controlCaption(const QString &id) const;
+    void setControlCaption(const QString &id, const QString &caption);
+    // Back to what the scene declares, and the pressed/changed events dropped.
+    void resetControls();
+    // What has happened to them since this was last called. The run reads it
+    // once a step and turns it into rule events.
+    struct ControlEvent {
+        QString name;
+        QString eventId;
+    };
+    QVector<ControlEvent> takeControlEvents();
+
     const QVector<Rule> &rules() const { return m_rules; }
     QVector<Rule> &rules() { return m_rules; }
     void setRules(const QVector<Rule> &rules);
@@ -219,6 +279,12 @@ public:
 
     void clearContents();
     void destroyBody(PhysicsBody *body, bool announce = true);
+
+    // The body the view follows while a run is going: it stays in the middle
+    // of the screen and the scene moves around it. One body, because a view
+    // has one middle -- giving it to another takes it off the first.
+    PhysicsBody *focusedBody() const;
+    void setFocusedBody(PhysicsBody *body);
 
     // --- Joints -------------------------------------------------------
     // Joints are constraints between two bodies. The scene owns them, but
@@ -384,7 +450,32 @@ public:
     const physics::WorldDesc &world() const { return m_world; }
     physics::WorldDesc &world() { return m_world; }
     void notifyFieldPropertyChanged() { emit fieldPropertyChanged(); }
-    void notifyShapesChanged() { emit shapesChanged(); }
+    void notifyShapesChanged() { announceChange(Change::Shapes); }
+
+    // Reading a file, pasting a hundred shapes, a tool laying down a grid of
+    // them: one change to the whole scene, not one per object. Every panel
+    // rebuilds itself from scratch when its signal arrives, so a 39-shape,
+    // 16-body file announced piece by piece rebuilt the rules panel 22 times
+    // -- four seconds of it, where one rebuild is a fifth of a second. While
+    // a guard is held each kind is remembered and emitted once at the end.
+    class BulkChange {
+    public:
+        explicit BulkChange(CanvasScene *scene) : m_scene(scene)
+        {
+            if (m_scene)
+                ++m_scene->m_bulkDepth;
+        }
+        ~BulkChange()
+        {
+            if (m_scene)
+                m_scene->endBulkChange();
+        }
+        BulkChange(const BulkChange &) = delete;
+        BulkChange &operator=(const BulkChange &) = delete;
+
+    private:
+        CanvasScene *m_scene;
+    };
 
     void notifyEdit(const QString &label, const QString &mergeKey = QString())
     {
@@ -475,7 +566,8 @@ public:
     // where the picture wants to be clean. Sleep shading is the odd one out: it
     // adds nothing to the picture, it tints the bodies by whether the solver
     // still has them awake, and there is nothing to tint outside a run.
-    enum class RunLayer { Grid, Joints, BodyAxes, Rays, Explosions, SleepShading, Count };
+    enum class RunLayer { Grid, Joints, BodyAxes, Rays, Explosions, SleepShading, Sensors,
+                          Count };
 
     bool runLayer(RunLayer layer) const { return m_runLayers[static_cast<int>(layer)]; }
     void setRunLayer(RunLayer layer, bool on);
@@ -642,6 +734,14 @@ signals:
     void editorModeChanged(EditorMode mode);
     void physicsSelectionChanged();
     void editSelectionChanged();
+    void captionChanged();
+    void controlsChanged();
+    void controlValuesChanged();
+    // A key, while a run is going. The scene has the focus then and nothing
+    // else does, so this is where they arrive; who turns them into rule events
+    // is not the scene's business.
+    void keyPressedDuringRun(int key, Qt::KeyboardModifiers held);
+    void keyReleasedDuringRun(int key, Qt::KeyboardModifiers held);
     void jointsChanged();
     void selectedJointChanged(Joint *joint);
     // A double-click on a loose shape: a dynamic body, or a static one with
@@ -668,6 +768,7 @@ signals:
     void fieldPropertyChanged();
     // A shot was let go: this push, through the body's centre of mass.
     void shotReleased(PhysicsBody *body, const QPointF &impulse);
+    void focusedBodyChanged();
 
 protected:
     void drawBackground(QPainter *painter, const QRectF &rect) override;
@@ -678,6 +779,7 @@ protected:
     void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
     void wheelEvent(QGraphicsSceneWheelEvent *event) override;
 
 private:
@@ -703,6 +805,14 @@ private:
 
     bool m_snapSuspended = false;
     bool m_editsMuted = false;
+    QVector<SceneControl> m_controls;
+    QHash<QString, QVariant> m_controlValues;
+    QHash<QString, bool> m_controlEnabled;
+    QHash<QString, QString> m_controlCaptions;
+    QVector<ControlEvent> m_controlEvents;
+
+    QString m_caption;
+    bool m_captionShown = false;
 
     void finishPolygonDrawing(bool closed);
     void cancelPolygonDrawing();
@@ -751,6 +861,13 @@ private:
     // Set between a shape leaving a body and the queued prune that follows.
     bool m_prunePending = false;
     QVector<Rule> m_rules;
+    // What announceChange() defers while a BulkChange is held. See BulkChange.
+    enum class Change { Shapes, Bodies, Joints, Rules, Variables, Controls };
+    void announceChange(Change what);
+    void endBulkChange();
+    int m_bulkDepth = 0;
+    QSet<int> m_deferredChanges;
+
     QVector<SceneVariable> m_variables;
     // Owned; bodies and joints are deleted with the scene.
     QVector<PhysicsBody *> m_bodies;
@@ -878,6 +995,11 @@ private:
 
     QPointF m_dragOriginScene;
     qreal m_rotateStartAngle = 0.0;
+    // Where the pointer was last seen during a turn, and how far the shape has
+    // been turned so far. Kept apart because the two stop agreeing the moment
+    // Shift slows one of them down.
+    qreal m_rotateLastAngle = 0.0;
+    qreal m_rotateTurned = 0.0;
     qreal m_itemStartRotation = 0.0;
 
     qreal m_fieldWidth = 1000.0;

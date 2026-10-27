@@ -410,9 +410,17 @@ void ChipmunkEngine::performAction(const QString &id, BodyHandle target,
         const auto amount = [this, &params](const char *key) {
             return metres(params.value(QLatin1String(key), 0.0).toDouble());
         };
+        cpVect push = cpv(amount("impulseX"), amount("impulseY"));
+        cpVect offset = cpv(amount("offsetX"), amount("offsetY"));
+        // Read in the body's own directions, which turn with it, rather than
+        // the world's: a ship's engine points where the ship points.
+        if (params.value(QStringLiteral("relative"), false).toBool()) {
+            const cpVect facing = cpBodyGetRotation(body);
+            push = cpvrotate(push, facing);
+            offset = cpvrotate(offset, facing);
+        }
         const cpVect centre = cpBodyLocalToWorld(body, cpBodyGetCenterOfGravity(body));
-        const cpVect point = cpvadd(centre, cpv(amount("offsetX"), amount("offsetY")));
-        cpBodyApplyImpulseAtWorldPoint(body, cpv(amount("impulseX"), amount("impulseY")), point);
+        cpBodyApplyImpulseAtWorldPoint(body, push, cpvadd(centre, offset));
         return;
     }
 
@@ -421,9 +429,17 @@ void ChipmunkEngine::performAction(const QString &id, BodyHandle target,
         const auto amount = [this, &params](const char *key) {
             return metres(params.value(QLatin1String(key), 0.0).toDouble());
         };
+        cpVect push = cpv(amount("impulseX"), amount("impulseY"));
+        cpVect offset = cpv(amount("offsetX"), amount("offsetY"));
+        // Read in the body's own directions, which turn with it, rather than
+        // the world's: a ship's engine points where the ship points.
+        if (params.value(QStringLiteral("relative"), false).toBool()) {
+            const cpVect facing = cpBodyGetRotation(body);
+            push = cpvrotate(push, facing);
+            offset = cpvrotate(offset, facing);
+        }
         const cpVect centre = cpBodyLocalToWorld(body, cpBodyGetCenterOfGravity(body));
-        const cpVect point = cpvadd(centre, cpv(amount("offsetX"), amount("offsetY")));
-        cpBodyApplyForceAtWorldPoint(body, cpv(amount("impulseX"), amount("impulseY")), point);
+        cpBodyApplyForceAtWorldPoint(body, push, cpvadd(centre, offset));
         return;
     }
 

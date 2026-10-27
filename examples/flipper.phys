@@ -1,0 +1,613 @@
+{
+    "bodies": [
+        {
+            "isEnabled": true,
+            "name": "body_1",
+            "physics": {
+            },
+            "shapes": [
+                1
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_2",
+            "physics": {
+            },
+            "shapes": [
+                2
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_3",
+            "physics": {
+            },
+            "shapes": [
+                3
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_4",
+            "physics": {
+            },
+            "shapes": [
+                4
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_5",
+            "physics": {
+            },
+            "shapes": [
+                7
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_6",
+            "physics": {
+            },
+            "shapes": [
+                6
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_7",
+            "physics": {
+            },
+            "shapes": [
+                5
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_8",
+            "physics": {
+            },
+            "shapes": [
+                9
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_9",
+            "physics": {
+            },
+            "shapes": [
+                8
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_10",
+            "physics": {
+            },
+            "shapes": [
+                10
+            ],
+            "type": "static"
+        }
+    ],
+    "engine": "Box2D",
+    "field": {
+        "backgroundColor": "#ffffffff",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 1000,
+        "showGrid": true,
+        "width": 1000
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+        {
+            "anchorA": {
+                "x": -106.7857142857143,
+                "y": 194.64285714285714
+            },
+            "anchorB": {
+                "x": -106.78571428571429,
+                "y": 194.64285714285714
+            },
+            "axis": {
+                "x": -0.9821662188946284,
+                "y": 0.18801467618840037
+            },
+            "bodyA": "body_2",
+            "bodyB": "body_1",
+            "collideConnected": false,
+            "name": "revolute_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": true,
+                "enableMotor": false,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerAngle": 0,
+                "maxMotorTorque": 100,
+                "motorSpeed": 10000,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "upperAngle": 25
+            },
+            "type": "revolute"
+        }
+    ],
+    "log": [
+        {
+            "label": "score",
+            "object": "@variables",
+            "plotted": false,
+            "property": "score"
+        },
+        {
+            "label": "balls",
+            "object": "@variables",
+            "plotted": false,
+            "property": "balls"
+        }
+    ],
+    "rays": [
+        {
+            "angle": 0,
+            "length": 156,
+            "maskBits": "ffffffffffffffff",
+            "name": "ray_1",
+            "x": 302,
+            "y": 340
+        },
+        {
+            "angle": 0,
+            "length": 56,
+            "maskBits": "ffffffffffffffff",
+            "name": "ray_2",
+            "x": 322,
+            "y": -20
+        }
+    ],
+    "rules": [
+        {
+            "action": "@showCaption",
+            "actionParams": {
+                "shown": true,
+                "text": "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n<html><head><meta name=\"qrichtext\" content=\"1\" /><meta charset=\"utf-8\" /><style type=\"text/css\">\np, li { white-space: pre-wrap; }\nhr { height: 1px; border-width: 0; }\nli.unchecked::marker { content: \"\\2610\"; }\nli.checked::marker { content: \"\\2612\"; }\n</style></head><body style=\" font-family:'Segoe UI'; font-size:9pt; font-weight:400; font-style:normal;\">\n<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Press <span style=\" font-weight:700;\">Space</span> to activate handler</p>\n<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Try to throw the ball into the basket.</p></body></html>"
+            },
+            "event": "@runStarted",
+            "name": "info",
+            "op": "set",
+            "property": "",
+            "subject": "@world",
+            "target": "@world",
+            "value": false,
+            "when": ""
+        },
+        {
+            "action": "@clone",
+            "actionParams": {
+                "x": -380,
+                "y": -100
+            },
+            "actions": [
+                {
+                    "action": "@clone",
+                    "actionParams": {
+                        "x": -380,
+                        "y": -100
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "circle_1",
+                    "value": false
+                },
+                {
+                    "op": "add",
+                    "property": "balls",
+                    "target": "@variables",
+                    "value": 1
+                }
+            ],
+            "compare": "%",
+            "name": "create ball",
+            "op": "set",
+            "property": "",
+            "subject": "@world",
+            "target": "circle_1",
+            "value": false,
+            "watch": "frame",
+            "when": 200
+        },
+        {
+            "event": "@keyPressed",
+            "name": "activate flipper",
+            "op": "set",
+            "property": "enableMotor",
+            "subject": "@keyboard",
+            "target": "revolute_1",
+            "value": true,
+            "when": "Space"
+        },
+        {
+            "event": "@keyReleased",
+            "name": "deactivate flipper",
+            "op": "set",
+            "property": "enableMotor",
+            "subject": "@keyboard",
+            "target": "revolute_1",
+            "value": false,
+            "when": "Space"
+        },
+        {
+            "action": "removeBody",
+            "actionParams": {
+            },
+            "event": "rayDetects",
+            "name": "remove ball",
+            "op": "set",
+            "property": "",
+            "subject": "ray_1",
+            "target": "@otherBody",
+            "value": false,
+            "when": ""
+        },
+        {
+            "actions": [
+                {
+                    "op": "add",
+                    "property": "score",
+                    "target": "@variables",
+                    "value": 1
+                },
+                {
+                    "action": "removeBody",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@otherBody",
+                    "value": 0
+                }
+            ],
+            "event": "rayDetects",
+            "name": "add score",
+            "op": "add",
+            "property": "score",
+            "subject": "ray_2",
+            "target": "@variables",
+            "value": 1,
+            "when": ""
+        }
+    ],
+    "shapes": [
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "polygon_1",
+            "origin": {
+                "x": 353.5,
+                "y": 102
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 3,
+                    "y": 2
+                },
+                {
+                    "x": 703,
+                    "y": 202
+                },
+                {
+                    "x": 3,
+                    "y": 202
+                }
+            ],
+            "pos": {
+                "x": -403,
+                "y": 98
+            },
+            "rect": {
+                "height": 200,
+                "width": 700,
+                "x": 3,
+                "y": 2
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": -30,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -20,
+                "y": 171
+            },
+            "rect": {
+                "height": 20,
+                "width": 140,
+                "x": -100,
+                "y": 30
+            },
+            "rotation": 16,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.39999999999999997
+            },
+            "pos": {
+                "x": -360,
+                "y": -100
+            },
+            "rect": {
+                "height": 40,
+                "width": 40,
+                "x": -20,
+                "y": -20
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 4,
+            "joinStyle": "round",
+            "name": "rectangle_2",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -340,
+                "y": -250
+            },
+            "rect": {
+                "height": 640,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 5,
+            "joinStyle": "round",
+            "name": "rectangle_3",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 560,
+                "y": -250
+            },
+            "rect": {
+                "height": 640,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 6,
+            "joinStyle": "round",
+            "name": "rectangle_4",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -300,
+                "y": -250
+            },
+            "rect": {
+                "height": 40,
+                "width": 860,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 7,
+            "joinStyle": "round",
+            "name": "rectangle_5",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -300,
+                "y": 350
+            },
+            "rect": {
+                "height": 40,
+                "width": 700,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 8,
+            "joinStyle": "round",
+            "name": "rectangle_6",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 300,
+                "y": -50
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": 80,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 9,
+            "joinStyle": "round",
+            "name": "rectangle_7",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 220,
+                "y": -50
+            },
+            "rect": {
+                "height": 100,
+                "width": 20,
+                "x": 80,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 10,
+            "joinStyle": "round",
+            "name": "rectangle_8",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 300,
+                "y": 50
+            },
+            "rect": {
+                "height": 20,
+                "width": 100,
+                "x": 0,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        }
+    ],
+    "variables": [
+        {
+            "name": "score",
+            "type": "int",
+            "value": 0
+        },
+        {
+            "name": "balls",
+            "type": "int",
+            "value": 1
+        }
+    ],
+    "version": 1,
+    "world": {
+        "physics": {
+        },
+        "pixelsPerMeter": 100,
+        "randomSeed": 0,
+        "solidBounds": false
+    }
+}

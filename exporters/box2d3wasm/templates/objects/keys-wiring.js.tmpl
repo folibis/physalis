@@ -1,0 +1,40 @@
+//! The editor's own spelling of a key, from the browser's.
+function chordOf(event) {
+    var key = event.key;
+    var named = { " ": "Space", "Enter": "Enter", "Tab": "Tab", "Backspace": "Backspace",
+                  "Delete": "Delete", "Escape": "Esc", "ArrowUp": "Up", "ArrowDown": "Down",
+                  "ArrowLeft": "Left", "ArrowRight": "Right", "Home": "Home", "End": "End",
+                  "PageUp": "PageUp", "PageDown": "PageDown", "Insert": "Insert" };
+    var base = named[key] || (key.length === 1 ? key.toUpperCase() : key);
+    var chord = "";
+    if (event.ctrlKey) chord += "Ctrl+";
+    if (event.shiftKey) chord += "Shift+";
+    if (event.altKey) chord += "Alt+";
+    return chord + base;
+}
+
+window.addEventListener("keydown", function (event) {
+    var chord = chordOf(event);
+    //! Held down repeats; a rule asked about the press, which happened once.
+    if (!keyHeld[chord]) {
+        keyHeld[chord] = true;
+        keyFired.pressed[chord] = true;
+    }
+    if (TAKES_KEYS[chord])
+        event.preventDefault();
+});
+
+window.addEventListener("keyup", function (event) {
+    var chord = chordOf(event);
+    //! A modifier let go first leaves the plain key held: let go of every chord
+    //! that ends in this key, or a flipper would stay up.
+    var base = chordOf({ key: event.key, ctrlKey: false, shiftKey: false, altKey: false });
+    for (var held in keyHeld) {
+        if (!keyHeld[held])
+            continue;
+        if (held === chord || held === base || held.indexOf("+" + base) === held.length - base.length - 1) {
+            keyHeld[held] = false;
+            keyFired.released[held] = true;
+        }
+    }
+});

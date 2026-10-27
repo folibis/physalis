@@ -50,8 +50,8 @@
             "key": "box2dRef",
             "label": "Box2D tag or branch",
             "type": "string",
-            "default": "v3.1.1",
-            "tooltip": "Which commit of that repository to build. Pinned to a tag by default, so the project builds the same way twice."
+            "default": "956ce4e1e8acddd05a21102629e268ff9321ec50",
+            "tooltip": "Which commit of that repository to build. Pinned by default to the commit the application's own Box2D engine is built against, which is the API the generated code is written to."
         },
         {
             "key": "cxxStandard",

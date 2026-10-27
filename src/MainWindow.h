@@ -91,6 +91,8 @@ private slots:
     void onOriginsToCenterOfMass();
     void addAnchorActions(QMenu *menu, Joint *joint, bool simulating);
     void updatePasteAction();
+    void updateCopyAction();
+    void updateDeleteAction();
     bool clipboardHasShape() const;
     QVector<ShapeItem *> clipboardShapes() const;
     QVector<ShapeItem *> selectedShapes() const;
@@ -112,6 +114,9 @@ private:
     QString m_converterPath;
     // Which engine a new scene is built for. An open scene keeps its own.
     QString m_defaultEngineName;
+    // The field a new scene is given: its size, its background and its grid.
+    // The open scene's own are in the scene, and in the file it came from.
+    OptionsDialog::Settings m_fieldDefaults;
     QString engineForNewScenes() const;
     // Points the scene, the simulation, the joint menu and the panels at one
     // engine.
@@ -209,6 +214,9 @@ private:
 
     // The log readout, pinned to the canvas corner.
     QLabel *m_logOverlay = nullptr;
+    QLabel *m_caption = nullptr;
+    QWidget *m_controls = nullptr;
+    QHash<QString, QWidget *> m_controlWidgets;
     void updateLogOverlay();
     // Font, size and colour of that readout, from Options.
     void applyLogStyle();
@@ -218,7 +226,26 @@ private:
     Qt::Corner m_logCorner = Qt::TopLeftCorner;
     // The overlay is a child of the view, so it has to be put back in its
     // corner whenever the view changes size.
+    // Whichever view is showing the scene: the editor's, or the full-screen
+    // one while that is up. The log, the caption and the controls are its
+    // children, so they move house when it changes.
+    QGraphicsView *overlayHost() const;
+    void moveOverlaysTo(QGraphicsView *host);
     void placeLogOverlay();
+    // Words a rule put up, under the log in the top-left corner.
+    void updateCaption();
+    // The body the scene says to keep in view, put back in the middle after
+    // every step of a run.
+    void followFocusedBody();
+    // What a new scene's field starts as. Everything the *.phys carries in its
+    // field block is the scene's own, so Options holds the default for the
+    // next scene rather than a setting applied to the one that is open.
+    void applyFieldDefaults();
+    static void centreViewOn(QGraphicsView *view, const QPointF &at, const QRectF &field);
+    // The scene own controls, on the canvas under the caption. Rebuilt when
+    // the scene declares different ones; refreshed when their values change.
+    void rebuildControls();
+    void refreshControls();
     bool eventFilter(QObject *watched, QEvent *event) override;
     // The heading a logged property sits under, worked out again rather than
     // taken from what the watch was named when it was added.
@@ -250,6 +277,15 @@ public:
         return m_scene->convertToSegments(shape, segments, startAngle);
     }
     void createBodyForTest(bool asStatic) { onCreateBody(asStatic); }
+    void startRunForTest();
+    // What the Options dialog would hand back, and what it would be given:
+    // the dialog itself is modal, so a test cannot work it from the outside.
+    void applySettingsForTest(const OptionsDialog::Settings &s) { applySettings(s); }
+    OptionsDialog::Settings settingsSnapshotForTest() const { return currentSettingsSnapshot(); }
+    void stopRunForTest();
+    void setFullScreenForTest(bool on);
+    void moveOverlaysForTest(QGraphicsView *host);
+    QWidget *overlayHostForTest() const;
     void openSegmentsToolForTest(ShapeItem *shape) { shapeToSegments(shape); }
     void openChainToolForTest(ShapeItem *shape) { circleToChain(shape); }
     void runToolForTest() { runTool(); }

@@ -9,6 +9,7 @@
 #include <QStringList>
 #include <QHash>
 #include <QMap>
+#include <QSet>
 #include <QVector>
 #include <functional>
 #include <memory>
@@ -28,6 +29,13 @@ class SimulationController : public QObject
     Q_OBJECT
 
 public:
+    // A key going down or coming back up during a run, handed over by whatever
+    // had the focus. Held until the next step raises it as an event, so a key
+    // tapped between two steps is not lost.
+    void applyActionForTest(const RuleAction &action) { applyAction(action, QString()); }
+    void keyPressed(int key, Qt::KeyboardModifiers held = Qt::NoModifier);
+    void keyReleased(int key, Qt::KeyboardModifiers held = Qt::NoModifier);
+
     SimulationController(CanvasScene *scene, QObject *parent = nullptr);
     ~SimulationController() override;
 
@@ -110,6 +118,13 @@ signals:
     void stepped();
 
 private:
+    // The chord of every key currently down, by key: the press names it once,
+    // and "key held" names it again on every step until it comes up.
+    QHash<int, QString> m_keysDown;
+    QVector<QString> m_keysPressed;
+    QVector<QString> m_keysReleased;
+
+
     void stepOnce();
     void syncTransforms();
     void captureSnapshot();
@@ -303,6 +318,8 @@ private:
     void applyPendingRunAction();
 
     int m_stepsPerSecond = 60;
+    // The body the scene keeps in view, as the run found it.
+    QString m_focusedAtStart;
     qreal m_speed = 1.0;
     qreal timeStep() const { return 1.0 / m_stepsPerSecond; }
     static constexpr int kMaxStepsPerTick = 5;

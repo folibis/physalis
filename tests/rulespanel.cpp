@@ -4,6 +4,9 @@
 #include "EditorMode.h"
 #include "RulesPanel.h"
 #include "Rule.h"
+#include "ShapeItem.h"
+#include "RayItem.h"
+#include "CircleItem.h"
 #include "SceneVariable.h"
 
 #include <QComboBox>
@@ -294,4 +297,55 @@ TEST(RulesPanel, TheWorldOffersItsFrameCountAndElapsedTime)
         << "the world's watch list no longer offers the elapsed time";
     EXPECT_EQ(watch->currentData().toString(), QStringLiteral("frame"))
         << "the rule watches the frame count, but the box is showing something else";
+}
+
+// Adding shapes used to rewrite rules that named other shapes. The cards are
+// rebuilt when the scene's objects change, and a combo whose stored name was
+// not in the refilled list fell back to the first entry -- so the card showed
+// an object the rule never named, and the next edit on that card wrote it
+// back. The rule has to survive anything happening elsewhere in the scene.
+TEST(RulesPanel, AddingShapesLeavesTheRulesAlone)
+{
+    CanvasScene scene;
+    scene.setEditorMode(EditorMode::Physics);
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+
+    ShapeItem *ball = scene.addCircle(QPointF(0, 0));
+    ASSERT_TRUE(ball);
+    const QString ballName = ball->name();
+    RayItem *ray = scene.addRay(QPointF(100, 100));
+    ASSERT_TRUE(ray);
+    scene.notifyShapesChanged();
+
+    Rule rule;
+    rule.conditions[0].subjectName = ray->name();
+    rule.conditions[0].eventId = QStringLiteral("rayDetects");
+    rule.conditions[0].conditionValue = ballName;   // the other object
+    rule.actions[0].targetName = Rule::world();
+    rule.actions[0].actionId = Rule::stopRunAction();
+    scene.setRules({ rule });
+
+    RulesPanel panel(&scene, nullptr);
+    QCoreApplication::processEvents();
+    ASSERT_EQ(scene.rules().at(0).conditions.at(0).conditionValue.toString(), ballName);
+
+    // Two more circles, named after the one the rule watches.
+    for (int i = 0; i < 2; ++i)
+        scene.addCircle(QPointF(200 + 60 * i, -100));
+    scene.notifyShapesChanged();
+    QCoreApplication::processEvents();
+
+    EXPECT_EQ(scene.rules().at(0).conditions.at(0).conditionValue.toString(), ballName)
+        << "adding shapes changed which object the rule watches";
+    EXPECT_EQ(scene.rules().at(0).conditions.at(0).subjectName, ray->name())
+        << "adding shapes changed the rule's subject";
+
+    // And the card has to be showing it, or the next edit commits whatever it
+    // is showing instead.
+    bool shown = false;
+    for (QComboBox *combo : panel.findChildren<QComboBox *>()) {
+        if (combo->currentData().toString() == ballName)
+            shown = true;
+    }
+    EXPECT_TRUE(shown) << "no box on the card is showing the object the rule names";
 }

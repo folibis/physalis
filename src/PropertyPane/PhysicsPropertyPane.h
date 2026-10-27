@@ -30,6 +30,8 @@ private:
                                   const std::function<void()> &changed);
     static std::vector<PropertyRow> bodyIdentityRows(PhysicsBody *body);
     static std::vector<PropertyRow> shotRows(ShotSettings *shot, const std::function<void()> &changed);
+    // Not static: taking the focus off whatever had it is the scene's to do.
+    PropertyRow focusRow(PhysicsBody *body) const;
     static std::vector<PropertyRow> shapeIdentityRows(ShapeItem *shape);
 
     CanvasScene *m_scene = nullptr;

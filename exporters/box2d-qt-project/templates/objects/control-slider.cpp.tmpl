@@ -1,0 +1,20 @@
+auto *{{VAR}}Row = new QWidget(panel);
+auto *{{VAR}}Line = new QHBoxLayout({{VAR}}Row);
+{{VAR}}Line->setContentsMargins(0, 0, 0, 0);
+{{VAR}}Line->setSpacing(6);
+auto *{{VAR}}Says = new QLabel({{VAR}}Row);
+auto *{{VAR}} = new QSlider(Qt::Horizontal, {{VAR}}Row);
+auto *{{VAR}}Out = new QLabel({{VAR}}Row);
+//! A slider counts in whole numbers, so it counts in steps and the step is
+//! what a number means here.
+{{VAR}}->setRange(0, {{STEPS}});
+{{VAR}}->setMinimumWidth(120);
+{{VAR}}Line->addWidget({{VAR}}Says);
+{{VAR}}Line->addWidget({{VAR}}, 1);
+{{VAR}}Line->addWidget({{VAR}}Out);
+panelColumn->addWidget({{VAR}}Row);
+QObject::connect({{VAR}}, &QSlider::valueChanged, [{{VAR}}Out](int at) {
+    controls[{{ID}}].at = {{MIN}} + at * {{STEP}};
+    controlChangedNow.insert({{ID}});
+    {{VAR}}Out->setText(QString::number(controls[{{ID}}].at, 'f', {{DECIMALS}}));
+});

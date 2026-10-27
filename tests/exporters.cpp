@@ -10,6 +10,7 @@
 #include "RayItem.h"
 #include "RectangleItem.h"
 #include "Rule.h"
+#include "SceneControl.h"
 #include "SceneVariable.h"
 #include "SceneExporter.h"
 #include "ShapeItem.h"
@@ -1214,11 +1215,14 @@ namespace {
 // metre -- gravity and the thresholds that answer to it. A converter has to
 // use the one the app uses, so the test says which that is rather than
 // accepting whichever of them makes the number turn up.
-enum class Scaled { Raw, ByScale, AtTheReferencePace };
+enum class Scaled { Raw, ByScale, InMetresPerSecond };
 
 Scaled scalingOf(const QString &key)
 {
-    static const QSet<QString> pace {
+    // Metres a second, the editor's own metre: the app hands each of these to
+    // the solver as it stands -- 9.81 is 9.81. It used to multiply them by
+    // 50 / pixelsPerMeter, and that is gone.
+    static const QSet<QString> inMetres {
         QStringLiteral("gravityX"), QStringLiteral("gravityY"),
         QStringLiteral("maximumLinearSpeed"), QStringLiteral("contactSpeed"),
         QStringLiteral("restitutionThreshold"), QStringLiteral("hitEventThreshold"),
@@ -1228,21 +1232,27 @@ Scaled scalingOf(const QString &key)
         QStringLiteral("velocityX"), QStringLiteral("velocityY"),
         QStringLiteral("tangentSpeed"),
     };
-    if (pace.contains(key))
-        return Scaled::AtTheReferencePace;
+    if (inMetres.contains(key))
+        return Scaled::InMetresPerSecond;
     if (byScale.contains(key))
         return Scaled::ByScale;
     return Scaled::Raw;
 }
 
-// The number the app itself hands the solver for this property.
-double asTheAppUsesIt(const QString &key, double value, double pixelsPerMeter)
+// The number this converter has to write for the property to mean what it
+// means in the app. `metre` is the metre the converter chose, which is the
+// scene's own unless it works in one of its own.
+double asTheAppUsesIt(const QString &key, double value, double ppm, double metre)
 {
     switch (scalingOf(key)) {
     case Scaled::ByScale:
-        return value / pixelsPerMeter;
-    case Scaled::AtTheReferencePace:
-        return value * (physics::kReferencePixelsPerMeter / pixelsPerMeter);
+        // Scene units a second, into that converter's metres a second.
+        return value / metre;
+    case Scaled::InMetresPerSecond:
+        // Already metres a second at the scene's metre. A converter working at
+        // a metre of its own has to re-quote it there, or the same motion
+        // would come out at a different speed.
+        return value * (ppm / metre);
     case Scaled::Raw:
         break;
     }
@@ -1316,7 +1326,7 @@ TEST(Exporters, EveryPropertyIsExportedWithTheValueTheAppUses)
 
                 // At the metre this converter chose, not necessarily the scene's.
                 const double metre = metreOf(out, ppm);
-                double appUses = asTheAppUsesIt(property.key, wanted, metre);
+                double appUses = asTheAppUsesIt(property.key, wanted, ppm, metre);
                 // A density is per unit area, and an area is the square of the
                 // scale: a converter working at its own metre carries the
                 // difference here, which is what keeps every mass the editor's.
@@ -1336,6 +1346,164 @@ TEST(Exporters, EveryPropertyIsExportedWithTheValueTheAppUses)
 // converters -- and what a converter cannot express it has to say, rather than
 // writing half a rule. A scene that runs one way here and another way there is
 // the failure this guards against.
+// What the scene is worked with while it runs -- its own controls, the keys a
+// rule watches, the words a rule puts on the canvas -- belongs to no engine,
+// so a converter has to write it itself or the exported scene is a scene
+// nobody can touch. The editor's own log goes the same way.
+TEST(Exporters, WhatAHandDoesToASceneSurvivesTheExport)
+{
+    const QVector<SceneExporter::Converter> converters = shipped();
+    ASSERT_GE(converters.size(), 1);
+
+    CanvasScene scene;
+    buildEverything(&scene);
+
+    SceneControl pull;
+    pull.id = QStringLiteral("speed");
+    pull.caption = QStringLiteral("How fast");
+    pull.kind = SceneControl::Kind::Slider;
+    pull.minimum = 0.0;
+    pull.maximum = 50.0;
+    pull.step = 5.0;
+    pull.initial = 10.0;
+    SceneControl press;
+    press.id = QStringLiteral("go");
+    press.kind = SceneControl::Kind::Button;
+    scene.setControls({ pull, press });
+
+    // A key works the scene, a control works it, and the scene says so in
+    // words -- the three the editor adds on top of the engine.
+    Rule byKey;
+    byKey.name = QStringLiteral("keyRule");
+    byKey.conditions[0].subjectName = Rule::keyboard();
+    byKey.conditions[0].eventId = Rule::keyPressedEvent();
+    byKey.conditions[0].conditionValue = QStringLiteral("Up");
+    byKey.actions[0].targetName = Rule::controls();
+    byKey.actions[0].propertyKey = pull.valueKey();
+    byKey.actions[0].op = Rule::Op::Add;
+    byKey.actions[0].value = 5.0;
+
+    Rule byButton;
+    byButton.name = QStringLiteral("buttonRule");
+    byButton.conditions[0].subjectName = Rule::controls();
+    byButton.conditions[0].eventId = Rule::controlPressedEvent();
+    byButton.conditions[0].conditionValue = press.id;
+    byButton.actions[0].targetName = QStringLiteral("crateBody");
+    byButton.actions[0].propertyKey = QStringLiteral("gravityScale");
+    byButton.actions[0].sourceObject = Rule::controls();
+    byButton.actions[0].sourceProperty = pull.valueKey();
+
+    Rule saysSo;
+    saysSo.name = QStringLiteral("captionRule");
+    saysSo.conditions[0].subjectName = Rule::world();
+    saysSo.conditions[0].eventId = Rule::runStartedEvent();
+    saysSo.actions[0].targetName = Rule::world();
+    saysSo.actions[0].actionId = Rule::showCaptionAction();
+    saysSo.actions[0].actionParams.insert(Rule::captionTextParam(),
+                                          QStringLiteral("<b>Up</b> speeds it up"));
+    saysSo.actions[0].actionParams.insert(Rule::captionShownParam(), true);
+
+    Rule renames;
+    renames.name = QStringLiteral("captionOfAControl");
+    renames.conditions[0].subjectName = Rule::controls();
+    renames.conditions[0].eventId = Rule::controlReleasedEvent();
+    renames.conditions[0].conditionValue = press.id;
+    renames.actions[0].targetName = Rule::controls();
+    renames.actions[0].propertyKey = press.captionKey();
+    renames.actions[0].value = QStringLiteral("Again");
+
+    scene.setRules({ byKey, byButton, saysSo, renames });
+    scene.addWatch({ Rule::world(), QStringLiteral("frame"), QString(), false });
+    // The body the editor keeps in the middle of the screen: the export has a
+    // view of its own, and it has to follow the same body.
+    ASSERT_FALSE(scene.bodies().isEmpty());
+    scene.setFocusedBody(scene.bodies().first());
+
+    for (const SceneExporter::Converter &converter : converters) {
+        const Output out = exportWith(converter, &scene);
+        ASSERT_TRUE(out.ok) << converter.id.toStdString() << ": " << out.error.toStdString();
+        for (const QString &line : std::as_const(out.log)) {
+            EXPECT_FALSE(line.contains(QStringLiteral("was not exported")))
+                << converter.id.toStdString() << ": " << line.toStdString();
+        }
+
+        const std::string who = converter.id.toStdString();
+        EXPECT_TRUE(out.text.contains(QStringLiteral("\"Up\"")))
+            << who << " wrote no key to watch for";
+        EXPECT_TRUE(out.text.contains(pull.id)) << who << " wrote no slider";
+        EXPECT_TRUE(out.text.contains(pull.caption)) << who << " wrote no caption for it";
+        EXPECT_TRUE(out.text.contains(press.id)) << who << " wrote no button";
+        EXPECT_TRUE(out.text.contains(QStringLiteral("Up</b> speeds it up")))
+            << who << " wrote no caption";
+        EXPECT_TRUE(out.text.contains(QStringLiteral("Again")))
+            << who << " cannot change what a control says";
+        // The address the cards spell with punctuation is theirs alone.
+        EXPECT_FALSE(out.text.contains(pull.valueKey()))
+            << who << " carried the editor's own spelling of an address";
+        EXPECT_TRUE(out.text.contains(QStringLiteral("followFocused")))
+            << who << " does not follow the body the scene keeps in view";
+    }
+}
+
+// A rule that watches an event is carried out on every step the event is
+// raised -- that is what the editor does -- and a clone lands where the rule
+// says. Both were wrong in the converters while the scene they came from was
+// right: a ray that pushed a ball every step for half a second pushed it once,
+// and a clone asked for x,y landed at a hundredth of it.
+TEST(Exporters, AnEventActsEveryStepAndACloneLandsWhereItIsSent)
+{
+    const QVector<SceneExporter::Converter> converters = shipped();
+    ASSERT_GE(converters.size(), 1);
+
+    CanvasScene scene;
+    buildEverything(&scene);
+
+    Rule push;
+    push.name = QStringLiteral("everyStep");
+    push.conditions[0].subjectName = QStringLiteral("crate");
+    push.conditions[0].eventId = QStringLiteral("contactBegin");
+    push.actions[0].targetName = QStringLiteral("crateBody");
+    push.actions[0].propertyKey = QStringLiteral("gravityScale");
+    push.actions[0].value = 0.5;
+
+    Rule copy;
+    copy.name = QStringLiteral("copyIt");
+    copy.conditions[0].subjectName = Rule::world();
+    copy.conditions[0].conditionKey = QStringLiteral("frame");
+    copy.conditions[0].compare = Rule::Compare::Greater;
+    copy.conditions[0].conditionValue = 5;
+    copy.actions[0].targetName = QStringLiteral("crateBody");
+    copy.actions[0].actionId = Rule::cloneAction();
+    copy.actions[0].actionParams.insert(QStringLiteral("x"), -275.0);
+    copy.actions[0].actionParams.insert(QStringLiteral("y"), 325.0);
+
+    scene.setRules({ push, copy });
+
+    for (const SceneExporter::Converter &converter : converters) {
+        const Output out = exportWith(converter, &scene);
+        ASSERT_TRUE(out.ok) << converter.id.toStdString() << ": " << out.error.toStdString();
+        const std::string who = converter.id.toStdString();
+
+        // The clone's place goes in as the scene's own numbers, for the one
+        // helper that turns a pair of them into metres.
+        EXPECT_TRUE(out.text.contains(QStringLiteral("m(-275"))
+                    || out.text.contains(QStringLiteral("m(-275.0")))
+            << who << " does not send the clone to the x the rule names";
+        EXPECT_TRUE(out.text.contains(QStringLiteral("325")))
+            << who << " does not send the clone to the y the rule names";
+        EXPECT_FALSE(out.text.contains(QStringLiteral("m(m(-275"))
+                     || out.text.contains(QStringLiteral("m(len(-275")))
+            << who << " turns the clone's place into metres twice";
+
+        // A rule made of readings waits for the value to cross; one that
+        // watches an event does not, so it keeps no "before" of its own.
+        EXPECT_TRUE(out.text.contains(QStringLiteral("copyitBefore")))
+            << who << " does not edge-trigger a rule made of readings";
+        EXPECT_FALSE(out.text.contains(QStringLiteral("everystepBefore")))
+            << who << " fires an event rule once instead of every step it is raised";
+    }
+}
+
 TEST(Exporters, CompoundRulesAreWrittenOrReported)
 {
     const QVector<SceneExporter::Converter> converters = shipped();

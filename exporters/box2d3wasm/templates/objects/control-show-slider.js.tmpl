@@ -1,0 +1,4 @@
+dom("{{DOM}}").value = controls["{{ID}}"].value;
+dom("{{DOM}}").disabled = !controls["{{ID}}"].enabled;
+dom("{{DOM}}Says").textContent = controls["{{ID}}"].caption;
+dom("{{DOM}}Out").textContent = Number(controls["{{ID}}"].value).toFixed({{DECIMALS}});

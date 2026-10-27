@@ -1,0 +1,14 @@
+auto *{{VAR}} = new QPushButton(panel);
+panelColumn->addWidget({{VAR}});
+//! Down and up, not "clicked": a rule may drive something for exactly as long
+//! as the button is held.
+QObject::connect({{VAR}}, &QPushButton::pressed, [] {
+    controls[{{ID}}].on = true;
+    controlPressedNow.insert({{ID}});
+    controlChangedNow.insert({{ID}});
+});
+QObject::connect({{VAR}}, &QPushButton::released, [] {
+    controls[{{ID}}].on = false;
+    controlReleasedNow.insert({{ID}});
+    controlChangedNow.insert({{ID}});
+});

@@ -147,6 +147,12 @@ group 2 through.
 The switches on this page for contact, hit, sensor and pre-solve events can be
 left alone. Physalis turns on whatever the [rules](rules.md) need.
 
+### Keeping a body in view
+
+**Keep In View**, on the body's own page, makes the view follow this body while
+the simulation runs -- see [Keeping one body in view](running.md#keeping-one-body-in-view).
+Only one body in a scene can have it.
+
 ## Sensors
 
 A shape with **Sensor** ticked no longer blocks anything. Other shapes pass

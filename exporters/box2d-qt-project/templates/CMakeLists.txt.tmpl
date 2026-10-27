@@ -20,7 +20,7 @@ FetchContent_Declare(box2d
     # Whatever is here has to speak the Box2D v3 API: that is what the
     # generated code below is written against.
     GIT_TAG {{BOX2D_REF}}
-    GIT_SHALLOW TRUE
+    {{BOX2D_SHALLOW}}
 )
 FetchContent_MakeAvailable(box2d)
 

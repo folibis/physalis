@@ -49,6 +49,7 @@ QIcon distributeAcross() { return QIcon(QStringLiteral(":/icons/distribute_acros
 QIcon distributeDown() { return QIcon(QStringLiteral(":/icons/distribute_down.svg")); }
 QIcon flipHorizontal() { return QIcon(QStringLiteral(":/icons/mirror_across.svg")); }
 QIcon flipVertical() { return QIcon(QStringLiteral(":/icons/mirror_down.svg")); }
+QIcon keyboard() { return QIcon(QStringLiteral(":/icons/keyboard.svg")); }
 QIcon tools() { return QIcon(QStringLiteral(":/icons/tools.svg")); }
 QIcon clone() { return QIcon(QStringLiteral(":/icons/clone.svg")); }
 QIcon alignRingOutside() { return QIcon(QStringLiteral(":/icons/align_ring_out.svg")); }

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <QPointer>
+#include <QHash>
 #include <QVector>
 #include <QIcon>
 #include <QSet>
@@ -51,6 +52,10 @@ signals:
     void revealRequested(const QString &objectName);
 
 private:
+    // The small editor behind a caption's button. True when the text was kept.
+    bool editCaptionText(QString *text);
+
+
     // Lets a card's object box be followed back to the thing it names.
     void offerToReveal(ObjectComboBox *box);
     void setCollapsed(int index, bool collapsed);
@@ -87,7 +92,10 @@ private:
     // The card's borders and heading. A rule that is switched off goes pale; an
     // unfinished one goes red, whether it is switched off or not, because it
     // would not run either way and that is the part worth noticing.
-    static void setCardLook(QWidget *card, QLabel *heading, bool enabled, bool complete);
+    // Which of the four looks a card wears, said with two properties the one
+    // sheet in buildUi() selects on -- see setCardLook().
+    static void setCardLook(QWidget *card, QWidget *header, QLabel *heading,
+                            bool enabled, bool complete);
     // The mark on one When or Then block, so a card with several rows says
     // which of them is the unfinished one.
     static void setRowWarning(QLabel *warning, Rule::Problem problem);
@@ -137,6 +145,7 @@ private:
 
     struct Row {
         QWidget *card = nullptr;
+        QWidget *header = nullptr;    // the band across the top, coloured with the card
         QWidget *body = nullptr;      // everything under the title, hidden when collapsed
         QToolButton *collapse = nullptr;
         // The caption, and the box that replaces it while it is being renamed.
@@ -156,6 +165,12 @@ private:
     void buildUi();
     void connectScene();
     void rebuild();
+    // Two things feed a card and only one of them is the rule: what rows it
+    // has comes from the rule, so only a change to the rules needs the cards
+    // built again. What the combo boxes offer comes from the scene's objects,
+    // and that is a refill of boxes that already exist -- not fifteen cards
+    // torn down and made again because one body appeared.
+    void refreshChoices();
     void addRule();
     void removeRule(int index);
     // Rules are applied in the order they are listed, so the order is part of
@@ -196,6 +211,7 @@ private:
     const physics::JointParam *describe(const QString &objectName, const QString &key) const;
     // What a rule is checked against: does the scene's engine still offer this?
     Rule::KnownProperty knownProperty() const;
+    bool propertyIsText(const QString &objectName, const QString &key) const;
     bool propertyIsFlag(const QString &objectName, const QString &key) const;
     // A property the engine offers as one of a fixed set rather than as a
     // number. The editor knows nothing about what the choices mean; it shows
@@ -213,6 +229,14 @@ private:
     // falling back to Set where the new list does not have it. Returns the op
     // actually selected, which is what the rule should then hold.
     static Rule::Op fillOpBox(QComboBox *box, bool timer, Rule::Op current);
+
+    // The three lists of what a rule can name. They are the same for every box
+    // on every card and change only when the scene does, so each is built once
+    // and kept until forgetChoices() -- filling three hundred boxes meant
+    // three hundred passes over every shape, body and joint in the scene.
+    enum class ChoiceList { Subject, SourceObject, Target };
+    void forgetChoices();
+    mutable QHash<int, QVector<RuleChoice>> m_choices;
 
     QVector<RuleChoice> sourceChoices() const;
     QVector<RuleChoice> watchChoices(const QString &name) const;

@@ -364,6 +364,12 @@ QVector<ActionType> ChipmunkEngine::bodyActions() const
                     offsetTip),
         actionParam(QStringLiteral("offsetY"), QObject::tr("Offset Y (px)"), 0.0, -1e6, 1e6, 1, 10.0,
                     offsetTip),
+        // cpvrotate by the body's angle: the same numbers read in the body's
+        // own frame, so a ship that has turned is pushed along its own axis.
+        flag(QStringLiteral("relative"), QObject::tr("In its own direction"), false, false,
+             QObject::tr("Read the push and the offset in the body's own directions, which turn"
+                         " with it, rather than the world's. A ship's engine points where the"
+                         " ship points.")),
     };
     actions.append(push);
 

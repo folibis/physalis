@@ -126,7 +126,17 @@ function exportScene(scene, io) {
     var margin = Math.max(0.1, pickNumber(vals(world).contactMargin, 2));
     PPM = margin / (4.0 * 0.005);
     SCALE = SCENE_PPM / PPM;
-    MOTION = 50.0 / PPM;
+    // What the editor quotes a world speed or gravity in -- metres a second,
+    // its own metre -- as this page's. The page's metre is SCALE times the
+    // editor's, so 9.81 m/s^2 there is 9.81 * SCALE here and the motion in
+    // scene units is the same.
+    //
+    // This was 50 / PPM, which is the m_motionScale the application used to
+    // put on gravity and its five speed thresholds. That is gone: gravity is
+    // handed to the engine as it stands. Keeping it here ran every exported
+    // scene at a fraction of the gravity it was drawn with -- half, at the
+    // usual contact margin.
+    MOTION = SCALE;
     TOLERANCE = 1.0;
 
     var cache = {};
@@ -155,6 +165,10 @@ function exportScene(scene, io) {
     LOST = destroys(scene);
 
     HELPERS = { initState: false, preSolve: false, clones: {} };
+    declareControls(scene);
+    KEYS_TAKEN = {};
+    CAPTION_USED = false;
+    FOLLOW_USED = false;
     ANSWERING = false;
     // The step code first: it decides which shape ids have to be kept.
     var stepCode = stepBody(scene, io);
@@ -168,6 +182,7 @@ function exportScene(scene, io) {
     var width = Math.round(field.width || 1000);
     var height = Math.round(field.height || 600);
 
+    var following = followCode(scene);
     var readout = logCode(scene, physics);
     var sling = slingshotCode(scene, physics);
     var engine = engineDelivery(io, own);
@@ -211,7 +226,7 @@ function exportScene(scene, io) {
         HEIGHT: String(height),
         VIEW_CENTER_X: "0.0",
         VIEW_CENTER_Y: "0.0",
-        BACKGROUND: field.backgroundColor || "#ffffffff",
+        BACKGROUND: cssColour(field.backgroundColor, "#ffffff"),
         DEBUG_VIEW: bool(own.debugView),
         DRAW_RAY: (scene.rays || []).length ? render("objects/draw-ray.js.tmpl", {}) : "",
         DEBUG_DRAWING: debugDrawing(scene),
@@ -230,6 +245,19 @@ function exportScene(scene, io) {
         SPRING_WIDTH: short(pickNumber(physics.springWidth, 9)),
         CONTROLS: controlsCode(own),
         CONTROL_WIRING: controlWiring(own),
+        FOLLOW: following,
+        OVERLAY: overlayHtml(),
+        CAPTION: CAPTION_USED ? render("objects/caption.js.tmpl", {}) : "",
+        CAPTION_RESET: CAPTION_USED ? "showCaption(\"\", false);" : "",
+        CONTROLS_STATE: toJavaScript(controlsState()),
+        CONTROLS_SHOW: toJavaScript(controlsShow()),
+        CONTROLS_RESET: hasControls() ? render("objects/controls-reset.js.tmpl", {}) : "",
+        SCENE_CONTROL_WIRING: hasControls() ? sceneControlWiring() : "",
+        KEYS_STATE: keysUsed() ? render("objects/keys-state.js.tmpl", {}) : "",
+        KEYS_WIRING: keysUsed() ? render("objects/keys-wiring.js.tmpl", {}) : "",
+        TAKES_KEYS: takesKeys(),
+        PLACE_OVERLAY: (hasControls() || CAPTION_USED)
+                           ? "dom(\"overlay\").style.top = (8 + logHeight) + \"px\";" : "",
         WASM_SCRIPT: engine.wasmScript,
         LIBRARY_SCRIPT: engine.libraryScript,
         BOOT: engine.boot,
@@ -1273,6 +1301,16 @@ function stepBody(scene, io) {
         out.push("");
         out = out.concat(CHANGE_SAVES);
     }
+    // A press, a release, a change and a keystroke last the step they happened
+    // on, so they are cleared once every rule has had its look.
+    if (hasControls()) {
+        out.push("");
+        out = out.concat(render("objects/controls-clear.js.tmpl", {}).split(NEWLINE));
+    }
+    if (keysUsed()) {
+        out.push("");
+        out = out.concat(render("objects/keys-clear.js.tmpl", {}).split(NEWLINE));
+    }
     return wrapLong(out.join(NEWLINE), 88);
 }
 
@@ -1415,10 +1453,6 @@ function ruleShape(rule) {
                             + " cannot join" };
         }
     }
-    if (events.length === 1 && values.length > 0 && any) {
-        return { error: "it joins an event with a reading using \"or\", which this"
-                        + " converter cannot write" };
-    }
     return { events: events, values: values, any: any,
              join: any ? " || " : " && " };
 }
@@ -1507,20 +1541,42 @@ function ruleCode(scene, rule, n, caption, loops) {
         // exactly that, and refusing it left a pool table that swallowed nothing.
         var everySubjectIsASensor = event.indexOf("sensor") === 0;
         for (var p = 0; everySubjectIsASensor && p < pairs.length; ++p)
-            everySubjectIsASensor = pairs[p].subject.isSensor && !pairs[p].partner;
+            everySubjectIsASensor = pairs[p].subject.isSensor;
         if (pairs.length > 1 && ruleNeedsOther(rule) && !everySubjectIsASensor) {
             return { error: "it watches several shapes and acts on the other one,"
                             + " which this converter cannot tell apart" };
         }
-        var effect = guarded(allEffectLines(scene, rule, "other"), guard);
+        var fired = null;
+        if (shape.values.length && shape.any) {
+            if (ruleNeedsOther(rule)) {
+                return { error: "it joins an event with a reading and acts on the object the"
+                                + " event named, which this converter cannot tell apart" };
+            }
+            fired = base + "Fired";
+            TAKEN[fired] = true;
+            remember("bool", fired, "false");
+        }
+        var effect = fired ? [fired + " = true;"]
+                           : guarded(allEffectLines(scene, rule, "other"), guard);
         if (!effect)
             return { error: "nothing in Box2D does " + describe(rule).split(", ")[1] };
         if (event === "preSolve")
             HELPERS.preSolve = true;
         loops[pair[event]].push({ caption: caption, pairs: pairs,
                                   sensor: event.indexOf("sensor") === 0, effect: effect,
-                                  usesOther: ruleNeedsOther(rule), once: once });
-        return {};
+                                  usesOther: fired ? false : ruleNeedsOther(rule), once: once });
+        if (!fired)
+            return {};
+
+        var readings = valueConditions(scene, shape.values, " || ");
+        if (!readings)
+            return { error: "one of its readings cannot be read here" };
+        var both = allEffectLines(scene, rule, null);
+        if (!both)
+            return { error: "nothing in Box2D does " + describe(rule).split(", ")[1] };
+        // The flag was set in the loop above, which runs before this does.
+        return { check: eventBlock(caption, fired + " || (" + readings + ")", both, once)
+                            .concat([fired + " = false;"]) };
     }
 
     if (event === "bodyFellAsleep" || event === "bodyMoved") {
@@ -1538,7 +1594,7 @@ function ruleCode(scene, rule, n, caption, loops) {
         }
         var flag = body.handle.replace(/[^A-Za-z0-9_]/g, "_") + "Moved";
         loops.moved.push({ body: body.handle, flag: flag });
-        return { check: edgeBlock(caption, base, flag, acting, once, "false") };
+        return { check: eventBlock(caption, flag, acting, once) };
     }
 
     var condition;
@@ -1605,6 +1661,41 @@ function ruleCode(scene, rule, n, caption, loops) {
             condition = "b2Joint_IsValid(" + J + ") && " + condition;
         // Starting against the stop is not arriving at it.
         startsTrue = "true";
+    } else if (event === "@keyHeld") {
+        // Every step the key is down, which is what a thruster is.
+        var heldTests = [];
+        for (var kh = 0; kh < shape.events.length; ++kh) {
+            var heldChord = String(shape.events[kh].when || "");
+            if (!heldChord)
+                return { error: "it watches @keyHeld without naming a key" };
+            KEYS_TAKEN[heldChord] = true;
+            heldTests.push("keyHeld[" + quoted(heldChord) + "] === true");
+        }
+        condition = heldTests.join(" || ");
+    } else if (event === "@keyPressed" || event === "@keyReleased") {
+        // A key is the page's to notice, not Box2D's: the flag is already a
+        // one-step pulse, and several keys on one card are OR-ed together.
+        var fired = event === "@keyPressed" ? "keyFired.pressed" : "keyFired.released";
+        var keyTests = [];
+        for (var ke = 0; ke < shape.events.length; ++ke) {
+            var chord = String(shape.events[ke].when || "");
+            if (!chord)
+                return { error: "it watches " + event + " without naming a key" };
+            KEYS_TAKEN[chord] = true;
+            keyTests.push(fired + "[" + quoted(chord) + "] === true");
+        }
+        condition = keyTests.join(" || ");
+    } else if (CONTROL_EVENTS[event]) {
+        var which = "controlFired." + CONTROL_EVENTS[event];
+        var controlTests = [];
+        for (var ce = 0; ce < shape.events.length; ++ce) {
+            var named = String(shape.events[ce].when || "");
+            if (named && !CONTROLS[named])
+                return { error: "this scene has no control called " + named };
+            controlTests.push(named ? (which + "[" + quoted(named) + "] === true")
+                                    : ("anyFired(" + which + ")"));
+        }
+        condition = controlTests.join(" || ");
     } else if (event) {
         return { error: "Box2D has no " + event + " event to read" };
     } else {
@@ -1613,12 +1704,36 @@ function ruleCode(scene, rule, n, caption, loops) {
             return { error: "one of its readings cannot be read here" };
     }
 
+    // An event or a reading, where the event is a test rather than a loop: the
+    // two are simply OR-ed, which is what the card says.
+    if (shape.events.length && shape.values.length && shape.any) {
+        var alternatives = valueConditions(scene, shape.values, " || ");
+        if (!alternatives)
+            return { error: "one of its readings cannot be read here" };
+        condition = "(" + condition + ") || (" + alternatives + ")";
+        guard = null;
+    }
     var actions = guarded(allEffectLines(scene, rule, effectOther), guard);
     if (!actions)
         return { error: "nothing in Box2D does " + describe(rule).split(", ")[1] };
     if (rayPick)
         actions = [rayPick].concat(actions);
+    if (shape.events.length && event !== "@runStarted")
+        return { check: eventBlock(caption, condition, actions, once) };
     return { check: edgeBlock(caption, base, condition, actions, once, startsTrue) };
+}
+
+// A rule that watches an event is carried out on every step the event is
+// raised, not only on the step it starts on: the editor fires one whenever its
+// combination is true, and only a rule made of readings alone waits for the
+// value to cross. A ray that sees something for twenty steps pushes twenty
+// times there, and pushed once here.
+function eventBlock(caption, condition, effect, once) {
+    var lines = [caption, "if (" + (once.test ? ("(" + condition + ")" + once.test)
+                                              : condition) + ") {"];
+    lines = lines.concat(indentLines("    ", effect.concat(once.set)));
+    lines.push("}");
+    return lines;
 }
 
 // bool now = ...; if (now && !before) { ... } before = now;
@@ -1882,6 +1997,8 @@ function resolve(scene, name) {
         return { kind: "world" };
     if (name === "@variables")
         return { kind: "variables" };
+    if (name === "@controls")
+        return { kind: "controls" };
 
     var rays = scene.rays || [];
     for (var r = 0; r < rays.length; ++r) {
@@ -1955,6 +2072,7 @@ var SHAPE_KEYS = {
 function property(place, key) {
     if (place.kind === "world")  return worldProperty(key);
     if (place.kind === "variables") return variableProperty(key);
+    if (place.kind === "controls")  return controlProperty(addressOf(key));
     if (place.kind === "body")   return bodyProperty(place.handle, key);
     if (place.kind === "shape")  return place.outline ? null : shapeProperty(place, key);
     if (place.kind === "joint")  return jointProperty(place, key);
@@ -2380,7 +2498,10 @@ function rayProperty(place, key) {
     var R = place.handle;
     if (key === "hit") return prop("bool", R + ".hit", null);
     if (key === "distance")
-        return prop("len", R + ".fraction * m(" + short(place.ray.length || 0) + ")", null);
+        // Nothing hit is the whole length, the way the editor reports it; the
+        // fraction is zero there, and zero is not a distance.
+        return prop("len", "(" + R + ".hit ? " + R + ".fraction : 1.0f) * m("
+                           + short(place.ray.length || 0) + ")", null);
     if (key === "hitX") return prop("len", R + ".point.x", null);
     if (key === "hitY") return prop("len", R + ".point.y", null);
     return null;
@@ -2390,6 +2511,7 @@ function rayProperty(place, key) {
 
 // A number from the editor, in Box2D's units, as C++.
 function literal(unit, value) {
+    if (unit === "text")   return quoted(value === undefined || value === null ? "" : String(value));
     var x = Number(value) || 0;
     if (unit === "bool")   return value === true || value === 1 || value === "true" ? "true" : "false";
     if (unit === "len")    return x === 0 ? "0.0f" : ("m(" + short(x) + ")");
@@ -2658,6 +2780,21 @@ function actionLines(scene, rule, target) {
 
     // Ending or holding the run cannot happen inside the step; the view does it
     // once the step is over.
+    if (rule.action === "@keepInView") {
+        // Where the view points is the page's business, not Box2D's.
+        if (!isBody)
+            return null;
+        FOLLOW_USED = true;
+        var keep = params[FOLLOW_PARAM] === undefined || !!params[FOLLOW_PARAM];
+        return ["followed = " + (keep ? body : "null") + ";"];
+    }
+    if (rule.action === "@showCaption") {
+        // Words over the canvas, which is the page's business and not Box2D's.
+        CAPTION_USED = true;
+        var words = params.text === undefined ? "" : String(params.text);
+        var up = params.shown === undefined || !!params.shown;
+        return ["showCaption(" + quoted(words) + ", " + (up ? "true" : "false") + ");"];
+    }
     if (rule.action === "@stopRun")
         return ["pendingRun = 1;"];
     if (rule.action === "@holdRun")
@@ -2674,8 +2811,11 @@ function actionLines(scene, rule, target) {
         if (!isBody || target.index === undefined)
             return null;
         HELPERS.clones[target.index] = true;
+        // m() turns scene units into metres, so what goes in is the plain
+        // numbers the rule carries -- converting them first put the clone a
+        // hundredth of the way there.
         return ["cloneOf_" + NAMES["body:" + target.index] + "(m("
-                + numberOrRoll("len", params.x) + ", " + numberOrRoll("len", params.y) + "));"];
+                + numberOrRoll("num", params.x) + ", " + numberOrRoll("num", params.y) + "));"];
     }
     if (rule.action === "pushForceAt") {
         if (!isBody)
@@ -2903,6 +3043,244 @@ function destroys(scene) {
     return false;
 }
 
+
+// --- the scene's own controls ------------------------------------------------
+//
+// A control is the scene's, not the engine's: a box to tick, a button to press,
+// a slider to pull, with an id a rule addresses it by and a caption that is
+// only what it says. They become HTML over the canvas and one object the rules
+// read and write -- `controls[id].value`, `.enabled`, `.caption` -- plus three
+// sets of flags, each true for the one step the thing happened on, which is
+// what a rule watching an event asks about.
+var CONTROLS = {};
+var CONTROL_ORDER = [];
+var KEYS_TAKEN = {};
+var CAPTION_USED = false;
+// A rule that hands the view to another body: the page needs the handle to be
+// a variable even where the scene itself follows nothing.
+var FOLLOW_USED = false;
+var FOLLOW_PARAM = "follow";
+
+// Which flag each of the scene's control events leaves behind.
+var CONTROL_EVENTS = { "@controlPressed": "pressed", "@controlReleased": "released",
+                       "@controlChanged": "changed" };
+
+function declareControls(scene) {
+    CONTROLS = {};
+    CONTROL_ORDER = [];
+    var declared = scene.controls || [];
+    for (var i = 0; i < declared.length; ++i) {
+        var one = declared[i];
+        // "name" is what the id was called when a control had only one of them.
+        var id = String(one.id || one.name || "");
+        if (!id || CONTROLS[id])
+            continue;
+        var kind = String(one.kind || "checkbox");
+        CONTROLS[id] = {
+            id: id,
+            kind: kind,
+            caption: String(one.caption || id),
+            min: pickNumber(one.min, 0),
+            max: pickNumber(one.max, 100),
+            step: pickNumber(one.step, 1),
+            decimals: Math.max(0, Math.round(pickNumber(one.decimals, 1))),
+            start: startingValue(one, kind),
+            dom: "control" + String(id).replace(/[^A-Za-z0-9]/g, "_"),
+        };
+        CONTROL_ORDER.push(id);
+    }
+}
+
+// What a control is set to before anything has touched it: a button is up, a
+// slider starts where the scene says or at its lowest, a box as it was left.
+function startingValue(declared, kind) {
+    if (kind === "button")
+        return false;
+    if (kind === "slider") {
+        var at = pickNumber(declared.value, pickNumber(declared.min, 0));
+        return at;
+    }
+    return declared.value === true || declared.value === 1 || declared.value === "true";
+}
+
+function hasControls() { return CONTROL_ORDER.length > 0; }
+
+function keysUsed() {
+    for (var chord in KEYS_TAKEN) {
+        if (has(KEYS_TAKEN, chord))
+            return true;
+    }
+    return false;
+}
+
+function takesKeys() {
+    var rows = [];
+    for (var chord in KEYS_TAKEN) {
+        if (has(KEYS_TAKEN, chord))
+            rows.push(quoted(chord) + ": true");
+    }
+    return "{ " + rows.join(", ") + " }";
+}
+
+// The caption and the controls, stacked over the canvas in its corner.
+function overlayHtml() {
+    if (!hasControls() && !CAPTION_USED)
+        return "";
+    var inside = [];
+    if (CAPTION_USED)
+        inside.push(render("objects/caption.html.tmpl", {}));
+    if (hasControls())
+        inside.push(render("objects/scene-controls.html.tmpl", { ITEMS: controlItems() }));
+    return "<div id=\"overlay\">" + NEWLINE + inside.join(NEWLINE) + NEWLINE + "</div>";
+}
+
+function controlItems() {
+    var items = [];
+    for (var i = 0; i < CONTROL_ORDER.length; ++i) {
+        var c = CONTROLS[CONTROL_ORDER[i]];
+        if (c.kind === "button") {
+            items.push(render("objects/control-button.html.tmpl",
+                              { DOM: c.dom, CAPTION: escapeHtml(c.caption) }));
+        } else if (c.kind === "slider") {
+            items.push(render("objects/control-slider.html.tmpl",
+                              { DOM: c.dom, CAPTION: escapeHtml(c.caption),
+                                MIN: short(c.min), MAX: short(c.max), STEP: short(c.step),
+                                VALUE: short(c.start) }));
+        } else {
+            items.push(render("objects/control-checkbox.html.tmpl",
+                              // Not null: that takes the whole line out, and the
+                              // box a rule writes to would not be there at all.
+                              { DOM: c.dom, CAPTION: escapeHtml(c.caption),
+                                CHECKED: c.start ? " checked" : "" }));
+        }
+    }
+    return items.join(NEWLINE);
+}
+
+function escapeHtml(text) {
+    return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                       .replace(/"/g, "&quot;");
+}
+
+function controlsState() {
+    if (!hasControls())
+        return "";
+    var rows = [];
+    for (var i = 0; i < CONTROL_ORDER.length; ++i) {
+        var c = CONTROLS[CONTROL_ORDER[i]];
+        var value = c.kind === "slider" ? short(c.start) : (c.start ? "true" : "false");
+        rows.push("    " + quoted(c.id) + ": { value: " + value + ", enabled: true, caption: "
+                  + quoted(c.caption) + " },");
+    }
+    return render("objects/controls-state.js.tmpl", { ROWS: rows.join(NEWLINE) });
+}
+
+function controlsShow() {
+    if (!hasControls())
+        return "";
+    var rows = [];
+    for (var i = 0; i < CONTROL_ORDER.length; ++i) {
+        var c = CONTROLS[CONTROL_ORDER[i]];
+        var name = c.kind === "button" ? "control-show-button"
+                 : c.kind === "slider" ? "control-show-slider" : "control-show-checkbox";
+        rows.push(indentLines("    ", render("objects/" + name + ".js.tmpl",
+                                             { DOM: c.dom, ID: c.id,
+                                               DECIMALS: String(c.decimals) })
+                                          .split(NEWLINE)).join(NEWLINE));
+    }
+    return render("objects/controls-show.js.tmpl", { ROWS: rows.join(NEWLINE) });
+}
+
+function sceneControlWiring() {
+    var rows = [];
+    for (var i = 0; i < CONTROL_ORDER.length; ++i) {
+        var c = CONTROLS[CONTROL_ORDER[i]];
+        var name = c.kind === "button" ? "control-wire-button"
+                 : c.kind === "slider" ? "control-wire-slider" : "control-wire-checkbox";
+        rows.push(render("objects/" + name + ".js.tmpl",
+                         { DOM: c.dom, ID: c.id, DECIMALS: String(c.decimals) }));
+    }
+    rows.push("showControls();");
+    return rows.join(NEWLINE);
+}
+
+// A control's property, as the rules see it. The caption is words rather than a
+// number, which is the one unit nothing else here has.
+function controlProperty(address) {
+    if (!address)
+        return null;
+    var c = CONTROLS[address.control];
+    if (!c)
+        return null;
+    var held = "controls[" + quoted(c.id) + "]";
+    var shown = ["showControls();"];
+    if (address.property === "enabled") {
+        return prop("bool", held + ".enabled", function (value) {
+            return [held + ".enabled = " + value + ";"].concat(shown);
+        });
+    }
+    if (address.property === "caption") {
+        return prop("text", held + ".caption", function (value) {
+            return [held + ".caption = " + value + ";"].concat(shown);
+        });
+    }
+    if (address.property !== "value")
+        return null;
+    if (c.kind === "slider") {
+        // A rule writing a slider still cannot drive it past its own ends.
+        return prop("num", held + ".value", function (value) {
+            return [held + ".value = Math.min(" + short(c.max) + ", Math.max(" + short(c.min)
+                    + ", " + value + "));", "controlFired.changed[" + quoted(c.id) + "] = true;"]
+                   .concat(shown);
+        });
+    }
+    return prop("bool", held + ".value", function (value) {
+        return [held + ".value = " + value + ";",
+                "controlFired.changed[" + quoted(c.id) + "] = true;"].concat(shown);
+    });
+}
+
+// A rule names a control's property as the two things it is. Everything else is
+// a plain property name.
+function addressOf(key) {
+    if (key && typeof key === "object" && key.property !== undefined) {
+        return { control: String(key.control || ""), property: String(key.property || "") };
+    }
+    return null;
+}
+
+// The same address as one piece of text, for a message to a reader.
+function keyText(key) {
+    var address = addressOf(key);
+    return address ? (address.control + ":" + address.property) : String(key || "");
+}
+
+// Which body the scene says to keep in view, if any. The camera follows it
+// rather than the body crossing the screen -- the editor's own "Keep In View".
+function followCode(scene) {
+    if (!FOLLOW_USED && !focusedHandle(scene))
+        return render("objects/follow-nothing.js.tmpl", {});
+    // Declared with the rest of the run's state, so a reset arms it again.
+    TAKEN.followed = true;
+    remember("var", "followed", "undefined");
+    return render("objects/follow.js.tmpl", { START: focusedHandle(scene) || "null" });
+}
+
+// The handle of the body the scene starts out following, if it names one.
+function focusedHandle(scene) {
+    var saved = scene.bodies || [];
+    for (var i = 0; i < saved.length; ++i) {
+        if (!saved[i].focus)
+            continue;
+        var live = scene.simulation.bodies;
+        for (var b = 0; b < live.length; ++b) {
+            if (live[b].name === saved[i].name)
+                return NAMES["body:" + b];
+        }
+    }
+    return null;
+}
+
 // --- the window around it --------------------------------------------------
 
 function controlsCode(own) {
@@ -3061,6 +3439,10 @@ function ordered(lower, upper) {
 function clampAngle(degrees) { return Math.max(-176.0, Math.min(176.0, degrees || 0)); }
 
 function has(map, key) { return Object.prototype.hasOwnProperty.call(map, key); }
+
+// A string as JavaScript source, so a caption with a quote in it cannot end
+// the line it is written on.
+function quoted(text) { return JSON.stringify(String(text)); }
 function pick(map, key, fallback) { return has(map, key) ? map[key] : fallback; }
 function bool(v) { return v ? "true" : "false"; }
 function differs(a, b) { return Math.abs(Number(a) - Number(b)) > 1e-6; }

@@ -24,11 +24,15 @@ public:
     explicit FullScreenView(CanvasScene *scene, QWidget *parent = nullptr);
 
 signals:
-    void holdRequested();
-    void stepRequested();
     void closeRequested();
 
+public slots:
+    // The same following the editor's view does: the scene says which body,
+    // and every step puts it back in the middle.
+    void followFocusedBody();
+
 protected:
+    void keyReleaseEvent(QKeyEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;

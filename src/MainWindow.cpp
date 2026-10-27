@@ -19,6 +19,8 @@
 #include "SceneTree.h"
 #include "RulesPanel.h"
 #include "ShapeStyle.h"
+#include "ControlsPanel.h"
+#include "SceneControl.h"
 #include "VariablesPanel.h"
 #include "UndoStack.h"
 #include "RectangleItem.h"
@@ -29,6 +31,10 @@
 #include "SceneExporter.h"
 #include "SceneScreenshot.h"
 
+#include <QTextDocument>
+#include <cmath>
+#include <QDoubleSpinBox>
+#include <QSlider>
 #include <QJsonArray>
 #include <QStringList>
 #include <QJsonObject>
@@ -88,6 +94,7 @@ const QString kLayerAxes = QStringLiteral("bodyAxes");
 const QString kLayerRays = QStringLiteral("rays");
 const QString kLayerExplosions = QStringLiteral("explosions");
 const QString kLayerSleep = QStringLiteral("sleepShading");
+const QString kLayerSensors = QStringLiteral("sensors");
 
 constexpr int kIconSize = 22;
 constexpr int kButtonSize = 30;
@@ -155,6 +162,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_ui->sceneTree->setScene(m_scene);
     m_ui->rulesPanel->setScene(m_scene);
     m_ui->variablesPanel->setScene(m_scene);
+    m_ui->controlsPanel->setScene(m_scene);
     connect(m_ui->rulesPanel, &RulesPanel::incompleteCountChanged, this,
             &MainWindow::showIncompleteRules);
     // Following a rule back to what it names: the scene selects it, and the
@@ -170,6 +178,8 @@ MainWindow::MainWindow(QWidget *parent)
     // them there.
     const OptionsDialog::Settings startup = loadSettingsFromFile();
     applySettings(startup);
+    // The scene the window opens with is a new one, so it starts with them.
+    applyFieldDefaults();
 
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this,
             &MainWindow::updatePasteAction);
@@ -181,8 +191,8 @@ MainWindow::MainWindow(QWidget *parent)
     // The extra 30 px is for the panel's own furniture -- the tab strip's
     // icons and the plot's left gutter -- which a plain fraction of the window
     // does not account for.
-    m_ui->propertyDock->setMinimumWidth(static_cast<int>(width() * 0.17) + 30);
-    resizeDocks({m_ui->propertyDock}, {static_cast<int>(width() * 0.25) + 30}, Qt::Horizontal);
+    m_ui->propertyDock->setMinimumWidth(static_cast<int>(width() * 0.17) + 60);
+    resizeDocks({m_ui->propertyDock}, {static_cast<int>(width() * 0.25) + 60}, Qt::Horizontal);
 
     QToolBar *toolBar = m_ui->toolBar;
     toolBar->setIconSize(QSize(kIconSize, kIconSize));
@@ -215,7 +225,10 @@ MainWindow::MainWindow(QWidget *parent)
     buildDocumentationMenu();
 
     // The dividers travel with their group, so a hidden group leaves no line.
-    m_editModeActions << m_ui->actionAddShape << m_ui->actionDelete
+    // Not actionDelete: a ray, a blast and a body are picked in Physics mode
+    // and Delete has to reach those too. Hiding a QAction disables it as well,
+    // so listing it here left the key dead the moment the mode changed.
+    m_editModeActions << m_ui->actionAddShape
                       << m_ui->actionMoveScale << m_ui->actionEditNodes << m_ui->actionRotate
                       << m_ui->actionAlign << m_toolsAction
                       << separatorBefore(toolBar, m_ui->actionMoveScale)
@@ -275,7 +288,13 @@ MainWindow::MainWindow(QWidget *parent)
         switch (m_simulation->state()) {
         case SimulationController::State::Running:  m_simulation->pause();  break;
         case SimulationController::State::Stepping: m_simulation->resume(); break;
-        case SimulationController::State::Stopped:  m_simulation->start();  break;
+        case SimulationController::State::Stopped:
+            m_simulation->start();
+            // Keys reach whatever has the focus, and after clicking the
+            // toolbar that is the toolbar. A rule watching the keyboard was
+            // never given a chance.
+            m_ui->canvasView->setFocus(Qt::OtherFocusReason);
+            break;
         }
     });
     connect(m_ui->actionStep, &QAction::triggered, m_simulation, &SimulationController::stepFrame);
@@ -314,6 +333,9 @@ MainWindow::MainWindow(QWidget *parent)
                        m_scene->runLayer(RunLayer::Explosions),
                        tr("Where a blast goes off and how far it reaches, once a run"
                           " starts."));
+    m_layers->addLayer(kLayerSensors, tr("Sensors"), m_scene->runLayer(RunLayer::Sensors),
+                       tr("The pass-through shapes rules watch, once a run starts. They are"
+                          " always drawn while editing -- that is when they are placed."));
     m_layers->addLayer(kLayerSleep, tr("Sleep shading"),
                        m_scene->runLayer(RunLayer::SleepShading),
                        tr("Tint each body by whether the solver still has it awake. There"
@@ -438,6 +460,15 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_scene, &CanvasScene::editorModeChanged, this, &MainWindow::onEditorModeChanged);
     connect(m_scene, &CanvasScene::physicsSelectionChanged, this, &MainWindow::onPhysicsSelectionChanged);
     // Selecting an explosion is a different signal, and Remove depends on it.
+    connect(m_scene, &CanvasScene::selectedRayChanged, this, [this](RayItem *) {
+        updateCopyAction();
+        updateDeleteAction();
+    });
+    connect(m_scene, &CanvasScene::selectedExplosionChanged, this,
+            [this](ExplosionItem *) {
+                updateCopyAction();
+                updateDeleteAction();
+            });
     connect(m_scene, &CanvasScene::selectedExplosionChanged, this,
             [this] { onPhysicsSelectionChanged(); });
     connect(m_scene, &CanvasScene::selectedRayChanged, this,
@@ -494,6 +525,37 @@ MainWindow::MainWindow(QWidget *parent)
     m_logOverlay->setObjectName(QStringLiteral("LogOverlay"));
     m_logOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
     applyLogStyle();
+    // Beside the log, and above it in stacking order: a caption is what the
+    // scene wants read.
+    m_caption = new QLabel(m_ui->canvasView);
+    m_caption->setObjectName(QStringLiteral("SceneCaption"));
+    m_caption->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_caption->setTextFormat(Qt::RichText);
+    m_caption->setWordWrap(true);
+    m_caption->setMaximumWidth(420);
+    // The padding is a real margin and not a stylesheet one: heightForWidth()
+    // counts contents margins and knows nothing about what a stylesheet adds,
+    // so padding put there came out of the text's height instead of being
+    // added to it -- and the last line was cut off.
+    m_caption->setContentsMargins(9, 7, 9, 7);
+    m_caption->setStyleSheet(QStringLiteral(
+        "#SceneCaption { background: rgba(255, 255, 255, 200); border: 1px solid #b4b4b4;"
+        " border-radius: 4px; }"));
+    m_caption->hide();
+    connect(m_scene, &CanvasScene::captionChanged, this, &MainWindow::updateCaption);
+
+    m_controls = new QWidget(m_ui->canvasView);
+    m_controls->setObjectName(QStringLiteral("SceneControls"));
+    auto *controlColumn = new QVBoxLayout(m_controls);
+    controlColumn->setContentsMargins(9, 7, 9, 7);
+    controlColumn->setSpacing(4);
+    m_controls->setStyleSheet(QStringLiteral(
+        "#SceneControls { background: rgba(255, 255, 255, 200); border: 1px solid #b4b4b4;"
+        " border-radius: 4px; }"));
+    m_controls->hide();
+    connect(m_scene, &CanvasScene::controlsChanged, this, &MainWindow::rebuildControls);
+    connect(m_scene, &CanvasScene::controlValuesChanged, this, &MainWindow::refreshControls);
+
     m_ui->canvasView->installEventFilter(this);
     m_ui->canvasView->viewport()->installEventFilter(this);
     placeLogOverlay();
@@ -501,6 +563,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_scene, &CanvasScene::watchesChanged, this, &MainWindow::updateLogOverlay);
     connect(m_simulation, &SimulationController::stateChanged, this, &MainWindow::updateLogOverlay);
     connect(m_simulation, &SimulationController::stepped, this, &MainWindow::updateLogOverlay);
+    connect(m_simulation, &SimulationController::stepped, this, &MainWindow::followFocusedBody);
+    // Centred as soon as it is chosen, rather than at the next step: a run
+    // that is paused would otherwise leave it where it was.
+    connect(m_scene, &CanvasScene::focusedBodyChanged, this, &MainWindow::followFocusedBody);
     // The measured rows in the property table read the same values the log
     // does, so they are refreshed on the same beat.
     connect(m_simulation, &SimulationController::stepped,
@@ -610,6 +676,14 @@ QString MainWindow::engineForNewScenes() const
 
 void MainWindow::useEngine(const QString &name)
 {
+    // Taking up the engine already in use is nothing to do. A file naming the
+    // engine this window is on came through here on its way open and had every
+    // panel that asks the catalogue build itself a second time.
+    if (!name.isEmpty() && m_scene->simulationEngineName() == name
+        && m_simulation->engineName() == name) {
+        return;
+    }
+
     m_scene->setSimulationEngineName(name);
     m_simulation->setEngineName(name);
     // Everything the engine has a say in, filled again from the new one: the
@@ -946,16 +1020,58 @@ bool MainWindow::clipboardHasShape() const
     // Asked of the same code paste itself uses, rather than sniffing the JSON.
     const QVector<ShapeItem *> shapes = clipboardShapes();
     qDeleteAll(shapes);
-    return !shapes.isEmpty();
+    if (!shapes.isEmpty())
+        return true;
+
+    // A ray and a blast are made by the scene, so there is nothing to build
+    // and throw away here -- only the arrays to look for.
+    QJsonParseError parseError {};
+    const QJsonDocument document =
+        QJsonDocument::fromJson(QGuiApplication::clipboard()->text().toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+        return false;
+    const QJsonObject root = document.object();
+    return !root.value(QStringLiteral("rays")).toArray().isEmpty()
+           || !root.value(QStringLiteral("explosions")).toArray().isEmpty();
+}
+
+// Copy takes whatever is picked, so what is picked is what decides it: a
+// shape in Edit mode, a ray or a blast outside it. Said in one place because
+// three handlers used to set it and none of them knew about the other two.
+// Delete takes whatever is picked, so what is picked is what decides it: the
+// active shape in Edit mode, the ray or the blast selected outside it. Said in
+// one place because three handlers used to set it and none knew about the
+// others -- which is how a selected ray ended up with Delete greyed out.
+void MainWindow::updateDeleteAction()
+{
+    if (!m_ui->actionDelete)
+        return;
+    const bool running = m_simulation && m_simulation->isActive();
+    const bool want = !running
+                      && (m_scene->activeItem() || m_scene->selectedRay()
+                          || m_scene->selectedExplosion());
+    fputc(10, stderr);
+    m_ui->actionDelete->setEnabled(want);
+}
+
+void MainWindow::updateCopyAction()
+{
+    if (!m_ui->actionCopy)
+        return;
+    const bool running = m_simulation && m_simulation->isActive();
+    m_ui->actionCopy->setEnabled(!running
+                                 && (m_scene->activeItem() || m_scene->selectedRay()
+                                     || m_scene->selectedExplosion()));
 }
 
 void MainWindow::updatePasteAction()
 {
     if (!m_ui->actionPaste)
         return;
-    m_ui->actionPaste->setEnabled(m_scene->editorMode() == EditorMode::Edit
-                              && !(m_simulation && m_simulation->isActive())
-                              && clipboardHasShape());
+    // Not Edit mode's alone any more: a ray and a blast are picked outside
+    // it, and a scene holds all three whichever mode is showing.
+    m_ui->actionPaste->setEnabled(!(m_simulation && m_simulation->isActive())
+                                  && clipboardHasShape());
 }
 
 void MainWindow::addAnchorActions(QMenu *menu, Joint *joint, bool simulating)
@@ -1065,24 +1181,43 @@ void MainWindow::updateUndoActions()
 
 void MainWindow::on_actionCopy_triggered()
 {
+    // Whatever is picked, of whatever kind: shapes in Edit mode, and the ray
+    // or the blast that is selected outside it. They go into the same object
+    // the file uses, so one clipboard carries any of them.
     const QVector<ShapeItem *> picked = selectedShapes();
-    if (picked.isEmpty())
+    RayItem *ray = m_scene->selectedRay();
+    ExplosionItem *explosion = m_scene->selectedExplosion();
+    if (picked.isEmpty() && !ray && !explosion)
         return;
 
-    QJsonArray array;
-    for (ShapeItem *item : picked)
-        array.append(SceneSerializer::shapeToJson(item));
     QJsonObject root;
-    root.insert(QStringLiteral("shapes"), array);
+    if (!picked.isEmpty()) {
+        QJsonArray array;
+        for (ShapeItem *item : picked)
+            array.append(SceneSerializer::shapeToJson(item));
+        root.insert(QStringLiteral("shapes"), array);
+    }
+    if (ray)
+        root.insert(QStringLiteral("rays"), QJsonArray { SceneSerializer::rayToJson(ray) });
+    if (explosion) {
+        root.insert(QStringLiteral("explosions"),
+                    QJsonArray { SceneSerializer::explosionToJson(explosion) });
+    }
     const QJsonDocument document(root);
     QGuiApplication::clipboard()->setText(QString::fromUtf8(document.toJson(QJsonDocument::Compact)));
 
+    QString what;
+    if (!picked.isEmpty()) {
+        what = picked.size() == 1 ? picked.first()->name()
+                                  : tr("%n shapes", nullptr, int(picked.size()));
+    } else if (ray) {
+        what = ray->name();
+    } else {
+        what = explosion->name();
+    }
     m_pasteCount = 0;
     updatePasteAction();
-    statusBar()->showMessage(picked.size() == 1
-                                 ? tr("Copied %1").arg(picked.first()->name())
-                                 : tr("Copied %n shapes", nullptr, int(picked.size())),
-                             4000);
+    statusBar()->showMessage(tr("Copied %1").arg(what), 4000);
 }
 
 void MainWindow::on_actionSaveScreenshot_triggered()
@@ -1126,14 +1261,50 @@ void MainWindow::on_actionPaste_triggered()
     if (parseError.error != QJsonParseError::NoError || !document.isObject())
         return; // clipboard holds something else entirely; not an error
 
+    const QJsonObject root = document.object();
     const QVector<ShapeItem *> shapes = clipboardShapes();
-    if (shapes.isEmpty())
+    const QJsonArray rays = root.value(QStringLiteral("rays")).toArray();
+    const QJsonArray explosions = root.value(QStringLiteral("explosions")).toArray();
+    if (shapes.isEmpty() && rays.isEmpty() && explosions.isEmpty())
         return;
 
     // The same offset for every one of them, so a group pasted keeps the
     // arrangement it was copied in.
     constexpr qreal kPasteOffset = 20.0;
     const qreal offset = kPasteOffset * ++m_pasteCount;
+
+    QString last;
+    int made = 0;
+    for (const QJsonValue &value : rays) {
+        QJsonObject one = value.toObject();
+        one.insert(QStringLiteral("x"), one.value(QStringLiteral("x")).toDouble() + offset);
+        one.insert(QStringLiteral("y"), one.value(QStringLiteral("y")).toDouble() + offset);
+        if (RayItem *ray = SceneSerializer::rayFromJson(m_scene, one)) {
+            ray->setName(Naming::nextName(QStringLiteral("ray"), m_scene->takenNames()));
+            m_scene->selectRay(ray);
+            last = ray->name();
+            ++made;
+        }
+    }
+    for (const QJsonValue &value : explosions) {
+        QJsonObject one = value.toObject();
+        one.insert(QStringLiteral("x"), one.value(QStringLiteral("x")).toDouble() + offset);
+        one.insert(QStringLiteral("y"), one.value(QStringLiteral("y")).toDouble() + offset);
+        if (ExplosionItem *blast = SceneSerializer::explosionFromJson(m_scene, one)) {
+            blast->setName(Naming::nextName(QStringLiteral("explosion"), m_scene->takenNames()));
+            m_scene->selectExplosion(blast);
+            last = blast->name();
+            ++made;
+        }
+    }
+    if (shapes.isEmpty()) {
+        m_scene->notifyEdit(tr("Paste %1").arg(last));
+        statusBar()->showMessage(tr("Pasted %1").arg(made == 1 ? last
+                                                               : tr("%n objects", nullptr, made)),
+                                 4000);
+        return;
+    }
+
     for (ShapeItem *shape : shapes) {
         shape->setPos(shape->pos() + QPointF(offset, offset));
         // Named after it joins the scene, and against what the scene already
@@ -1194,6 +1365,7 @@ void MainWindow::on_actionNewScene_triggered()
     // A run holds engine state built from the shapes about to be deleted.
     m_simulation->stop();
     m_scene->clearContents();
+    applyFieldDefaults();
     // An empty scene has nothing to group into bodies or hang joints on, so
     // Physics mode has nothing to show and nothing to do. Drawing is where a
     // scene starts.
@@ -1220,6 +1392,7 @@ void MainWindow::on_actionLoadScene_triggered()
 bool MainWindow::openScene(const QString &path)
 {
     m_simulation->stop();
+    applyFieldDefaults();
 
     QString error;
     if (!SceneSerializer::loadFromFile(m_scene, path, &error)) {
@@ -1474,6 +1647,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     if (watched == m_ui->canvasView && event->type() == QEvent::Resize) {
         placeLogOverlay();
         placeToolOptions();
+        updateCaption();
     }
     // The panel is a child of the view, so a press that reaches the viewport
     // landed somewhere else -- which means the user has moved on, and the tool
@@ -1483,13 +1657,292 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     return QMainWindow::eventFilter(watched, event);
 }
 
+// Under the log, in the top-left corner, whatever corner the log is in: the
+// caption is the scene talking to whoever is watching it, and the top-left is
+// where reading starts.
+// The scene's controls, laid out under the caption in the same corner. They
+// are the scene talking to whoever is working it, so they go where the reading
+// happens -- and they are widgets rather than something drawn into the scene,
+// so they keep their size whatever the zoom and can actually be clicked.
+void MainWindow::rebuildControls()
+{
+    if (!m_controls)
+        return;
+
+    m_controlWidgets.clear();
+    qDeleteAll(m_controls->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly));
+    auto *column = qobject_cast<QVBoxLayout *>(m_controls->layout());
+    if (!column)
+        return;
+
+    for (const SceneControl &control : m_scene->controls()) {
+        const QString name = control.id;
+        const QString shown = m_scene->controlCaption(name);
+        QWidget *widget = nullptr;
+
+        switch (control.kind) {
+        case SceneControl::Kind::Checkbox: {
+            auto *box = new QCheckBox(shown, m_controls);
+            connect(box, &QCheckBox::toggled, this, [this, name](bool on) {
+                m_scene->setControlValue(name, on);
+            });
+            widget = box;
+            break;
+        }
+        case SceneControl::Kind::Button: {
+            auto *button = new QPushButton(shown, m_controls);
+            // Down and up, not "clicked": a rule may want to drive something
+            // for exactly as long as the button is held.
+            connect(button, &QPushButton::pressed, this, [this, name] {
+                m_scene->setControlValue(name, true);
+            });
+            connect(button, &QPushButton::released, this, [this, name] {
+                m_scene->setControlValue(name, false);
+            });
+            widget = button;
+            break;
+        }
+        case SceneControl::Kind::Slider: {
+            auto *holder = new QWidget(m_controls);
+            auto *row = new QHBoxLayout(holder);
+            row->setContentsMargins(0, 0, 0, 0);
+            row->setSpacing(6);
+            auto *says = new QLabel(shown, holder);
+            says->setObjectName(QStringLiteral("says"));
+            row->addWidget(says);
+            auto *spin = new QDoubleSpinBox(holder);
+            spin->setObjectName(QStringLiteral("value"));
+            spin->setDecimals(control.decimals);
+            spin->setRange(control.minimum, control.maximum);
+            spin->setSingleStep(control.step);
+            spin->setKeyboardTracking(false);
+            auto *slider = new QSlider(Qt::Horizontal, holder);
+            slider->setObjectName(QStringLiteral("slider"));
+            // A slider counts in whole numbers, so it counts in steps and the
+            // step is what a number means here.
+            const int steps = qMax(1, qRound((control.maximum - control.minimum)
+                                             / qMax(0.0001, control.step)));
+            slider->setRange(0, steps);
+            row->addWidget(slider, 1);
+            row->addWidget(spin);
+
+            connect(slider, &QSlider::valueChanged, this, [this, name, control](int at) {
+                m_scene->setControlValue(name, control.minimum + at * control.step);
+            });
+            connect(spin, &QDoubleSpinBox::valueChanged, this, [this, name](double v) {
+                m_scene->setControlValue(name, v);
+            });
+            widget = holder;
+            break;
+        }
+        }
+
+        if (!widget)
+            continue;
+        widget->setToolTip(tr("Rules reach it as %1").arg(name));
+        column->addWidget(widget);
+        m_controlWidgets.insert(name, widget);
+    }
+
+    refreshControls();
+}
+
+// What they are set to now. The widgets are told without answering back, or a
+// rule moving a slider would be answered by the slider moving it again.
+void MainWindow::refreshControls()
+{
+    if (!m_controls)
+        return;
+
+    // Only while a run is going. They are how a running scene is worked --
+    // outside one there is nothing for a press to reach, and a slider left
+    // standing over a scene being edited is just something in the way.
+    const bool running = m_simulation && m_simulation->isActive();
+    m_controls->setVisible(running && !m_scene->controls().isEmpty());
+    if (!m_controls->isVisible())
+        return;
+
+    for (const SceneControl &control : m_scene->controls()) {
+        QWidget *widget = m_controlWidgets.value(control.id);
+        if (!widget)
+            continue;
+        widget->setEnabled(m_scene->controlEnabled(control.id));
+        const QVariant value = m_scene->controlValue(control.id);
+        const QString says = m_scene->controlCaption(control.id);
+
+        if (auto *box = qobject_cast<QCheckBox *>(widget)) {
+            const QSignalBlocker quiet(box);
+            box->setChecked(value.toBool());
+            box->setText(says);
+        } else if (auto *button = qobject_cast<QPushButton *>(widget)) {
+            // A press is a moment, not a state to put back; what it says is
+            // not, and a rule may have changed it.
+            button->setText(says);
+        } else {
+            if (auto *label = widget->findChild<QLabel *>(QStringLiteral("says")))
+                label->setText(says);
+            auto *slider = widget->findChild<QSlider *>(QStringLiteral("slider"));
+            auto *spin = widget->findChild<QDoubleSpinBox *>(QStringLiteral("value"));
+            if (!slider || !spin)
+                continue;
+            const QSignalBlocker quietSlider(slider);
+            const QSignalBlocker quietSpin(spin);
+            spin->setValue(value.toDouble());
+            slider->setValue(qRound((value.toDouble() - control.minimum)
+                                    / qMax(0.0001, control.step)));
+        }
+    }
+
+    m_controls->adjustSize();
+    constexpr int kMargin = 8;
+    int top = kMargin;
+    if (m_caption && m_caption->isVisible())
+        top = m_caption->y() + m_caption->height() + kMargin;
+    else if (m_logOverlay && m_logOverlay->isVisible() && m_logCorner == Qt::TopLeftCorner)
+        top = m_logOverlay->y() + m_logOverlay->height() + kMargin;
+    m_controls->move(kMargin, top);
+    m_controls->raise();
+}
+
+// The scene moves around the body rather than the body across the screen.
+// Only while a run is going: editing is when panning is the user's own.
+void MainWindow::followFocusedBody()
+{
+    if (!m_simulation || !m_simulation->isActive())
+        return;
+    PhysicsBody *body = m_scene->focusedBody();
+    if (!body)
+        return;
+    centreViewOn(m_ui->canvasView, body->originScenePos(), m_scene->sceneRect());
+}
+
+// centerOn will not scroll past the scene's rectangle, so a body that has left
+// the field would slide off the screen with nothing following it. The view is
+// given a rectangle of its own, big enough to hold both, rather than the
+// scene's being stretched -- the field is what the scene says it is.
+void MainWindow::centreViewOn(QGraphicsView *view, const QPointF &at, const QRectF &field)
+{
+    if (!view)
+        return;
+    const QRectF seen = view->mapToScene(view->viewport()->rect()).boundingRect();
+    QRectF reach = field.united(QRectF(at, at).adjusted(-seen.width(), -seen.height(),
+                                                        seen.width(), seen.height()));
+    view->setSceneRect(reach);
+    view->centerOn(at);
+}
+
+void MainWindow::startRunForTest()
+{
+    m_simulation->start();
+}
+
+void MainWindow::stopRunForTest()
+{
+    m_simulation->stop();
+}
+
+void MainWindow::updateCaption()
+{
+    if (!m_caption)
+        return;
+
+    const bool show = m_scene->captionShown() && !m_scene->caption().isEmpty();
+    m_caption->setVisible(show);
+    if (!show)
+        return;
+
+    m_caption->setText(m_scene->caption());
+
+    // A wrapped label cannot size itself: its hint is the width the text would
+    // want on one line, so adjustSize() gave a box too narrow for what it then
+    // wrapped and the last words were cut off. And measured from the text
+    // rather than asked of the label, because QLabel::heightForWidth()
+    // under-reports rich text -- it returned 64 for a caption whose document
+    // needed 56 inside margins of 14.
+    //
+    // Sized once at the widest it may be, to learn what the frame and the
+    // margins cost, then to what the words actually want: a line and a half
+    // of text was taking the full width of the box it was allowed, which is a
+    // lot of white space to put over somebody's scene.
+    constexpr int kMargin = 8;
+    const int room = overlayHost()->viewport()->width() - 2 * kMargin;
+    const int widest = qMax(120, qMin(m_caption->maximumWidth(), room));
+
+    m_caption->resize(widest, 100);
+    const int chromeWide = m_caption->width() - m_caption->contentsRect().width();
+    const int chromeTall = m_caption->height() - m_caption->contentsRect().height();
+
+    QTextDocument wrapped;
+    wrapped.setDefaultFont(m_caption->font());
+    wrapped.setHtml(m_scene->caption());
+    // What it would take on the lines it chooses for itself, which for text
+    // with no break in it is one line and for text with breaks is the longest
+    // of them.
+    wrapped.setTextWidth(-1);
+    const int wanted = int(std::ceil(wrapped.idealWidth()));
+    const int text = qBound(60, wanted, widest - chromeWide);
+
+    wrapped.setTextWidth(text);
+    m_caption->resize(text + chromeWide,
+                      int(std::ceil(wrapped.size().height())) + chromeTall);
+
+    const bool under = m_logCorner == Qt::TopLeftCorner && m_logOverlay
+                       && m_logOverlay->isVisible();
+    m_caption->move(kMargin, under ? m_logOverlay->y() + m_logOverlay->height() + kMargin
+                                   : kMargin);
+    m_caption->raise();
+    refreshControls();
+}
+
+void MainWindow::moveOverlaysForTest(QGraphicsView *host)
+{
+    moveOverlaysTo(host);
+}
+
+void MainWindow::setFullScreenForTest(bool on)
+{
+    if (m_fullScreenCheck)
+        m_fullScreenCheck->setChecked(on);
+}
+
+QWidget *MainWindow::overlayHostForTest() const
+{
+    return overlayHost();
+}
+
+QGraphicsView *MainWindow::overlayHost() const
+{
+    return m_fullScreen ? static_cast<QGraphicsView *>(m_fullScreen) : m_ui->canvasView;
+}
+
+// They are children of a view, and a full-screen run is a different view --
+// so on the way in and out they are handed over, rather than left behind on a
+// window nobody is looking at.
+void MainWindow::moveOverlaysTo(QGraphicsView *host)
+{
+    if (!host)
+        return;
+    for (QWidget *overlay : { static_cast<QWidget *>(m_logOverlay),
+                              static_cast<QWidget *>(m_caption),
+                              static_cast<QWidget *>(m_controls) }) {
+        if (!overlay || overlay->parentWidget() == host)
+            continue;
+        const bool wasShown = overlay->isVisible();
+        overlay->setParent(host);
+        overlay->setVisible(wasShown);
+    }
+    updateLogOverlay();
+    updateCaption();
+    refreshControls();
+}
+
 void MainWindow::placeLogOverlay()
 {
     if (!m_logOverlay)
         return;
 
     constexpr int kMargin = 8;
-    const QSize view = m_ui->canvasView->viewport()->size();
+    const QSize view = overlayHost()->viewport()->size();
     const QSize own = m_logOverlay->size();
     const bool right = m_logCorner == Qt::TopRightCorner
                        || m_logCorner == Qt::BottomRightCorner;
@@ -1497,6 +1950,12 @@ void MainWindow::placeLogOverlay()
                         || m_logCorner == Qt::BottomRightCorner;
     m_logOverlay->move(right ? qMax(kMargin, view.width() - own.width() - kMargin) : kMargin,
                        bottom ? qMax(kMargin, view.height() - own.height() - kMargin) : kMargin);
+
+    // The caption sits under the log, so it moves whenever the log does -- and
+    // the log moves on every line it gains. Left to place itself once, it was
+    // overlapped the moment a watch was added.
+    updateCaption();
+    refreshControls();
 }
 
 void MainWindow::applyLogStyle()
@@ -1527,6 +1986,7 @@ void MainWindow::buildSidePanelTabs()
         {m_ui->sceneTree, Icons::objects()},
         {m_ui->rulesPanel, Icons::rules()},
         {m_ui->variablesPanel, Icons::variable()},
+        {m_ui->controlsPanel, Icons::keyboard()},
         {m_ui->plotPanel, Icons::plot()},
     };
     for (const auto &one : wanted) {
@@ -1550,6 +2010,7 @@ void MainWindow::buildSidePanelTabs()
                                static_cast<QWidget *>(m_ui->sceneTree),
                                static_cast<QWidget *>(m_ui->rulesPanel),
                                static_cast<QWidget *>(m_ui->variablesPanel),
+                               static_cast<QWidget *>(m_ui->controlsPanel),
                                static_cast<QWidget *>(m_ui->plotPanel) }) {
             const QString name = page->property("tabName").toString();
             if (name.isEmpty())
@@ -1600,7 +2061,8 @@ void MainWindow::applyVisibleTabs()
     QTabWidget *tabs = m_ui->sidePanel;
     QWidget *was = tabs->currentWidget();
     const QVector<QWidget *> order = { m_ui->propertyPanel, m_ui->sceneTree, m_ui->rulesPanel,
-                                       m_ui->variablesPanel, m_ui->plotPanel };
+                                       m_ui->variablesPanel, m_ui->controlsPanel,
+                                       m_ui->plotPanel };
     for (QWidget *page : order) {
         const int at = tabs->indexOf(page);
         if (at >= 0)
@@ -1638,6 +2100,7 @@ void MainWindow::updateLogOverlay()
     const QVector<CanvasScene::Watch> watches = m_scene->watches();
     if (watches.isEmpty() || !m_simulation || !m_simulation->isActive()) {
         m_logOverlay->hide();
+        updateCaption(); // the caption moves up into the space
         return;
     }
 
@@ -1668,8 +2131,10 @@ void MainWindow::updateLogOverlay()
     }
     m_logOverlay->setText(lines.join(QChar::LineFeed));
     m_logOverlay->adjustSize();
-    placeLogOverlay();
+    // Shown before it is placed: placing it moves the caption under it, and
+    // that has to know whether there is a log there at all.
     m_logOverlay->show();
+    placeLogOverlay();
     m_logOverlay->raise();
 }
 
@@ -1723,6 +2188,7 @@ void MainWindow::syncTransportWidgets(const OptionsDialog::Settings &s)
         m_layers->setOn(kLayerJoints, s.runShowJoints);
         m_layers->setOn(kLayerAxes, s.runShowBodyAxes);
         m_layers->setOn(kLayerRays, s.runShowRays);
+        m_layers->setOn(kLayerSensors, s.runShowSensors);
         m_layers->setOn(kLayerExplosions, s.runShowExplosions);
         m_layers->setOn(kLayerSleep, s.sleepShading);
     }
@@ -1760,6 +2226,8 @@ void MainWindow::applyLayer(const QString &key, bool on)
         m_scene->setRunLayer(RunLayer::Explosions, on);
     else if (key == kLayerSleep)
         m_scene->setRunLayer(RunLayer::SleepShading, on);
+    else if (key == kLayerSensors)
+        m_scene->setRunLayer(RunLayer::Sensors, on);
 }
 
 void MainWindow::updateFullScreenView()
@@ -1771,6 +2239,7 @@ void MainWindow::updateFullScreenView()
             m_fullScreen->close();
             m_fullScreen->deleteLater();
             m_fullScreen = nullptr;
+            moveOverlaysTo(m_ui->canvasView);
             // The editor was behind it the whole time; give it the keyboard.
             activateWindow();
         }
@@ -1782,26 +2251,28 @@ void MainWindow::updateFullScreenView()
     m_fullScreen = new FullScreenView(m_scene, this);
     // The keys stand in for the transport buttons, which are not on this
     // screen: the same three things they do there.
-    connect(m_fullScreen, &FullScreenView::holdRequested, this, [this] {
-        if (m_simulation->isRunning())
-            m_simulation->pause();
-        else
-            m_simulation->resume();
-    });
-    connect(m_fullScreen, &FullScreenView::stepRequested,
-            m_simulation, &SimulationController::stepFrame);
     connect(m_fullScreen, &FullScreenView::closeRequested,
             m_simulation, &SimulationController::stop);
+    // It has its own view onto the same scene, so it does its own following.
+    connect(m_simulation, &SimulationController::stepped,
+            m_fullScreen, &FullScreenView::followFocusedBody);
+    m_fullScreen->followFocusedBody();
     // Whichever screen the editor is on, rather than always the first.
     if (QScreen *screen = windowHandle() ? windowHandle()->screen() : nullptr)
         m_fullScreen->setGeometry(screen->geometry());
     m_fullScreen->showFullScreen();
     m_fullScreen->raise();
     m_fullScreen->activateWindow();
+    // Keys reach whatever has the focus, and a window that has just been shown
+    // does not have it until it is asked for.
+    m_fullScreen->setFocus(Qt::OtherFocusReason);
+    moveOverlaysTo(m_fullScreen);
 }
 
 void MainWindow::onSimulationStateChanged()
 {
+    refreshControls();
+
     const bool active = m_simulation->isActive();
 
     updateFullScreenView();
@@ -1902,7 +2373,7 @@ void MainWindow::onEditorModeChanged(EditorMode mode)
 
     m_ui->menuAddShape->setEnabled(editing);
     updateAlignActions();
-    m_ui->actionCopy->setEnabled(editing && m_scene->activeItem() != nullptr);
+    updateCopyAction();
     updatePasteAction();
 
     if (m_ui->propertyPanel)
@@ -2498,9 +2969,8 @@ void MainWindow::onActiveItemChanged(ShapeItem *item)
         m_ui->actionEditNodes->setChecked(false);
         m_ui->actionRotate->setEnabled(false);
         m_ui->actionRotate->setChecked(false);
-        m_ui->actionDelete->setEnabled(false);
-        if (m_ui->actionCopy)
-            m_ui->actionCopy->setEnabled(false);
+        updateDeleteAction();
+        updateCopyAction();
         m_statusHelpLabel->setText(m_scene->geometryEditingAllowed()
             ? tr("Click a shape to select it • Add → Rectangle/Circle/Polygon to create a new shape")
             : tr("Click a shape to set its physical properties"
@@ -2513,8 +2983,8 @@ void MainWindow::onActiveItemChanged(ShapeItem *item)
     // All three change geometry -- see CanvasScene::geometryEditingAllowed().
     const bool geometry = m_scene->geometryEditingAllowed();
 
-    if (m_ui->actionCopy)
-        m_ui->actionCopy->setEnabled(geometry);
+    updateCopyAction();
+    updateDeleteAction();
 
     m_ui->actionMoveScale->setChecked(mode == ShapeMode::Selected);
     m_ui->actionMoveScale->setEnabled(geometry && mode != ShapeMode::Selected);
@@ -2522,7 +2992,6 @@ void MainWindow::onActiveItemChanged(ShapeItem *item)
     m_ui->actionEditNodes->setEnabled(geometry && editable && mode != ShapeMode::Editing);
     m_ui->actionRotate->setChecked(mode == ShapeMode::Rotating);
     m_ui->actionRotate->setEnabled(geometry && mode != ShapeMode::Rotating);
-    m_ui->actionDelete->setEnabled(true);
 
     if (!geometry) {
         m_statusHelpLabel->setText(
@@ -2877,12 +3346,14 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.converterPath = m_converterPath;
     current.defaultEngineName = engineForNewScenes();
     current.converterSettings = m_converterSettings;
-    current.fieldWidth = m_scene->fieldWidth();
-    current.fieldHeight = m_scene->fieldHeight();
-    current.backgroundColor = m_scene->backgroundColor();
-    current.showGrid = m_scene->showGrid();
-    current.gridCellSize = m_scene->gridCellSize();
-    current.gridColor = m_scene->gridColor();
+    // The field belongs to the scene and travels in its file; what Options
+    // holds is what the next new scene starts with.
+    current.fieldWidth = m_fieldDefaults.fieldWidth;
+    current.fieldHeight = m_fieldDefaults.fieldHeight;
+    current.backgroundColor = m_fieldDefaults.backgroundColor;
+    current.showGrid = m_fieldDefaults.showGrid;
+    current.gridCellSize = m_fieldDefaults.gridCellSize;
+    current.gridColor = m_fieldDefaults.gridColor;
     current.snapToGrid = m_scene->snapToGrid();
     current.snapPoint = m_scene->snapPoint();
     current.snapStep = m_scene->snapStep();
@@ -2915,6 +3386,7 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.runShowJoints = m_scene->runLayer(CanvasScene::RunLayer::Joints);
     current.runShowBodyAxes = m_scene->runLayer(CanvasScene::RunLayer::BodyAxes);
     current.runShowRays = m_scene->runLayer(CanvasScene::RunLayer::Rays);
+    current.runShowSensors = m_scene->runLayer(CanvasScene::RunLayer::Sensors);
     current.runShowExplosions = m_scene->runLayer(CanvasScene::RunLayer::Explosions);
     if (m_fullScreenCheck)
         current.simulationFullScreen = m_fullScreenCheck->isChecked();
@@ -2962,17 +3434,30 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     return current;
 }
 
+void MainWindow::applyFieldDefaults()
+{
+    m_scene->setFieldSize(m_fieldDefaults.fieldWidth, m_fieldDefaults.fieldHeight);
+    m_scene->setBackgroundColor(m_fieldDefaults.backgroundColor);
+    m_scene->setShowGrid(m_fieldDefaults.showGrid);
+    m_scene->setGridCellSize(m_fieldDefaults.gridCellSize);
+    m_scene->setGridColor(m_fieldDefaults.gridColor);
+}
+
 void MainWindow::applySettings(const OptionsDialog::Settings &s)
 {
     m_converterPath = s.converterPath;
     // Only new scenes: what is open was built for the engine it names.
     m_defaultEngineName = s.defaultEngineName;
     m_converterSettings = s.converterSettings;
-    m_scene->setFieldSize(s.fieldWidth, s.fieldHeight);
-    m_scene->setBackgroundColor(s.backgroundColor);
-    m_scene->setShowGrid(s.showGrid);
-    m_scene->setGridCellSize(s.gridCellSize);
-    m_scene->setGridColor(s.gridColor);
+    // Kept for the next new scene. Changing it does not repaint the scene
+    // that is open: that one's field came from its own file, and is saved
+    // back to it.
+    m_fieldDefaults.fieldWidth = s.fieldWidth;
+    m_fieldDefaults.fieldHeight = s.fieldHeight;
+    m_fieldDefaults.backgroundColor = s.backgroundColor;
+    m_fieldDefaults.showGrid = s.showGrid;
+    m_fieldDefaults.gridCellSize = s.gridCellSize;
+    m_fieldDefaults.gridColor = s.gridColor;
     m_scene->setSnapToGrid(s.snapToGrid);
     m_scene->setSnapPoint(s.snapPoint);
     m_scene->setSnapStep(s.snapStep);
@@ -3008,6 +3493,7 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_scene->setRunLayer(CanvasScene::RunLayer::Joints, s.runShowJoints);
     m_scene->setRunLayer(CanvasScene::RunLayer::BodyAxes, s.runShowBodyAxes);
     m_scene->setRunLayer(CanvasScene::RunLayer::Rays, s.runShowRays);
+    m_scene->setRunLayer(CanvasScene::RunLayer::Sensors, s.runShowSensors);
     m_scene->setRunLayer(CanvasScene::RunLayer::Explosions, s.runShowExplosions);
     syncTransportWidgets(s);
     m_scene->setShowBodyAxes(s.showBodyAxes);
@@ -3125,6 +3611,7 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
     s.runShowJoints = settings.value("runShowJoints", s.runShowJoints).toBool();
     s.runShowBodyAxes = settings.value("runShowBodyAxes", s.runShowBodyAxes).toBool();
     s.runShowRays = settings.value("runShowRays", s.runShowRays).toBool();
+    s.runShowSensors = settings.value("runShowSensors", s.runShowSensors).toBool();
     s.runShowExplosions =
         settings.value("runShowExplosions", s.runShowExplosions).toBool();
     s.showBodyAxes = settings.value("showBodyAxes", s.showBodyAxes).toBool();
@@ -3294,6 +3781,7 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("runShowJoints", s.runShowJoints);
     settings.setValue("runShowBodyAxes", s.runShowBodyAxes);
     settings.setValue("runShowRays", s.runShowRays);
+    settings.setValue("runShowSensors", s.runShowSensors);
     settings.setValue("runShowExplosions", s.runShowExplosions);
     settings.setValue("showBodyAxes", s.showBodyAxes);
     settings.setValue("bodyAxisLength", s.bodyAxisLength);

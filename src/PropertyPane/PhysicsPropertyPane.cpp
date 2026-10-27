@@ -65,6 +65,7 @@ std::vector<PropertyRow> PhysicsPropertyPane::rows(EditorMode mode) const
         result.push_back(bodyTypeRow(&body->props(), typeChanged));
         append(bodyIdentityRows(body));
         result.push_back(enabledRow(&body->props(), notify));
+        result.push_back(focusRow(body));
         if (body->props().type == physics::BodyType::Dynamic)
             append(shotRows(&body->shot(), notify));
         if (engine) {
@@ -114,6 +115,13 @@ std::vector<PropertyRow> PhysicsPropertyPane::defaultRows(EditorMode mode) const
     result.push_back(enabledRow(&pristineBody, [] {}));
     static ShotSettings pristineShot;
     pristineShot = ShotSettings();
+    {
+        PropertyRow row {QObject::tr("Keep In View"), PropertyFieldType::Boolean,
+            [] { return false; }, [](const QVariant &) {},
+            -100000.0, 100000.0, {}, -1, 0.0, bodySection()};
+        row.defaultValue = false;
+        result.push_back(std::move(row));
+    }
     for (PropertyRow &row : shotRows(&pristineShot, [] {}))
         result.push_back(std::move(row));
     if (auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName())) {
@@ -165,6 +173,23 @@ PropertyRow PhysicsPropertyPane::enabledRow(physics::BodyDesc *props,
     row.defaultValue = true;
     row.tooltip = QObject::tr("A disabled body is not handed to the engine at all: it stays on"
                               " the canvas and takes no part in the run.");
+    return row;
+}
+
+PropertyRow PhysicsPropertyPane::focusRow(PhysicsBody *body) const
+{
+    CanvasScene *scene = m_scene;
+    PropertyRow row {QObject::tr("Keep In View"), PropertyFieldType::Boolean,
+        [body] { return body->isFocused(); },
+        [body, scene](const QVariant &v) {
+            if (scene)
+                scene->setFocusedBody(v.toBool() ? body : nullptr);
+        },
+        -100000.0, 100000.0, {}, -1, 0.0, bodySection()};
+    row.defaultValue = false;
+    row.tooltip = QObject::tr("While a run is going, the view follows this body: it stays in the"
+                              " middle of the screen and the scene moves around it. One body at a"
+                              " time -- giving it to another takes it off this one.");
     return row;
 }
 

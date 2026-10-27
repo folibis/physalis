@@ -23,7 +23,14 @@ var NEWLINE = String.fromCharCode(10);
 
 var T = null;       // template loader
 var PPM = 1000;     // scene units per metre
-var MOTION = 0.05;  // 50 / PPM -- the scale the editor quotes world speeds at
+// What the editor quotes a world speed or gravity in as this program's. It
+// calls b2SetLengthUnitsPerMeter with the editor's own tolerance, so the metre
+// is the same one and nothing needs converting: 9.81 is 9.81.
+//
+// This was 50 / PPM, which is the m_motionScale the application used to put on
+// gravity and its five speed thresholds. That is gone, and keeping it here ran
+// every exported scene at a fraction of the gravity it was drawn with.
+var MOTION = 1.0;
 var TOLERANCE = 0.1; // Box2D's length unit, from the world's Contact Margin, as the editor sets it
 
 var NAMES = null;   // editor name -> C++ identifier
@@ -51,7 +58,6 @@ function exportScene(scene, io) {
     var physics = (scene.settings && scene.settings.Physics) || {};
 
     PPM = world.pixelsPerMeter || 1000;
-    MOTION = 50.0 / PPM;
     // The world's Contact Margin, in scene units: Box2D makes a contact 4 x slop
     // away, so its length unit is the margin over 4 x 5 mm at this scale.
     TOLERANCE = Math.max(0.1, pickNumber(vals(world).contactMargin, 2)) / (4.0 * 0.005 * PPM);
@@ -72,7 +78,10 @@ function exportScene(scene, io) {
             : "",
         CXX_STANDARD: String(own.cxxStandard || "17"),
         BOX2D_REPO: String(own.box2dRepository || "https://github.com/erincatto/box2d.git").trim(),
-        BOX2D_REF: String(own.box2dRef || "v3.1.1").trim(),
+        BOX2D_REF: box2dRef(own),
+        // A shallow clone can fetch a branch or a tag; a commit of its own is
+        // not a tip of anything, and git refuses to check one out of one.
+        BOX2D_SHALLOW: /^[0-9a-f]{40}$/.test(box2dRef(own)) ? null : "GIT_SHALLOW TRUE",
     }));
 
     TAKEN = {};
@@ -92,12 +101,18 @@ function exportScene(scene, io) {
     LOST = destroys(scene);
 
     HELPERS = { initState: false, preSolve: false, clones: {} };
+    declareControls(scene);
+    KEYS_TAKEN = {};
+    CAPTION_USED = false;
+    FOLLOW_USED = false;
     ANSWERING = false;
     // The step code first: it decides which shape ids have to be kept.
     var stepCode = stepBody(scene, io);
     var colours = bodyColours(physics);
     WATCHED = watchedShapes(scene);
     var helpers = helpersCode(scene, colours);
+    var following = followCode(scene);
+    var readout = logCode(scene, physics);
     var steps = int(own.stepsPerSecond, 60);
     var width = Math.round(field.width || 1000);
     var height = Math.round(field.height || 600);
@@ -138,12 +153,292 @@ function exportScene(scene, io) {
         JOINT_COLOR: qtColour(physics.jointColor, "170, 232, 196, 106"),
         JOINT_ANCHOR_RADIUS: short(pickNumber(physics.jointAnchorRadius, 7)),
         CONTROLS: controlsCode(own),
+        FOLLOW: following.code,
+        FOLLOW_CALL: following.call,
+        KEYS_STATE: keysUsed() ? render("objects/keys-state.cpp.tmpl",
+                                        { TAKEN: takenChords() }) : "",
+        KEY_PRESSED: keysUsed() ? render("objects/key-pressed.cpp.tmpl", {}) : "",
+        KEY_EVENTS: keysUsed() ? render("objects/keys-events.cpp.tmpl", {}) : "",
+        TAKES_SPACE: bool(!!KEYS_TAKEN["Space"]),
+        TAKES_R: bool(!!KEYS_TAKEN["R"]),
+        TAKES_D: bool(!!KEYS_TAKEN["D"]),
+        CONTROLS_STATE: controlsState(),
+        CONTROLS_RESET: hasControls() ? render("objects/controls-reset.cpp.tmpl", {}) : "",
+        CAPTION: CAPTION_USED ? render("objects/caption.cpp.tmpl", {}) : "",
+        CAPTION_RESET: CAPTION_USED ? "showCaption(QString(), false);" : "",
+        OVERLAY_UI: overlayUi(),
+        LOG: readout.code,
+        DRAW_LOG: readout.call,
     }));
 
     io.log("Exported " + scene.simulation.bodies.length + " bodies, "
            + scene.simulation.joints.length + " joints and "
            + (scene.rules || []).length + " rules into main.cpp.");
     return true;
+}
+
+
+// --- the scene's own controls ------------------------------------------------
+//
+// A control is the scene's, not the engine's: a box to tick, a button to press,
+// a slider to pull, with an id a rule addresses it by and a caption that is
+// only what it says. They become widgets over the canvas and one map the rules
+// read and write, plus three sets of flags, each holding what happened on this
+// step -- which is what a rule watching the event asks about.
+var CONTROLS = {};
+var CONTROL_ORDER = [];
+var KEYS_TAKEN = {};
+var CAPTION_USED = false;
+// A rule that hands the view to another body: the program needs the id to be a
+// variable even where the scene itself follows nothing.
+var FOLLOW_USED = false;
+var FOLLOW_PARAM = "follow";
+
+// Which set each of the scene's control events leaves its id in.
+var CONTROL_EVENTS = { "@controlPressed": "controlPressedNow",
+                       "@controlReleased": "controlReleasedNow",
+                       "@controlChanged": "controlChangedNow" };
+
+function declareControls(scene) {
+    CONTROLS = {};
+    CONTROL_ORDER = [];
+    var declared = scene.controls || [];
+    for (var i = 0; i < declared.length; ++i) {
+        var one = declared[i];
+        // "name" is what the id was called when a control had only one of them.
+        var id = String(one.id || one.name || "");
+        if (!id || CONTROLS[id])
+            continue;
+        var kind = String(one.kind || "checkbox");
+        var low = pickNumber(one.min, 0), high = pickNumber(one.max, 100);
+        var step = pickNumber(one.step, 1);
+        CONTROLS[id] = {
+            id: id,
+            kind: kind,
+            caption: String(one.caption || id),
+            min: low,
+            max: high,
+            step: step > 0 ? step : 1,
+            decimals: Math.max(0, Math.round(pickNumber(one.decimals, 1))),
+            on: kind === "checkbox" && (one.value === true || one.value === 1
+                                        || one.value === "true"),
+            at: kind === "slider" ? pickNumber(one.value, low) : 0,
+            variable: identifier("control" + String(id).replace(/[^A-Za-z0-9]/g, "_"), "control"),
+        };
+        CONTROL_ORDER.push(id);
+    }
+}
+
+function hasControls() { return CONTROL_ORDER.length > 0; }
+
+function keysUsed() {
+    for (var chord in KEYS_TAKEN) {
+        if (has(KEYS_TAKEN, chord))
+            return true;
+    }
+    return false;
+}
+
+function takenChords() {
+    var rows = [];
+    for (var chord in KEYS_TAKEN) {
+        if (has(KEYS_TAKEN, chord))
+            rows.push(quoted(chord));
+    }
+    return rows.join(", ");
+}
+
+function controlsState() {
+    if (!hasControls())
+        return "";
+    var rows = [];
+    for (var i = 0; i < CONTROL_ORDER.length; ++i) {
+        var c = CONTROLS[CONTROL_ORDER[i]];
+        rows.push(indentLines("    ", render("objects/controls-row.cpp.tmpl", {
+            ID: quoted(c.id), ON: c.on ? "true" : "false", AT: fnum(c.at),
+            CAPTION: quoted(c.caption),
+        }).split(NEWLINE)).join(NEWLINE));
+    }
+    return render("objects/controls-state.cpp.tmpl", { ROWS: rows.join(NEWLINE) });
+}
+
+// The caption and the controls, stacked over the canvas in its corner.
+function overlayUi() {
+    if (!hasControls() && !CAPTION_USED)
+        return "";
+    return render("objects/overlay-ui.cpp.tmpl", {
+        CAPTION_LABEL: CAPTION_USED ? render("objects/caption-label.cpp.tmpl", {}) : "",
+        CONTROL_WIDGETS: hasControls() ? controlsPanel() : "",
+    });
+}
+
+function controlsPanel() {
+    var items = [], shown = [];
+    for (var i = 0; i < CONTROL_ORDER.length; ++i) {
+        var c = CONTROLS[CONTROL_ORDER[i]];
+        var kind = c.kind === "button" ? "button" : c.kind === "slider" ? "slider" : "checkbox";
+        var fields = {
+            VAR: c.variable, ID: quoted(c.id), MIN: fnum(c.min), STEP: fnum(c.step),
+            DECIMALS: String(c.decimals),
+            STEPS: String(Math.max(1, Math.round((c.max - c.min) / c.step))),
+        };
+        items.push(render("objects/control-" + kind + ".cpp.tmpl", fields));
+        shown.push(indentLines("    ", render("objects/control-show-" + kind + ".cpp.tmpl",
+                                              fields).split(NEWLINE)).join(NEWLINE));
+    }
+    return render("objects/controls-panel.cpp.tmpl",
+                  { ITEMS: items.join(NEWLINE), SHOW: shown.join(NEWLINE) });
+}
+
+// A control's property, as the rules see it. The caption is words rather than a
+// number, which is the one unit nothing else here has.
+function controlProperty(address) {
+    if (!address)
+        return null;
+    var c = CONTROLS[address.control];
+    if (!c)
+        return null;
+    var held = "controls[" + quoted(c.id) + "]";
+    var tell = ["showControls();"];
+    if (address.property === "enabled") {
+        return prop("bool", held + ".enabled", function (value) {
+            return [held + ".enabled = " + value + ";"].concat(tell);
+        });
+    }
+    if (address.property === "caption") {
+        return prop("text", held + ".caption", function (value) {
+            return [held + ".caption = " + value + ";"].concat(tell);
+        });
+    }
+    if (address.property !== "value")
+        return null;
+    if (c.kind === "slider") {
+        // A rule writing a slider still cannot drive it past its own ends.
+        return prop("num", held + ".at", function (value) {
+            return [held + ".at = std::min(" + fnum(c.max) + ", std::max(" + fnum(c.min)
+                    + ", float(" + value + ")));",
+                    "controlChangedNow.insert(" + quoted(c.id) + ");"].concat(tell);
+        });
+    }
+    return prop("bool", held + ".on", function (value) {
+        return [held + ".on = " + value + ";",
+                "controlChangedNow.insert(" + quoted(c.id) + ");"].concat(tell);
+    });
+}
+
+// A rule names a control's property as the two things it is. Everything else is
+// a plain property name.
+function addressOf(key) {
+    if (key && typeof key === "object" && key.property !== undefined) {
+        return { control: String(key.control || ""), property: String(key.property || "") };
+    }
+    return null;
+}
+
+// The same address as one piece of text, for a message to a reader.
+function keyText(key) {
+    var address = addressOf(key);
+    return address ? (address.control + ":" + address.property) : String(key || "");
+}
+
+// A string as C++ source, so a caption with a quote in it cannot end the line
+// it is written on.
+function quoted(text) { return JSON.stringify(String(text)); }
+
+// --- the log ---------------------------------------------------------------
+
+// The readout the editor keeps in a corner of the canvas while a run is going:
+// the properties the scene was told to watch, read every frame. The scene
+// carries the list; what each one is called and how it is read belong to the
+// catalogue, exactly as they do when a rule reads one.
+function logCode(scene, style) {
+    var watches = scene.log || [];
+    if (!watches.length)
+        return { code: "", call: null };
+
+    var rows = [];
+    for (var i = 0; i < watches.length; ++i) {
+        var watch = watches[i];
+        var subject = resolve(scene, watch.object);
+        if (!subject)
+            continue;
+        var p = property(subject, watch.property);
+        if (!p || !p.read)
+            continue;
+        // "@world" is a handle, not something to show a reader.
+        var who = watch.object === "@world" ? "World" : String(watch.object);
+        var label = String(watch.label || keyText(watch.property));
+        var caption = quoted(who + " \u00b7 " + label + "   ");
+        var value = p.unit === "bool"
+            ? "QString(" + p.read + " ? \"true\" : \"false\")"
+            : p.unit === "text" ? p.read
+            : ("logNumber(" + outOfBox2D(p.unit, p.read) + ")");
+        var line = "rows << " + caption + " + " + value + ";";
+        // A body a rule can take away leaves nothing to read.
+        var guard = live(subject);
+        rows.push(guard ? ("if (" + guard + ") " + line) : line);
+    }
+    if (!rows.length)
+        return { code: "", call: null };
+
+    // 0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right -- Qt::Corner.
+    var corner = Math.round(pickNumber(style.logCorner, 0));
+    var family = String(style.logFont || "").split("\"").join("").trim();
+    return {
+        code: render("objects/log.cpp.tmpl", {
+            ROWS: indentLines("    ", rows).join(NEWLINE),
+            FONT_SIZE: String(Math.round(pickNumber(style.logFontSize, 10))),
+            FONT_FAMILY: family ? ("font.setFamily(" + quoted(family) + ");") : null,
+            TEXT_COLOR: rgbText(style.logColor, "#202020"),
+            AT_RIGHT: (corner === 1 || corner === 3) ? "true" : "false",
+            AT_BOTTOM: (corner === 2 || corner === 3) ? "true" : "false",
+        }),
+        call: "drawLog(painter, size());",
+    };
+}
+
+// "#aarrggbb" as something QColor reads, which is "#rrggbb" here -- the log's
+// own colour carries no alpha in the editor either.
+function rgbText(colour, fallback) {
+    var hex = rgb(colour);
+    return hex ? ("#" + hex) : fallback;
+}
+
+// Which commit of Box2D the generated project builds. The default is the one
+// the application's own engine is built against, which is the API this
+// converter writes for.
+function box2dRef(own) {
+    return String(own.box2dRef || "956ce4e1e8acddd05a21102629e268ff9321ec50").trim();
+}
+
+// Which body the scene says to keep in view, if any. The view scrolls to it
+// rather than the body crossing the screen -- the editor's own "Keep In View".
+function followCode(scene) {
+    var start = focusedHandle(scene);
+    if (!FOLLOW_USED && !start)
+        return { code: "", call: null };
+    // Declared with the rest of the run's state, so a reset arms it again.
+    TAKEN.followed = true;
+    TAKEN.followArmed = true;
+    remember("b2BodyId", "followed", "b2_nullBodyId");
+    remember("bool", "followArmed", "false");
+    return { code: render("objects/follow.cpp.tmpl", { START: start || "b2_nullBodyId" }),
+             call: "followFocused(this);" };
+}
+
+// The id of the body the scene starts out following, if it names one.
+function focusedHandle(scene) {
+    var saved = scene.bodies || [];
+    for (var i = 0; i < saved.length; ++i) {
+        if (!saved[i].focus)
+            continue;
+        var live = scene.simulation.bodies;
+        for (var b = 0; b < live.length; ++b) {
+            if (live[b].name === saved[i].name)
+                return NAMES["body:" + b];
+        }
+    }
+    return null;
 }
 
 // --- names -----------------------------------------------------------------
@@ -768,6 +1063,16 @@ function stepBody(scene, io) {
         out.push("");
         out = out.concat(CHANGE_SAVES);
     }
+    // A press, a release, a change and a keystroke last the step they happened
+    // on, so they are cleared once every rule has had its look.
+    if (hasControls()) {
+        out.push("");
+        out = out.concat(render("objects/controls-clear.cpp.tmpl", {}).split(NEWLINE));
+    }
+    if (keysUsed()) {
+        out.push("");
+        out = out.concat(render("objects/keys-clear.cpp.tmpl", {}).split(NEWLINE));
+    }
     return wrapLong(out.join(NEWLINE), 88);
 }
 
@@ -897,11 +1202,18 @@ function ruleShape(rule) {
         (isEventCondition(conditions[i]) ? events : values).push(conditions[i]);
 
     var any = rule.join === "any";
-    if (events.length > 1)
-        return { error: "it watches more than one event, which this converter cannot join" };
-    if (events.length === 1 && values.length > 0 && any) {
-        return { error: "it joins an event with a reading using \"or\", which this"
-                        + " converter cannot write" };
+    if (events.length > 1) {
+        // Two different events would need both raised on the same step, and the
+        // second is not in scope inside the first's loop. The same event on the
+        // same subject is not that: those differ only in what was touched, so
+        // one loop with the others OR-ed together says exactly the same thing.
+        var alike = any;
+        for (var e = 1; alike && e < events.length; ++e)
+            alike = events[e].event === events[0].event;
+        if (!alike) {
+            return { error: "it watches more than one event, which this converter"
+                            + " cannot join" };
+        }
     }
     return { events: events, values: values, any: any,
              join: any ? " || " : " && " };
@@ -960,21 +1272,72 @@ function ruleCode(scene, rule, n, caption, loops) {
         return {};
 
     if (pair[event]) {
-        var subject = side(scene, primary.subject);
-        if (!subject)
-            return { error: "cannot tell which shape " + primary.subject + " is" };
-        var partner = primary.when ? side(scene, String(primary.when)) : null;
-        if (primary.when && !partner)
-            return { error: "cannot tell which shape " + primary.when + " is" };
-        var effect = guarded(allEffectLines(scene, rule, "other"), guard);
+        // One pair of shapes per condition: several alike events joined with "or"
+        // are one loop over the step's events with a wider test, since each is
+        // asking about the same two shapes in the same array.
+        var pairs = [];
+        for (var w = 0; w < shape.events.length; ++w) {
+            var each = shape.events[w];
+            var who = side(scene, each.subject);
+            if (!who)
+                return { error: "cannot tell which shape " + each.subject + " is" };
+            var with_ = null;
+            if (each.when) {
+                with_ = side(scene, String(each.when));
+                if (!with_)
+                    return { error: "cannot tell which shape " + each.when + " is" };
+            }
+            pairs.push({ subject: who, partner: with_ });
+        }
+        if (!pairs.length) {
+            var only = side(scene, primary.subject);
+            if (!only)
+                return { error: "cannot tell which shape " + primary.subject + " is" };
+            pairs.push({ subject: only, partner: null });
+        }
+        // "The other object" is whichever of the two is not the subject, and for a
+        // contact that is only answerable with one subject: either shape of the
+        // pair could be it. A sensor event names its two sides -- the sensor and
+        // the visitor -- so where every subject is a sensor the other one is the
+        // visitor however many there are.
+        var everySubjectIsASensor = event.indexOf("sensor") === 0;
+        for (var p = 0; everySubjectIsASensor && p < pairs.length; ++p)
+            everySubjectIsASensor = pairs[p].subject.isSensor;
+        if (pairs.length > 1 && ruleNeedsOther(rule) && !everySubjectIsASensor) {
+            return { error: "it watches several shapes and acts on the other one,"
+                            + " which this converter cannot tell apart" };
+        }
+        var fired = null;
+        if (shape.values.length && shape.any) {
+            if (ruleNeedsOther(rule)) {
+                return { error: "it joins an event with a reading and acts on the object the"
+                                + " event named, which this converter cannot tell apart" };
+            }
+            fired = base + "Fired";
+            TAKEN[fired] = true;
+            remember("bool", fired, "false");
+        }
+        var effect = fired ? [fired + " = true;"]
+                           : guarded(allEffectLines(scene, rule, "other"), guard);
         if (!effect)
             return { error: "nothing in Box2D does " + describe(rule).split(", ")[1] };
         if (event === "preSolve")
             HELPERS.preSolve = true;
-        loops[pair[event]].push({ caption: caption, subject: subject, partner: partner,
+        loops[pair[event]].push({ caption: caption, pairs: pairs,
                                   sensor: event.indexOf("sensor") === 0, effect: effect,
-                                  usesOther: ruleNeedsOther(rule), once: once });
-        return {};
+                                  usesOther: fired ? false : ruleNeedsOther(rule), once: once });
+        if (!fired)
+            return {};
+
+        var readings = valueConditions(scene, shape.values, " || ");
+        if (!readings)
+            return { error: "one of its readings cannot be read here" };
+        var both = allEffectLines(scene, rule, null);
+        if (!both)
+            return { error: "nothing in Box2D does " + describe(rule).split(", ")[1] };
+        // The flag was set in the loop above, which runs before this does.
+        return { check: eventBlock(caption, fired + " || (" + readings + ")", both, once)
+                            .concat([fired + " = false;"]) };
     }
 
     if (event === "bodyFellAsleep" || event === "bodyMoved") {
@@ -992,7 +1355,7 @@ function ruleCode(scene, rule, n, caption, loops) {
         }
         var flag = body.handle.replace(/[^A-Za-z0-9_]/g, "_") + "Moved";
         loops.moved.push({ body: body.handle, flag: flag });
-        return { check: edgeBlock(caption, base, flag, acting, once, "false") };
+        return { check: eventBlock(caption, flag, acting, once) };
     }
 
     var condition;
@@ -1030,6 +1393,41 @@ function ruleCode(scene, rule, n, caption, loops) {
             condition = "b2Joint_IsValid(" + J + ") && " + condition;
         // Starting against the stop is not arriving at it.
         startsTrue = "true";
+    } else if (event === "@keyHeld") {
+        // Every step the key is down, which is what a thruster is.
+        var heldTests = [];
+        for (var kh = 0; kh < shape.events.length; ++kh) {
+            var heldChord = String(shape.events[kh].when || "");
+            if (!heldChord)
+                return { error: "it watches @keyHeld without naming a key" };
+            KEYS_TAKEN[heldChord] = true;
+            heldTests.push("keyHeld.contains(" + quoted(heldChord) + ")");
+        }
+        condition = heldTests.join(" || ");
+    } else if (event === "@keyPressed" || event === "@keyReleased") {
+        // A key is the window's to notice, not Box2D's: the set already holds
+        // only this step's, and several keys on one card are OR-ed together.
+        var fired = event === "@keyPressed" ? "keyPressedNow" : "keyReleasedNow";
+        var keyTests = [];
+        for (var ke = 0; ke < shape.events.length; ++ke) {
+            var chord = String(shape.events[ke].when || "");
+            if (!chord)
+                return { error: "it watches " + event + " without naming a key" };
+            KEYS_TAKEN[chord] = true;
+            keyTests.push(fired + ".contains(" + quoted(chord) + ")");
+        }
+        condition = keyTests.join(" || ");
+    } else if (CONTROL_EVENTS[event]) {
+        var which = CONTROL_EVENTS[event];
+        var controlTests = [];
+        for (var ce = 0; ce < shape.events.length; ++ce) {
+            var named = String(shape.events[ce].when || "");
+            if (named && !CONTROLS[named])
+                return { error: "this scene has no control called " + named };
+            controlTests.push(named ? (which + ".contains(" + quoted(named) + ")")
+                                    : ("!" + which + ".isEmpty()"));
+        }
+        condition = controlTests.join(" || ");
     } else if (event) {
         return { error: "Box2D has no " + event + " event to read" };
     } else {
@@ -1038,10 +1436,34 @@ function ruleCode(scene, rule, n, caption, loops) {
             return { error: "one of its readings cannot be read here" };
     }
 
+    // An event or a reading, where the event is a test rather than a loop: the
+    // two are simply OR-ed, which is what the card says.
+    if (shape.events.length && shape.values.length && shape.any) {
+        var alternatives = valueConditions(scene, shape.values, " || ");
+        if (!alternatives)
+            return { error: "one of its readings cannot be read here" };
+        condition = "(" + condition + ") || (" + alternatives + ")";
+        guard = null;
+    }
     var actions = guarded(allEffectLines(scene, rule, effectOther), guard);
     if (!actions)
         return { error: "nothing in Box2D does " + describe(rule).split(", ")[1] };
+    if (shape.events.length && event !== "@runStarted")
+        return { check: eventBlock(caption, condition, actions, once) };
     return { check: edgeBlock(caption, base, condition, actions, once, startsTrue) };
+}
+
+// A rule that watches an event is carried out on every step the event is
+// raised, not only on the step it starts on: the editor fires one whenever its
+// combination is true, and only a rule made of readings alone waits for the
+// value to cross. A ray that sees something for twenty steps pushes twenty
+// times there, and pushed once here.
+function eventBlock(caption, condition, effect, once) {
+    var lines = [caption, "if (" + (once.test ? ("(" + condition + ")" + once.test)
+                                              : condition) + ") {"];
+    lines = lines.concat(indentLines("    ", effect.concat(once.set)));
+    lines.push("}");
+    return lines;
 }
 
 // bool now = ...; if (now && !before) { ... } before = now;
@@ -1103,20 +1525,26 @@ function eventLoop(count, array, firstField, secondField, first, second, watcher
         }
         lines.push("");
         lines.push("    " + w.caption);
-        var test;
-        var otherFrom;
-        if (w.sensor && w.subject.isSensor) {
-            // The sensor is always the first of the two.
-            test = w.subject.test(first) + (w.partner ? (" && " + w.partner.test(second)) : "");
-            otherFrom = second;
-        } else {
-            var forward = w.subject.test(first) + (w.partner ? (" && " + w.partner.test(second)) : "");
-            var backward = w.subject.test(second) + (w.partner ? (" && " + w.partner.test(first)) : "");
-            test = "(" + forward + ") || (" + backward + ")";
-            if (!w.partner)
-                test = w.subject.test(first) + " || " + w.subject.test(second);
-            otherFrom = w.subject.test(first) + " ? " + second + " : " + first;
+        // Each pair the rule named, either way round, OR-ed together.
+        var tests = [];
+        var otherFrom = null;
+        for (var q = 0; q < w.pairs.length; ++q) {
+            var who = w.pairs[q].subject, with_ = w.pairs[q].partner;
+            if (w.sensor && who.isSensor) {
+                // The sensor is always the first of the two.
+                tests.push(who.test(first) + (with_ ? (" && " + with_.test(second)) : ""));
+                otherFrom = second;
+                continue;
+            }
+            if (!with_) {
+                tests.push(who.test(first) + " || " + who.test(second));
+            } else {
+                tests.push("(" + who.test(first) + " && " + with_.test(second) + ")");
+                tests.push("(" + who.test(second) + " && " + with_.test(first) + ")");
+            }
+            otherFrom = who.test(first) + " ? " + second + " : " + first;
         }
+        var test = tests.length === 1 ? tests[0] : ("(" + tests.join(") || (") + ")");
         lines.push("    if (" + (w.once.test ? ("(" + test + ")" + w.once.test) : test) + ") {");
         var body = w.effect.concat(w.once.set);
         if (w.usesOther)
@@ -1276,6 +1704,8 @@ function resolve(scene, name) {
         return { kind: "world" };
     if (name === "@variables")
         return { kind: "variables" };
+    if (name === "@controls")
+        return { kind: "controls" };
 
     var rays = scene.rays || [];
     for (var r = 0; r < rays.length; ++r) {
@@ -1308,7 +1738,11 @@ function resolve(scene, name) {
             if (!outline)
                 USED[name] = true;
             return { kind: "shape", handle: NAMES["shape:" + name], outline: outline,
-                     shapeKind: parts[p].kind, isSensor: !!parts[p].isSensor,
+                     // The sensor flag is one of the engine's own properties, so it
+                     // sits in the part's physics block and not on the part. Read
+                     // from the wrong place it was always false, and a rule on a
+                     // sensor was written as though it watched an ordinary shape.
+                     shapeKind: parts[p].kind, isSensor: !!vals(parts[p]).isSensor,
                      bodyHandle: NAMES["body:" + i], index: i };
         }
     }
@@ -1345,6 +1779,7 @@ var SHAPE_KEYS = {
 function property(place, key) {
     if (place.kind === "world")  return worldProperty(key);
     if (place.kind === "variables") return variableProperty(key);
+    if (place.kind === "controls")  return controlProperty(addressOf(key));
     if (place.kind === "body")   return bodyProperty(place.handle, key);
     if (place.kind === "shape")  return place.outline ? null : shapeProperty(place, key);
     if (place.kind === "joint")  return jointProperty(place, key);
@@ -1767,7 +2202,10 @@ function rayProperty(place, key) {
     var R = place.handle;
     if (key === "hit") return prop("bool", R + ".hit", null);
     if (key === "distance")
-        return prop("len", R + ".fraction * m(" + short(place.ray.length || 0) + ")", null);
+        // Nothing hit is the whole length, the way the editor reports it; the
+        // fraction is zero there, and zero is not a distance.
+        return prop("len", "(" + R + ".hit ? " + R + ".fraction : 1.0f) * m("
+                           + short(place.ray.length || 0) + ")", null);
     if (key === "hitX") return prop("len", R + ".point.x", null);
     if (key === "hitY") return prop("len", R + ".point.y", null);
     return null;
@@ -1777,6 +2215,7 @@ function rayProperty(place, key) {
 
 // A number from the editor, in Box2D's units, as C++.
 function literal(unit, value) {
+    if (unit === "text")   return quoted(value === undefined || value === null ? "" : String(value));
     var x = Number(value) || 0;
     if (unit === "bool")   return value === true || value === 1 || value === "true" ? "true" : "false";
     if (unit === "len")    return x === 0 ? "0.0f" : ("m(" + short(x) + ")");
@@ -2041,6 +2480,21 @@ function actionLines(scene, rule, target) {
 
     // Ending or holding the run cannot happen inside the step; the view does it
     // once the step is over.
+    if (rule.action === "@keepInView") {
+        // Where the view points is the window's business, not Box2D's.
+        if (!isBody)
+            return null;
+        FOLLOW_USED = true;
+        var keep = params[FOLLOW_PARAM] === undefined || !!params[FOLLOW_PARAM];
+        return ["followed = " + (keep ? body : "b2_nullBodyId") + ";"];
+    }
+    if (rule.action === "@showCaption") {
+        // Words over the canvas, which is the window's business and not Box2D's.
+        CAPTION_USED = true;
+        var words = params.text === undefined ? "" : String(params.text);
+        var up = params.shown === undefined || !!params.shown;
+        return ["showCaption(" + quoted(words) + ", " + (up ? "true" : "false") + ");"];
+    }
     if (rule.action === "@stopRun")
         return ["pendingRun = 1;"];
     if (rule.action === "@holdRun")
@@ -2057,8 +2511,11 @@ function actionLines(scene, rule, target) {
         if (!isBody || target.index === undefined)
             return null;
         HELPERS.clones[target.index] = true;
+        // m() turns scene units into metres, so what goes in is the plain
+        // numbers the rule carries -- converting them first put the clone a
+        // hundredth of the way there.
         return ["cloneOf_" + NAMES["body:" + target.index] + "(m("
-                + numberOrRoll("len", params.x) + ", " + numberOrRoll("len", params.y) + "));"];
+                + numberOrRoll("num", params.x) + ", " + numberOrRoll("num", params.y) + "));"];
     }
     if (rule.action === "pushForceAt") {
         if (!isBody)

@@ -17,6 +17,7 @@ function logNumber(v) {
 
 function drawLog() {
     var rows = logLines();
+    logHeight = 0;
     if (!rows.length)
         return;
     ctx.save();
@@ -44,4 +45,7 @@ function drawLog() {
     for (var r = 0; r < rows.length; ++r)
         ctx.fillText(rows[r], x + pad, y + pad + r * line);
     ctx.restore();
+    // Only a log in that corner is in the way of what stacks there.
+    if (!{{AT_BOTTOM}} && !{{AT_RIGHT}})
+        logHeight = boxH + gap;
 }

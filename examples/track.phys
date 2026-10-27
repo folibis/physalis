@@ -311,6 +311,24 @@
             "type": "dynamic"
         }
     ],
+    "controls": [
+        {
+            "caption": "Speed",
+            "decimals": 1,
+            "id": "speed_control",
+            "kind": "slider",
+            "max": 720,
+            "min": 0,
+            "step": 10,
+            "value": 10
+        },
+        {
+            "caption": "Start",
+            "id": "start_control",
+            "kind": "button",
+            "value": false
+        }
+    ],
     "engine": "Box2D",
     "field": {
         "backgroundColor": "#ffffffff",
@@ -604,16 +622,16 @@
         },
         {
             "anchorA": {
+                "x": 332.0000000000004,
+                "y": -80.0000000000002
+            },
+            "anchorB": {
                 "x": 332.00000000000034,
                 "y": -80.00000000000017
             },
-            "anchorB": {
-                "x": 332.0000000000003,
-                "y": -80.00000000000011
-            },
             "axis": {
                 "x": 0.5578849052230317,
-                "y": 0.8299183288277763
+                "y": 0.8299183288277764
             },
             "bodyA": "body_9",
             "bodyB": "body_10",
@@ -779,12 +797,12 @@
         },
         {
             "anchorA": {
-                "x": 4.000030249205945,
-                "y": 99.95739775308306
+                "x": 4.000030249205942,
+                "y": 99.95739775308304
             },
             "anchorB": {
-                "x": 4.00003024920596,
-                "y": 99.95739775308306
+                "x": 4.000030249205956,
+                "y": 99.95739775308304
             },
             "axis": {
                 "x": -0.9999989916931349,
@@ -850,11 +868,11 @@
         {
             "anchorA": {
                 "x": 123.99990925238214,
-                "y": 100.12780674075066
+                "y": 100.12780674075064
             },
             "anchorB": {
                 "x": 123.99990925238214,
-                "y": 100.12780674075066
+                "y": 100.12780674075064
             },
             "axis": {
                 "x": -0.9999989916931349,
@@ -884,11 +902,11 @@
         },
         {
             "anchorA": {
-                "x": 183.9998487539701,
+                "x": 183.99984875397007,
                 "y": 100.2130112345845
             },
             "anchorB": {
-                "x": 183.99984875397013,
+                "x": 183.9998487539701,
                 "y": 100.21301123458449
             },
             "axis": {
@@ -1102,8 +1120,8 @@
                 "y": -130.4242424242424
             },
             "axis": {
-                "x": 0.9920394816945889,
-                "y": -0.12592722802925377
+                "x": 0.9920394816945888,
+                "y": -0.12592722802925374
             },
             "bodyA": "body_26",
             "bodyB": "body_1",
@@ -1150,7 +1168,7 @@
                 "dampingRatio": 0,
                 "drawSize": 0.25,
                 "enableLimit": false,
-                "enableMotor": true,
+                "enableMotor": false,
                 "enableSpring": false,
                 "hertz": 0,
                 "lowerAngle": 0,
@@ -1199,12 +1217,12 @@
         },
         {
             "anchorA": {
-                "x": -115.99984875397013,
-                "y": 99.78698876541542
+                "x": -115.9998487539701,
+                "y": 99.7869887654154
             },
             "anchorB": {
-                "x": -115.99984875397016,
-                "y": 99.78698876541543
+                "x": -115.99984875397013,
+                "y": 99.78698876541542
             },
             "axis": {
                 "x": 0.9999989916931349,
@@ -1234,12 +1252,12 @@
         },
         {
             "anchorA": {
-                "x": 243.57142857142847,
+                "x": 243.57142857142844,
                 "y": 100.71428571428572
             },
             "anchorB": {
-                "x": 243.5714285714285,
-                "y": 100.71428571428574
+                "x": 243.57142857142847,
+                "y": 100.71428571428575
             },
             "axis": {
                 "x": 0.9879319493459489,
@@ -1277,8 +1295,8 @@
                 "y": 99.99999999999997
             },
             "axis": {
-                "x": 0.996708718705429,
-                "y": 0.08106620785865255
+                "x": 0.9967087187054289,
+                "y": 0.08106620785865254
             },
             "bodyA": "body_21",
             "bodyB": "body_14",
@@ -1370,6 +1388,110 @@
                 "upperTranslation": 52
             },
             "type": "prismatic"
+        }
+    ],
+    "rules": [
+        {
+            "event": "@keyPressed",
+            "name": "Start/Stop",
+            "op": "toggle",
+            "property": "enableMotor",
+            "subject": "@keyboard",
+            "target": "revolute_27",
+            "when": "Enter"
+        },
+        {
+            "event": "@controlPressed",
+            "name": "Start button",
+            "op": "toggle",
+            "property": "enableMotor",
+            "subject": "@controls",
+            "target": "revolute_27",
+            "when": "start_control"
+        },
+        {
+            "event": "@keyPressed",
+            "name": "Speed up",
+            "op": "add",
+            "property": {
+                "control": "speed_control",
+                "property": "value"
+            },
+            "subject": "@keyboard",
+            "target": "@controls",
+            "value": 10,
+            "when": "Up"
+        },
+        {
+            "event": "@keyPressed",
+            "name": "Speed down",
+            "op": "subtract",
+            "property": {
+                "control": "speed_control",
+                "property": "value"
+            },
+            "subject": "@keyboard",
+            "target": "@controls",
+            "value": 10,
+            "when": "Down"
+        },
+        {
+            "event": "@controlChanged",
+            "name": "Slider sets the speed",
+            "op": "set",
+            "property": "motorSpeed",
+            "sourceObject": "@controls",
+            "sourceOffset": 0,
+            "sourceProperty": {
+                "control": "speed_control",
+                "property": "value"
+            },
+            "subject": "@controls",
+            "target": "revolute_27",
+            "value": 0,
+            "when": "speed_control"
+        },
+        {
+            "compare": "=",
+            "name": "Button says Stop",
+            "op": "set",
+            "property": {
+                "control": "start_control",
+                "property": "caption"
+            },
+            "subject": "revolute_27",
+            "target": "@controls",
+            "value": "Stop",
+            "watch": "motorEnabled",
+            "when": true
+        },
+        {
+            "compare": "=",
+            "name": "Button says Start",
+            "op": "set",
+            "property": {
+                "control": "start_control",
+                "property": "caption"
+            },
+            "subject": "revolute_27",
+            "target": "@controls",
+            "value": "Start",
+            "watch": "motorEnabled",
+            "when": false
+        },
+        {
+            "action": "@showCaption",
+            "actionParams": {
+                "shown": true,
+                "text": "<p><b>Enter</b> or <b>Start</b> works the motor.<br/><b>Up</b> and <b>Down</b> change its speed.</p>"
+            },
+            "event": "@runStarted",
+            "name": "caption",
+            "op": "set",
+            "property": "",
+            "subject": "@world",
+            "target": "@world",
+            "value": null
         }
     ],
     "shapes": [

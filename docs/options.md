@@ -17,8 +17,12 @@ them in the scene's own properties, shown when nothing is selected.
 - **Physics engine** chooses the [engine](engines.md) that new scenes use.
 - **Field** sets the default size and background colour of the field for new
   scenes, and how far you can zoom in and out.
-- **Grid** sets whether the grid is shown, the size of its cells and its
-  colour.
+- **Grid** sets whether the grid is shown by default, the size of its cells and
+  its colour.
+
+The field and the grid belong to the scene: each is saved in the `.phys` file
+and comes back with it. What is set here is what a **new** scene starts with,
+so changing it leaves the scene that is open exactly as it was drawn.
 - **Snap** decides whether shapes line up with the grid when they are moved,
   which point of a shape lines up (its top-left corner or its origin), the
   snap step, and how close a shape has to come before it snaps.

@@ -17,6 +17,15 @@ start*. A rule can watch several things at once and do several things when it
 fires, and it can count with **variables** the scene carries -- a score, a
 number of lives -- that belong to no object.
 
+One body can be marked **Keep In View**, and then the view follows it through
+the run rather than letting it slide off the edge.
+
+A scene can also be worked by hand while it runs: a rule can watch the
+**keyboard**, and the scene can carry its own **controls** -- a box to tick, a
+button to press, a slider to pull -- which appear over the canvas during a run.
+A rule can put a **caption** on the canvas as well, so a scene can say what it
+is and how it is played.
+
 ![The Physalis window: a scene in Physics mode, with a body selected and its properties on the right](images/overview.png)
 
 ## How the simulation works
@@ -43,7 +52,7 @@ simulation controls and the zoom. On its right is the **Edit / Physics**
 switch, which chooses the mode you are working in. The toolbar only shows the
 tools that make sense in that mode.
 
-**The side panel** on the right has five tabs. Each shows an icon; hover one
+**The side panel** on the right has six tabs. Each shows an icon; hover one
 to see its name, and the tab you are on shows its name beside the icon. Use
 **View** on the menu bar to hide any panel you do not use -- the choice is
 remembered.
@@ -66,6 +75,9 @@ remembered.
   rule starts and reads. Rules read and write them, and they can be watched in
   the log. See
   [Variables](rules.md#variables).
+- **Controls** holds the scene's own controls -- checkboxes, buttons and
+  sliders -- which appear over the canvas while the simulation runs and which
+  rules read and write. See [Controls](rules.md#controls).
 - **Plot** draws the values you have marked for plotting against the run's own
   clock, so you can see what a force or a position *did* rather than what it is
   at this instant. See [Plotting values](running.md#plotting-values).

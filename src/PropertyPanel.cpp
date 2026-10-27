@@ -80,6 +80,15 @@ QTableWidget *PropertyPanel::tableForSection(const QString &section)
         return it.value();
 
     auto *table = new QTableWidget(0, 2, m_tabs);
+    // Where this section stands is recorded as it is scrolled, not read off
+    // the table when it is rebuilt: selecting an object rebuilds the panel
+    // more than once, and the second pass read the fresh table -- sitting at
+    // zero -- and called that the place to remember.
+    connect(table->verticalScrollBar(), &QScrollBar::valueChanged, this,
+            [this, section](int at) {
+                if (!m_rebuilding)
+                    m_sectionScroll.insert(section, at);
+            });
     table->setHorizontalHeaderLabels({tr("Property"), tr("Value")});
     table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
     table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
@@ -365,10 +374,7 @@ void PropertyPanel::rebuildRows()
                                     ? m_tabs->tabText(m_tabs->currentIndex())
                                     : QString();
 
-    for (auto it = m_sectionTables.cbegin(); it != m_sectionTables.cend(); ++it) {
-        if (const int at = it.value()->verticalScrollBar()->value(); at > 0)
-            m_sectionScroll.insert(it.key(), at);
-    }
+    m_rebuilding = true;
 
     m_tabs->clear();
     qDeleteAll(m_sectionTables);
@@ -412,11 +418,9 @@ void PropertyPanel::rebuildRows()
     QMetaObject::invokeMethod(
         this,
         [this] {
-            for (auto it = m_sectionTables.cbegin(); it != m_sectionTables.cend(); ++it) {
-                const int at = m_sectionScroll.value(it.key(), 0);
-                if (at > 0)
-                    it.value()->verticalScrollBar()->setValue(at);
-            }
+            for (auto it = m_sectionTables.cbegin(); it != m_sectionTables.cend(); ++it)
+                it.value()->verticalScrollBar()->setValue(m_sectionScroll.value(it.key(), 0));
+            m_rebuilding = false;
         },
         Qt::QueuedConnection);
 
@@ -607,6 +611,20 @@ void PropertyPanel::setScene(CanvasScene *scene)
     connect(m_scene, &CanvasScene::selectedJointChanged, this, &PropertyPanel::updateActivePane);
     connect(m_scene, &CanvasScene::selectedExplosionChanged, this, &PropertyPanel::updateActivePane);
     connect(m_scene, &CanvasScene::selectedRayChanged, this, &PropertyPanel::updateActivePane);
+    // Picking a second shape changes which table belongs here, and nothing
+    // else was telling the panel about it.
+    connect(m_scene, &CanvasScene::editSelectionChanged, this, &PropertyPanel::updateActivePane);
+
+    // Dragging on the canvas writes to the same values the table shows, and
+    // nothing was telling the table. Turn a selection with the mouse and the
+    // Rotation row sat at whatever it read when the table was built -- 0, for
+    // a selection that had not been turned before.
+    //
+    // Queued, because an edit may well be committed from inside a widget's own
+    // signal and refreshing there would pull the editor out from under it.
+    connect(m_scene, &CanvasScene::editCommitted, this, [this] {
+        QMetaObject::invokeMethod(this, &PropertyPanel::refreshValues, Qt::QueuedConnection);
+    });
     updateActivePane();
 }
 
@@ -629,6 +647,7 @@ void PropertyPanel::setActiveItem(ShapeItem *item)
 
 void PropertyPanel::updateActivePane()
 {
+
     if (!m_scene) {
         setTitle(EditorModes::name(m_mode));
         setActivePane(m_item ? m_factory->paneFor(m_item) : nullptr);
@@ -668,6 +687,16 @@ void PropertyPanel::updateActivePane()
                               : (sensor ? m_factory->paneForSensor(m_scene)
                                         : m_factory->paneForPhysics(m_scene)));
         }
+        return;
+    }
+
+    // Several shapes picked are not one shape with handles on it: a corner
+    // radius, a circle's radius, a polygon's points belong to one of them, and
+    // showing the lead's said the table spoke for all of them when it spoke
+    // for one. What they share is the box round them and which way it faces.
+    if (m_scene->selectedShapes().size() > 1) {
+        setTitle(tr("Selection"));
+        setActivePane(m_factory->paneForSelection(m_scene));
         return;
     }
 

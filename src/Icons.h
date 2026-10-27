@@ -60,6 +60,7 @@ QIcon distributeAcross();
 QIcon distributeDown();
 QIcon flipHorizontal();
 QIcon flipVertical();
+QIcon keyboard();
 QIcon tools();
 QIcon clone();
 QIcon alignRingOutside();

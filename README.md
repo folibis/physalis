@@ -11,8 +11,10 @@ itself belongs to a physics engine loaded as a plugin.
 A run is not only watched. The application applies forces and impulses to
 bodies, measures distances with rays, sets off explosions, and carries out
 rules that describe how the scene answers events, with no programming --
-*when the ball enters the pocket, return it to the start*. A finished scene
-can be exported as a standalone C++ program or a web page.
+*when the ball enters the pocket, return it to the start*. A scene can be
+played as well as watched: rules can watch the keyboard, and a scene can carry
+its own on-screen controls. A finished scene can be exported as a standalone
+C++ program or a web page.
 
 <p align="center">
   <img src="docs/images/overview.png" alt="The Physalis window in Physics mode" width="640">
@@ -23,7 +25,10 @@ can be exported as a standalone C++ program or a web page.
 ## Features
 
 - **Drawing:** rectangles, circles and polygons, with moving, resizing,
-  rotating, point editing, snapping to a grid, and undo.
+  rotating, point editing, snapping to a grid, and undo. Select several by
+  dragging a rectangle, line them up or space them evenly, lay them round a
+  ring, clone them into a grid, mirror them, or turn a circle into a chain of
+  segments.
 - **Bodies:** dynamic, static and kinematic bodies made of one or more shapes,
   with density, friction, bounciness, damping, sensors and collision groups.
 - **Joints:** hinges, sliders, wheels, springs, ropes, welds, motors, gears and
@@ -35,17 +40,23 @@ can be exported as a standalone C++ program or a web page.
 - **Variables:** values the scene carries that belong to no object -- a score, a
   count of lives, a flag, a timer counting milliseconds -- which rules count
   with and the log can watch.
+- **Playing a scene:** rules can watch the keyboard, with Ctrl, Shift and Alt
+  chords, and a scene can carry its own controls -- checkboxes, buttons and
+  sliders -- which appear over the canvas during a run for rules to read and
+  write. A rule can also put a caption on the canvas.
 - **Running:** play, pause and step, playback from ×¼ to ×8, full-screen mode,
-  a live log of chosen values and variables, and a slingshot for flinging bodies
-  with the mouse.
+  a live log of chosen values and variables, plots of what they did, a
+  slingshot for flinging bodies with the mouse, and a view that follows one
+  chosen body through the run.
 - **Physics engines as plugins:** Physalis itself does not simulate anything.
   It comes with plugins for [Box2D](https://box2d.org) and
   [Chipmunk2D](https://chipmunk-physics.net), and further engines can be added
   as plugins.
 - **Export:** turn a scene into a standalone Box2D/Qt C++ project, or a single
   self-contained web page carrying the same engine compiled to WebAssembly.
-  Export formats are JavaScript plugins, so new ones can be added without
-  rebuilding.
+  Both carry the whole scene -- rules, log, keys, controls and caption -- and
+  name any rule they cannot express rather than dropping it quietly. Export
+  formats are JavaScript plugins, so new ones can be added without rebuilding.
 
 ## Building
 

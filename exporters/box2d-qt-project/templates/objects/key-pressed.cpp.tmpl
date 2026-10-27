@@ -1,0 +1,8 @@
+//! A key held down repeats; a rule asked about the press, which happened once.
+if (!event->isAutoRepeat()) {
+    const QString chord = chordOf(event);
+    if (!chord.isEmpty() && !keyHeld.contains(chord)) {
+        keyHeld.insert(chord);
+        keyPressedNow.insert(chord);
+    }
+}

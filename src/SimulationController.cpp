@@ -35,6 +35,16 @@ SimulationController::SimulationController(CanvasScene *scene, QObject *parent)
     m_timer->setTimerType(Qt::PreciseTimer);
     m_timer->setInterval(qMax(1, int(timeStep() * 1000.0) / 2));
     connect(m_timer, &QTimer::timeout, this, &SimulationController::stepOnce);
+
+    // Keys arrive at whatever has the focus, which during a run is the canvas.
+    // Taken here rather than wired up by the window, so a run driven from a
+    // test or from the full-screen view answers to them the same way.
+    if (m_scene) {
+        connect(m_scene, &CanvasScene::keyPressedDuringRun, this,
+                &SimulationController::keyPressed);
+        connect(m_scene, &CanvasScene::keyReleasedDuringRun, this,
+                &SimulationController::keyReleased);
+    }
 }
 
 SimulationController::~SimulationController()
@@ -215,6 +225,10 @@ QVariantMap SimulationController::rollParams(const QVariantMap &given) const
 
 void SimulationController::start()
 {
+    m_keysDown.clear();
+    m_keysPressed.clear();
+    m_keysReleased.clear();
+
     // A seed of zero means the scene wants a different run every time; anything
     // else is asking for this run to be repeatable, and gets exactly that.
     const quint32 asked = m_scene ? m_scene->randomSeed() : 0;
@@ -253,14 +267,20 @@ void SimulationController::start()
     m_pendingRunAction.clear();
     m_elapsedSeconds = 0.0;
     m_frameCount = 0;
+    // Which body the scene itself keeps in view. A rule may hand the view to
+    // another one, and that lasts as long as the run does.
+    m_focusedAtStart = m_scene->focusedBody() ? m_scene->focusedBody()->name() : QString();
 
+    // Which objects the rules are watching. An event is the obvious case; a
+    // reading is watching too -- a rule asking how many things are inside a
+    // sensor needs that sensor reporting what overlaps it exactly as much as
+    // one watching for it to be entered.
     QSet<QString> contactSources;
     for (const Rule &rule : m_scene->rules()) {
-        for (const RuleCondition &condition : rule.conditions) {
-            if (condition.isEvent())
-                contactSources.insert(condition.subjectName);
-        }
+        for (const RuleCondition &condition : rule.conditions)
+            contactSources.insert(condition.subjectName);
     }
+    contactSources.remove(QString());
     if (!contactSources.isEmpty()) {
         for (PhysicsBody *body : m_scene->bodies()) {
             const bool wholeBody = contactSources.contains(body->name());
@@ -395,6 +415,27 @@ bool SimulationController::buildWorld(IPhysicsEngine *engine, Built *built) cons
     return true;
 }
 
+// A control's properties, as a rule names them. The value lives on the scene
+// whether a run is going or not, so there is one answer and no world to build
+// to find it.
+static QVariant readControl(const CanvasScene *scene, const QString &key)
+{
+    const SceneControl::Address address = SceneControl::parse(key);
+    if (!address.isValid())
+        return {};
+    const QString name = address.control;
+    const QString what = address.property;
+    if (!scene->controlWithId(name))
+        return {};
+    if (what == SceneControl::enabledProperty())
+        return scene->controlEnabled(name);
+    if (what == SceneControl::captionProperty())
+        return scene->controlCaption(name);
+    if (what == SceneControl::valueProperty())
+        return scene->controlValue(name);
+    return {};
+}
+
 QVariant SimulationController::initialValue(const QString &name, const QString &key)
 {
     if (isActive())
@@ -406,6 +447,8 @@ QVariant SimulationController::initialValue(const QString &name, const QString &
         const SceneVariable *variable = m_scene->variableNamed(key);
         return variable ? variable->value() : QVariant();
     }
+    if (name == Rule::controls())
+        return readControl(m_scene, key);
     if (name == Rule::world()) {
         if (key == QLatin1String("time") || key == QLatin1String("frame")
             || key == QLatin1String("chance"))
@@ -707,6 +750,26 @@ void SimulationController::stepFrame()
 
 void SimulationController::stop()
 {
+    // Controls go back to what the scene declares, like every variable and
+    // every position on the canvas.
+    m_scene->resetControls();
+
+    m_scene->setCaption(QString(), false);
+
+    // And the view goes back to the body the scene names, whatever a rule did
+    // with it while the run was going.
+    PhysicsBody *wanted = nullptr;
+    for (PhysicsBody *body : m_scene->bodies()) {
+        if (!m_focusedAtStart.isEmpty() && body->name() == m_focusedAtStart)
+            wanted = body;
+    }
+    m_scene->setFocusedBody(wanted);
+
+    // A key still held when the run ends is not held when the next one starts.
+    m_keysDown.clear();
+    m_keysPressed.clear();
+    m_keysReleased.clear();
+
     if (!isActive())
         return;
 
@@ -741,6 +804,30 @@ void SimulationController::stop()
 void SimulationController::stepOnce()
 {
     advance(m_clock.restart() / 1000.0);
+}
+
+void SimulationController::keyPressed(int key, Qt::KeyboardModifiers held)
+{
+    // Auto-repeat holds the key down and sends it again; a rule asked for the
+    // press, not for however fast the keyboard repeats.
+    if (!isActive() || m_keysDown.contains(key))
+        return;
+    const QString chord = Rule::chordName(key, held);
+    if (chord.isEmpty())
+        return;
+    m_keysDown.insert(key, chord);
+    m_keysPressed.append(chord);
+}
+
+void SimulationController::keyReleased(int key, Qt::KeyboardModifiers held)
+{
+    // The chord it went down as, not the one it comes up as: letting go of
+    // Shift first would otherwise release a key nobody ever pressed.
+    const QString chord = m_keysDown.take(key);
+    if (chord.isEmpty() || !isActive())
+        return;
+    Q_UNUSED(held);
+    m_keysReleased.append(chord);
 }
 
 void SimulationController::advance(qreal wallSeconds)
@@ -955,6 +1042,24 @@ void SimulationController::applyRules()
             raised[m_jointNames[event.joint]][event.eventId] << other;
     }
 
+    // Keys, phrased as events on the one keyboard object. Taken rather than
+    // read, so a key tapped between two steps still raises both halves and
+    // neither is raised twice.
+    // What the person watching has done to the controls since the last step.
+    for (const CanvasScene::ControlEvent &event : m_scene->takeControlEvents())
+        raised[Rule::controls()][event.eventId] << event.name;
+
+    for (const QString &chord : std::as_const(m_keysPressed))
+        raised[Rule::keyboard()][Rule::keyPressedEvent()] << chord;
+    for (const QString &chord : std::as_const(m_keysReleased))
+        raised[Rule::keyboard()][Rule::keyReleasedEvent()] << chord;
+    // Still down: raised again on this step, and on every step until it is
+    // let go.
+    for (const QString &chord : std::as_const(m_keysDown))
+        raised[Rule::keyboard()][Rule::keyHeldEvent()] << chord;
+    m_keysPressed.clear();
+    m_keysReleased.clear();
+
     // What each ray is looking at, phrased as an event so a rule can name the
     // shape it cares about -- the same way a contact rule names the other side.
     for (RayItem *ray : m_scene->rays()) {
@@ -992,8 +1097,20 @@ void SimulationController::applyRules()
         const bool nowTrue = evaluate(rule, raised, &other);
 
         // One verdict for the whole card, so a rule with several conditions
-        // fires as the combination becomes true rather than once per condition.
-        const bool rising = nowTrue && !m_ruleState[i].wasTrue;
+        // fires as the combination becomes true rather than once per
+        // condition.
+        //
+        // An edge is what a reading needs: "speed is over 10" must not fire on
+        // every step while it stays over 10. An event is already an edge --
+        // it is true on the step it is raised and false on every other -- so
+        // asking it to rise as well swallowed the second of two that landed on
+        // consecutive steps. A slider pushed up ten times in ten steps moved
+        // the motor once.
+        bool watchesAnEvent = false;
+        for (const RuleCondition &condition : rule.conditions)
+            watchesAnEvent = watchesAnEvent || condition.isEvent();
+
+        const bool rising = nowTrue && (watchesAnEvent || !m_ruleState[i].wasTrue);
         m_ruleState[i].wasTrue = nowTrue;
         if (!rising)
             continue;
@@ -1186,6 +1303,9 @@ QVariant SimulationController::readValue(const QString &name, const QString &key
         return {};
     }
 
+    if (name == Rule::controls())
+        return readControl(m_scene, key);
+
     if (name == Rule::variables()) {
         const auto it = m_variables.constFind(key);
         // One declared after the run started is not in the world yet; what it
@@ -1316,6 +1436,14 @@ void SimulationController::applyAction(const RuleAction &action,
         return;
     }
 
+    // And so is a caption: no engine has anything to say about text.
+    if (action.actionId == Rule::showCaptionAction()) {
+        const QVariantMap params = rollParams(action.actionParams);
+        m_scene->setCaption(params.value(Rule::captionTextParam()).toString(),
+                            params.value(Rule::captionShownParam(), true).toBool());
+        return;
+    }
+
     // So is "Clone": no engine knows the canvas the copy has to appear on.
     if (action.actionId == Rule::cloneAction()) {
         PhysicsBody *parent = nullptr;
@@ -1331,6 +1459,23 @@ void SimulationController::applyAction(const RuleAction &action,
         cloneBody(parent,
                   QPointF(rollNumber(action.actionParams.value(Rule::cloneXParam())).toDouble(),
                           rollNumber(action.actionParams.value(Rule::cloneYParam())).toDouble()));
+        return;
+    }
+
+    // Where the view points is the application's too.
+    if (action.actionId == Rule::keepInViewAction()) {
+        PhysicsBody *wanted = nullptr;
+        for (PhysicsBody *body : m_scene->bodies()) {
+            if (body->name() == action.targetName)
+                wanted = body;
+        }
+        for (ShapeItem *shape : m_scene->shapes()) {
+            if (!wanted && shape->name() == action.targetName)
+                wanted = shape->body();
+        }
+        const QVariant follow = action.actionParams.value(Rule::keepInViewParam());
+        if (wanted)
+            m_scene->setFocusedBody(!follow.isValid() || follow.toBool() ? wanted : nullptr);
         return;
     }
 
@@ -1430,14 +1575,7 @@ void SimulationController::applyAction(const RuleAction &action,
         return;
     }
 
-    bool isShapeProperty = false;
-    if (m_engine) {
-        for (const physics::JointParam &p : m_engine->shapeProperties())
-            isShapeProperty = isShapeProperty || p.key == action.propertyKey;
-    }
-
     const QString target = action.targetName;
-    Q_UNUSED(isShapeProperty);
 
     // A literal, or whatever the named property reads right now plus an
     // offset. Read once per firing, so every branch below sees the same value.
@@ -1462,6 +1600,40 @@ void SimulationController::applyAction(const RuleAction &action,
     // The scene's own variables, which no engine has heard of. Kept to the
     // type the variable was declared with, so a whole number counted by a
     // half stays a whole number.
+    // A control is the scene's too, and a rule may work one the way a hand
+    // does -- tick the box, move the slider, grey the whole thing out.
+    if (target == Rule::controls()) {
+        const SceneControl::Address address = SceneControl::parse(action.propertyKey);
+        if (!address.isValid())
+            return;
+        const QString name = address.control;
+        const QString what = address.property;
+        const SceneControl *control = m_scene->controlWithId(name);
+        if (!control)
+            return;
+        if (what == SceneControl::enabledProperty()) {
+            m_scene->setControlEnabled(name,
+                                       compute(m_scene->controlEnabled(name)).toBool());
+            return;
+        }
+        if (what == SceneControl::captionProperty()) {
+            // Words, so only setting one means anything: adding to a caption
+            // is not something a rule card offers.
+            m_scene->setControlCaption(name, action.value.toString());
+            return;
+        }
+        if (what != SceneControl::valueProperty())
+            return;
+        const QVariant updated = compute(m_scene->controlValue(name));
+        if (control->kind == SceneControl::Kind::Slider) {
+            m_scene->setControlValue(
+                name, qBound(control->minimum, updated.toDouble(), control->maximum));
+        } else {
+            m_scene->setControlValue(name, updated.toBool());
+        }
+        return;
+    }
+
     if (target == Rule::variables()) {
         const SceneVariable *declared = m_scene->variableNamed(action.propertyKey);
         if (!declared)

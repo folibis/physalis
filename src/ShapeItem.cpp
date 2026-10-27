@@ -205,6 +205,13 @@ void ShapeItem::paintPhysicsView(QPainter *painter, const CanvasScene *canvas) c
     const bool assigned = m_body != nullptr;
     const bool picked = canvas->isSelectedForPhysics(const_cast<ShapeItem *>(this));
 
+    // A sensor is scenery for the rules rather than something to look at, and
+    // a table covered in them hides what is actually moving. Hidden it is not
+    // drawn at all, rather than drawn without its hatching: an unhatched
+    // sensor reads as a wall, which is worse than not seeing it.
+    if (canvas->isSensorShape(this) && !canvas->layerVisible(CanvasScene::RunLayer::Sensors))
+        return;
+
     QBrush brush;
     QColor outline;
     if (assigned) {

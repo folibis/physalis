@@ -1,0 +1,7 @@
+//! What a rule puts into words, over the canvas under the log. The editor's
+//! caption is rich text, so the page is given it as it stands.
+function showCaption(html, shown) {
+    var box = dom("caption");
+    box.innerHTML = html;
+    box.hidden = !shown || !html;
+}

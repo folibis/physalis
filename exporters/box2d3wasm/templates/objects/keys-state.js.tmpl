@@ -1,0 +1,5 @@
+//! Which keys are down, and which were pressed or let go on this step. A chord
+//! is named the way the editor names one -- "Ctrl+Shift+A", "Enter", "Up" --
+//! so a rule written there reads the same here.
+var keyHeld = {};
+var keyFired = { pressed: {}, released: {} };

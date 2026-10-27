@@ -16,12 +16,15 @@ protected:
         result.push_back({QObject::tr("Radius"), PropertyFieldType::Numeric,
             [item] { return item->rect().width() / 2.0; },
             [item](const QVariant &v) {
-                const qreal radius = qMax(5.0, v.toDouble());
+                // Half of the smallest side a rectangle may have, for the
+                // same reason: below that a solver cannot keep it apart from
+                // what it touches.
+                const qreal radius = qMax(0.5, v.toDouble());
                 const QPointF centre = item->rect().center();
                 item->setRect(QRectF(centre.x() - radius, centre.y() - radius,
                                      radius * 2.0, radius * 2.0));
             },
-            5.0, 100000.0, {}, -1, 0.0, section});
+            0.5, 100000.0, {}, -1, 0.0, section});
         result.back().tooltip = QObject::tr("How big the circle is, measured from its centre."
                                             " It grows and shrinks about that centre.");
         return result;

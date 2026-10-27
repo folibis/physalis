@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPainterPathStroker>
+#include <QHash>
 #include <QPixmap>
 #include <QtMath>
 
@@ -46,6 +47,14 @@ QIcon ObjectIcons::forShape(ShapeItem *shape)
 
 QIcon ObjectIcons::forBody(const QColor &color)
 {
+    // The drawing depends on nothing but the colour, and a rules card asks for
+    // one per object in every box it fills -- thousands of identical icons for
+    // one panel. Drawn once per colour instead.
+    static QHash<QRgb, QIcon> drawn;
+    const auto found = drawn.constFind(color.rgba());
+    if (found != drawn.constEnd())
+        return *found;
+
     // Half-pixel coordinates and a 1px pen: anything else spreads across two
     // rows under antialiasing and reads as a drop shadow at this size.
     QPixmap pixmap = blankIcon();
@@ -59,11 +68,16 @@ QIcon ObjectIcons::forBody(const QColor &color)
     painter.drawRoundedRect(QRectF(1.5, 1.5, kIconSize - 3.0, kIconSize - 3.0), 4.0, 4.0);
     painter.end();
 
-    return QIcon(pixmap);
+    return *drawn.insert(color.rgba(), QIcon(pixmap));
 }
 
 QIcon ObjectIcons::forJoint(const QColor &color)
 {
+    static QHash<QRgb, QIcon> drawn; // see forBody
+    const auto found = drawn.constFind(color.rgba());
+    if (found != drawn.constEnd())
+        return *found;
+
     QPixmap pixmap = blankIcon();
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -90,5 +104,5 @@ QIcon ObjectIcons::forJoint(const QColor &color)
     painter.drawPath(bone);
     painter.end();
 
-    return QIcon(pixmap);
+    return *drawn.insert(color.rgba(), QIcon(pixmap));
 }

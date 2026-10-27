@@ -1,4 +1,6 @@
 #include "PropertyPaneFactory.h"
+
+#include "SelectionPropertyPane.h"
 #include "PropertyPane.h"
 #include "../ShapeItem.h"
 #include "../CanvasScene.h"
@@ -29,6 +31,14 @@ PropertyPane *PropertyPaneFactory::paneFor(ShapeItem *item)
     }
     pane->attach(item);
     return pane;
+}
+
+PropertyPane *PropertyPaneFactory::paneForSelection(CanvasScene *scene)
+{
+    if (!m_selectionPane)
+        m_selectionPane = new SelectionPropertyPane(this);
+    m_selectionPane->attach(scene);
+    return m_selectionPane;
 }
 
 PropertyPane *PropertyPaneFactory::paneForPhysics(CanvasScene *scene)

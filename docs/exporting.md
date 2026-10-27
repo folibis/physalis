@@ -15,11 +15,36 @@ To export, choose **File → Export to** and pick a format. Then choose the fold
 to write the result to. When the export finishes, a message lists the files
 that were written or explains what went wrong.
 
+## What comes across
+
+Both formats carry the whole of a scene, not only its shapes: the bodies,
+their joints and every property the engine was given, the rays, the sensors
+and the explosions, and the rules -- including the parts of a scene that belong
+to no engine, which the exported program has to provide for itself:
+
+- the **log** of watched values, in the same corner it occupies in the editor;
+- the scene's own **controls**, as real widgets over the canvas, which the
+  exported rules read and write exactly as they do here;
+- the **keys** a rule watches, with the same chords;
+- the **caption** a rule puts up;
+- the scene's own **variables**, and the actions that belong to the
+  application rather than to the engine -- init state, clone, stop and hold.
+
+A rule a format cannot express is **left out and named**: the message at the
+end of the export says which rule it was and why, and the generated code
+carries the same note where the rule would have been. A rule is never written
+wrong and never dropped in silence.
+
+The message also reports anything a format cannot carry exactly, such as a
+world setting the engine's bindings do not expose under that name.
+
 ## Available formats
 
 - **box2d/Qt** writes a C++ project: a small Qt application that
   downloads Box2D, builds the scene and runs it in a window. Open the project
-  in Qt Creator, or build it with CMake, like any other C++ project.
+  in Qt Creator, or build it with CMake, like any other C++ project. It fetches
+  the same Box2D the application itself is built against, which is the version
+  the generated code is written for.
 - **box2d3wasm** writes an `index.html` that runs the scene in a web browser.
   It uses the same Box2D the application itself runs, compiled to WebAssembly,
   so the physics is the same physics rather than an approximation of it. Open

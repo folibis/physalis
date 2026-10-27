@@ -63,6 +63,14 @@ and Physalis adjusts a name that is already taken.
 - **Ctrl+click** reaches a shape lying under another one: each Ctrl+click on
   the same spot selects the next shape down.
 - **Click a shape in the Objects tab** to select it from the tree.
+- **Drag an empty part of the canvas** to draw a selection rectangle: every
+  shape it touches is selected. This works in Physics mode too, where it picks
+  bodies.
+
+With several shapes selected, the **Properties** tab shows the selection
+itself -- how many shapes it holds, where it starts, how big it is and how far
+it is turned -- and changing one of those rows moves, resizes or turns the
+whole selection as one piece, about its middle.
 
 ## Moving, resizing and rotating
 
@@ -115,7 +123,41 @@ Right-clicking a shape offers these commands:
   grid when moved, and whether its top-left corner or its origin is the point
   that snaps.
 - **Reset Rotation** turns the shape back to 0°.
+- **Convert to Chain...** (circles only) replaces the circle with one closed
+  outline of straight segments: a wheel, a ring, a hoop for other shapes to sit
+  in. Choose how many segments it has and which angle it starts at.
+- **Convert to Segments...** (circles and rectangles) replaces the shape with
+  that many separate line shapes, each of which can be given a body and joined
+  to its neighbours.
 - **Delete** removes the shape. The **Delete** key does the same.
+
+## Lining shapes up
+
+With more than one shape selected, the toolbar's **Align** list arranges them:
+
+- **Align Left**, **Centres Across**, **Right**, **Top**, **Centres Down** and
+  **Bottom** line them up on an edge or a middle;
+- **Distribute Across** and **Distribute Down** leave the first and the last
+  where they are and space the rest evenly between them, by the gap between
+  shapes rather than by their centres, so shapes of different sizes end up
+  evenly spaced;
+- **Ring Outside** and **Ring Inside** lay them round a circle, each turned to
+  face the ring, either standing on it or hanging inside it. The ring is as
+  small as it can be without the shapes overlapping.
+
+## Tools
+
+The toolbar's **Tools** list works on whatever is selected. Each tool opens a
+small panel in the bottom-left corner of the canvas with its own settings, and
+the canvas shows the result as the settings change. **Apply** keeps it,
+**Cancel** -- or clicking anywhere outside the panel -- puts the scene back.
+
+- **Clone...** fills a grid with copies of the selection: how many **rows** and
+  **columns**, and the **gap** across and down between them.
+- **Mirror...** puts a mirrored copy beside the original, on the **side** you
+  choose -- right, left, top or bottom -- at the **margin** you give.
+
+Both are ordinary edits: Undo takes them back.
 
 ## Shape properties
 

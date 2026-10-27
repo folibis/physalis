@@ -5,6 +5,9 @@
 #include "PhysicsBody.h"
 #include "PolygonItem.h"
 #include "RectangleItem.h"
+#include "RayItem.h"
+#include "ExplosionItem.h"
+#include "SceneControl.h"
 #include "SceneSerializer.h"
 #include "ShapeItem.h"
 #include "SimulationController.h"
@@ -14,9 +17,16 @@
 
 #include "ToolOptionsBar.h"
 #include <QDoubleSpinBox>
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QPainter>
 #include <QImage>
 #include <QPainterPath>
+#include "PropertyPane/PropertyPane.h"
+#include "PropertyPanel.h"
+#include <memory>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <gtest/gtest.h>
 #include "EditorMode.h"
@@ -1379,6 +1389,11 @@ TEST(Alignment, ARingOfRoundedBoxesStillCloses)
             box->setRect(QRectF(0, 0, 60, 40));
             box->setCornerRadius(rho);
             box->setPos(300 * std::cos(i * M_PI / 6), 300 * std::sin(i * M_PI / 6));
+            // Turned to face the middle, the way they would be if they had
+            // been dropped round a ring by hand: which edge is nearest the
+            // centre is what the alignment goes by, and a box square to the
+            // page says nothing about which edge was meant.
+            box->setRotation(i * 30.0);
             box->setName(QStringLiteral("box%1").arg(i));
             scene.addItem(box);
             made.append(box);
@@ -1390,29 +1405,561 @@ TEST(Alignment, ARingOfRoundedBoxesStillCloses)
 
         scene.alignSelection(CanvasScene::Align::RingOutside);
 
-        QRectF all;
-        for (ShapeItem *box : made)
-            all = all.isNull() ? drawn(box).boundingRect()
-                               : all.united(drawn(box).boundingRect());
-        const QPointF centre = all.center();
-        std::sort(made.begin(), made.end(), [&](ShapeItem *a, ShapeItem *b) {
-            const QPointF pa = drawn(a).boundingRect().center() - centre;
-            const QPointF pb = drawn(b).boundingRect().center() - centre;
-            return std::atan2(pa.y(), pa.x()) < std::atan2(pb.y(), pb.x());
-        });
-
+        // Every shape touches something. Asked of the nearest other shape
+        // rather than of "the next one round", so the check does not depend on
+        // sorting them into ring order first.
         for (int i = 0; i < made.size(); ++i) {
-            const QPolygonF a = drawn(made.at(i));
-            const QPolygonF b = drawn(made.at((i + 1) % made.size()));
+            const QPolygonF mine = drawn(made.at(i));
             qreal nearest = std::numeric_limits<qreal>::max();
-            for (const QPointF &p : a)
-                for (const QPointF &q : b)
-                    nearest = qMin(nearest, QLineF(p, q).length());
-            // Not zero to the micron: the arcs are measured as the flattened
-            // polygons Qt draws them with, so the sampled points sit a little
-            // off the tangent point. A real gap is a hundred times this.
-            EXPECT_LT(nearest, 0.25) << "corner radius " << rho << " left a gap of " << nearest
-                                     << " between box " << i << " and the next";
+            for (int j = 0; j < made.size(); ++j) {
+                if (j == i)
+                    continue;
+                const QPolygonF other = drawn(made.at(j));
+                for (const QPointF &p : mine)
+                    for (const QPointF &q : other)
+                        nearest = qMin(nearest, QLineF(p, q).length());
+            }
+            // Square corners close exactly. Rounded ones close to about a
+            // quarter of the radius: the share each shape takes is worked out
+            // from where its two corner arcs sit, which is exact only while
+            // the face is long against the radius. It is an approximation, and
+            // a declared one -- before it there was a gap of five and a half
+            // pixels here at this radius.
+            EXPECT_LT(nearest, rho > 0.0 ? rho / 4.0 + 0.1 : 0.01)
+                << "corner radius " << rho << " left box " << i << " a gap of " << nearest
+                << " from anything";
         }
     }
+}
+
+// Copy and Paste took shapes and nothing else, so a ray could be selected,
+// Copy was greyed out, and there was no way to make a second one like it.
+// They go through the same JSON the file uses, so the clipboard cannot drift
+// from what a scene can hold.
+// Copy and paste go through the system clipboard, which belongs to the
+// machine rather than to this program: on Windows another process can hold it
+// open, and then every setText is dropped and read back empty. A run on such a
+// machine says so and stands aside -- the alternative is a red test that means
+// "somebody else had the clipboard", which is not a fault anybody can fix here.
+bool theClipboardAnswers()
+{
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    if (!clipboard)
+        return false;
+    const QString probe = QStringLiteral("physalis-clipboard-probe");
+    clipboard->setText(probe);
+    return clipboard->text() == probe;
+}
+
+TEST(Selection, ARayAndAnExplosionCopyAndPaste)
+{
+    if (!theClipboardAnswers())
+        GTEST_SKIP() << "the system clipboard is held by something else on this machine";
+
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Physics);
+
+    RayItem *ray = scene->addRay(QPointF(120, 80));
+    ASSERT_TRUE(ray);
+    ray->setAngleDegrees(37.0);
+    ray->setLength(222.0);
+    scene->notifyShapesChanged();
+    scene->selectRay(ray);
+
+    QAction *copy = window.findChild<QAction *>(QStringLiteral("actionCopy"));
+    QAction *paste = window.findChild<QAction *>(QStringLiteral("actionPaste"));
+    ASSERT_TRUE(copy);
+    ASSERT_TRUE(paste);
+    EXPECT_TRUE(copy->isEnabled()) << "a selected ray left Copy greyed out";
+
+    copy->trigger();
+    EXPECT_TRUE(paste->isEnabled()) << "a copied ray left Paste greyed out";
+    paste->trigger();
+
+    ASSERT_EQ(scene->rays().size(), 2) << "pasting the ray made no second one";
+    RayItem *copied = scene->rays().at(0) == ray ? scene->rays().at(1) : scene->rays().at(0);
+    EXPECT_NE(copied->name(), ray->name()) << "the copy took the original's name";
+    EXPECT_DOUBLE_EQ(copied->angleDegrees(), 37.0) << "the copy lost its angle";
+    EXPECT_DOUBLE_EQ(copied->length(), 222.0) << "the copy lost its length";
+    EXPECT_NE(copied->pos(), ray->pos()) << "the copy landed exactly on the original";
+
+    // The same for a blast, and its settings come with it.
+    ExplosionItem *blast = scene->addExplosion(QPointF(300, 200));
+    ASSERT_TRUE(blast);
+    blast->params()[QStringLiteral("radius")] = 123.0;
+    scene->selectRay(nullptr);
+    scene->selectExplosion(blast);
+    EXPECT_TRUE(copy->isEnabled()) << "a selected explosion left Copy greyed out";
+
+    copy->trigger();
+    paste->trigger();
+    ASSERT_EQ(scene->explosions().size(), 2);
+    ExplosionItem *other = scene->explosions().at(0) == blast ? scene->explosions().at(1)
+                                                             : scene->explosions().at(0);
+    EXPECT_NE(other->name(), blast->name());
+    EXPECT_DOUBLE_EQ(other->params().value(QStringLiteral("radius")).toDouble(), 123.0)
+        << "the copy lost the blast's settings";
+}
+
+// Shift during a turn is the precision modifier: the shape takes a fifth of
+// the mouse's swing, so a degree can be placed by hand. Accumulated rather
+// than measured from where the drag began, so pressing or releasing Shift
+// part-way through does not make the shape jump.
+TEST(ShiftDrag, ShiftTurnsAShapeMoreSlowly)
+{
+    const auto turnBy = [](bool fine, bool halfway) {
+        CanvasScene scene;
+        scene.setEditorMode(EditorMode::Edit);
+        auto *box = new RectangleItem;
+        box->setRect(QRectF(0, 0, 100, 60));
+        box->setPos(0, 0);
+        box->setName(QStringLiteral("box"));
+        scene.addItem(box);
+        scene.notifyShapesChanged();
+        scene.selectShape(box);
+        scene.switchActiveToRotating();
+
+        // The press has to land inside the shape, which is what tells the
+        // scene a turn is beginning rather than a click on empty field.
+        const QPointF pivot = box->mapToScene(box->origin());
+        const QPointF grip = box->mapToScene(box->rect().center());
+        const QPointF arm = grip - pivot;
+        const auto swungBy = [&](qreal degrees) {
+            const qreal r = qDegreesToRadians(degrees);
+            return pivot + QPointF(arm.x() * std::cos(r) - arm.y() * std::sin(r),
+                                   arm.x() * std::sin(r) + arm.y() * std::cos(r));
+        };
+
+        const Qt::KeyboardModifiers held = fine ? Qt::ShiftModifier : Qt::NoModifier;
+        press(&scene, grip, halfway ? Qt::NoModifier : held);
+        // A quarter turn, in two halves, so the modifier can change in between.
+        moveTo(&scene, swungBy(45.0), halfway ? Qt::NoModifier : held);
+        moveTo(&scene, swungBy(90.0), held);
+        release(&scene, swungBy(90.0), held);
+        return box->rotation();
+    };
+
+    const qreal free = turnBy(false, false);
+    EXPECT_NEAR(free, 90.0, 0.001) << "a plain drag no longer follows the mouse";
+
+    const qreal fine = turnBy(true, false);
+    EXPECT_NEAR(fine, 18.0, 0.001) << "Shift should turn it a fifth as far";
+
+    // Shift pressed half way: the first half at full speed, the second slowed.
+    const qreal mixed = turnBy(true, true);
+    EXPECT_NEAR(mixed, 45.0 + 9.0, 0.001)
+        << "pressing Shift part-way made the shape jump instead of slowing down";
+}
+
+// With several shapes picked the property table speaks for all of them: typing
+// a rotation turns the whole selection, not only the shape carrying the
+// handles. One shape on its own is a selection of one and behaves as before.
+TEST(Selection, TheRotationRowTurnsTheSelectionAsOnePiece)
+{
+    CanvasScene scene;
+    scene.setEditorMode(EditorMode::Edit);
+
+    QVector<ShapeItem *> made;
+    for (int i = 0; i < 3; ++i) {
+        auto *box = new RectangleItem;
+        box->setRect(QRectF(0, 0, 60, 40));
+        box->setPos(i * 100, 0);
+        box->setRotation(i * 10.0);
+        box->setName(QStringLiteral("box%1").arg(i));
+        scene.addItem(box);
+        made.append(box);
+    }
+    scene.notifyShapesChanged();
+    scene.selectShape(made.at(0));
+    scene.addToEditSelection(made.at(1));
+    scene.addToEditSelection(made.at(2));
+    ASSERT_EQ(scene.editSelection().size(), 2);
+
+    std::unique_ptr<PropertyPane> pane(made.at(0)->makePropertyPane());
+    ASSERT_TRUE(pane);
+    pane->attach(made.at(0));
+
+    const PropertyRow *rotation = nullptr;
+    const std::vector<PropertyRow> rows = pane->rows(EditorMode::Edit);
+    for (const PropertyRow &row : rows) {
+        if (row.label == QStringLiteral("Rotation"))
+            rotation = &row;
+    }
+    ASSERT_TRUE(rotation) << "the shape pane offers no Rotation row";
+
+    // The selection turns as one piece: every shape gains the same angle and
+    // orbits the group's pivot, so the arrangement survives.
+    QVector<QPointF> before;
+    for (ShapeItem *box : made)
+        before << box->mapToScene(box->rect().center());
+    const QPointF pivot = scene.editSelectionOrigin();
+
+    rotation->setter(37.0);
+
+    for (int i = 0; i < made.size(); ++i) {
+        EXPECT_DOUBLE_EQ(made.at(i)->rotation(), i * 10.0 + 37.0)
+            << made.at(i)->name().toStdString() << " did not gain the same angle as the rest";
+        // Carried round the pivot, not spun where it stood.
+        const QLineF was(pivot, before.at(i));
+        const QLineF now(pivot, made.at(i)->mapToScene(made.at(i)->rect().center()));
+        EXPECT_NEAR(now.length(), was.length(), 0.001)
+            << made.at(i)->name().toStdString() << " changed its distance from the pivot";
+        qreal swept = was.angle() - now.angle();
+        while (swept < -180.0)
+            swept += 360.0;
+        while (swept > 180.0)
+            swept -= 360.0;
+        EXPECT_NEAR(swept, 37.0, 0.001)
+            << made.at(i)->name().toStdString() << " did not orbit with the rest";
+    }
+
+    // Picked on its own, it is the only one that turns.
+    scene.selectShape(made.at(1));
+    std::unique_ptr<PropertyPane> alone(made.at(1)->makePropertyPane());
+    alone->attach(made.at(1));
+    for (const PropertyRow &row : alone->rows(EditorMode::Edit)) {
+        if (row.label == QStringLiteral("Rotation"))
+            row.setter(12.0);
+    }
+    EXPECT_DOUBLE_EQ(made.at(1)->rotation(), 12.0);
+    EXPECT_DOUBLE_EQ(made.at(0)->rotation(), 37.0) << "a lone selection turned its neighbours";
+}
+
+// A shape dragged round and round kept the running total -- 1663 degrees,
+// which is the same way up as 223 and reads like a fault. The drag now leaves
+// the angle inside 0..360, and the table shows it that way.
+TEST(ShiftDrag, TurningRoundAndRoundKeepsTheAngleInRange)
+{
+    CanvasScene scene;
+    scene.setEditorMode(EditorMode::Edit);
+    auto *box = new RectangleItem;
+    box->setRect(QRectF(0, 0, 100, 60));
+    box->setPos(0, 0);
+    box->setName(QStringLiteral("box"));
+    scene.addItem(box);
+    scene.notifyShapesChanged();
+    scene.selectShape(box);
+    scene.switchActiveToRotating();
+
+    const QPointF pivot = box->mapToScene(box->origin());
+    const QPointF grip = box->mapToScene(box->rect().center());
+    const QPointF arm = grip - pivot;
+    const auto swungBy = [&](qreal degrees) {
+        const qreal r = qDegreesToRadians(degrees);
+        return pivot + QPointF(arm.x() * std::cos(r) - arm.y() * std::sin(r),
+                               arm.x() * std::sin(r) + arm.y() * std::cos(r));
+    };
+
+    // Four times round and a bit more, in steps small enough to follow.
+    press(&scene, grip, Qt::NoModifier);
+    for (int step = 1; step <= 50; ++step)
+        moveTo(&scene, swungBy(step * 30.0), Qt::NoModifier);
+    release(&scene, swungBy(1500.0), Qt::NoModifier);
+
+    EXPECT_GE(box->rotation(), 0.0) << "the angle came out negative";
+    EXPECT_LT(box->rotation(), 360.0)
+        << "the angle kept the running total instead of coming back into range";
+    EXPECT_NEAR(box->rotation(), 60.0, 0.001) << "1500 degrees is 60 degrees round";
+
+    std::unique_ptr<PropertyPane> pane(box->makePropertyPane());
+    pane->attach(box);
+    for (const PropertyRow &row : pane->rows(EditorMode::Edit)) {
+        if (row.label == QStringLiteral("Rotation"))
+            EXPECT_NEAR(row.getter().toDouble(), 60.0, 0.001) << "the table shows it out of range";
+    }
+}
+
+// Several shapes picked are not one shape with handles on it. The table used
+// to show the lead shape's pane -- its Corner Radius, its Radius, its own Left
+// and Top -- which said it was speaking for all of them while it spoke for
+// one. What they share is the box round them and which way it faces.
+TEST(Selection, SeveralShapesGetTheirOwnPropertyTable)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Edit);
+
+    QVector<ShapeItem *> made;
+    for (int i = 0; i < 3; ++i) {
+        auto *box = new RectangleItem;
+        box->setRect(QRectF(0, 0, 60, 40));
+        box->setPos(i * 100, 0);
+        box->setCornerRadius(8.0);
+        box->setName(QStringLiteral("box%1").arg(i));
+        scene->addItem(box);
+        made.append(box);
+    }
+    scene->notifyShapesChanged();
+
+    PropertyPanel *panel = window.findChild<PropertyPanel *>();
+    ASSERT_TRUE(panel);
+
+    const auto labels = [&] {
+        QStringList found;
+        for (const PropertyRow &row : panel->rowsForTest())
+            found << row.label;
+        return found;
+    };
+
+    scene->selectShape(made.at(0));
+    QCoreApplication::processEvents();
+    EXPECT_TRUE(labels().contains(QStringLiteral("Corner Radius")))
+        << "one shape on its own lost its own properties";
+
+    scene->addToEditSelection(made.at(1));
+    scene->addToEditSelection(made.at(2));
+    QCoreApplication::processEvents();
+
+    const QStringList many = labels();
+    EXPECT_FALSE(many.contains(QStringLiteral("Corner Radius")))
+        << "the selection's table is still showing one shape's corner radius";
+    for (const char *wanted : { "Shapes", "Left", "Top", "Width", "Height", "Rotation" }) {
+        EXPECT_TRUE(many.contains(QLatin1String(wanted)))
+            << "the selection's table has no " << wanted << " row";
+    }
+
+    // Left moves everything, keeping the arrangement.
+    const QRectF before = scene->editSelectionBounds();
+    for (const PropertyRow &row : panel->rowsForTest()) {
+        if (row.label == QStringLiteral("Left"))
+            row.setter(before.left() + 50.0);
+    }
+    EXPECT_NEAR(scene->editSelectionBounds().left(), before.left() + 50.0, 0.001);
+    EXPECT_NEAR(made.at(2)->pos().x() - made.at(0)->pos().x(), 200.0, 0.001)
+        << "moving the selection changed the spacing inside it";
+
+    // Width scales it, and the box comes out the size that was typed.
+    for (const PropertyRow &row : panel->rowsForTest()) {
+        if (row.label == QStringLiteral("Width"))
+            row.setter(before.width() / 2.0);
+    }
+    EXPECT_NEAR(scene->editSelectionBounds().width(), before.width() / 2.0, 0.001)
+        << "the box is not the width that was typed";
+}
+
+// Dragging on the canvas writes the same values the table shows, and nothing
+// was telling the table. Turn a selection with the mouse and the Rotation row
+// sat at whatever it read when the table was built -- 0, for a selection that
+// had not been turned before.
+TEST(Selection, TheTableFollowsATurnWhileTheMouseIsStillDown)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Edit);
+
+    QVector<ShapeItem *> made;
+    for (int i = 0; i < 3; ++i) {
+        auto *box = new RectangleItem;
+        box->setRect(QRectF(0, 0, 60, 40));
+        box->setPos(i * 100, 0);
+        box->setName(QStringLiteral("box%1").arg(i));
+        scene->addItem(box);
+        made.append(box);
+    }
+    scene->notifyShapesChanged();
+    scene->selectShape(made.at(0));
+    scene->addToEditSelection(made.at(1));
+    scene->addToEditSelection(made.at(2));
+    scene->switchActiveToRotating();
+    QCoreApplication::processEvents();
+
+    PropertyPanel *panel = window.findChild<PropertyPanel *>();
+    ASSERT_TRUE(panel);
+    const auto shown = [&] {
+        for (QDoubleSpinBox *box : panel->findChildren<QDoubleSpinBox *>()) {
+            if (box->toolTip().contains(QLatin1String("one piece")))
+                return box->value();
+        }
+        return -1.0;
+    };
+    ASSERT_NEAR(shown(), 0.0, 0.001) << "the selection's Rotation row is missing";
+
+    // A quarter turn with the mouse, about the selection's pivot.
+    const QPointF pivot = scene->editSelectionOrigin();
+    const QPointF grip = made.at(0)->mapToScene(made.at(0)->rect().center());
+    const QPointF arm = grip - pivot;
+    const auto swungBy = [&](qreal degrees) {
+        const qreal r = qDegreesToRadians(degrees);
+        return pivot + QPointF(arm.x() * std::cos(r) - arm.y() * std::sin(r),
+                               arm.x() * std::sin(r) + arm.y() * std::cos(r));
+    };
+    press(scene, grip, Qt::NoModifier);
+    moveTo(scene, swungBy(45.0), Qt::NoModifier);
+    QCoreApplication::processEvents();
+    // Still dragging. A single shape's table keeps up while the mouse is down,
+    // and the selection's has to as well -- catching up only on release is the
+    // thing that looked like it was stuck at zero.
+    EXPECT_NEAR(shown(), 45.0, 0.001) << "the table waits for the mouse to be let go";
+
+    moveTo(scene, swungBy(90.0), Qt::NoModifier);
+    QCoreApplication::processEvents();
+    EXPECT_NEAR(shown(), 90.0, 0.001) << "the table stopped following part-way through";
+
+    release(scene, swungBy(90.0), Qt::NoModifier);
+    QCoreApplication::processEvents();
+    ASSERT_NEAR(made.at(0)->rotation(), 90.0, 0.001) << "the drag did not turn the selection";
+    EXPECT_NEAR(shown(), 90.0, 0.001) << "the table lost the value when the drag finished";
+}
+
+// The same for moving: Left and Top follow the drag rather than jumping when
+// the mouse is let go.
+TEST(Selection, TheTableFollowsAMoveWhileTheMouseIsStillDown)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Edit);
+    // Whatever the saved settings say: snapping would round the drag, which is
+    // nothing to do with whether the table keeps up with it.
+    scene->setSnapToGrid(false);
+
+    QVector<ShapeItem *> made;
+    for (int i = 0; i < 2; ++i) {
+        auto *box = new RectangleItem;
+        box->setRect(QRectF(0, 0, 60, 40));
+        box->setPos(i * 100, 0);
+        box->setName(QStringLiteral("box%1").arg(i));
+        scene->addItem(box);
+        made.append(box);
+    }
+    scene->notifyShapesChanged();
+    scene->selectShape(made.at(0));
+    scene->addToEditSelection(made.at(1));
+    QCoreApplication::processEvents();
+
+    PropertyPanel *panel = window.findChild<PropertyPanel *>();
+    ASSERT_TRUE(panel);
+    const auto left = [&] {
+        for (QDoubleSpinBox *box : panel->findChildren<QDoubleSpinBox *>()) {
+            if (box->toolTip().contains(QLatin1String("left edge of everything")))
+                return box->value();
+        }
+        return -99999.0;
+    };
+    const qreal was = scene->editSelectionBounds().left();
+    ASSERT_NEAR(left(), was, 0.001) << "the selection's Left row is missing";
+
+    const QPointF grip = made.at(0)->mapToScene(made.at(0)->rect().center());
+    press(scene, grip, Qt::NoModifier);
+    moveTo(scene, grip + QPointF(70, 0), Qt::NoModifier);
+    QCoreApplication::processEvents();
+    EXPECT_NEAR(left(), was + 70.0, 0.001) << "Left waits for the mouse to be let go";
+    release(scene, grip + QPointF(70, 0), Qt::NoModifier);
+    QCoreApplication::processEvents();
+    EXPECT_NEAR(left(), was + 70.0, 0.001) << "Left lost the value when the drag finished";
+}
+
+// A control is declared in the document and its value is run state, the same
+// bargain a variable makes. The declaration survives the file; the value does
+// not need to, because a run starts it where the scene says.
+TEST(Shapes, ControlsSurviveTheFile)
+{
+    CanvasScene scene;
+    SceneControl tick;
+    tick.id = QStringLiteral("go");
+    tick.kind = SceneControl::Kind::Checkbox;
+    tick.initial = true;
+    SceneControl pull;
+    pull.id = QStringLiteral("speed");
+    pull.kind = SceneControl::Kind::Slider;
+    pull.minimum = -20.0;
+    pull.maximum = 80.0;
+    pull.step = 2.5;
+    pull.decimals = 2;
+    pull.initial = 15.0;
+    SceneControl press;
+    press.id = QStringLiteral("fire");
+    press.kind = SceneControl::Kind::Button;
+    scene.setControls({ tick, pull, press });
+
+    CanvasScene read;
+    QString error;
+    ASSERT_TRUE(SceneSerializer::load(&read, SceneSerializer::save(&scene), &error))
+        << error.toStdString();
+
+    ASSERT_EQ(read.controls().size(), 3);
+    const SceneControl &back = read.controls().at(1);
+    EXPECT_EQ(back.id, QStringLiteral("speed"));
+    EXPECT_EQ(back.kind, SceneControl::Kind::Slider);
+    EXPECT_DOUBLE_EQ(back.minimum, -20.0);
+    EXPECT_DOUBLE_EQ(back.maximum, 80.0);
+    EXPECT_DOUBLE_EQ(back.step, 2.5);
+    EXPECT_EQ(back.decimals, 2);
+    EXPECT_DOUBLE_EQ(back.startingValue().toDouble(), 15.0);
+
+    EXPECT_EQ(read.controls().at(0).kind, SceneControl::Kind::Checkbox);
+    EXPECT_TRUE(read.controls().at(0).startingValue().toBool());
+    EXPECT_EQ(read.controls().at(2).kind, SceneControl::Kind::Button);
+    EXPECT_FALSE(read.controls().at(2).startingValue().toBool()) << "a button starts up";
+
+    // And each one is readable straight away, before any run.
+    EXPECT_DOUBLE_EQ(read.controlValue(QStringLiteral("speed")).toDouble(), 15.0);
+    EXPECT_TRUE(read.controlEnabled(QStringLiteral("go")));
+
+    // What a rule names of a control goes in as the two things it is -- which
+    // control, which property -- so the punctuation the cards show an address
+    // with stays theirs, and changing it cannot leave a saved scene naming
+    // nothing. A file written while it was one flat string still reads.
+    Rule rule;
+    rule.conditions.resize(1);
+    rule.conditions[0].subjectName = Rule::controls();
+    rule.conditions[0].conditionKey = pull.valueKey();
+    rule.conditions[0].compare = Rule::Compare::Greater;
+    rule.conditions[0].conditionValue = 10.0;
+    rule.actions.resize(1);
+    rule.actions[0].targetName = Rule::controls();
+    rule.actions[0].propertyKey = tick.enabledKey();
+    rule.actions[0].sourceObject = Rule::controls();
+    rule.actions[0].sourceProperty = pull.valueKey();
+    scene.setRules({ rule });
+
+    const QJsonObject document = SceneSerializer::save(&scene);
+    const QJsonObject written = document.value("rules").toArray().first().toObject();
+    for (const char *field : { "watch", "property", "sourceProperty" }) {
+        const QJsonObject address = written.value(field).toObject();
+        EXPECT_FALSE(address.isEmpty()) << field << " was not written as an address";
+        EXPECT_FALSE(address.value("control").toString().isEmpty());
+        EXPECT_FALSE(address.value("property").toString().contains(
+            SceneControl::separator()))
+            << "the file carries no punctuation of the cards'";
+    }
+    EXPECT_EQ(written.value("watch").toObject().value("control").toString(),
+              QStringLiteral("speed"));
+    EXPECT_EQ(written.value("watch").toObject().value("property").toString(),
+              SceneControl::valueProperty());
+
+    // And the same scene as it was written when an address was one string with
+    // a dot in it.
+    QJsonObject flat = written;
+    flat.insert("watch", QStringLiteral("speed.value"));
+    flat.insert("property", QStringLiteral("go.enabled"));
+    flat.insert("sourceProperty", QStringLiteral("speed.value"));
+    QJsonObject legacy = document;
+    legacy.insert("rules", QJsonArray { flat });
+
+    CanvasScene before;
+    ASSERT_TRUE(SceneSerializer::load(&before, legacy, &error)) << error.toStdString();
+    ASSERT_EQ(before.rules().size(), 1);
+    EXPECT_EQ(before.rules().first().conditions.first().conditionKey, pull.valueKey())
+        << "a rule written with a dot no longer names anything";
+    EXPECT_EQ(before.rules().first().actions.first().propertyKey, tick.enabledKey());
+    EXPECT_EQ(before.rules().first().actions.first().sourceProperty, pull.valueKey());
+
+    // A caption is only what it says: the id is what a rule holds on to, so
+    // changing one leaves every rule alone.
+    EXPECT_EQ(read.controlCaption(QStringLiteral("fire")), QStringLiteral("fire"))
+        << "a control with no caption says its id";
+    press.caption = QStringLiteral("Fire!");
+    scene.setControls({ tick, pull, press });
+    EXPECT_EQ(scene.controlCaption(QStringLiteral("fire")), QStringLiteral("Fire!"));
+
+    CanvasScene captioned;
+    ASSERT_TRUE(SceneSerializer::load(&captioned, SceneSerializer::save(&scene), &error))
+        << error.toStdString();
+    EXPECT_EQ(captioned.controls().at(2).caption, QStringLiteral("Fire!"));
+    EXPECT_EQ(captioned.rules().first().conditions.first().conditionKey, pull.valueKey());
 }

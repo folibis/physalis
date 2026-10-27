@@ -1,0 +1,13 @@
+//! Down and up, not "click": a rule may drive something for exactly as long
+//! as the button is held.
+dom("{{DOM}}").onmousedown = function () {
+    controls["{{ID}}"].value = true;
+    controlFired.pressed["{{ID}}"] = true;
+    controlFired.changed["{{ID}}"] = true;
+};
+dom("{{DOM}}").onmouseup = function () {
+    controls["{{ID}}"].value = false;
+    controlFired.released["{{ID}}"] = true;
+    controlFired.changed["{{ID}}"] = true;
+};
+dom("{{DOM}}").onmouseleave = dom("{{DOM}}").onmouseup;

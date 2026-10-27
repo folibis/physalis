@@ -53,6 +53,12 @@ public:
     const ShotSettings &shot() const { return m_shot; }
     ShotSettings &shot() { return m_shot; }
 
+    // The one body the view keeps in the middle of the screen while a run is
+    // going. Set it through CanvasScene::setFocusedBody, which is what keeps
+    // it to one body: a view can only be centred on one thing.
+    bool isFocused() const { return m_focused; }
+    void setFocused(bool focused) { m_focused = focused; }
+
     QPointF originScenePos() const;
 
     // The body's orientation in degrees, taken from the same reference shape
@@ -88,6 +94,7 @@ private:
 
     QVector<ShapeItem *> m_shapes;
     ShotSettings m_shot;
+    bool m_focused = false;
     bool m_asleep = false;
     bool m_removed = false;
     bool m_runOnly = false;

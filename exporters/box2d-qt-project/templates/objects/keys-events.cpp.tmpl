@@ -1,0 +1,18 @@
+void keyReleaseEvent(QKeyEvent *event) override
+{
+    if (event->isAutoRepeat()) {
+        QWidget::keyReleaseEvent(event);
+        return;
+    }
+    //! A modifier let go first leaves the plain key held, so every chord
+    //! ending in this key is let go -- or a flipper would stay up.
+    const QString chord = chordOf(event);
+    const QString base = chord.section('+', -1);
+    for (const QString &held : QSet<QString>(keyHeld)) {
+        if (held == chord || held.section('+', -1) == base) {
+            keyHeld.remove(held);
+            keyReleasedNow.insert(held);
+        }
+    }
+    QWidget::keyReleaseEvent(event);
+}

@@ -236,6 +236,11 @@
          <string>Variables</string>
         </attribute>
        </widget>
+       <widget class="ControlsPanel" name="controlsPanel">
+        <attribute name="title">
+         <string>Controls</string>
+        </attribute>
+       </widget>
        <widget class="PlotPanel" name="plotPanel">
         <attribute name="title">
          <string>Plot</string>
@@ -624,6 +629,12 @@
    <class>VariablesPanel</class>
    <extends>QWidget</extends>
    <header>VariablesPanel.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ControlsPanel</class>
+   <extends>QWidget</extends>
+   <header>ControlsPanel.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

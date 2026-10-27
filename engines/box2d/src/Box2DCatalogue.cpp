@@ -513,7 +513,19 @@ QVector<ActionType> Box2DEngine::bodyActions() const
     offsetY.key = QStringLiteral("offsetY");
     offsetY.label = QObject::tr("Offset Y");
 
-    push.params = { pushX, pushY, offsetX, offsetY };
+    // b2Body_GetWorldVector: the same numbers read in the body's own frame, so
+    // a ship that has turned is pushed along its own axis rather than the
+    // world's. Both the push and where it lands turn with it.
+    JointParam relative;
+    relative.key = QStringLiteral("relative");
+    relative.label = QObject::tr("In its own direction");
+    relative.type = ParamType::Bool;
+    relative.defaultValue = false;
+    relative.tooltip = QObject::tr("Read the push and the offset in the body's own directions,"
+                                   " which turn with it, rather than the world's. A ship's"
+                                   " engine points where the ship points.");
+
+    push.params = { pushX, pushY, offsetX, offsetY, relative };
     actions.append(push);
 
     // b2Body_ApplyForce, at a point rather than through the centre of mass.

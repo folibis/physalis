@@ -1,0 +1,12 @@
+auto *panel = new QWidget(overlay);
+auto *panelColumn = new QVBoxLayout(panel);
+panelColumn->setContentsMargins(9, 7, 9, 7);
+panelColumn->setSpacing(4);
+{{ITEMS}}
+overlayColumn->addWidget(panel);
+showControls = [=] {
+{{SHOW}}
+    panel->adjustSize();
+    overlay->adjustSize();
+};
+showControls();

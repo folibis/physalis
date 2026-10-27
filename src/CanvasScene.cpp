@@ -134,7 +134,7 @@ RectangleItem *CanvasScene::addRectangle(const QPointF &scenePos)
     item->setPos(scenePos);
     addItem(item);
     item->setName(uniqueName(item->name(), item));
-    emit shapesChanged();
+    announceChange(Change::Shapes);
     return item;
 }
 
@@ -224,10 +224,10 @@ void CanvasScene::destroyShape(ShapeItem *shape)
     {
         emit physicsSelectionChanged();
     }
-    emit shapesChanged();
+    announceChange(Change::Shapes);
     if (body)
     {
-        emit bodiesChanged();
+        announceChange(Change::Bodies);
     }
     pruneWatches();
 }
@@ -282,10 +282,10 @@ ShapeItem *CanvasScene::replaceShape(ShapeItem *shape, const QJsonObject &json)
     removeItem(shape);
     delete shape;
 
-    emit shapesChanged();
+    announceChange(Change::Shapes);
     if (body)
     {
-        emit bodiesChanged();
+        announceChange(Change::Bodies);
     }
     if (wasActive)
     {
@@ -410,7 +410,7 @@ QVector<ShapeItem *> CanvasScene::convertToSegments(ShapeItem *shape, int segmen
 
     if (!made.isEmpty())
     {
-        emit shapesChanged();
+        announceChange(Change::Shapes);
     }
     return made;
 }
@@ -650,7 +650,7 @@ CircleItem *CanvasScene::addCircle(const QPointF &scenePos)
     item->setPos(scenePos);
     addItem(item);
     item->setName(uniqueName(item->name(), item));
-    emit shapesChanged();
+    announceChange(Change::Shapes);
     return item;
 }
 
@@ -856,7 +856,7 @@ PhysicsBody *CanvasScene::createEmptyBody(bool announce)
     m_bodies.append(body);
     if (announce)
     {
-        emit bodiesChanged();
+        announceChange(Change::Bodies);
     }
     return body;
 }
@@ -868,7 +868,7 @@ void CanvasScene::clearContents()
     clearWatches();
 
     m_rules.clear();
-    emit rulesChanged();
+    announceChange(Change::Rules);
 
     qDeleteAll(m_explosions);
     m_explosions.clear();
@@ -884,7 +884,7 @@ void CanvasScene::clearContents()
     qDeleteAll(m_joints);
     m_joints.clear();
     emit selectedJointChanged(nullptr);
-    emit jointsChanged();
+    announceChange(Change::Joints);
 
     qDeleteAll(m_bodies);
     m_bodies.clear();
@@ -900,9 +900,43 @@ void CanvasScene::clearContents()
     }
 
     update();
-    emit shapesChanged();
-    emit bodiesChanged();
+    announceChange(Change::Shapes);
+    announceChange(Change::Bodies);
     emit physicsSelectionChanged();
+}
+
+void CanvasScene::announceChange(Change what)
+{
+    if (m_bulkDepth > 0) {
+        m_deferredChanges.insert(int(what));
+        return;
+    }
+    switch (what) {
+    case Change::Shapes:    emit shapesChanged(); break;
+    case Change::Bodies:    emit bodiesChanged(); break;
+    case Change::Joints:    emit jointsChanged(); break;
+    case Change::Rules:     emit rulesChanged(); break;
+    case Change::Variables: emit variablesChanged(); break;
+    case Change::Controls:  emit controlsChanged(); break;
+    }
+}
+
+void CanvasScene::endBulkChange()
+{
+    if (--m_bulkDepth > 0)
+        return;
+
+    // Taken first: what a listener does on its way through can ask for another
+    // announcement, and this one is already being delivered.
+    const QSet<int> deferred = m_deferredChanges;
+    m_deferredChanges.clear();
+    // In a fixed order rather than the set's, so a panel listening to two of
+    // them sees them the same way every time.
+    for (Change what : { Change::Shapes, Change::Bodies, Change::Joints,
+                         Change::Rules, Change::Variables, Change::Controls }) {
+        if (deferred.contains(int(what)))
+            announceChange(what);
+    }
 }
 
 ShapeItem *CanvasScene::looseShapeAt(const QPointF &scenePos) const
@@ -982,7 +1016,7 @@ PhysicsBody *CanvasScene::createBodyFromShapes(const QVector<ShapeItem *> &shape
     }
 
     update();
-    emit bodiesChanged();
+    announceChange(Change::Bodies);
     emit physicsSelectionChanged();
     return body;
 }
@@ -1073,7 +1107,7 @@ Joint *CanvasScene::createJoint(const QString &typeId, PhysicsBody *bodyA, Physi
 
     m_joints.append(joint);
     update();
-    emit jointsChanged();
+    announceChange(Change::Joints);
     return joint;
 }
 
@@ -1091,7 +1125,7 @@ void CanvasScene::destroyJoint(Joint *joint)
     delete joint;
     pruneWatches();
     update();
-    emit jointsChanged();
+    announceChange(Change::Joints);
 }
 
 void CanvasScene::setJointSelectionColor(const QColor &color)
@@ -1253,6 +1287,7 @@ void CanvasScene::setJointKindColor(physics::JointVisual kind, const QColor &col
     }
     m_jointKindColors.insert(static_cast<int>(kind), color);
     update();
+    announceChange(Change::Joints); // the icon beside a joint's name -- see setBodyColor
 }
 
 JointStyle CanvasScene::jointKindStyle(physics::JointVisual kind) const
@@ -1278,6 +1313,7 @@ void CanvasScene::setJointKindColors(const QHash<int, QColor> &colors)
     }
     m_jointKindColors = colors;
     update();
+    announceChange(Change::Joints);
 }
 
 void CanvasScene::setJointKindStyles(const QHash<int, JointStyle> &styles)
@@ -1655,7 +1691,7 @@ void CanvasScene::setSimulationEngineName(const QString &name)
         return;
     }
     m_simulationEngineName = name;
-    emit jointsChanged();
+    announceChange(Change::Joints);
 }
 
 void CanvasScene::selectJoint(Joint *joint)
@@ -1755,6 +1791,18 @@ void CanvasScene::objectRenamed(const QString &previous, const QString &current)
         return;
     }
 
+    // Something else still answers to the old name, so this was not a rename
+    // of the thing the rules mean. A shape arrives carrying the default name
+    // of its kind and is given a free one the moment it joins the scene, which
+    // reaches here as "circle_1 became circle_2" -- and following that rewrote
+    // every rule that named the circle_1 already on the canvas. Adding a shape
+    // changed what other rules watched, which is the sort of thing you only
+    // notice once the scene has stopped working.
+    if (takenNames().contains(previous))
+    {
+        return;
+    }
+
     bool inRules = false;
     for (Rule &rule : m_rules)
     {
@@ -1791,7 +1839,7 @@ void CanvasScene::objectRenamed(const QString &previous, const QString &current)
     }
     if (inRules)
     {
-        emit rulesChanged();
+        announceChange(Change::Rules);
     }
 
     bool inLog = false;
@@ -1812,7 +1860,7 @@ void CanvasScene::objectRenamed(const QString &previous, const QString &current)
 void CanvasScene::setRules(const QVector<Rule> &rules)
 {
     m_rules = rules;
-    emit rulesChanged();
+    announceChange(Change::Rules);
 }
 
 void CanvasScene::pruneEmptyBodies()
@@ -1830,12 +1878,45 @@ void CanvasScene::pruneEmptyBodies()
     }
 }
 
+PhysicsBody *CanvasScene::focusedBody() const
+{
+    for (PhysicsBody *body : m_bodies)
+    {
+        if (body->isFocused())
+        {
+            return body;
+        }
+    }
+    return nullptr;
+}
+
+void CanvasScene::setFocusedBody(PhysicsBody *body)
+{
+    bool moved = false;
+    for (PhysicsBody *one : m_bodies)
+    {
+        const bool wanted = one == body;
+        if (one->isFocused() != wanted)
+        {
+            one->setFocused(wanted);
+            moved = true;
+        }
+    }
+    if (moved)
+    {
+        emit focusedBodyChanged();
+    }
+}
+
 void CanvasScene::destroyBody(PhysicsBody *body, bool announce)
 {
     if (!body || !m_bodies.removeOne(body))
     {
         return;
     }
+    // Nothing to follow once it is gone, and the view has to be told rather
+    // than left pointing at a body that no longer exists.
+    const bool wasFollowed = body->isFocused();
 
     // A joint with one end gone constrains nothing and cannot be drawn.
     const QVector<Joint *> attached = m_joints;
@@ -1848,9 +1929,13 @@ void CanvasScene::destroyBody(PhysicsBody *body, bool announce)
     }
     delete body;
     update();
+    if (wasFollowed)
+    {
+        emit focusedBodyChanged();
+    }
     if (announce)
     {
-        emit bodiesChanged();
+        announceChange(Change::Bodies);
         emit physicsSelectionChanged();
     }
     pruneWatches();
@@ -1913,6 +1998,9 @@ void CanvasScene::setBodyColor(physics::BodyType type, const QColor &color)
     }
     *target = color;
     update();
+    // The rule cards carry a body's colour in the icon beside its name, and
+    // they keep the list they built. A colour is part of what that list shows.
+    announceChange(Change::Bodies);
 }
 
 void CanvasScene::setUnassignedShapeColor(const QColor &color)
@@ -2159,7 +2247,7 @@ void CanvasScene::setWatches(const QVector<Watch> &watches)
 void CanvasScene::setVariables(const QVector<SceneVariable> &variables)
 {
     m_variables = variables;
-    emit variablesChanged();
+    announceChange(Change::Variables);
 }
 
 void CanvasScene::renameVariableInRules(const QString &previous, const QString &current)
@@ -2196,7 +2284,7 @@ void CanvasScene::renameVariableInRules(const QString &previous, const QString &
     }
     if (touched)
     {
-        emit rulesChanged();
+        announceChange(Change::Rules);
     }
 
     for (Watch &watch : m_watches)
@@ -3002,53 +3090,67 @@ void CanvasScene::ringSelection(const QVector<ShapeItem *> &shapes,
 {
     const QPointF centre = all.center();
 
-    // Measured from the shape itself rather than from the box it covers now:
-    // every one of them is about to be turned, so what it covers is about to
-    // change. Width runs along the ring, height out from it.
-    QVector<qreal> widths;
-    QVector<qreal> heights;
+    // A shape has edges, and one of them is nearer the middle of the ring than
+    // the rest. That edge is the one the user means: it goes on the circle,
+    // and whatever stands behind it points away. Nothing here looks at width
+    // or height -- a box standing on its short side and the same box lying on
+    // its long one are different arrangements, and which was drawn is the
+    // answer, not which number is larger.
+    QVector<QPointF> faceFrom;   // the edge, in the shape's own coordinates
+    QVector<QPointF> faceTo;
+    QVector<qreal> widths;       // its length, which is what has to fit
     QVector<qreal> rounds;
-    QVector<bool> upended;
     qreal widest = 0.0;
     qreal total = 0.0;
-    for (ShapeItem *shape : shapes)
-    {
-        const QRectF own = shape->rect();
-        widths.append(qAbs(own.width()));
-        heights.append(qAbs(own.height()));
-        widest = qMax(widest, qAbs(own.width()));
-        total += qAbs(own.width());
-        rounds.append(qBound(0.0, shape->cornerRadius(),
-                             qMin(qAbs(own.width()), qAbs(own.height())) / 2.0));
 
-        // Which end of the shape is the broad one, since that is the end that
-        // meets the circle and the narrow one is the tooth. A bounding box
-        // cannot say -- two triangles drawn point up and point down have the
-        // same one -- so it is asked of the area: the centroid of a triangle
-        // sits a third of the way from its base, so whichever side of centre
-        // it falls on is the side the width is on. Dead centre, as a rectangle
-        // and a circle are, leaves it as drawn.
-        qreal twiceArea = 0.0;
-        qreal sum = 0.0;
+    for (int i = 0; i < shapes.size(); ++i)
+    {
+        ShapeItem *shape = shapes.at(i);
+        QPolygonF own;
         const int corners = shape->nodeCount();
-        for (int i = 0; i < corners; ++i)
+        if (corners >= 3)
         {
-            const QPointF a = shape->nodePosition(i);
-            const QPointF b = shape->nodePosition((i + 1) % corners);
-            const qreal cross = a.x() * b.y() - b.x() * a.y();
-            twiceArea += cross;
-            sum += (a.y() + b.y()) * cross;
+            for (int c = 0; c < corners; ++c)
+            {
+                own << shape->nodePosition(c);
+            }
         }
-        const qreal lean = corners < 3 || qFuzzyIsNull(twiceArea)
-                               ? 0.0
-                               : sum / (3.0 * twiceArea) - own.center().y();
-        upended.append(lean < 0.0);
+        else
+        {
+            // A circle has no edges to choose between, so the box it fills
+            // stands in for one and any of its sides will do.
+            own = QPolygonF(shape->rect());
+        }
+
+        const QPolygonF there = shape->mapToScene(own);
+        int nearest = 0;
+        qreal best = std::numeric_limits<qreal>::max();
+        for (int c = 0; c < own.size(); ++c)
+        {
+            const QPointF middle = (there.at(c) + there.at((c + 1) % own.size())) / 2.0;
+            const qreal reach = QLineF(centre, middle).length();
+            if (reach < best)
+            {
+                best = reach;
+                nearest = c;
+            }
+        }
+
+        const int next = (nearest + 1) % own.size();
+        faceFrom.append(own.at(nearest));
+        faceTo.append(own.at(next));
+        const qreal length = QLineF(there.at(nearest), there.at(next)).length();
+        widths.append(length);
+        widest = qMax(widest, length);
+        total += length;
+        rounds.append(qBound(0.0, shape->cornerRadius(), length / 2.0));
     }
 
     // Somewhere between "every shape flat against the circle" and a ring so
-    // large the chords are the widths; the answer is always between them.
+    // large the chords are the faces; the answer is always between them.
     qreal low = qMax(widest, qAbs(gap)) / 2.0 + 0.001;
     qreal high = qMax(total + qAbs(gap) * shapes.size(), widest) + 1.0;
+
     // Half the turn one shape takes up on a ring of this size. With square
     // corners that is the chord: half the face subtends asin(w / 2r). Rounding
     // the corners cuts away exactly the material that was doing the touching,
@@ -3118,10 +3220,10 @@ void CanvasScene::ringSelection(const QVector<ShapeItem *> &shapes,
     std::sort(order.begin(), order.end(),
               [&](int a, int b) { return bearing(a) < bearing(b); });
 
-    // Each shape takes the share its own width needs, not an even slice: a
-    // ring of shapes of different sizes has to give the big ones more of the
-    // turn or the small ones stand apart. It still comes out exact, because
-    // the radius above was chosen to make these shares add to a whole turn.
+    // Each shape takes the share its own face needs, not an even slice: a ring
+    // of shapes of different sizes has to give the big ones more of the turn or
+    // the small ones stand apart. It still comes out exact, because the radius
+    // above was chosen to make these shares add to a whole turn.
     const qreal gapAngle = 2.0 * std::asin(qBound(-1.0, gap / (2.0 * path), 1.0));
     qreal angle = order.isEmpty() ? 0.0 : bearing(order.first());
     for (const int i : std::as_const(order))
@@ -3129,43 +3231,55 @@ void CanvasScene::ringSelection(const QVector<ShapeItem *> &shapes,
         const qreal half = halfAngle(i, path);
         // Half its own share before it and half after, so neighbours meet.
         angle += half;
-        ShapeItem *shape = shapes.at(i);
-        // Turned so its height lies along the radius, which puts the width --
-        // the side that meets its neighbours -- along the ring. Outward or
-        // inward is half a turn apart, and for anything but a plain rectangle
-        // that is the difference between a tooth pointing out and one
-        // pointing in.
-        // A shape is drawn with its top at the low end of its own height, so the
-        // side that meets the circle is the bottom one. Turning its local
-        // downward axis towards the centre puts that side on the ring and
-        // whatever is at the top -- the point of a tooth -- out beyond it.
-        // Half a turn more for a shape drawn the other way up, so that every
-        // tooth in the ring points the same way whichever way each was drawn.
-        shape->setRotation(qRadiansToDegrees(angle) + (outside ? 90.0 : -90.0)
-                           + (upended.at(i) ? 180.0 : 0.0));
 
-        // The near face is a chord of the circle, not a tangent to it: its two
-        // corners sit on the circle and its middle falls short of it by the
-        // sagitta. Placing the middle on the circle instead leaves every pair
-        // of neighbours meeting outside it, which is a visible gap at each of
-        // the joints and the whole ring failing to close.
+        ShapeItem *shape = shapes.at(i);
+
+        // Turned by the difference between where its chosen edge points now
+        // and where it has to point: across the radius, which is what makes it
+        // a chord of the ring. Half a turn more for the inside, so the shape
+        // hangs towards the centre instead of away from it.
+        const QPointF was = shape->mapToScene(faceTo.at(i)) - shape->mapToScene(faceFrom.at(i));
+        const qreal facing = std::atan2(was.y(), was.x());
+        const qreal wanted = angle + M_PI / 2.0;
+        shape->setRotation(shape->rotation() + qRadiansToDegrees(wanted - facing));
+
+        // Laying the edge along the ring says nothing about which side of it
+        // the rest of the shape ended up on, and that depends on which way
+        // round the outline happens to run. Asked rather than assumed: the
+        // body has to stand outside the circle, or inside it, and half a turn
+        // puts it right where it does not. Without this the shapes hung the
+        // wrong way and every pair of neighbours overlapped.
+        const QPointF outward(std::cos(angle), std::sin(angle));
+        const QPointF body = shape->mapToScene(shape->rect().center())
+                             - (shape->mapToScene(faceFrom.at(i))
+                                + shape->mapToScene(faceTo.at(i)))
+                                   / 2.0;
+        const qreal side = body.x() * outward.x() + body.y() * outward.y();
+        if ((outside && side < 0.0) || (!outside && side > 0.0))
+        {
+            shape->setRotation(shape->rotation() + 180.0);
+        }
+
+        // The face is a chord of the circle, not a tangent to it: its two ends
+        // sit on the circle and its middle falls short of it by the sagitta.
+        // Placing the middle on the circle instead leaves every pair of
+        // neighbours meeting outside it, which is a visible gap at each of the
+        // joints and the whole ring failing to close.
         const qreal faceMiddle =
             std::sqrt(qMax(0.0, path * path - widths.at(i) * widths.at(i) / 4.0));
-        // Outward from the ring, or inward from it -- the face stays on the
-        // circle either way, and only what hangs off it changes sides.
-        const qreal radius =
-            outside ? faceMiddle + heights.at(i) / 2.0 : faceMiddle - heights.at(i) / 2.0;
-        const QPointF wanted(centre.x() + radius * std::cos(angle),
-                             centre.y() + radius * std::sin(angle));
-        // After the turn, since turning moves what the shape covers.
-        const QPointF now = shape->mapToScene(shape->rect()).boundingRect().center();
-        shape->setPos(shape->pos() + (wanted - now));
+        const QPointF lands(centre.x() + faceMiddle * std::cos(angle),
+                            centre.y() + faceMiddle * std::sin(angle));
+        // Measured after the turn, since turning moves the edge with it.
+        const QPointF now =
+            (shape->mapToScene(faceFrom.at(i)) + shape->mapToScene(faceTo.at(i))) / 2.0;
+        shape->setPos(shape->pos() + (lands - now));
 
         angle += half + gapAngle;
     }
 
     refreshGroupOrigin();
     update();
+
     notifyEdit(outside ? tr("Ring outside") : tr("Ring inside"));
 }
 
@@ -3337,6 +3451,299 @@ QRectF CanvasScene::editSelectionBox() const
     }
     constexpr qreal kClearance = 6.0;
     return bounds.adjusted(-kClearance, -kClearance, kClearance, kClearance);
+}
+
+qreal CanvasScene::selectionRotation() const
+{
+    return m_active ? m_active->rotation() : 0.0;
+}
+
+void CanvasScene::turnSelectionTo(qreal degrees)
+{
+    if (!m_active)
+    {
+        return;
+    }
+    const qreal turned = degrees - m_active->rotation();
+    if (qFuzzyIsNull(turned))
+    {
+        return;
+    }
+    if (m_editSelection.isEmpty())
+    {
+        m_active->setRotation(degrees);
+        update();
+        return;
+    }
+
+    // The same orbit a drag builds: each shape gains the angle and its origin
+    // is carried round the group's pivot, so the arrangement turns rather than
+    // every shape spinning where it stands.
+    refreshGroupOrigin();
+    QTransform orbit;
+    orbit.translate(m_groupOrigin.x(), m_groupOrigin.y());
+    orbit.rotate(turned);
+    orbit.translate(-m_groupOrigin.x(), -m_groupOrigin.y());
+
+    const auto turn = [&](ShapeItem *shape) {
+        const QPointF originScene = shape->pos() + shape->origin();
+        shape->setRotation(shape->rotation() + turned);
+        shape->setPos(orbit.map(originScene) - shape->origin());
+    };
+    turn(m_active);
+    for (ShapeItem *shape : std::as_const(m_editSelection))
+    {
+        turn(shape);
+    }
+    update();
+}
+
+void CanvasScene::moveSelectionBy(const QPointF &by)
+{
+    for (ShapeItem *shape : selectedShapes())
+    {
+        shape->setPos(shape->pos() + by);
+    }
+    refreshGroupOrigin();
+    update();
+}
+
+void CanvasScene::scaleSelectionBy(qreal across, qreal down)
+{
+    if (across <= 0.0 || down <= 0.0)
+    {
+        return;
+    }
+    const QRectF box = editSelectionBounds();
+    if (box.isNull())
+    {
+        return;
+    }
+
+    // Measured from the corner the box starts at, so what is typed into Width
+    // is what the box comes out as -- scaling about the middle would move the
+    // left edge as well and the number would never settle.
+    const QPointF from = box.topLeft();
+    for (ShapeItem *shape : selectedShapes())
+    {
+        const QRectF own = shape->rect();
+        shape->setRect(QRectF(own.topLeft(), QSizeF(own.width() * across, own.height() * down)));
+        const QPointF at = shape->pos() - from;
+        shape->setPos(from + QPointF(at.x() * across, at.y() * down));
+    }
+    refreshGroupOrigin();
+    update();
+}
+
+void CanvasScene::setControls(const QVector<SceneControl> &controls)
+{
+    m_controls = controls;
+    // A control that has gone takes its value with it; one that has arrived
+    // starts where the scene says.
+    QHash<QString, QVariant> values;
+    QHash<QString, bool> enabled;
+    for (const SceneControl &control : m_controls)
+    {
+        values.insert(control.id, m_controlValues.value(control.id, control.startingValue()));
+        enabled.insert(control.id, m_controlEnabled.value(control.id, true));
+    }
+    m_controlValues = values;
+    m_controlEnabled = enabled;
+    announceChange(Change::Controls);
+}
+
+const SceneControl *CanvasScene::controlWithId(const QString &id) const
+{
+    for (const SceneControl &control : m_controls)
+    {
+        if (control.id == id)
+        {
+            return &control;
+        }
+    }
+    return nullptr;
+}
+
+QString CanvasScene::uniqueControlId(const QString &desired, int except) const
+{
+    QString wanted = desired.isEmpty() ? QStringLiteral("control") : desired;
+    const auto taken = [&](const QString &name) {
+        for (int i = 0; i < m_controls.size(); ++i)
+        {
+            if (i != except && m_controls.at(i).id == name)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (!taken(wanted))
+    {
+        return wanted;
+    }
+    for (int n = 2;; ++n)
+    {
+        const QString tried = QStringLiteral("%1%2").arg(wanted).arg(n);
+        if (!taken(tried))
+        {
+            return tried;
+        }
+    }
+}
+
+// A control renamed is a property key in every rule that reads or writes it,
+// and the other object of every event that names it. They follow, the way they
+// follow any other rename.
+void CanvasScene::renameControlInRules(const QString &previous, const QString &current)
+{
+    if (previous == current)
+    {
+        return;
+    }
+    // Every property of it, so a rule naming any of them follows the rename.
+    QHash<QString, QString> moved;
+    for (const QString &what : { SceneControl::valueProperty(), SceneControl::enabledProperty(),
+                                 SceneControl::captionProperty() }) {
+        moved.insert(SceneControl::key(previous, what), SceneControl::key(current, what));
+    }
+
+    bool touched = false;
+    const auto follow = [&](QString &key) {
+        const auto it = moved.constFind(key);
+        if (it != moved.constEnd())
+        {
+            key = *it;
+            touched = true;
+        }
+    };
+    for (Rule &rule : m_rules)
+    {
+        for (RuleCondition &condition : rule.conditions)
+        {
+            if (condition.subjectName == Rule::controls())
+            {
+                follow(condition.conditionKey);
+                if (condition.isEvent() && condition.conditionValue.toString() == previous)
+                {
+                    condition.conditionValue = current;
+                    touched = true;
+                }
+            }
+        }
+        for (RuleAction &action : rule.actions)
+        {
+            if (action.targetName == Rule::controls())
+            {
+                follow(action.propertyKey);
+            }
+            if (action.sourceObject == Rule::controls())
+            {
+                follow(action.sourceProperty);
+            }
+        }
+    }
+    if (touched)
+    {
+        announceChange(Change::Rules);
+    }
+}
+
+QVariant CanvasScene::controlValue(const QString &name) const
+{
+    const auto it = m_controlValues.constFind(name);
+    if (it != m_controlValues.constEnd())
+    {
+        return *it;
+    }
+    const SceneControl *control = controlWithId(name);
+    return control ? control->startingValue() : QVariant();
+}
+
+bool CanvasScene::controlEnabled(const QString &name) const
+{
+    return m_controlEnabled.value(name, true);
+}
+
+void CanvasScene::setControlValue(const QString &name, const QVariant &value)
+{
+    const SceneControl *control = controlWithId(name);
+    if (!control || m_controlValues.value(name) == value)
+    {
+        return;
+    }
+    m_controlValues.insert(name, value);
+    // A button says pressed and released; everything else says it changed.
+    if (control->kind == SceneControl::Kind::Button)
+    {
+        m_controlEvents.append({ name, value.toBool() ? Rule::controlPressedEvent()
+                                                      : Rule::controlReleasedEvent() });
+    }
+    m_controlEvents.append({ name, Rule::controlChangedEvent() });
+    emit controlValuesChanged();
+}
+
+void CanvasScene::setControlEnabled(const QString &name, bool enabled)
+{
+    if (!controlWithId(name) || m_controlEnabled.value(name, true) == enabled)
+    {
+        return;
+    }
+    m_controlEnabled.insert(name, enabled);
+    emit controlValuesChanged();
+}
+
+QString CanvasScene::controlCaption(const QString &id) const
+{
+    const auto it = m_controlCaptions.constFind(id);
+    if (it != m_controlCaptions.constEnd() && !it->isEmpty())
+    {
+        return *it;
+    }
+    const SceneControl *control = controlWithId(id);
+    return control && !control->caption.isEmpty() ? control->caption : id;
+}
+
+void CanvasScene::setControlCaption(const QString &id, const QString &caption)
+{
+    if (!controlWithId(id) || controlCaption(id) == caption)
+    {
+        return;
+    }
+    m_controlCaptions.insert(id, caption);
+    // A value change, not a different set of controls: rebuilding the widgets
+    // here deleted the button that was still held down, so its release never
+    // arrived and its value stayed true -- leaving every other press a no-op.
+    emit controlValuesChanged();
+}
+
+void CanvasScene::resetControls()
+{
+    m_controlEvents.clear();
+    m_controlCaptions.clear();
+    for (const SceneControl &control : std::as_const(m_controls))
+    {
+        m_controlValues.insert(control.id, control.startingValue());
+        m_controlEnabled.insert(control.id, true);
+    }
+    emit controlValuesChanged();
+}
+
+QVector<CanvasScene::ControlEvent> CanvasScene::takeControlEvents()
+{
+    QVector<ControlEvent> taken;
+    taken.swap(m_controlEvents);
+    return taken;
+}
+
+void CanvasScene::setCaption(const QString &text, bool shown)
+{
+    if (m_caption == text && m_captionShown == shown)
+    {
+        return;
+    }
+    m_caption = text;
+    m_captionShown = shown;
+    emit captionChanged();
 }
 
 bool CanvasScene::editSelectionRotating() const
@@ -3584,6 +3991,24 @@ void CanvasScene::switchActiveToRotating()
 
 void CanvasScene::deleteActiveItem()
 {
+    // A ray and a blast are selected on their own, not as the active shape,
+    // so Delete reached the guard below and did nothing at all. They are what
+    // is picked, so they are what goes.
+    if (RayItem *ray = m_selectedRay)
+    {
+        const QString name = ray->name();
+        removeRay(ray);
+        notifyEdit(tr("Delete %1").arg(name));
+        return;
+    }
+    if (ExplosionItem *explosion = m_selectedExplosion)
+    {
+        const QString name = explosion->name();
+        removeExplosion(explosion);
+        notifyEdit(tr("Delete %1").arg(name));
+        return;
+    }
+
     if (!m_active)
     {
         return;
@@ -3623,7 +4048,7 @@ void CanvasScene::deleteActiveItem()
 
     emit activeItemChanged(nullptr);
     emit editSelectionChanged();
-    emit shapesChanged();
+    announceChange(Change::Shapes);
     if (wasPicked)
     {
         emit physicsSelectionChanged();
@@ -3663,7 +4088,7 @@ void CanvasScene::finishPolygonDrawing(bool closed)
             item->setPos(itemPos);
         addItem(item);
         item->setName(uniqueName(item->name(), item));
-        emit shapesChanged();
+        announceChange(Change::Shapes);
         notifyEdit(tr("Add %1").arg(item->name()));
     }
 
@@ -4306,8 +4731,30 @@ void CanvasScene::drawShot(QPainter *painter) const
     painter->restore();
 }
 
+void CanvasScene::keyReleaseEvent(QKeyEvent *event)
+{
+    if (m_simulationRunning && !event->isAutoRepeat())
+    {
+        emit keyReleasedDuringRun(event->key(), event->modifiers());
+    }
+    QGraphicsScene::keyReleaseEvent(event);
+}
+
 void CanvasScene::keyPressEvent(QKeyEvent *event)
 {
+    // While a run is going the keyboard belongs to the rules. Taken here and
+    // not passed on, or the arrow keys would nudge whatever was selected at
+    // the same time as driving whatever the rules drive.
+    if (m_simulationRunning)
+    {
+        if (!event->isAutoRepeat())
+        {
+            emit keyPressedDuringRun(event->key(), event->modifiers());
+        }
+        event->accept();
+        return;
+    }
+
     if (isAimingShot() && event->key() == Qt::Key_Escape)
     {
         cancelShot();
@@ -4886,10 +5333,13 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
                    && m_active->handleAt(local) != HandleId::None;
         };
 
-        // Shift adds a shape to the selection instead of replacing it. Node
-        // editing spends Shift on picking vertices, so it is left alone there.
-        if (event->modifiers().testFlag(Qt::ShiftModifier) && m_active->mode() != ShapeMode::Editing
-            && !pressedOnAHandle())
+        // Shift adds a shape to the selection instead of replacing it -- but
+        // only while shapes are what is being picked. Node editing spends
+        // Shift on picking vertices, and turning spends it on slowing the turn
+        // down, so neither of those is touched here.
+        if (event->modifiers().testFlag(Qt::ShiftModifier)
+            && m_active->mode() != ShapeMode::Editing
+            && m_active->mode() != ShapeMode::Rotating && !pressedOnAHandle())
         {
             ShapeItem *picked = nullptr;
             for (QGraphicsItem *candidate : items(scenePos))
@@ -4906,11 +5356,14 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
                 event->accept();
                 return;
             }
-            m_dragMode = DragMode::RubberBand;
-            m_bandStart = scenePos;
-            m_bandRect = QRectF(scenePos, scenePos);
-            event->accept();
-            return;
+            if (!picked)
+            {
+                m_dragMode = DragMode::RubberBand;
+                m_bandStart = scenePos;
+                m_bandRect = QRectF(scenePos, scenePos);
+                event->accept();
+                return;
+            }
         }
 
         // The group's own handles sit on top of the shapes, so they are tested
@@ -4972,6 +5425,8 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
                 m_dragOriginScene = m_editSelection.isEmpty() ? m_active->mapToScene(m_active->origin())
                                                               : m_groupOrigin;
                 m_rotateStartAngle = angleAt(m_dragOriginScene, scenePos);
+                m_rotateLastAngle = m_rotateStartAngle;
+                m_rotateTurned = 0.0;
                 m_itemStartRotation = m_active->rotation();
                 beginGroupDrag();
                 return;
@@ -5064,6 +5519,10 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
     m_bandStart = scenePos;
     m_bandRect = QRectF(scenePos, scenePos);
 }
+
+// How much of the mouse's turn the shape takes while Shift is held. A fifth is
+// slow enough to place a degree by hand and fast enough not to feel stuck.
+static constexpr qreal kFineTurn = 0.2;
 
 void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
@@ -5216,7 +5675,19 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
     case DragMode::Rotate:
     {
         const qreal angle = angleAt(m_dragOriginScene, scenePos);
-        const qreal turned = angle - m_rotateStartAngle;
+
+        // Accumulated rather than measured from where the drag began, so that
+        // holding Shift can slow the turn down without the shape jumping the
+        // moment the key goes down or comes up: each scrap of mouse movement
+        // is weighed as it arrives and added to what has been turned so far.
+        qreal step = angle - m_rotateLastAngle;
+        while (step > 180.0)
+            step -= 360.0;
+        while (step < -180.0)
+            step += 360.0;
+        m_rotateLastAngle = angle;
+        m_rotateTurned += step * (m_snapSuspended ? kFineTurn : 1.0);
+        const qreal turned = m_rotateTurned;
 
         if (m_editSelection.isEmpty())
         {
@@ -5387,7 +5858,7 @@ void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             m_bodyDragStartPositions.clear();
             if (moved)
             {
-                emit bodiesChanged();
+                announceChange(Change::Bodies);
                 notifyEdit(tr("Move %1").arg(m_bodyDragLabel));
             }
             update();
@@ -5432,6 +5903,13 @@ void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                 }
                 break;
             case DragMode::Rotate:
+                // Left as it came out of the drag, a shape taken round twice
+                // carries 720 degrees for ever after.
+                m_active->setRotation(normalisedDegrees(m_active->rotation()));
+                for (ShapeItem *shape : std::as_const(m_editSelection))
+                {
+                    shape->setRotation(normalisedDegrees(shape->rotation()));
+                }
                 notifyEdit(m_editSelection.isEmpty()
                                    ? tr("Rotate %1").arg(m_active->name())
                                    : tr("Rotate %n shapes", nullptr, int(m_editSelection.size()) + 1));

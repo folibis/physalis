@@ -53,6 +53,7 @@
         <file alias="distribute_down.svg">icons/distribute_down.svg</file>
         <file alias="mirror_across.svg">icons/mirror_across.svg</file>
         <file alias="mirror_down.svg">icons/mirror_down.svg</file>
+        <file alias="keyboard.svg">icons/keyboard.svg</file>
         <file alias="tools.svg">icons/tools.svg</file>
         <file alias="clone.svg">icons/clone.svg</file>
         <file alias="align_ring_out.svg">icons/align_ring_out.svg</file>

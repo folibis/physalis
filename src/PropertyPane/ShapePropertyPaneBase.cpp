@@ -1,3 +1,4 @@
+#include "CanvasScene.h"
 #include "ShapePropertyPaneBase.h"
 
 #include "../ShapeStyle.h"
@@ -63,6 +64,12 @@ std::vector<PropertyRow> ShapePropertyPaneBase::rows(EditorMode mode) const
     return result;
 }
 
+// How thin a shape may be made. Box2D works to about half a scene unit at the
+// usual scale, so a side below one is not something a solver can keep apart
+// from its neighbours; above that it is the editor's business, not ours. It
+// used to be ten, which made an ordinary thin plate impossible to draw.
+static constexpr qreal kSmallestSide = 1.0;
+
 std::vector<PropertyRow> ShapePropertyPaneBase::sizeRows(ShapeItem *item,
                                                         const QString &section) const
 {
@@ -72,20 +79,20 @@ std::vector<PropertyRow> ShapePropertyPaneBase::sizeRows(ShapeItem *item,
         [item] { return item->rect().width(); },
         [item](const QVariant &v) {
             QRectF r = item->rect();
-            r.setWidth(qMax(10.0, v.toDouble()));
+            r.setWidth(qMax(kSmallestSide, v.toDouble()));
             item->setRect(r);
         },
-        10.0, 100000.0, {}, -1, 0.0, section});
+        kSmallestSide, 100000.0, {}, -1, 0.0, section});
     result.back().tooltip = QObject::tr("How wide the shape is drawn, before any rotation.");
 
     result.push_back({QObject::tr("Height"), PropertyFieldType::Numeric,
         [item] { return item->rect().height(); },
         [item](const QVariant &v) {
             QRectF r = item->rect();
-            r.setHeight(qMax(10.0, v.toDouble()));
+            r.setHeight(qMax(kSmallestSide, v.toDouble()));
             item->setRect(r);
         },
-        10.0, 100000.0, {}, -1, 0.0, section});
+        kSmallestSide, 100000.0, {}, -1, 0.0, section});
     result.back().tooltip = QObject::tr("How tall the shape is drawn, before any rotation.");
 
     return result;
@@ -152,10 +159,24 @@ std::vector<PropertyRow> ShapePropertyPaneBase::geometryRows(ShapeItem *item) co
     }
 
     result.push_back({QObject::tr("Rotation"), PropertyFieldType::Numeric,
-        [item] { return item->rotation(); },
-        [item](const QVariant &v) { item->setRotation(v.toDouble()); },
-        -3600.0, 3600.0, {}, -1, 0.0, geometry});
-    result.back().tooltip = QObject::tr("Degrees clockwise about the origin above.");
+        [item] { return CanvasScene::normalisedDegrees(item->rotation()); },
+        [item](const QVariant &v) {
+            // The selection turns as one piece -- every shape gains the angle
+            // and orbits the group's pivot -- which is what dragging it round
+            // does. Setting each shape's own rotation instead spun them where
+            // they stood and tore the arrangement apart.
+            if (auto *canvas = qobject_cast<CanvasScene *>(item->scene())) {
+                if (canvas->activeItem() == item) {
+                    canvas->turnSelectionTo(v.toDouble());
+                    return;
+                }
+            }
+            item->setRotation(v.toDouble());
+        },
+        -360.0, 360.0, {}, -1, 0.0, geometry});
+    result.back().tooltip =
+        QObject::tr("Degrees clockwise about the origin above, from 0 to 360. With several"
+                    " shapes picked it turns the whole selection as one piece.");
 
     for (PropertyRow &row : extraRows(item))
         result.push_back(std::move(row));

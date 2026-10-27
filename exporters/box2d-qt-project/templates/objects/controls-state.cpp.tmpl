@@ -1,0 +1,28 @@
+//! The scene's own controls: a box to tick, a button to press, a slider to
+//! pull. An id a rule addresses one by, a caption that is only what it says,
+//! and what it is set to, which is the run's and goes back when the run does.
+struct Control {
+    bool on = false;
+    double at = 0.0;
+    bool enabled = true;
+    QString caption;
+};
+
+QHash<QString, Control> controls;
+QHash<QString, Control> controlStart;
+
+//! A press, a release and a change are each true for the one step they
+//! happened on, which is what a rule watching the event asks about.
+QSet<QString> controlPressedNow;
+QSet<QString> controlReleasedNow;
+QSet<QString> controlChangedNow;
+
+//! What the widgets say; filled in once they exist.
+std::function<void()> showControls = [] {};
+
+void declareControls()
+{
+    controls.clear();
+    {{ROWS}}
+    controlStart = controls;
+}

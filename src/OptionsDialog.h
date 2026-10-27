@@ -96,6 +96,7 @@ public:
         bool runShowJoints = true;
         bool runShowBodyAxes = true;
         bool runShowRays = true;
+        bool runShowSensors = true;
         bool runShowExplosions = true;
         bool showBodyAxes = true;
         qreal bodyAxisLength = 40.0;

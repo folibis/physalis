@@ -1,0 +1,6 @@
+{{VAR}}->setText(controls[{{ID}}].caption);
+{{VAR}}->setEnabled(controls[{{ID}}].enabled);
+{
+    const QSignalBlocker quiet({{VAR}});
+    {{VAR}}->setChecked(controls[{{ID}}].on);
+}

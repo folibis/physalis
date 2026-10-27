@@ -11,6 +11,7 @@
 #include "PolygonItem.h"
 #include "EngineRegistry.h"
 #include "Rule.h"
+#include "SceneControl.h"
 #include "SceneVariable.h"
 #include "ShapeStyle.h"
 
@@ -228,6 +229,58 @@ void applyShapeProperties(const QJsonObject &o, ShapeItem *shape)
 
 namespace SceneSerializer {
 
+QJsonObject rayToJson(const RayItem *ray)
+{
+    return QJsonObject {
+        {"name", ray->name()},
+        {"x", ray->pos().x()},
+        {"y", ray->pos().y()},
+        {"angle", ray->angleDegrees()},
+        {"length", ray->length()},
+        {"maskBits", QString::number(ray->maskBits(), 16)},
+    };
+}
+
+RayItem *rayFromJson(CanvasScene *scene, const QJsonObject &o)
+{
+    if (!scene)
+        return nullptr;
+    RayItem *ray = scene->addRay(QPointF(o.value("x").toDouble(), o.value("y").toDouble()));
+    if (!ray)
+        return nullptr;
+    ray->setName(o.value("name").toString(ray->name()));
+    ray->setAngleDegrees(o.value("angle").toDouble());
+    ray->setLength(o.value("length").toDouble(300.0));
+    bool ok = false;
+    const quint64 bits = o.value("maskBits").toString().toULongLong(&ok, 16);
+    if (ok)
+        ray->setMaskBits(bits);
+    return ray;
+}
+
+QJsonObject explosionToJson(const ExplosionItem *explosion)
+{
+    return QJsonObject {
+        {"name", explosion->name()},
+        {"x", explosion->pos().x()},
+        {"y", explosion->pos().y()},
+        {"params", QJsonObject::fromVariantMap(explosion->params())},
+    };
+}
+
+ExplosionItem *explosionFromJson(CanvasScene *scene, const QJsonObject &o)
+{
+    if (!scene)
+        return nullptr;
+    ExplosionItem *explosion =
+        scene->addExplosion(QPointF(o.value("x").toDouble(), o.value("y").toDouble()));
+    if (!explosion)
+        return nullptr;
+    explosion->setName(o.value("name").toString(explosion->name()));
+    explosion->params() = o.value("params").toObject().toVariantMap();
+    return explosion;
+}
+
 QJsonObject shapeToJson(const ShapeItem *shape)
 {
     return shapeGeometryToJson(shape);
@@ -315,6 +368,9 @@ QJsonObject save(const CanvasScene *scene)
                 {"maxPull", shot.maxPull},
             });
         }
+        // Only the one body that has it, so a scene with none says nothing.
+        if (body->isFocused())
+            entry.insert("focus", true);
         bodies.append(entry);
     }
     document.insert("bodies", bodies);
@@ -348,28 +404,14 @@ QJsonObject save(const CanvasScene *scene)
     document.insert("joints", joints);
 
     QJsonArray explosions;
-    for (ExplosionItem *explosion : scene->explosions()) {
-        explosions.append(QJsonObject {
-            {"name", explosion->name()},
-            {"x", explosion->pos().x()},
-            {"y", explosion->pos().y()},
-            {"params", QJsonObject::fromVariantMap(explosion->params())},
-        });
-    }
+    for (ExplosionItem *explosion : scene->explosions())
+        explosions.append(explosionToJson(explosion));
     if (!explosions.isEmpty())
         document.insert("explosions", explosions);
 
     QJsonArray rays;
-    for (RayItem *ray : scene->rays()) {
-        rays.append(QJsonObject {
-            {"name", ray->name()},
-            {"x", ray->pos().x()},
-            {"y", ray->pos().y()},
-            {"angle", ray->angleDegrees()},
-            {"length", ray->length()},
-            {"maskBits", QString::number(ray->maskBits(), 16)},
-        });
-    }
+    for (RayItem *ray : scene->rays())
+        rays.append(rayToJson(ray));
     if (!rays.isEmpty())
         document.insert("rays", rays);
 
@@ -384,25 +426,75 @@ QJsonObject save(const CanvasScene *scene)
     if (!variables.isEmpty())
         document.insert("variables", variables);
 
+    // How a control is declared, not what it is set to: its value is run state
+    // and goes when the run does, the same bargain a variable makes.
+    QJsonArray controls;
+    for (const SceneControl &control : scene->controls()) {
+        QJsonObject o;
+        o.insert("id", control.id);
+        if (!control.caption.isEmpty())
+            o.insert("caption", control.caption);
+        o.insert("kind", SceneControl::kindName(control.kind));
+        o.insert("value", QJsonValue::fromVariant(control.initial));
+        if (control.kind == SceneControl::Kind::Slider) {
+            o.insert("min", control.minimum);
+            o.insert("max", control.maximum);
+            o.insert("step", control.step);
+            o.insert("decimals", control.decimals);
+        }
+        controls.append(o);
+    }
+    if (!controls.isEmpty())
+        document.insert("controls", controls);
+
     // One condition and one action are written straight onto the rule, the way
     // they always were, so a plain rule makes the same file it used to and an
     // older reader still understands it. Anything more goes into the two arrays
     // beside them, which a reader that knows about them prefers.
-    const auto writeCondition = [](const RuleCondition &condition) {
+    // What a rule names. Usually a property of the object named beside it, and
+    // then its own name is all there is to write.
+    //
+    // A control's property is two things, though -- which control, and which of
+    // its properties -- so it is written as the two of them:
+    //
+    //     "watch": { "control": "speed", "property": "value" }
+    //
+    // The cards show that address as one string with punctuation in it, and
+    // that punctuation is theirs: a file carrying it would turn a change of
+    // spelling into a scene that reads back naming nothing. The field is the
+    // same field either way, because a rule object carries a condition's
+    // "watch" and an action's "property" side by side and neither may tread on
+    // the other.
+    const auto writeAddress = [](QJsonObject &o, const QString &object, const QString &key,
+                                 const char *field) {
+        const SceneControl::Address address = object == Rule::controls()
+                                                  ? SceneControl::parse(key)
+                                                  : SceneControl::Address();
+        if (!address.isValid()) {
+            o.insert(field, key);
+            return;
+        }
+        QJsonObject spelt;
+        spelt.insert("control", address.control);
+        spelt.insert("property", address.property);
+        o.insert(field, spelt);
+    };
+
+    const auto writeCondition = [&writeAddress](const RuleCondition &condition) {
         QJsonObject o;
         o.insert("subject", condition.subjectName);
         if (condition.isEvent()) {
             o.insert("event", condition.eventId);
         } else {
             o.insert("compare", Rule::compareName(condition.compare));
-            o.insert("watch", condition.conditionKey);
+            writeAddress(o, condition.subjectName, condition.conditionKey, "watch");
         }
         if (condition.conditionValue.isValid())
             o.insert("when", QJsonValue::fromVariant(condition.conditionValue));
         return o;
     };
 
-    const auto writeAction = [](const RuleAction &action) {
+    const auto writeAction = [&writeAddress](const RuleAction &action) {
         QJsonObject o;
         o.insert("target", action.targetName);
         if (action.isAction()) {
@@ -411,10 +503,10 @@ QJsonObject save(const CanvasScene *scene)
         }
         if (action.usesSource()) {
             o.insert("sourceObject", action.sourceObject);
-            o.insert("sourceProperty", action.sourceProperty);
+            writeAddress(o, action.sourceObject, action.sourceProperty, "sourceProperty");
             o.insert("sourceOffset", action.sourceOffset);
         }
-        o.insert("property", action.propertyKey);
+        writeAddress(o, action.targetName, action.propertyKey, "property");
         o.insert("op", Rule::opName(action.op));
         if (Rule::usesValue(action.op))
             o.insert("value", QJsonValue::fromVariant(action.value));
@@ -512,6 +604,12 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
                                 " application.").arg(engineName));
     }
 
+    // One file is one change to the scene: without this every shape and every
+    // body announces itself as it arrives and each panel rebuilds from
+    // scratch per object -- 22 rebuilds of the rules panel for a scene this
+    // size, which is four seconds of a four-and-a-half second open.
+    const CanvasScene::BulkChange bulk(scene);
+
     scene->clearContents();
     // Before the joints: how many anchors a joint has is its engine's answer.
     if (!engineName.isEmpty())
@@ -593,6 +691,10 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
         body->shot().enabled = shot.value("enabled").toBool(untouched.enabled);
         body->shot().fullImpulse = shot.value("fullImpulse").toDouble(untouched.fullImpulse);
         body->shot().maxPull = shot.value("maxPull").toDouble(untouched.maxPull);
+        // Through the scene, which is what keeps it to one body -- a file with
+        // two of them marked leaves the last one followed rather than both.
+        if (o.value("focus").toBool())
+            scene->setFocusedBody(body);
 
         // Older scenes kept the engine's settings loose in the body object,
         // under Box2D's names -- which are the names its catalogue publishes.
@@ -621,26 +723,11 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
     for (PhysicsBody *body : scene->bodies())
         bodiesByName.insert(body->name(), body);
 
-    for (const QJsonValue &v : document.value("explosions").toArray()) {
-        const QJsonObject o = v.toObject();
-        ExplosionItem *explosion = scene->addExplosion(QPointF(o.value("x").toDouble(),
-                                                      o.value("y").toDouble()));
-        explosion->setName(o.value("name").toString(explosion->name()));
-        explosion->params() = o.value("params").toObject().toVariantMap();
-    }
+    for (const QJsonValue &v : document.value("explosions").toArray())
+        explosionFromJson(scene, v.toObject());
 
-    for (const QJsonValue &v : document.value("rays").toArray()) {
-        const QJsonObject o = v.toObject();
-        RayItem *ray = scene->addRay(QPointF(o.value("x").toDouble(),
-                                             o.value("y").toDouble()));
-        ray->setName(o.value("name").toString(ray->name()));
-        ray->setAngleDegrees(o.value("angle").toDouble());
-        ray->setLength(o.value("length").toDouble(300.0));
-        bool ok = false;
-        const quint64 bits = o.value("maskBits").toString().toULongLong(&ok, 16);
-        if (ok)
-            ray->setMaskBits(bits);
-    }
+    for (const QJsonValue &v : document.value("rays").toArray())
+        rayFromJson(scene, v.toObject());
 
     for (const QJsonValue &v : document.value("joints").toArray()) {
         const QJsonObject o = v.toObject();
@@ -676,6 +763,30 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
     }
 
     QVector<SceneVariable> variables;
+    {
+        QVector<SceneControl> controls;
+        for (const QJsonValue &v : document.value("controls").toArray()) {
+            const QJsonObject o = v.toObject();
+            SceneControl control;
+            // "name" is what the id was called when a control had only one of
+            // them.
+            control.id = o.value("id").toString();
+            if (control.id.isEmpty())
+                control.id = o.value("name").toString();
+            if (control.id.isEmpty())
+                continue;
+            control.caption = o.value("caption").toString();
+            control.kind = SceneControl::kindFromName(o.value("kind").toString());
+            control.initial = o.value("value").toVariant();
+            control.minimum = o.value("min").toDouble(0.0);
+            control.maximum = o.value("max").toDouble(100.0);
+            control.step = o.value("step").toDouble(1.0);
+            control.decimals = o.value("decimals").toInt(1);
+            controls.append(control);
+        }
+        scene->setControls(controls);
+    }
+
     for (const QJsonValue &v : document.value("variables").toArray()) {
         const QJsonObject o = v.toObject();
         SceneVariable variable;
@@ -690,25 +801,38 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
     // A condition and an action read the same whether they came off the rule
     // itself or out of one of the arrays, which is what lets a file written
     // before either array existed load without a second path through here.
-    const auto readCondition = [](const QJsonObject &o) {
+    // The other side of writeAddress, and the key the rest of the program
+    // works in. A file from before the two fields spells a control's address
+    // flat in the same place, with whatever separator the program used then --
+    // and SceneControl is the only thing that knows how to read one of those.
+    const auto readAddress = [](const QJsonObject &o, const QString &field) {
+        const QJsonValue value = o.value(field);
+        if (!value.isObject())
+            return SceneControl::canonical(value.toString());
+        const QJsonObject spelt = value.toObject();
+        return SceneControl::key(spelt.value("control").toString(),
+                                 spelt.value("property").toString());
+    };
+
+    const auto readCondition = [&readAddress](const QJsonObject &o) {
         RuleCondition condition;
         condition.subjectName = o.value("subject").toString();
         condition.eventId = o.value("event").toString();
         condition.compare = Rule::compareFromName(o.value("compare").toString());
-        condition.conditionKey = o.value("watch").toString();
+        condition.conditionKey = readAddress(o, "watch");
         condition.conditionValue = o.value("when").toVariant();
         return condition;
     };
 
-    const auto readAction = [](const QJsonObject &o) {
+    const auto readAction = [&readAddress](const QJsonObject &o) {
         RuleAction action;
         action.targetName = o.value("target").toString();
         action.actionId = o.value("action").toString();
         action.actionParams = o.value("actionParams").toObject().toVariantMap();
         action.sourceObject = o.value("sourceObject").toString();
-        action.sourceProperty = o.value("sourceProperty").toString();
+        action.sourceProperty = readAddress(o, "sourceProperty");
         action.sourceOffset = o.value("sourceOffset").toDouble();
-        action.propertyKey = o.value("property").toString();
+        action.propertyKey = readAddress(o, "property");
         action.op = Rule::opFromName(o.value("op").toString());
         action.value = o.value("value").toVariant();
 

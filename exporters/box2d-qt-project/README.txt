@@ -30,8 +30,21 @@ main.cpp reads like the Box2D manual:
 
                     A rule on an event -- two shapes starting to touch, a
                     sensor being entered -- is a loop over Box2D's own event
-                    arrays. A rule on a value acts on the step the value first
-                    crosses, which is what the bool beside it remembers.
+                    arrays, and is carried out on every step the event is
+                    raised, as it is in the editor. A rule on a value acts on
+                    the step the value first crosses, which is what the bool
+                    beside it remembers.
+
+    the window      what the scene carries that Box2D knows nothing about: the
+                    body the scene keeps in view, which the view follows; the
+                    log of watched values, painted in a corner of the view; the
+                    caption a rule puts up; the scene's own controls, as a
+                    QCheckBox, QPushButton or QSlider over the canvas, which
+                    the rules read and write through a `controls` map; and the
+                    keys a rule watches, named as the editor names them
+                    ("Enter", "Up", "Ctrl+A") by chordOf(). A key the scene
+                    uses is left to the scene -- the window's own Space, R and
+                    D stand aside for it.
 
     drawing         b2World_Draw with a b2DebugDraw whose callbacks paint with
                     QPainter. Each shape carries its colour in
@@ -52,8 +65,10 @@ Units
 
 Box2D works in metres. Lengths are written m(...) in the units the scene was
 drawn in, angles rad(...) in degrees; m() and rad() are two lines at the top of
-the file. World speeds -- gravity, thresholds -- are quoted in the editor at a
-reference of 50 px/m and come out already converted.
+the file. World speeds -- gravity, thresholds -- are metres a second in the
+editor too and are written as they stand: 9.81 is 9.81. The program calls
+b2SetLengthUnitsPerMeter with the same tolerance the editor uses, so it works
+in the editor's own metre throughout.
 
 Settings
 --------
@@ -68,7 +83,10 @@ Options -> Export -> box2d/Qt:
                           toolbar switch for them
     C++ standard          17, 20 or 23
     Box2D repository       where FetchContent pulls Box2D from
-    Box2D tag or branch   which commit of it to build (v3 API)
+    Box2D tag or branch   which commit of it to build (v3 API). The default is
+                          the commit the application's own Box2D engine is
+                          built against, which is the API this code is written
+                          to
 
 Building it
 -----------
@@ -77,7 +95,8 @@ Building it
     cmake --build build
 
 Space runs and pauses, R goes back to the beginning, D shows joints and centres
-of mass.
+of mass -- unless the scene's own rules watch that key, in which case it is the
+scene's.
 
 What is not carried
 -------------------

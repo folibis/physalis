@@ -1,0 +1,9 @@
+//! What each control is set to, and whether it can be worked at all. The
+//! values are the run's, so reset() puts them back where the scene declares.
+var controls = {
+{{ROWS}}
+};
+var controlStart = JSON.parse(JSON.stringify(controls));
+//! A press, a release and a change are each true for the one step they
+//! happened on, which is what a rule watching the event asks about.
+var controlFired = { pressed: {}, released: {}, changed: {} };

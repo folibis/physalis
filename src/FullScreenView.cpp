@@ -1,7 +1,9 @@
 #include "FullScreenView.h"
 
 #include "CanvasScene.h"
+#include "PhysicsBody.h"
 
+#include <QCoreApplication>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -158,6 +160,10 @@ void FullScreenView::mouseReleaseEvent(QMouseEvent *event)
 
 void FullScreenView::keyPressEvent(QKeyEvent *event)
 {
+    // Escape is the way out and stays the way out: without it a full-screen
+    // run cannot be left from the keyboard at all. Everything else the view
+    // used to keep -- Space to hold, Right to step, 0 to fit the field -- is
+    // gone, so a scene is free to put a rule on any of them.
     switch (event->key()) {
     case Qt::Key_Escape:
         // Mid-aim, escape calls the shot off rather than ending the run.
@@ -167,18 +173,40 @@ void FullScreenView::keyPressEvent(QKeyEvent *event)
         }
         emit closeRequested();
         return;
-    case Qt::Key_Space:
-        emit holdRequested();
-        return;
-    case Qt::Key_Right:
-        emit stepRequested();
-        return;
-    case Qt::Key_0:
-        // Back to the whole field, for a viewer who has zoomed into a corner.
-        fitField();
-        return;
     default:
         break;
     }
-    QGraphicsView::keyPressEvent(event);
+
+    // Handed to the scene rather than left to the base class. This view is not
+    // interactive -- it must never let a stray click drag a body around -- and
+    // a QGraphicsView that is not interactive forwards nothing to its scene at
+    // all. Keys are not clicks: a rule watching the keyboard has to hear them
+    // here as much as in the editor, and heard nothing until this.
+    if (scene())
+        QCoreApplication::sendEvent(scene(), event);
+}
+
+// The scene moves around the body rather than the body across the screen.
+void FullScreenView::followFocusedBody()
+{
+    auto *canvas = qobject_cast<CanvasScene *>(scene());
+    if (!canvas)
+        return;
+    PhysicsBody *body = canvas->focusedBody();
+    if (!body)
+        return;
+    // centerOn stops at the scene's rectangle, so a body that has left the
+    // field would slide away with nothing following it; this view is given a
+    // rectangle of its own that holds both.
+    const QPointF at = body->originScenePos();
+    const QRectF seen = mapToScene(viewport()->rect()).boundingRect();
+    setSceneRect(canvas->sceneRect().united(
+        QRectF(at, at).adjusted(-seen.width(), -seen.height(), seen.width(), seen.height())));
+    centerOn(at);
+}
+
+void FullScreenView::keyReleaseEvent(QKeyEvent *event)
+{
+    if (scene())
+        QCoreApplication::sendEvent(scene(), event);
 }

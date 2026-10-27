@@ -1,0 +1,14 @@
+//! The body the view keeps in the middle. The scene names one to begin with
+//! and a rule may hand the view to another, so it is a variable rather than a
+//! fixed handle; null follows nothing and leaves the view where it is.
+function followFocused() {
+    //! Not when the page loads: the bodies do not exist until createWorld has
+    //! run, and a reset makes new ones.
+    if (followed === undefined)
+        followed = {{START}};
+    if (!followed)
+        return;
+    var at = b2.b2Body_GetPosition(followed);
+    camera.x = -at.x * PIXELS_PER_METER;
+    camera.y = -at.y * PIXELS_PER_METER;
+}

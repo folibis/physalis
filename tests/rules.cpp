@@ -9,6 +9,7 @@
 #include "ExplosionItem.h"
 #include "RayItem.h"
 #include "Rule.h"
+#include "SceneControl.h"
 #include "SceneVariable.h"
 #include "SceneSerializer.h"
 #include "ShapeItem.h"
@@ -23,6 +24,10 @@
 #include <QTabWidget>
 #include "PropertyPane/ExplosionPropertyPane.h"
 #include "Joint.h"
+#include <QKeyEvent>
+#include <QCoreApplication>
+#include "FullScreenView.h"
+#include <QSignalSpy>
 #include <gtest/gtest.h>
 #include "EditorMode.h"
 
@@ -1385,4 +1390,651 @@ TEST(Rules, TheLogForgetsWhatIsNoLongerThere)
     EXPECT_FALSE(scene.isWatched(QStringLiteral("explosion_1"), QStringLiteral("radius")))
         << "the explosion was deleted and its log row stayed";
     EXPECT_TRUE(scene.isWatched(Rule::world(), QStringLiteral("time")));
+}
+
+// A key is the application's own event: no engine knows a keyboard exists. It
+// goes through the scene, which has the focus while a run is going, and the
+// rule names which key the way a contact rule names the other shape.
+TEST(RuleSource, AKeyPressFiresARule)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setPixelsPerMeter(physics::kReferencePixelsPerMeter);
+    scene.setEditorMode(EditorMode::Physics);
+
+    auto *box = new RectangleItem;
+    box->setRect(QRectF(0, 0, 40, 40));
+    box->setPos(0, 0);
+    box->setName(QStringLiteral("box"));
+    scene.addItem(box);
+    scene.notifyShapesChanged();
+    scene.selectForPhysics(box, true);
+    PhysicsBody *body = scene.createBodyFromSelection();
+    ASSERT_TRUE(body);
+
+    scene.setVariables({ SceneVariable { QStringLiteral("hits"), SceneVariable::Type::Integer, 0 },
+                         SceneVariable { QStringLiteral("lets"), SceneVariable::Type::Integer, 0 },
+                         SceneVariable { QStringLiteral("while"), SceneVariable::Type::Integer, 0 } });
+
+    const auto counting = [](const QString &event, const QString &key, const QString &variable) {
+        Rule rule;
+        rule.conditions[0].subjectName = Rule::keyboard();
+        rule.conditions[0].eventId = event;
+        rule.conditions[0].conditionValue = key;
+        rule.actions[0].targetName = Rule::variables();
+        rule.actions[0].propertyKey = variable;
+        rule.actions[0].op = Rule::Op::Add;
+        rule.actions[0].value = 1;
+        return rule;
+    };
+    scene.setRules({ counting(Rule::keyPressedEvent(), QStringLiteral("A"),
+                              QStringLiteral("hits")),
+                     counting(Rule::keyReleasedEvent(), QStringLiteral("A"),
+                              QStringLiteral("lets")),
+                     counting(Rule::keyHeldEvent(), QStringLiteral("A"),
+                              QStringLiteral("while")) });
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+
+    const auto step = [&] { sim.advance(1.0 / 60.0); };
+    const auto count = [&](const char *name) {
+        return sim.readValue(Rule::variables(), QString::fromLatin1(name)).toInt();
+    };
+    step();
+    EXPECT_EQ(count("hits"), 0) << "a rule fired before any key was touched";
+
+    // Through the scene, which is where a key arrives while a run is going.
+    QKeyEvent down(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier);
+    QCoreApplication::sendEvent(&scene, &down);
+    step();
+    EXPECT_EQ(count("hits"), 1) << "the key press raised nothing";
+    EXPECT_EQ(count("lets"), 0) << "a press counted as a release";
+
+    // Held down: the keyboard repeats, the press does not.
+    QCoreApplication::sendEvent(&scene, &down);
+    step();
+    EXPECT_EQ(count("hits"), 1) << "holding the key fired the press again";
+
+    // "Key held" is the other way round: it happens on every step the key is
+    // down, which is what a thruster is -- press and there is a force, let go
+    // and there is none.
+    const int whileHeld = count("while");
+    EXPECT_GT(whileHeld, 0) << "a rule watching the held key never fired";
+    step();
+    step();
+    EXPECT_EQ(count("while"), whileHeld + 2) << "holding it did not fire on every step";
+
+    QKeyEvent up(QEvent::KeyRelease, Qt::Key_A, Qt::NoModifier);
+    QCoreApplication::sendEvent(&scene, &up);
+    step();
+    EXPECT_EQ(count("lets"), 1) << "the key release raised nothing";
+    const int afterLettingGo = count("while");
+    step();
+    step();
+    EXPECT_EQ(count("while"), afterLettingGo) << "it went on firing after the key came up";
+
+    // A different key is a different event.
+    QKeyEvent other(QEvent::KeyPress, Qt::Key_B, Qt::NoModifier);
+    QCoreApplication::sendEvent(&scene, &other);
+    step();
+    EXPECT_EQ(count("hits"), 1) << "a rule watching A fired on B";
+
+    // And so is the same key held with a modifier: a rule asking for A is not
+    // what Ctrl+A means.
+    QKeyEvent withCtrl(QEvent::KeyPress, Qt::Key_A, Qt::ControlModifier);
+    QCoreApplication::sendEvent(&scene, &withCtrl);
+    step();
+    EXPECT_EQ(count("hits"), 1) << "a rule watching A fired on Ctrl+A";
+
+    sim.stop();
+}
+
+// Every key is the scene's. The run used to keep Space for holding itself and
+// Right for stepping, which took them from every scene that wanted them -- and
+// a scene that does want them can say so, because holding and ending a run are
+// rule actions like any other. Escape is the one exception: without it a
+// full-screen run cannot be left from the keyboard at all.
+TEST(RuleSource, EveryKeyIsOfferedToARule)
+{
+    QSet<int> offered;
+    for (const auto &key : Rule::offerableKeys())
+        offered.insert(key.second);
+
+    for (const int key : { int(Qt::Key_Space), int(Qt::Key_Right), int(Qt::Key_0),
+                           int(Qt::Key_Delete), int(Qt::Key_A), int(Qt::Key_Left) }) {
+        EXPECT_TRUE(offered.contains(key))
+            << "key " << key << " is not offered, and nothing reserves it any more";
+    }
+
+    // Names survive the file, so a scene written today reads in a build with a
+    // different Qt.
+    EXPECT_EQ(Rule::keyFromName(QStringLiteral("A")), int(Qt::Key_A));
+    EXPECT_EQ(Rule::nameOfKey(Qt::Key_Left), QStringLiteral("Left"));
+    EXPECT_EQ(Rule::keyFromName(QStringLiteral("Space")), int(Qt::Key_Space));
+    EXPECT_EQ(Rule::nameOfKey(Qt::Key_Right), QStringLiteral("Right"));
+}
+
+// A key may be held with Ctrl, Shift or Alt, and the combination is what the
+// rule names -- written the way a menu writes one, and compared as that text.
+TEST(RuleSource, AKeyChordFiresOnlyItsOwnCombination)
+{
+    EXPECT_EQ(Rule::chordName(Qt::Key_A, Qt::NoModifier), QStringLiteral("A"));
+    EXPECT_EQ(Rule::chordName(Qt::Key_A, Qt::ControlModifier), QStringLiteral("Ctrl+A"));
+    EXPECT_EQ(Rule::chordName(Qt::Key_Left, Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier),
+              QStringLiteral("Ctrl+Shift+Alt+Left"));
+    EXPECT_EQ(Rule::keyOfChord(QStringLiteral("Ctrl+Shift+A")), QStringLiteral("A"));
+    EXPECT_TRUE(Rule::modifiersOfChord(QStringLiteral("Ctrl+Shift+A"))
+                    .testFlag(Qt::ShiftModifier));
+    EXPECT_FALSE(Rule::modifiersOfChord(QStringLiteral("Ctrl+A")).testFlag(Qt::AltModifier));
+
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setPixelsPerMeter(physics::kReferencePixelsPerMeter);
+    scene.setEditorMode(EditorMode::Physics);
+    auto *box = new RectangleItem;
+    box->setRect(QRectF(0, 0, 40, 40));
+    box->setName(QStringLiteral("box"));
+    scene.addItem(box);
+    scene.notifyShapesChanged();
+    scene.selectForPhysics(box, true);
+    ASSERT_TRUE(scene.createBodyFromSelection());
+
+    scene.setVariables({ SceneVariable { QStringLiteral("hits"), SceneVariable::Type::Integer, 0 } });
+    Rule rule;
+    rule.conditions[0].subjectName = Rule::keyboard();
+    rule.conditions[0].eventId = Rule::keyPressedEvent();
+    rule.conditions[0].conditionValue = QStringLiteral("Ctrl+A");
+    rule.actions[0].targetName = Rule::variables();
+    rule.actions[0].propertyKey = QStringLiteral("hits");
+    rule.actions[0].op = Rule::Op::Add;
+    rule.actions[0].value = 1;
+    scene.setRules({ rule });
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+    const auto hits = [&] {
+        return sim.readValue(Rule::variables(), QStringLiteral("hits")).toInt();
+    };
+
+    QKeyEvent bare(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier);
+    QCoreApplication::sendEvent(&scene, &bare);
+    sim.advance(1.0 / 60.0);
+    EXPECT_EQ(hits(), 0) << "a rule asking for Ctrl+A fired on a bare A";
+
+    QKeyEvent release(QEvent::KeyRelease, Qt::Key_A, Qt::NoModifier);
+    QCoreApplication::sendEvent(&scene, &release);
+    QKeyEvent chord(QEvent::KeyPress, Qt::Key_A, Qt::ControlModifier);
+    QCoreApplication::sendEvent(&scene, &chord);
+    sim.advance(1.0 / 60.0);
+    EXPECT_EQ(hits(), 1) << "Ctrl+A did not fire the rule that asked for it";
+    sim.stop();
+}
+
+// The keypad's Enter is an Enter: nobody pressing it means anything different
+// by it, and a rule asking for Enter was ignoring it.
+TEST(RuleSource, TheKeypadsEnterIsAnEnter)
+{
+    EXPECT_EQ(Rule::nameOfKey(Qt::Key_Return), QStringLiteral("Enter"));
+    EXPECT_EQ(Rule::nameOfKey(Qt::Key_Enter), QStringLiteral("Enter"));
+    EXPECT_EQ(Rule::chordName(Qt::Key_Enter, Qt::ControlModifier), QStringLiteral("Ctrl+Enter"));
+}
+
+// Words on the canvas, put there by a rule. No engine has anything to say
+// about text, so this is the application's own action -- and like everything
+// else a rule does to a scene, the caption belongs to the run and goes with it.
+TEST(RuleSource, ARuleShowsAndHidesACaption)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setPixelsPerMeter(physics::kReferencePixelsPerMeter);
+    scene.setEditorMode(EditorMode::Physics);
+
+    auto *box = new RectangleItem;
+    box->setRect(QRectF(0, 0, 40, 40));
+    box->setName(QStringLiteral("box"));
+    scene.addItem(box);
+    scene.notifyShapesChanged();
+    scene.selectForPhysics(box, true);
+    ASSERT_TRUE(scene.createBodyFromSelection());
+
+    const auto saying = [](const QString &key, const QString &text, bool shown) {
+        Rule rule;
+        rule.conditions[0].subjectName = Rule::keyboard();
+        rule.conditions[0].eventId = Rule::keyPressedEvent();
+        rule.conditions[0].conditionValue = key;
+        rule.actions[0].targetName = Rule::world();
+        rule.actions[0].actionId = Rule::showCaptionAction();
+        rule.actions[0].actionParams.insert(Rule::captionTextParam(), text);
+        rule.actions[0].actionParams.insert(Rule::captionShownParam(), shown);
+        return rule;
+    };
+    scene.setRules({ saying(QStringLiteral("A"), QStringLiteral("<b>Go</b>"), true),
+                     saying(QStringLiteral("B"), QStringLiteral("<b>Go</b>"), false) });
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+    sim.advance(1.0 / 60.0);
+    EXPECT_TRUE(scene.caption().isEmpty()) << "a run started with a caption up";
+
+    QKeyEvent show(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier);
+    QCoreApplication::sendEvent(&scene, &show);
+    sim.advance(1.0 / 60.0);
+    EXPECT_EQ(scene.caption(), QStringLiteral("<b>Go</b>")) << "the caption was not put up";
+    EXPECT_TRUE(scene.captionShown());
+
+    QKeyEvent hide(QEvent::KeyPress, Qt::Key_B, Qt::NoModifier);
+    QCoreApplication::sendEvent(&scene, &hide);
+    sim.advance(1.0 / 60.0);
+    EXPECT_FALSE(scene.captionShown()) << "turning Shown off left the caption up";
+
+    // It belongs to the run. A has to come up before it can go down again --
+    // a key held is not a key pressed twice.
+    QKeyEvent lift(QEvent::KeyRelease, Qt::Key_A, Qt::NoModifier);
+    QCoreApplication::sendEvent(&scene, &lift);
+    QKeyEvent again(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier);
+    QCoreApplication::sendEvent(&scene, &again);
+    sim.advance(1.0 / 60.0);
+    ASSERT_TRUE(scene.captionShown());
+    sim.stop();
+    EXPECT_TRUE(scene.caption().isEmpty()) << "the caption outlived the run";
+    EXPECT_FALSE(scene.captionShown());
+}
+
+// Controls are the scene's own, like its variables: no engine knows a slider
+// exists. A rule reads one, writes one, and hears when a hand works it.
+TEST(RuleSource, RulesReadWriteAndHearControls)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setPixelsPerMeter(physics::kReferencePixelsPerMeter);
+    scene.setEditorMode(EditorMode::Physics);
+
+    auto *box = new RectangleItem;
+    box->setRect(QRectF(0, 0, 40, 40));
+    box->setName(QStringLiteral("box"));
+    scene.addItem(box);
+    scene.notifyShapesChanged();
+    scene.selectForPhysics(box, true);
+    ASSERT_TRUE(scene.createBodyFromSelection());
+
+    SceneControl run;
+    run.id = QStringLiteral("go");
+    run.kind = SceneControl::Kind::Checkbox;
+    run.initial = false;
+    SceneControl speed;
+    speed.id = QStringLiteral("speed");
+    speed.kind = SceneControl::Kind::Slider;
+    speed.minimum = 0.0;
+    speed.maximum = 50.0;
+    speed.initial = 10.0;
+    SceneControl fire;
+    fire.id = QStringLiteral("fire");
+    fire.kind = SceneControl::Kind::Button;
+    scene.setControls({ run, speed, fire });
+
+    EXPECT_EQ(scene.controlValue(QStringLiteral("go")).toBool(), false);
+    EXPECT_DOUBLE_EQ(scene.controlValue(QStringLiteral("speed")).toDouble(), 10.0);
+    EXPECT_TRUE(scene.controlEnabled(QStringLiteral("speed")));
+
+    scene.setVariables({ SceneVariable { QStringLiteral("shots"), SceneVariable::Type::Integer, 0 },
+                         SceneVariable { QStringLiteral("seen"), SceneVariable::Type::Double, 0.0 } });
+
+    // Pressing the button counts a shot.
+    Rule counting;
+    counting.conditions[0].subjectName = Rule::controls();
+    counting.conditions[0].eventId = Rule::controlPressedEvent();
+    counting.conditions[0].conditionValue = QStringLiteral("fire");
+    counting.actions[0].targetName = Rule::variables();
+    counting.actions[0].propertyKey = QStringLiteral("shots");
+    counting.actions[0].op = Rule::Op::Add;
+    counting.actions[0].value = 1;
+
+    // While the box is ticked, the slider's value is copied into a variable.
+    Rule copying;
+    copying.conditions[0].subjectName = Rule::controls();
+    copying.conditions[0].conditionKey = QStringLiteral("go:value");
+    copying.conditions[0].compare = Rule::Compare::Equal;
+    copying.conditions[0].conditionValue = true;
+    copying.actions[0].targetName = Rule::variables();
+    copying.actions[0].propertyKey = QStringLiteral("seen");
+    copying.actions[0].op = Rule::Op::Set;
+    copying.actions[0].sourceObject = Rule::controls();
+    copying.actions[0].sourceProperty = QStringLiteral("speed:value");
+
+    // And a rule can work a control itself.
+    Rule greying;
+    greying.conditions[0].subjectName = Rule::controls();
+    greying.conditions[0].eventId = Rule::controlChangedEvent();
+    greying.conditions[0].conditionValue = QStringLiteral("go");
+    greying.actions[0].targetName = Rule::controls();
+    greying.actions[0].propertyKey = QStringLiteral("speed:enabled");
+    greying.actions[0].op = Rule::Op::Set;
+    greying.actions[0].value = false;
+
+    scene.setRules({ counting, copying, greying });
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+    const auto step = [&] { sim.advance(1.0 / 60.0); };
+    const auto shots = [&] {
+        return sim.readValue(Rule::variables(), QStringLiteral("shots")).toInt();
+    };
+
+    step();
+    EXPECT_EQ(shots(), 0) << "a rule fired before the button was touched";
+
+    // A hand on the button: down, then up.
+    scene.setControlValue(QStringLiteral("fire"), true);
+    step();
+    EXPECT_EQ(shots(), 1) << "pressing the button raised nothing";
+    scene.setControlValue(QStringLiteral("fire"), false);
+    step();
+    EXPECT_EQ(shots(), 1) << "letting the button go counted as another press";
+
+    // Ticking the box lets the copying rule through, and greys the slider.
+    scene.setControlValue(QStringLiteral("speed"), 42.0);
+    scene.setControlValue(QStringLiteral("go"), true);
+    step();
+    EXPECT_DOUBLE_EQ(sim.readValue(Rule::variables(), QStringLiteral("seen")).toDouble(), 42.0)
+        << "the rule did not read the slider";
+    EXPECT_FALSE(scene.controlEnabled(QStringLiteral("speed")))
+        << "the rule did not grey the slider out";
+
+    // A rule writing a slider is held to the bounds it was declared with.
+    RuleAction push;
+    push.targetName = Rule::controls();
+    push.propertyKey = QStringLiteral("speed:value");
+    push.op = Rule::Op::Set;
+    push.value = 999.0;
+    sim.applyActionForTest(push);
+    EXPECT_DOUBLE_EQ(scene.controlValue(QStringLiteral("speed")).toDouble(), 50.0)
+        << "a rule pushed the slider past its maximum";
+
+    sim.stop();
+    EXPECT_DOUBLE_EQ(scene.controlValue(QStringLiteral("speed")).toDouble(), 10.0)
+        << "the slider did not go back to what the scene declares";
+    EXPECT_FALSE(scene.controlValue(QStringLiteral("go")).toBool());
+    EXPECT_TRUE(scene.controlEnabled(QStringLiteral("speed")));
+}
+
+// An event is already an edge: it is true on the step it is raised and false
+// on every other. Asking it to *rise* as well swallowed the second of two that
+// landed on consecutive steps -- a slider pushed up ten times in ten steps
+// moved what it drove once, and the two numbers disagreed on screen.
+TEST(RuleSource, AnEventOnEveryStepFiresOnEveryStep)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setPixelsPerMeter(physics::kReferencePixelsPerMeter);
+    scene.setEditorMode(EditorMode::Physics);
+
+    auto *box = new RectangleItem;
+    box->setRect(QRectF(0, 0, 40, 40));
+    box->setName(QStringLiteral("box"));
+    scene.addItem(box);
+    scene.notifyShapesChanged();
+    scene.selectForPhysics(box, true);
+    ASSERT_TRUE(scene.createBodyFromSelection());
+
+    SceneControl pull;
+    pull.id = QStringLiteral("speed");
+    pull.kind = SceneControl::Kind::Slider;
+    pull.minimum = 0.0;
+    pull.maximum = 100.0;
+    pull.step = 10.0;
+    pull.initial = 0.0;
+    scene.setControls({ pull });
+    scene.setVariables({ SceneVariable { QStringLiteral("seen"), SceneVariable::Type::Double,
+                                         0.0 } });
+
+    Rule follow;
+    follow.conditions[0].subjectName = Rule::controls();
+    follow.conditions[0].eventId = Rule::controlChangedEvent();
+    follow.conditions[0].conditionValue = QStringLiteral("speed");
+    follow.actions[0].targetName = Rule::variables();
+    follow.actions[0].propertyKey = QStringLiteral("seen");
+    follow.actions[0].op = Rule::Op::Set;
+    follow.actions[0].sourceObject = Rule::controls();
+    follow.actions[0].sourceProperty = QStringLiteral("speed:value");
+    scene.setRules({ follow });
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+    const auto seen = [&] {
+        return sim.readValue(Rule::variables(), QStringLiteral("seen")).toDouble();
+    };
+
+    // Changed on every step, with no quiet step in between to re-arm it.
+    for (int at = 10; at <= 50; at += 10) {
+        scene.setControlValue(QStringLiteral("speed"), double(at));
+        sim.advance(1.0 / 60.0);
+        EXPECT_DOUBLE_EQ(seen(), double(at))
+            << "the change on this step was swallowed: the two disagree at " << at;
+    }
+
+    // A reading still needs its edge, or it would fire on every step it stays
+    // true for.
+    scene.setVariables({ SceneVariable { QStringLiteral("seen"), SceneVariable::Type::Double, 0.0 },
+                         SceneVariable { QStringLiteral("count"), SceneVariable::Type::Integer,
+                                         0 } });
+    Rule counting;
+    counting.conditions[0].subjectName = Rule::controls();
+    counting.conditions[0].conditionKey = QStringLiteral("speed:value");
+    counting.conditions[0].compare = Rule::Compare::Greater;
+    counting.conditions[0].conditionValue = 5.0;
+    counting.actions[0].targetName = Rule::variables();
+    counting.actions[0].propertyKey = QStringLiteral("count");
+    counting.actions[0].op = Rule::Op::Add;
+    counting.actions[0].value = 1;
+    scene.setRules({ counting });
+    sim.stop();
+    sim.start();
+
+    scene.setControlValue(QStringLiteral("speed"), 50.0);
+    for (int step = 0; step < 5; ++step)
+        sim.advance(1.0 / 60.0);
+    EXPECT_EQ(sim.readValue(Rule::variables(), QStringLiteral("count")).toInt(), 1)
+        << "a reading fired on every step it stayed true for";
+    sim.stop();
+}
+
+// A full-screen run is a different view onto the same scene, and keys reach
+// the scene through whichever view has them. This drives the view directly:
+// whether the window is given the focus when it opens is the one part a test
+// on a machine with no window manager cannot answer.
+TEST(RuleSource, AKeyInTheFullScreenViewReachesTheRules)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setPixelsPerMeter(physics::kReferencePixelsPerMeter);
+    scene.setEditorMode(EditorMode::Physics);
+
+    auto *box = new RectangleItem;
+    box->setRect(QRectF(0, 0, 40, 40));
+    box->setName(QStringLiteral("box"));
+    scene.addItem(box);
+    scene.notifyShapesChanged();
+    scene.selectForPhysics(box, true);
+    ASSERT_TRUE(scene.createBodyFromSelection());
+
+    scene.setVariables({ SceneVariable { QStringLiteral("hits"), SceneVariable::Type::Integer,
+                                         0 } });
+    Rule rule;
+    rule.conditions[0].subjectName = Rule::keyboard();
+    rule.conditions[0].eventId = Rule::keyPressedEvent();
+    rule.conditions[0].conditionValue = QStringLiteral("A");
+    rule.actions[0].targetName = Rule::variables();
+    rule.actions[0].propertyKey = QStringLiteral("hits");
+    rule.actions[0].op = Rule::Op::Add;
+    rule.actions[0].value = 1;
+    scene.setRules({ rule });
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+    sim.advance(1.0 / 60.0);
+
+    FullScreenView view(&scene, nullptr);
+    view.resize(640, 480);
+    const auto hits = [&] {
+        return sim.readValue(Rule::variables(), QStringLiteral("hits")).toInt();
+    };
+    ASSERT_EQ(hits(), 0);
+
+    // Delivered to the full-screen view, not to the scene.
+    QKeyEvent down(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier);
+    QCoreApplication::sendEvent(&view, &down);
+    sim.advance(1.0 / 60.0);
+    EXPECT_EQ(hits(), 1) << "a key given to the full-screen view never reached the rules";
+
+    QKeyEvent up(QEvent::KeyRelease, Qt::Key_A, Qt::NoModifier);
+    QCoreApplication::sendEvent(&view, &up);
+    sim.advance(1.0 / 60.0);
+
+    // And Escape still belongs to the view: it is how a full-screen run is
+    // left, so the scene must not swallow it.
+    QSignalSpy leaving(&view, &FullScreenView::closeRequested);
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QCoreApplication::sendEvent(&view, &escape);
+    EXPECT_EQ(leaving.count(), 1) << "Escape no longer leaves a full-screen run";
+    EXPECT_EQ(hits(), 1);
+
+    sim.stop();
+}
+
+// In a full-screen run Escape is the only key the view keeps. Space must not
+// hold the run, the arrows must not step it or nudge anything, and all of them
+// must reach the rules -- a scene is free to bind every one of them.
+TEST(RuleSource, OnlyEscapeIsTheViewsInAFullScreenRun)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setPixelsPerMeter(physics::kReferencePixelsPerMeter);
+    scene.setEditorMode(EditorMode::Physics);
+
+    auto *box = new RectangleItem;
+    box->setRect(QRectF(0, 0, 40, 40));
+    box->setPos(0, 0);
+    box->setName(QStringLiteral("box"));
+    scene.addItem(box);
+    scene.notifyShapesChanged();
+    scene.selectForPhysics(box, true);
+    PhysicsBody *body = scene.createBodyFromSelection();
+    ASSERT_TRUE(body);
+    // Static, so anything that moves it moved it on purpose: a dynamic one
+    // falls, and falling is not nudging.
+    body->props().type = physics::BodyType::Static;
+
+    scene.setVariables({ SceneVariable { QStringLiteral("hits"), SceneVariable::Type::Integer,
+                                         0 } });
+    QVector<Rule> rules;
+    for (const char *key : { "Space", "Left", "Right", "Up", "Down" }) {
+        Rule rule;
+        rule.conditions[0].subjectName = Rule::keyboard();
+        rule.conditions[0].eventId = Rule::keyPressedEvent();
+        rule.conditions[0].conditionValue = QString::fromLatin1(key);
+        rule.actions[0].targetName = Rule::variables();
+        rule.actions[0].propertyKey = QStringLiteral("hits");
+        rule.actions[0].op = Rule::Op::Add;
+        rule.actions[0].value = 1;
+        rules.append(rule);
+    }
+    scene.setRules(rules);
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+    sim.advance(1.0 / 60.0);
+
+    FullScreenView view(&scene, nullptr);
+    view.resize(640, 480);
+    QSignalSpy leaving(&view, &FullScreenView::closeRequested);
+
+    const QPointF stood = box->pos();
+    int expected = 0;
+    for (const int key : { int(Qt::Key_Space), int(Qt::Key_Left), int(Qt::Key_Right),
+                           int(Qt::Key_Up), int(Qt::Key_Down) }) {
+        QKeyEvent down(QEvent::KeyPress, key, Qt::NoModifier);
+        QCoreApplication::sendEvent(&view, &down);
+        sim.advance(1.0 / 60.0);
+        QKeyEvent up(QEvent::KeyRelease, key, Qt::NoModifier);
+        QCoreApplication::sendEvent(&view, &up);
+        sim.advance(1.0 / 60.0);
+        ++expected;
+        EXPECT_EQ(sim.readValue(Rule::variables(), QStringLiteral("hits")).toInt(), expected)
+            << "key " << key << " never reached the rules";
+        EXPECT_TRUE(sim.isRunning()) << "key " << key << " stopped or held the run";
+        EXPECT_EQ(leaving.count(), 0) << "key " << key << " asked to leave the run";
+    }
+    EXPECT_EQ(box->pos(), stood) << "an arrow nudged a shape during the run";
+
+    // And Escape is still the way out.
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QCoreApplication::sendEvent(&view, &escape);
+    EXPECT_EQ(leaving.count(), 1) << "Escape no longer leaves a full-screen run";
+
+    sim.stop();
+}
+
+// What a control says is its own property: a rule changes the words on a
+// button without changing what every other rule calls it. Run state, like its
+// value -- the name comes back when the run stops.
+TEST(RuleSource, ARuleChangesWhatAControlSays)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setPixelsPerMeter(physics::kReferencePixelsPerMeter);
+    scene.setEditorMode(EditorMode::Physics);
+
+    auto *box = new RectangleItem;
+    box->setRect(QRectF(0, 0, 40, 40));
+    box->setName(QStringLiteral("box"));
+    scene.addItem(box);
+    scene.notifyShapesChanged();
+    scene.selectForPhysics(box, true);
+    ASSERT_TRUE(scene.createBodyFromSelection());
+
+    SceneControl press;
+    press.id = QStringLiteral("fire");
+    press.kind = SceneControl::Kind::Button;
+    scene.setControls({ press });
+    EXPECT_EQ(scene.controlCaption(QStringLiteral("fire")), QStringLiteral("fire"))
+        << "a control says its name until something says otherwise";
+
+    Rule rename;
+    rename.conditions[0].subjectName = Rule::keyboard();
+    rename.conditions[0].eventId = Rule::keyPressedEvent();
+    rename.conditions[0].conditionValue = QStringLiteral("A");
+    rename.actions[0].targetName = Rule::controls();
+    rename.actions[0].propertyKey = QStringLiteral("fire:caption");
+    rename.actions[0].op = Rule::Op::Set;
+    rename.actions[0].value = QStringLiteral("Reload");
+    scene.setRules({ rename });
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+    sim.advance(1.0 / 60.0);
+
+    QKeyEvent down(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier);
+    QCoreApplication::sendEvent(&scene, &down);
+    sim.advance(1.0 / 60.0);
+    EXPECT_EQ(scene.controlCaption(QStringLiteral("fire")), QStringLiteral("Reload"))
+        << "the rule did not change what the button says";
+    EXPECT_EQ(sim.readValue(Rule::controls(), QStringLiteral("fire:caption")).toString(),
+              QStringLiteral("Reload"))
+        << "a rule cannot read back what it wrote";
+    // The name is untouched: every other rule still calls it "fire".
+    ASSERT_EQ(scene.controls().size(), 1);
+    EXPECT_EQ(scene.controls().first().id, QStringLiteral("fire"));
+
+    sim.stop();
+    EXPECT_EQ(scene.controlCaption(QStringLiteral("fire")), QStringLiteral("fire"))
+        << "the caption outlived the run";
 }

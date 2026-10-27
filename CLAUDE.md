@@ -51,6 +51,49 @@ cards build an editor for something the catalogue never mentioned. They are run
 state: started from what the scene declares and gone when the run stops, like
 every position on the canvas.
 
+**A control is the scene's own too, and it has an id and a caption.** A
+`SceneControl` is a box to tick, a button or a slider, drawn under the caption
+while a run is going and nowhere else. The id is how a rule addresses it and
+never moves under one; the caption is only what it says, defaults to the id,
+and a rule may change it mid-run -- which is why identity could not be the
+words on a button. Rules reach every control through one pseudo-object,
+`Rule::controls()`, the way they reach every variable.
+
+**A key is named, never numbered.** `Rule::chordName` writes what the editor
+writes on a menu -- "Enter", "Up", "Ctrl+Shift+A" -- and a rule stores and
+compares that text. A raw key code would not survive a different Qt, and would
+mean a scene asking for Ctrl+A could be fired by a bare A. Nothing is reserved:
+the pause, step and reset keys the canvas used to keep are gone, because a
+scene that wants the space bar should have it, and a scene can bind its own
+through the rules. `FullScreenView` keeps only Escape and forwards everything
+else to the scene -- it is not interactive, so it hands the events over itself
+rather than letting the view do it.
+
+**A caption is the application's own action on the world**
+(`Rule::showCaptionAction()`, text and shown in `actionParams`): rich text over
+the canvas, under the log and above the controls, written in the editor behind
+the `...` button on the rule card. Run state like everything else, so `stop()`
+clears it. `MainWindow` stacks the three -- log, caption, controls -- as
+widgets over the canvas rather than drawing them into the scene, so they keep
+their size whatever the zoom and a control can actually be clicked.
+
+**The grammar of that address lives in `SceneControl` and nowhere else.** The
+cards show a property as one string, `Start:caption`; the separator, the
+joining (`SceneControl::key`) and the taking apart (`SceneControl::parse`,
+which accepts every separator the program has ever written) are that struct's
+business. The *file* does not carry the punctuation at all -- it writes the two
+things it is:
+
+```json
+"watch": { "control": "speed", "property": "value" }
+```
+
+That field is the same field a plain property goes in, because a rule object
+carries a condition's `watch` and the first action's `property` side by side.
+It was one flat string with a dot in it once, and changing the dot to a colon
+left every saved scene naming nothing: a spelling the cards choose must not be
+able to do that, which is what the two fields are for.
+
 A few properties the *editor* also has to recognise, because it draws with
 them: whatever the engine tags `PropertyRole::Sensor` (hatched rather than
 filled), `PropertyRole::Density` (where a body balances), and the three that
@@ -117,13 +160,43 @@ is built without knowing the scene's scale, so a scene at a very different one
 wants different numbers. Making them follow `pixelsPerMeter` needs the scale to
 reach the engine before the catalogue is asked.
 
-**The side panel's tabs are icons.** Five names across a narrow panel left no
+**The side panel's tabs are icons.** Six names across a narrow panel left no
 room for any of them, so each tab keeps its name in a tooltip and only the one
 you are on spells it out (`MainWindow::updateSidePanelTabLabels`). **View** on
 the menu bar is a checkbox per panel; unchecking one takes its tab out --
 `QTabWidget` cannot hide a tab, so `applyVisibleTabs` removes them all and puts
 back the ones wanted, in order -- and the choice is remembered under
 `Panels/hidden`. It refuses to leave none.
+
+**The field is the scene's, and Options holds what a new one starts with.**
+Everything the `*.phys` carries in its `field` block -- size, background, grid
+-- belongs to the scene and comes back with the file. `MainWindow` keeps the
+defaults in `m_fieldDefaults` and `applyFieldDefaults()` puts them on a new
+scene, on the empty scene at startup, and on the scene a file is about to be
+read into, so a file that says nothing about its field does not inherit the
+last one's. `applySettings` no longer touches the open scene's field, and
+`currentSettingsSnapshot` reads the defaults rather than the scene -- which is
+what used to carry one scene's background into the settings and from there
+into every scene after it.
+
+**One body can be kept in the middle of the view.** `PhysicsBody::isFocused()`
+is the application's own flag -- no engine has an opinion about where a camera
+points -- and `CanvasScene::setFocusedBody` is its only writer, which is what
+keeps it to one body. Both views follow it on `SimulationController::stepped`,
+and each gives *its own* `sceneRect` a rectangle wide enough to hold the body:
+`centerOn` will not scroll past the scene's own, so a body that has left the
+field would otherwise slide away with nothing following it. The field stays
+what the scene says it is.
+
+**A tool is a preview with Apply and Cancel, not a dialog.** The Tools list on
+the toolbar -- Clone, Mirror -- and the two conversions on a shape's context
+menu open `ToolOptionsBar` in the bottom-left of the canvas, declare their
+settings as a list of `ToolOption`, and re-run on every change:
+`MainWindow::beginTool` holds the scene as it was, `runTool` undoes the last
+preview and lays down a new one, and Cancel -- or a click outside the panel --
+leaves nothing behind. A tool that destroys the shape it is converting goes
+through `CanvasScene::destroyShape` rather than deleting it, since the scene
+may still hold it as the active selection.
 
 **A rule can be followed back to what it names.** Double-click an object box on
 a rule card, or take it from its context menu, and `CanvasScene::revealObjectNamed`
@@ -149,6 +222,9 @@ src/              the application (Qt widgets, canvas, panels, serialization)
     Rule.h            one rule: a list of conditions joined all-of or any-of,
                       and a list of actions carried out in order
     SceneVariable.h   a named value the scene carries and no engine knows
+    SceneControl.h    a checkbox, button or slider the scene is worked with,
+                      and the grammar of how a rule addresses one
+    ControlsPanel     the Controls tab: one card per control
     RulesPanel        the rule cards
     VariablesPanel    the Variables tab beside them
     PropertyPanel + PropertyPane/*   property tables, one pane per selection kind
@@ -175,6 +251,14 @@ exporters/        export converters -- one folder each, all JavaScript
                   field and a scene sets only what differs from the default; a
                   `//!` line is a note that is not written; a placeholder the
                   script does not fill is an error naming the template
+    box2d3wasm/        the same bargain, one index.html on a canvas
+                  Both carry what belongs to no engine as well as what does:
+                  the log, the scene's own controls, the keys a rule watches
+                  and the caption a rule writes. A rule the converter cannot
+                  write is reported by name through io.log() and left out --
+                  never written wrong, never dropped in silence
+tools/            view_exports.py -- serves exported scenes and lists them on
+                  one page; a wasm export needs a server, not a file:// URL
 deploy/           the *.phys file association template
 cmake/            Version.h.in
 ```
@@ -391,6 +475,27 @@ functions, and everything else is the script's.
 A run always ends in a dialog: what was written and where, or why it failed
 and on which line. A converter that writes no files has not converted
 anything, whatever it thinks, and is reported as a failure.
+
+**An export has to agree with the editor about more than the shapes**, and the
+three it got wrong are worth stating:
+
+- **Gravity goes over as it stands**, with the speed thresholds. Both
+  converters carried the `m_motionScale` of `50 / pixelsPerMeter` for a while
+  after the application dropped it, so every exported scene fell at half
+  gravity. A converter working in a metre of its own -- box2d3wasm chooses one
+  at which Box2D's fixed 2 cm is the scene's contact margin -- re-quotes them
+  at that metre instead, which is the same motion in scene units.
+- **A rule that watches an event fires on every step the event is raised**,
+  the way `SimulationController` does it; only a rule made of readings alone
+  waits for the value to cross. Written as a rising edge, a ray that pushes a
+  ball for half a second pushed it once.
+- **A clone's place is scene units**, handed to the one helper that turns a
+  pair of them into metres. Converting each number first put the clone a
+  hundredth of the way there.
+
+`tests/exporters.cpp` is where these live, and the suite compares what a
+converter writes against what the application hands the solver rather than
+against itself.
 
 A converter may also declare **its own settings** in the manifest -- name,
 label, type (`string`, `int`, `double`, `bool`, `color`, `choice`, `path`,

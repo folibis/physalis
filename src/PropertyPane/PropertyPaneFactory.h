@@ -24,6 +24,7 @@ public:
     PropertyPane *paneForExplosion(CanvasScene *scene);
     PropertyPane *paneForSensor(CanvasScene *scene);
     PropertyPane *paneForRay(CanvasScene *scene);
+    PropertyPane *paneForSelection(CanvasScene *scene);
 
 private:
     QHash<std::size_t, PropertyPane *> m_shapePanes;
@@ -33,4 +34,5 @@ private:
     PropertyPane *m_explosionPane = nullptr;
     PropertyPane *m_sensorPane = nullptr;
     PropertyPane *m_rayPane = nullptr;
+    PropertyPane *m_selectionPane = nullptr;
 };

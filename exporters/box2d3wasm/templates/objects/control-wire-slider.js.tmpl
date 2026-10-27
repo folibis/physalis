@@ -1,0 +1,5 @@
+dom("{{DOM}}").oninput = function () {
+    controls["{{ID}}"].value = Number(dom("{{DOM}}").value);
+    dom("{{DOM}}Out").textContent = Number(controls["{{ID}}"].value).toFixed({{DECIMALS}});
+    controlFired.changed["{{ID}}"] = true;
+};

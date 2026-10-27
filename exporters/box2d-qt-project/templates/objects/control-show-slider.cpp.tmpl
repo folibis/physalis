@@ -1,0 +1,7 @@
+{{VAR}}Says->setText(controls[{{ID}}].caption);
+{{VAR}}Row->setEnabled(controls[{{ID}}].enabled);
+{{VAR}}Out->setText(QString::number(controls[{{ID}}].at, 'f', {{DECIMALS}}));
+{
+    const QSignalBlocker quiet({{VAR}});
+    {{VAR}}->setValue(int(std::lround((controls[{{ID}}].at - {{MIN}}) / {{STEP}})));
+}

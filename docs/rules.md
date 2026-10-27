@@ -126,6 +126,90 @@ Renaming carries every rule and log row that named it along with it. **Remove
 Variable**, also on the right-click menu, leaves the rules that used it marked
 unfinished, so nothing goes wrong quietly.
 
+## Keys and controls
+
+Two things in the condition's first box belong to no engine and to no object in
+the scene: **Keyboard** and **Controls**. They are how somebody plays a scene
+rather than only watches it.
+
+### Keys
+
+Choose **Keyboard**, then **key pressed**, **key held** or **key released**,
+then the key.
+Any letter, digit or named key can be used -- the arrows, Enter, Space, Tab,
+Backspace, Delete -- and **Ctrl**, **Shift** and **Alt** can be ticked beside
+it, so *Ctrl+R* is a different key from *R*.
+
+No key is reserved. A **press** and a **release** happen once each -- holding
+the key down does not fire them again. **Key held** is the other way round: it
+fires on every step the key is down, which is how a rule keeps doing something
+for as long as it is held. A thruster is exactly that: press and there is a
+force, let go and there is none.
+
+Because it fires every step rather than once, the amount is per step: at 60
+steps a second, an impulse of 1 a step is 60 a second.
+
+For the keys to reach the scene, the canvas has to have the focus -- click it
+once after pressing Simulate. In [full screen](running.md#full-screen) every
+key but Esc goes to the scene.
+
+**Example: a thruster.** *Keyboard* **key held** *Left* -> *the ship* ->
+**Push at a Point**, with **Impulse Y** -1 and **Offset X** 80: while Left is
+down the ship is pushed, 60 times a second, 80 units to one side of its centre
+of mass, so it both lifts and turns. The offset is what puts the push on a
+side; a push with no offset goes through the centre of mass and only moves it.
+
+**Example: a flipper.** *Keyboard* **key pressed** *Left* → *left flipper
+joint* → **Motor speed** **Set to** -720, and *Keyboard* **key released**
+*Left* → the same joint → **Motor speed** **Set to** 240. The flipper snaps up
+while the key is held and falls back when it is let go.
+
+### Controls
+
+A scene can carry its own controls. They are declared on the **Controls** tab
+of the side panel, one card each:
+
+- **Id** is how a rule addresses the control. Changing it carries every rule
+  that names it along.
+- **Caption** is what it says on the canvas. Leave it empty and it says its id.
+- **Kind** is **Checkbox**, **Button** or **Slider**.
+- A checkbox declares whether it **starts ticked**; a slider declares where it
+  **starts**, its **lowest** and **highest** values and its **step**. A button
+  declares nothing -- what it has is a press.
+
+The controls appear over the canvas while the simulation runs, under the
+caption, and they are gone when it stops. What a control is set to is run
+state: it starts each run where the scene declares and goes back there when the
+run ends.
+
+Rules reach them through **Controls**:
+
+| | |
+|---|---|
+| **value** | what it is set to: ticked or not, held or not, where the slider sits |
+| **enabled** | whether it can be worked at all; a rule can grey one out |
+| **caption** | what it says, which a rule can change mid-run |
+
+and through three events: **pressed**, **released** and **changed**. Each names
+which control it means, or *any control*. A button raises a press and a release
+rather than a click, so a rule can drive something for exactly as long as the
+button is held.
+
+**Example: a motor with a speed slider.** A slider `speed` from 0 to 720, and a
+button `start`:
+
+- *Controls* **changed** *speed* → *the motor joint* → **Motor speed** **Set
+  to** the **Property** *Controls · speed:value*;
+- *Controls* **pressed** *start* → *the motor joint* → **Enable motor**
+  **Toggle**;
+- *the motor joint* **Motor enabled** **is** *true* → *Controls* →
+  *start:caption* **Set to** `Stop`, and the same the other way round for
+  `Start`, so the button says what pressing it will do.
+
+Writing a control's value from a rule moves the widget on the canvas, and
+pulling the widget is read by the rules -- a slider follows the arrow keys if a
+rule says it should.
+
 ## When: the condition
 
 First choose the object the rule watches: a shape, a body, a joint, a ray,
@@ -172,9 +256,20 @@ depends on the object and on the [physics engine](engines.md):
   [Answering a removal](#answering-a-removal-to-be-removed).
 - **starting simulation** (on **World**): happens once, at the start. See
   [Setting things up](#setting-things-up-starting-simulation).
+- **key pressed**, **key held** and **key released** (on **Keyboard**):
+  somebody worked the keyboard. See [Keys and controls](#keys-and-controls).
+- **pressed**, **released** and **changed** (on **Controls**): somebody worked
+  one of the scene's own controls. See [Keys and controls](#keys-and-controls).
 
 Events that involve a second object, such as *begins contact*, have one more
 box: which object it has to be. Choose *anything*, or name one in particular.
+
+A rule that watches an event is carried out on **every** step the event is
+raised, not only on the first one. A ray that sees something for half a second
+fires its rule thirty times, which is what makes *while the ray sees the ball,
+push it* work. A rule made only of value comparisons behaves the other way: it
+fires on the step its combination *becomes* true and then waits for it to stop
+being true before it can fire again.
 
 ### Watching a value change
 
@@ -235,11 +330,21 @@ engine are:
   shape properties, at the **X** and **Y** you give. It works even on a body
   that has already been removed. Clones exist only while the simulation runs
   and are never saved.
+- **Keep in view** hands the view to this body: from then on it stays in the
+  middle of the screen and the scene moves around it. Untick **Follow** to let
+  it go again. One body at a time, and when the run ends the view goes back to
+  whatever the scene itself keeps in view. See
+  [Keeping one body in view](running.md#keeping-one-body-in-view).
 - **Explode** sets off an [explosion](physics.md#explosions).
 - **Break** destroys a joint.
 - **Stop the simulation** (on **World**) ends the run and puts the scene
   back, just like the Stop button.
 - **Hold the simulation** (on **World**) pauses the run where it is.
+- **Show a caption** (on **World**) puts words on the canvas, under the log.
+  Press the **...** button to write them: the editor there sets bold, italic
+  and underline, a typeface, a size and a colour. Untick **shown** to take the
+  caption down again. A caption is run state like everything else:
+  stopping the run clears it.
 
 Engines add their own actions, such as a push or a force at a point on a body,
 or working out a body's mass again after its shapes have changed.

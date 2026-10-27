@@ -26,6 +26,11 @@ class PropertyPanel : public QWidget
     Q_OBJECT
 
 public:
+    std::vector<PropertyRow> rowsForTest() const
+    {
+        return m_activePane ? m_activePane->rows(m_mode) : std::vector<PropertyRow>();
+    }
+
     explicit PropertyPanel(QWidget *parent = nullptr);
 
     void setScene(CanvasScene *scene);
@@ -95,6 +100,10 @@ private:
     CanvasScene *m_scene = nullptr;
     PropertyPaneFactory *m_factory;
     PropertyPane *m_activePane = nullptr;
+    // True while the table is being torn down and put back, so the scroll
+    // bars settling at zero on the way through are not mistaken for somebody
+    // scrolling to the top.
+    bool m_rebuilding = false;
     std::vector<Row> m_rows;
     bool m_updating = false; // guards against editor->setter->refresh feedback loops
 };

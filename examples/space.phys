@@ -1,0 +1,2657 @@
+{
+    "bodies": [
+        {
+            "isEnabled": true,
+            "name": "body_1",
+            "physics": {
+            },
+            "shapes": [
+                1
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_2",
+            "physics": {
+            },
+            "shapes": [
+                2
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_3",
+            "physics": {
+            },
+            "shapes": [
+                3
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_4",
+            "physics": {
+            },
+            "shapes": [
+                4
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_5",
+            "physics": {
+            },
+            "shapes": [
+                5
+            ],
+            "type": "static"
+        },
+        {
+            "focus": true,
+            "isEnabled": true,
+            "name": "body_11",
+            "physics": {
+                "angularDamping": 2
+            },
+            "shapes": [
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_14",
+            "physics": {
+            },
+            "shapes": [
+                21,
+                22,
+                23,
+                34,
+                35,
+                36,
+                29,
+                30,
+                31,
+                32,
+                33,
+                25,
+                26,
+                27,
+                28,
+                24
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_15",
+            "physics": {
+                "gravityScale": 0
+            },
+            "shapes": [
+                20
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_16",
+            "physics": {
+                "gravityScale": 0
+            },
+            "shapes": [
+                18
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_17",
+            "physics": {
+                "gravityScale": 0
+            },
+            "shapes": [
+                17
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_18",
+            "physics": {
+                "gravityScale": 0
+            },
+            "shapes": [
+                16
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_19",
+            "physics": {
+                "gravityScale": 0
+            },
+            "shapes": [
+                15
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_20",
+            "physics": {
+                "gravityScale": 0
+            },
+            "shapes": [
+                19
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_21",
+            "physics": {
+                "gravityScale": 0
+            },
+            "shapes": [
+                37
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_22",
+            "physics": {
+                "gravityScale": 0
+            },
+            "shapes": [
+                38
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_23",
+            "physics": {
+                "gravityScale": 0
+            },
+            "shapes": [
+                39
+            ],
+            "type": "dynamic"
+        }
+    ],
+    "engine": "Box2D",
+    "field": {
+        "backgroundColor": "#ff424242",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 1000,
+        "showGrid": false,
+        "width": 1000
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+    ],
+    "log": [
+        {
+            "label": "Fuel",
+            "object": "@variables",
+            "plotted": false,
+            "property": "fuel"
+        }
+    ],
+    "rules": [
+        {
+            "action": "@showCaption",
+            "actionParams": {
+                "shown": true,
+                "text": "<p><b>Left</b> and <b>Right</b> fire the engines. Keep an eye on the fuel, and set down on the platform to win.</p>"
+            },
+            "event": "@runStarted",
+            "name": "instructions",
+            "op": "set",
+            "property": "",
+            "subject": "@world",
+            "target": "@world",
+            "value": null
+        },
+        {
+            "action": "pushAt",
+            "actionParams": {
+                "impulseX": 0,
+                "impulseY": -1,
+                "offsetX": -80,
+                "offsetY": 0,
+                "relative": true
+            },
+            "actions": [
+                {
+                    "action": "pushAt",
+                    "actionParams": {
+                        "impulseX": 0,
+                        "impulseY": -1,
+                        "offsetX": -80,
+                        "offsetY": 0,
+                        "relative": true
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "body_11",
+                    "value": -1
+                },
+                {
+                    "op": "subtract",
+                    "property": "fuel",
+                    "target": "@variables",
+                    "value": 1
+                }
+            ],
+            "conditions": [
+                {
+                    "event": "@keyHeld",
+                    "subject": "@keyboard",
+                    "when": "Left"
+                },
+                {
+                    "compare": ">",
+                    "subject": "@variables",
+                    "watch": "fuel",
+                    "when": 0
+                }
+            ],
+            "event": "@keyHeld",
+            "join": "all",
+            "name": "left motor",
+            "op": "set",
+            "property": "",
+            "subject": "@keyboard",
+            "target": "body_11",
+            "value": -1,
+            "when": "Left"
+        },
+        {
+            "action": "pushAt",
+            "actionParams": {
+                "impulseX": 0,
+                "impulseY": -1,
+                "offsetX": 80,
+                "offsetY": 0,
+                "relative": true
+            },
+            "actions": [
+                {
+                    "action": "pushAt",
+                    "actionParams": {
+                        "impulseX": 0,
+                        "impulseY": -1,
+                        "offsetX": 80,
+                        "offsetY": 0,
+                        "relative": true
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "body_11",
+                    "value": -1
+                },
+                {
+                    "op": "subtract",
+                    "property": "fuel",
+                    "target": "@variables",
+                    "value": 1
+                }
+            ],
+            "conditions": [
+                {
+                    "event": "@keyHeld",
+                    "subject": "@keyboard",
+                    "when": "Right"
+                },
+                {
+                    "compare": ">",
+                    "subject": "@variables",
+                    "watch": "fuel",
+                    "when": 0
+                }
+            ],
+            "event": "@keyHeld",
+            "join": "all",
+            "name": "right motor",
+            "op": "set",
+            "property": "",
+            "subject": "@keyboard",
+            "target": "body_11",
+            "value": -1,
+            "when": "Right"
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "velocityX",
+                    "target": "body_15",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "velocityY",
+                    "target": "body_15",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "angularVelocity",
+                    "target": "body_15",
+                    "value": {
+                        "from": -60,
+                        "step": 5,
+                        "to": 60
+                    }
+                }
+            ],
+            "event": "@runStarted",
+            "name": "drift body_15",
+            "op": "set",
+            "property": "velocityX",
+            "subject": "@world",
+            "target": "body_15",
+            "value": {
+                "from": -120,
+                "step": 5,
+                "to": 120
+            }
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "velocityX",
+                    "target": "body_16",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "velocityY",
+                    "target": "body_16",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "angularVelocity",
+                    "target": "body_16",
+                    "value": {
+                        "from": -60,
+                        "step": 5,
+                        "to": 60
+                    }
+                }
+            ],
+            "event": "@runStarted",
+            "name": "drift body_16",
+            "op": "set",
+            "property": "velocityX",
+            "subject": "@world",
+            "target": "body_16",
+            "value": {
+                "from": -120,
+                "step": 5,
+                "to": 120
+            }
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "velocityX",
+                    "target": "body_17",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "velocityY",
+                    "target": "body_17",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "angularVelocity",
+                    "target": "body_17",
+                    "value": {
+                        "from": -60,
+                        "step": 5,
+                        "to": 60
+                    }
+                }
+            ],
+            "event": "@runStarted",
+            "name": "drift body_17",
+            "op": "set",
+            "property": "velocityX",
+            "subject": "@world",
+            "target": "body_17",
+            "value": {
+                "from": -120,
+                "step": 5,
+                "to": 120
+            }
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "velocityX",
+                    "target": "body_18",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "velocityY",
+                    "target": "body_18",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "angularVelocity",
+                    "target": "body_18",
+                    "value": {
+                        "from": -60,
+                        "step": 5,
+                        "to": 60
+                    }
+                }
+            ],
+            "event": "@runStarted",
+            "name": "drift body_18",
+            "op": "set",
+            "property": "velocityX",
+            "subject": "@world",
+            "target": "body_18",
+            "value": {
+                "from": -120,
+                "step": 5,
+                "to": 120
+            }
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "velocityX",
+                    "target": "body_19",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "velocityY",
+                    "target": "body_19",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "angularVelocity",
+                    "target": "body_19",
+                    "value": {
+                        "from": -60,
+                        "step": 5,
+                        "to": 60
+                    }
+                }
+            ],
+            "event": "@runStarted",
+            "name": "drift body_19",
+            "op": "set",
+            "property": "velocityX",
+            "subject": "@world",
+            "target": "body_19",
+            "value": {
+                "from": -120,
+                "step": 5,
+                "to": 120
+            }
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "velocityX",
+                    "target": "body_20",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "velocityY",
+                    "target": "body_20",
+                    "value": {
+                        "from": -120,
+                        "step": 5,
+                        "to": 120
+                    }
+                },
+                {
+                    "op": "set",
+                    "property": "angularVelocity",
+                    "target": "body_20",
+                    "value": {
+                        "from": -60,
+                        "step": 5,
+                        "to": 60
+                    }
+                }
+            ],
+            "event": "@runStarted",
+            "name": "drift body_20",
+            "op": "set",
+            "property": "velocityX",
+            "subject": "@world",
+            "target": "body_20",
+            "value": {
+                "from": -120,
+                "step": 5,
+                "to": 120
+            }
+        },
+        {
+            "action": "@showCaption",
+            "actionParams": {
+                "shown": true,
+                "text": "<p><b>Crashed.</b> That was too hard.</p>"
+            },
+            "actions": [
+                {
+                    "action": "@showCaption",
+                    "actionParams": {
+                        "shown": true,
+                        "text": "<p><b>Crashed.</b> That was too hard.</p>"
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@world",
+                    "value": null
+                },
+                {
+                    "action": "@holdRun",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@world",
+                    "value": null
+                }
+            ],
+            "conditions": [
+                {
+                    "event": "contactHit",
+                    "subject": "polygon_5",
+                    "when": ""
+                },
+                {
+                    "event": "contactHit",
+                    "subject": "polygon_6",
+                    "when": ""
+                },
+                {
+                    "event": "contactHit",
+                    "subject": "rectangle_2",
+                    "when": ""
+                },
+                {
+                    "event": "contactHit",
+                    "subject": "polygon_7",
+                    "when": ""
+                },
+                {
+                    "event": "contactHit",
+                    "subject": "circle_1",
+                    "when": ""
+                },
+                {
+                    "event": "contactHit",
+                    "subject": "circle_2",
+                    "when": ""
+                }
+            ],
+            "event": "contactHit",
+            "join": "any",
+            "name": "crashed",
+            "op": "set",
+            "property": "",
+            "subject": "polygon_5",
+            "target": "@world",
+            "value": null,
+            "when": ""
+        },
+        {
+            "action": "@showCaption",
+            "actionParams": {
+                "shown": true,
+                "text": "<p><b>Landed.</b> Both motors are on the platform.</p>"
+            },
+            "actions": [
+                {
+                    "action": "@showCaption",
+                    "actionParams": {
+                        "shown": true,
+                        "text": "<p><b>Landed.</b> Both motors are on the platform.</p>"
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@world",
+                    "value": null
+                },
+                {
+                    "action": "@holdRun",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@world",
+                    "value": null
+                }
+            ],
+            "compare": ">",
+            "conditions": [
+                {
+                    "compare": ">",
+                    "subject": "rectangle_3",
+                    "watch": "sensorOverlapCount",
+                    "when": 0
+                },
+                {
+                    "compare": ">",
+                    "subject": "rectangle_4",
+                    "watch": "sensorOverlapCount",
+                    "when": 0
+                }
+            ],
+            "join": "all",
+            "name": "landed",
+            "op": "set",
+            "property": "",
+            "subject": "rectangle_3",
+            "target": "@world",
+            "value": null,
+            "watch": "sensorOverlapCount",
+            "when": 0
+        },
+        {
+            "actions": [
+                {
+                    "op": "add",
+                    "property": "fuel",
+                    "target": "@variables",
+                    "value": 300
+                },
+                {
+                    "action": "removeBody",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "body_21",
+                    "value": null
+                }
+            ],
+            "conditions": [
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_6",
+                    "when": "polygon_5"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_6",
+                    "when": "polygon_6"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_6",
+                    "when": "rectangle_2"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_6",
+                    "when": "polygon_7"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_6",
+                    "when": "circle_1"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_6",
+                    "when": "circle_2"
+                }
+            ],
+            "event": "contactBegin",
+            "join": "any",
+            "name": "capsule 1",
+            "op": "add",
+            "property": "fuel",
+            "subject": "rectangle_6",
+            "target": "@variables",
+            "value": 300,
+            "when": "polygon_5"
+        },
+        {
+            "actions": [
+                {
+                    "op": "add",
+                    "property": "fuel",
+                    "target": "@variables",
+                    "value": 300
+                },
+                {
+                    "action": "removeBody",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "body_22",
+                    "value": null
+                }
+            ],
+            "conditions": [
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_7",
+                    "when": "polygon_5"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_7",
+                    "when": "polygon_6"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_7",
+                    "when": "rectangle_2"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_7",
+                    "when": "polygon_7"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_7",
+                    "when": "circle_1"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_7",
+                    "when": "circle_2"
+                }
+            ],
+            "event": "contactBegin",
+            "join": "any",
+            "name": "capsule 2",
+            "op": "add",
+            "property": "fuel",
+            "subject": "rectangle_7",
+            "target": "@variables",
+            "value": 300,
+            "when": "polygon_5"
+        },
+        {
+            "actions": [
+                {
+                    "op": "add",
+                    "property": "fuel",
+                    "target": "@variables",
+                    "value": 300
+                },
+                {
+                    "action": "removeBody",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "body_23",
+                    "value": null
+                }
+            ],
+            "conditions": [
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_8",
+                    "when": "polygon_5"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_8",
+                    "when": "polygon_6"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_8",
+                    "when": "rectangle_2"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_8",
+                    "when": "polygon_7"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_8",
+                    "when": "circle_1"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_8",
+                    "when": "circle_2"
+                }
+            ],
+            "event": "contactBegin",
+            "join": "any",
+            "name": "capsule 3",
+            "op": "add",
+            "property": "fuel",
+            "subject": "rectangle_8",
+            "target": "@variables",
+            "value": 300,
+            "when": "polygon_5"
+        },
+        {
+            "action": "@showCaption",
+            "actionParams": {
+                "shown": true,
+                "text": "<p><b>Lost.</b> Hit by an asteroid.</p>"
+            },
+            "actions": [
+                {
+                    "action": "@showCaption",
+                    "actionParams": {
+                        "shown": true,
+                        "text": "<p><b>Lost.</b> Hit by an asteroid.</p>"
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@world",
+                    "value": null
+                },
+                {
+                    "action": "@holdRun",
+                    "actionParams": {
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "@world",
+                    "value": null
+                }
+            ],
+            "conditions": [
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_5",
+                    "when": "circle_8"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_5",
+                    "when": "circle_6"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_5",
+                    "when": "circle_5"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_5",
+                    "when": "circle_4"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_5",
+                    "when": "circle_3"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_5",
+                    "when": "circle_7"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_6",
+                    "when": "circle_8"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_6",
+                    "when": "circle_6"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_6",
+                    "when": "circle_5"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_6",
+                    "when": "circle_4"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_6",
+                    "when": "circle_3"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_6",
+                    "when": "circle_7"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_2",
+                    "when": "circle_8"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_2",
+                    "when": "circle_6"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_2",
+                    "when": "circle_5"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_2",
+                    "when": "circle_4"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_2",
+                    "when": "circle_3"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "rectangle_2",
+                    "when": "circle_7"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_7",
+                    "when": "circle_8"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_7",
+                    "when": "circle_6"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_7",
+                    "when": "circle_5"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_7",
+                    "when": "circle_4"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_7",
+                    "when": "circle_3"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "polygon_7",
+                    "when": "circle_7"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_1",
+                    "when": "circle_8"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_1",
+                    "when": "circle_6"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_1",
+                    "when": "circle_5"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_1",
+                    "when": "circle_4"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_1",
+                    "when": "circle_3"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_1",
+                    "when": "circle_7"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_2",
+                    "when": "circle_8"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_2",
+                    "when": "circle_6"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_2",
+                    "when": "circle_5"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_2",
+                    "when": "circle_4"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_2",
+                    "when": "circle_3"
+                },
+                {
+                    "event": "contactBegin",
+                    "subject": "circle_2",
+                    "when": "circle_7"
+                }
+            ],
+            "event": "contactBegin",
+            "join": "any",
+            "name": "struck",
+            "op": "set",
+            "property": "",
+            "subject": "polygon_5",
+            "target": "@world",
+            "value": null,
+            "when": "circle_8"
+        }
+    ],
+    "shapes": [
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "polygon_1",
+            "origin": {
+                "x": 201.5,
+                "y": 44.5
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 2,
+                    "y": 70
+                },
+                {
+                    "x": 42,
+                    "y": 10
+                },
+                {
+                    "x": 122,
+                    "y": -50
+                },
+                {
+                    "x": 222,
+                    "y": -90
+                },
+                {
+                    "x": 322,
+                    "y": -10
+                },
+                {
+                    "x": 362,
+                    "y": 50
+                },
+                {
+                    "x": 362,
+                    "y": 90
+                },
+                {
+                    "x": 2,
+                    "y": 90
+                }
+            ],
+            "pos": {
+                "x": -502,
+                "y": 310
+            },
+            "rect": {
+                "height": 180,
+                "width": 360,
+                "x": 2,
+                "y": -90
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "polygon_2",
+            "origin": {
+                "x": 71.5,
+                "y": 47
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 1,
+                    "y": 52
+                },
+                {
+                    "x": 41,
+                    "y": -8
+                },
+                {
+                    "x": 121,
+                    "y": 52
+                },
+                {
+                    "x": 121,
+                    "y": 92
+                },
+                {
+                    "x": 1,
+                    "y": 92
+                }
+            ],
+            "pos": {
+                "x": -141,
+                "y": 308
+            },
+            "rect": {
+                "height": 100,
+                "width": 120,
+                "x": 1,
+                "y": -8
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": -60,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 2,
+                "enableSensorEvents": true,
+                "maskBits": 18446744073709552000
+            },
+            "pos": {
+                "x": 140,
+                "y": 350
+            },
+            "rect": {
+                "height": 40,
+                "width": 200,
+                "x": -160,
+                "y": 10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 4,
+            "joinStyle": "round",
+            "name": "polygon_3",
+            "origin": {
+                "x": 77,
+                "y": 42.5
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 20,
+                    "y": 40
+                },
+                {
+                    "x": 40,
+                    "y": -20
+                },
+                {
+                    "x": 100,
+                    "y": 0
+                },
+                {
+                    "x": 140,
+                    "y": 40
+                },
+                {
+                    "x": 140,
+                    "y": 80
+                },
+                {
+                    "x": 20,
+                    "y": 80
+                }
+            ],
+            "pos": {
+                "x": 160,
+                "y": 320
+            },
+            "rect": {
+                "height": 100,
+                "width": 120,
+                "x": 20,
+                "y": -20
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 5,
+            "joinStyle": "round",
+            "name": "polygon_4",
+            "origin": {
+                "x": 85.5,
+                "y": 108
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": -27,
+                    "y": 214
+                },
+                {
+                    "x": -27,
+                    "y": 174
+                },
+                {
+                    "x": 73,
+                    "y": -6
+                },
+                {
+                    "x": 153,
+                    "y": 94
+                },
+                {
+                    "x": 173,
+                    "y": 174
+                },
+                {
+                    "x": 171,
+                    "y": 216
+                }
+            ],
+            "pos": {
+                "x": 327,
+                "y": 186
+            },
+            "rect": {
+                "height": 222,
+                "width": 200,
+                "x": -27,
+                "y": -6
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 6,
+            "joinStyle": "round",
+            "name": "polygon_5",
+            "origin": {
+                "x": 41,
+                "y": 31.5
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 8,
+                "maskBits": 18446744073709552000
+            },
+            "points": [
+                {
+                    "x": 20,
+                    "y": 3
+                },
+                {
+                    "x": 0,
+                    "y": 63
+                },
+                {
+                    "x": 40,
+                    "y": 63
+                },
+                {
+                    "x": 60,
+                    "y": 43
+                },
+                {
+                    "x": 60,
+                    "y": -17
+                }
+            ],
+            "pos": {
+                "x": -160,
+                "y": -163
+            },
+            "rect": {
+                "height": 80,
+                "width": 60,
+                "x": 0,
+                "y": -17
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 7,
+            "joinStyle": "round",
+            "name": "polygon_6",
+            "origin": {
+                "x": 41,
+                "y": 31.5
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 8,
+                "maskBits": 18446744073709552000
+            },
+            "points": [
+                {
+                    "x": 62,
+                    "y": 3
+                },
+                {
+                    "x": 82,
+                    "y": 63
+                },
+                {
+                    "x": 42,
+                    "y": 63
+                },
+                {
+                    "x": 22,
+                    "y": 43
+                },
+                {
+                    "x": 22,
+                    "y": -17
+                }
+            ],
+            "pos": {
+                "x": -82,
+                "y": -163
+            },
+            "rect": {
+                "height": 80,
+                "width": 60,
+                "x": 22,
+                "y": -17
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 8,
+            "joinStyle": "round",
+            "name": "rectangle_2",
+            "origin": {
+                "x": -80,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 8,
+                "maskBits": 18446744073709552000
+            },
+            "pos": {
+                "x": 0,
+                "y": -150
+            },
+            "rect": {
+                "height": 80,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 9,
+            "joinStyle": "round",
+            "name": "polygon_7",
+            "origin": {
+                "x": 20,
+                "y": 18.5
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 8,
+                "maskBits": 18446744073709552000
+            },
+            "points": [
+                {
+                    "x": -1,
+                    "y": 41
+                },
+                {
+                    "x": 19,
+                    "y": 1
+                },
+                {
+                    "x": 39,
+                    "y": 41
+                }
+            ],
+            "pos": {
+                "x": -99,
+                "y": -241
+            },
+            "rect": {
+                "height": 40,
+                "width": 40,
+                "x": -1,
+                "y": 1
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 10,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 8,
+                "maskBits": 18446744073709552000
+            },
+            "pos": {
+                "x": -80,
+                "y": -180
+            },
+            "rect": {
+                "height": 20,
+                "width": 20,
+                "x": -10,
+                "y": -10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 11,
+            "joinStyle": "round",
+            "name": "circle_2",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 8,
+                "maskBits": 18446744073709552000
+            },
+            "pos": {
+                "x": -80,
+                "y": -140
+            },
+            "rect": {
+                "height": 20,
+                "width": 20,
+                "x": -10,
+                "y": -10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 12,
+            "joinStyle": "round",
+            "name": "rectangle_3",
+            "origin": {
+                "x": -80,
+                "y": -45
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "enableSensorEvents": true,
+                "isSensor": true,
+                "maskBits": 2
+            },
+            "pos": {
+                "x": -60,
+                "y": -50.00000000000001
+            },
+            "rect": {
+                "height": 1,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 13,
+            "joinStyle": "round",
+            "name": "rectangle_4",
+            "origin": {
+                "x": -80,
+                "y": -45
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 1,
+                "enableSensorEvents": true,
+                "isSensor": true,
+                "maskBits": 2
+            },
+            "pos": {
+                "x": 60,
+                "y": -50.00000000000001
+            },
+            "rect": {
+                "height": 1,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 14,
+            "joinStyle": "round",
+            "name": "rectangle_5",
+            "origin": {
+                "x": -60,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 140,
+                "y": 329
+            },
+            "rect": {
+                "height": 1,
+                "width": 200,
+                "x": -160,
+                "y": 30
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 15,
+            "joinStyle": "round",
+            "name": "circle_3",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 4,
+                "groupIndex": -1,
+                "maskBits": 18446744073709552000,
+                "restitution": 1
+            },
+            "pos": {
+                "x": -500,
+                "y": -200
+            },
+            "rect": {
+                "height": 80,
+                "width": 80,
+                "x": -40,
+                "y": -40
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 16,
+            "joinStyle": "round",
+            "name": "circle_4",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 4,
+                "groupIndex": -1,
+                "maskBits": 18446744073709552000,
+                "restitution": 1
+            },
+            "pos": {
+                "x": 480,
+                "y": -300
+            },
+            "rect": {
+                "height": 40,
+                "width": 40,
+                "x": -20,
+                "y": -20
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 17,
+            "joinStyle": "round",
+            "name": "circle_5",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 4,
+                "groupIndex": -1,
+                "maskBits": 18446744073709552000,
+                "restitution": 1
+            },
+            "pos": {
+                "x": 340,
+                "y": -140
+            },
+            "rect": {
+                "height": 20,
+                "width": 20,
+                "x": -10,
+                "y": -10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 18,
+            "joinStyle": "round",
+            "name": "circle_6",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 4,
+                "groupIndex": -1,
+                "maskBits": 18446744073709552000,
+                "restitution": 1
+            },
+            "pos": {
+                "x": -410,
+                "y": 110
+            },
+            "rect": {
+                "height": 20,
+                "width": 20,
+                "x": -10,
+                "y": -10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 19,
+            "joinStyle": "round",
+            "name": "circle_7",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 4,
+                "groupIndex": -1,
+                "maskBits": 18446744073709552000,
+                "restitution": 1
+            },
+            "pos": {
+                "x": -290,
+                "y": -330
+            },
+            "rect": {
+                "height": 20,
+                "width": 20,
+                "x": -10,
+                "y": -10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 20,
+            "joinStyle": "round",
+            "name": "circle_8",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "categoryBits": 4,
+                "groupIndex": -1,
+                "maskBits": 18446744073709552000,
+                "restitution": 1
+            },
+            "pos": {
+                "x": 130,
+                "y": 130
+            },
+            "rect": {
+                "height": 20,
+                "width": 20,
+                "x": -10,
+                "y": -10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 21,
+            "joinStyle": "round",
+            "name": "circle_9_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": 17.130219296696282,
+                    "y": -108.15594803123159
+                },
+                {
+                    "x": -17.130219296696282,
+                    "y": 108.15594803123159
+                }
+            ],
+            "pos": {
+                "x": 684.8697807033037,
+                "y": 32.15594803123159
+            },
+            "rect": {
+                "height": 216.31189606246318,
+                "width": 34.260438593392564,
+                "x": -17.130219296696282,
+                "y": -108.15594803123159
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 22,
+            "joinStyle": "round",
+            "name": "circle_9_2",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": 49.71383267207216,
+                    "y": -97.56889027113402
+                },
+                {
+                    "x": -49.713832672072044,
+                    "y": 97.56889027113402
+                }
+            ],
+            "pos": {
+                "x": 618.0257287345353,
+                "y": 237.8807863335972
+            },
+            "rect": {
+                "height": 195.13778054226805,
+                "width": 99.4276653441442,
+                "x": -49.713832672072044,
+                "y": -97.56889027113402
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 23,
+            "joinStyle": "round",
+            "name": "circle_9_3",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": 77.43110972886598,
+                    "y": -77.43110972886603
+                },
+                {
+                    "x": 9.119213666402743,
+                    "y": -12.880786333597257
+                }
+            ],
+            "pos": {
+                "x": 490.88078633359726,
+                "y": 412.88078633359726
+            },
+            "rect": {
+                "height": 64.55032339526878,
+                "width": 68.31189606246323,
+                "x": 9.119213666402743,
+                "y": -77.43110972886603
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 24,
+            "joinStyle": "round",
+            "name": "circle_9_8",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": -11.119213666402857,
+                    "y": -12.880786333597257
+                },
+                {
+                    "x": -77.43110972886598,
+                    "y": -77.43110972886598
+                }
+            ],
+            "pos": {
+                "x": -488.88078633359714,
+                "y": 412.88078633359726
+            },
+            "rect": {
+                "height": 64.55032339526872,
+                "width": 66.31189606246312,
+                "x": -77.43110972886598,
+                "y": -77.43110972886598
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 25,
+            "joinStyle": "round",
+            "name": "circle_9_9",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": 49.71383267207216,
+                    "y": 97.56889027113402
+                },
+                {
+                    "x": -49.71383267207216,
+                    "y": -97.568890271134
+                }
+            ],
+            "pos": {
+                "x": -616.0257287345353,
+                "y": 237.88078633359726
+            },
+            "rect": {
+                "height": 195.13778054226802,
+                "width": 99.42766534414432,
+                "x": -49.71383267207216,
+                "y": -97.568890271134
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 26,
+            "joinStyle": "round",
+            "name": "circle_9_10",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": 17.130219296696282,
+                    "y": 108.15594803123159
+                },
+                {
+                    "x": -17.130219296696282,
+                    "y": -108.15594803123159
+                }
+            ],
+            "pos": {
+                "x": -682.8697807033037,
+                "y": 32.155948031231674
+            },
+            "rect": {
+                "height": 216.31189606246318,
+                "width": 34.260438593392564,
+                "x": -17.130219296696282,
+                "y": -108.15594803123159
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 27,
+            "joinStyle": "round",
+            "name": "circle_9_11",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": -17.13021929669617,
+                    "y": 108.15594803123147
+                },
+                {
+                    "x": 17.13021929669617,
+                    "y": -108.15594803123145
+                }
+            ],
+            "pos": {
+                "x": -682.8697807033038,
+                "y": -184.1559480312314
+            },
+            "rect": {
+                "height": 216.31189606246292,
+                "width": 34.26043859339234,
+                "x": -17.13021929669617,
+                "y": -108.15594803123145
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 28,
+            "joinStyle": "round",
+            "name": "circle_9_12",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": -49.71383267207216,
+                    "y": 97.56889027113414
+                },
+                {
+                    "x": 49.71383267207216,
+                    "y": -97.56889027113414
+                }
+            ],
+            "pos": {
+                "x": -616.0257287345355,
+                "y": -389.880786333597
+            },
+            "rect": {
+                "height": 195.13778054226827,
+                "width": 99.42766534414432,
+                "x": -49.71383267207216,
+                "y": -97.56889027113414
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 29,
+            "joinStyle": "round",
+            "name": "circle_9_13",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": -77.43110972886603,
+                    "y": 77.43110972886603
+                },
+                {
+                    "x": 77.43110972886603,
+                    "y": -77.43110972886598
+                }
+            ],
+            "pos": {
+                "x": -488.8807863335973,
+                "y": -564.8807863335971
+            },
+            "rect": {
+                "height": 154.862219457732,
+                "width": 154.86221945773207,
+                "x": -77.43110972886603,
+                "y": -77.43110972886598
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 30,
+            "joinStyle": "round",
+            "name": "circle_9_14",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": -97.56889027113402,
+                    "y": 49.71383267207216
+                },
+                {
+                    "x": 97.56889027113397,
+                    "y": -49.71383267207216
+                }
+            ],
+            "pos": {
+                "x": -313.88078633359726,
+                "y": -692.0257287345353
+            },
+            "rect": {
+                "height": 99.42766534414432,
+                "width": 195.137780542268,
+                "x": -97.56889027113402,
+                "y": -49.71383267207216
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 31,
+            "joinStyle": "round",
+            "name": "circle_9_15",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": -108.15594803123157,
+                    "y": 17.130219296696282
+                },
+                {
+                    "x": 108.15594803123159,
+                    "y": -17.130219296696282
+                }
+            ],
+            "pos": {
+                "x": -108.15594803123172,
+                "y": -758.8697807033037
+            },
+            "rect": {
+                "height": 34.260438593392564,
+                "width": 216.31189606246318,
+                "x": -108.15594803123157,
+                "y": -17.130219296696282
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 32,
+            "joinStyle": "round",
+            "name": "circle_9_16",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": -108.15594803123159,
+                    "y": -17.13021929669617
+                },
+                {
+                    "x": 108.1559480312316,
+                    "y": 17.130219296696282
+                }
+            ],
+            "pos": {
+                "x": 108.15594803123146,
+                "y": -758.8697807033038
+            },
+            "rect": {
+                "height": 34.26043859339245,
+                "width": 216.31189606246318,
+                "x": -108.15594803123159,
+                "y": -17.13021929669617
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 33,
+            "joinStyle": "round",
+            "name": "circle_9_17",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": -97.56889027113397,
+                    "y": -49.713832672072044
+                },
+                {
+                    "x": 97.56889027113402,
+                    "y": 49.71383267207216
+                }
+            ],
+            "pos": {
+                "x": 313.88078633359703,
+                "y": -692.0257287345355
+            },
+            "rect": {
+                "height": 99.4276653441442,
+                "width": 195.137780542268,
+                "x": -97.56889027113397,
+                "y": -49.713832672072044
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 34,
+            "joinStyle": "round",
+            "name": "circle_9_18",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": -77.43110972886603,
+                    "y": -77.43110972886598
+                },
+                {
+                    "x": 77.43110972886603,
+                    "y": 77.43110972886603
+                }
+            ],
+            "pos": {
+                "x": 488.8807863335971,
+                "y": -564.8807863335974
+            },
+            "rect": {
+                "height": 154.862219457732,
+                "width": 154.86221945773207,
+                "x": -77.43110972886603,
+                "y": -77.43110972886598
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 35,
+            "joinStyle": "round",
+            "name": "circle_9_19",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": -49.71383267207216,
+                    "y": -97.56889027113397
+                },
+                {
+                    "x": 49.71383267207216,
+                    "y": 97.56889027113402
+                }
+            ],
+            "pos": {
+                "x": 618.0257287345353,
+                "y": -389.88078633359737
+            },
+            "rect": {
+                "height": 195.137780542268,
+                "width": 99.42766534414432,
+                "x": -49.71383267207216,
+                "y": -97.56889027113397
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": false,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 36,
+            "joinStyle": "round",
+            "name": "circle_9_20",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": true,
+            "physics": {
+                "restitution": 0.9
+            },
+            "points": [
+                {
+                    "x": -17.130219296696282,
+                    "y": -108.15594803123167
+                },
+                {
+                    "x": 17.130219296696282,
+                    "y": 108.15594803123167
+                }
+            ],
+            "pos": {
+                "x": 684.8697807033037,
+                "y": -184.15594803123167
+            },
+            "rect": {
+                "height": 216.31189606246335,
+                "width": 34.260438593392564,
+                "x": -17.130219296696282,
+                "y": -108.15594803123167
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 37,
+            "joinStyle": "round",
+            "name": "rectangle_6",
+            "origin": {
+                "x": -80,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 400,
+                "y": -270
+            },
+            "rect": {
+                "height": 20,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 43.99491399474582,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 38,
+            "joinStyle": "round",
+            "name": "rectangle_7",
+            "origin": {
+                "x": -80,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -260,
+                "y": -110
+            },
+            "rect": {
+                "height": 20,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 156.80823610129784,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 10,
+            "filled": true,
+            "id": 39,
+            "joinStyle": "round",
+            "name": "rectangle_8",
+            "origin": {
+                "x": -80,
+                "y": -40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 540,
+                "y": 50
+            },
+            "rect": {
+                "height": 20,
+                "width": 40,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 219.21094023265414,
+            "smoothChain": false,
+            "type": "rectangle"
+        }
+    ],
+    "variables": [
+        {
+            "name": "fuel",
+            "type": "double",
+            "value": 1000
+        }
+    ],
+    "version": 1,
+    "world": {
+        "physics": {
+            "gravityY": 0.5,
+            "hitEventThreshold": 3
+        },
+        "pixelsPerMeter": 100,
+        "randomSeed": 0,
+        "solidBounds": false
+    }
+}

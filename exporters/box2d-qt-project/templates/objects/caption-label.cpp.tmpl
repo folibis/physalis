@@ -1,0 +1,12 @@
+auto *captionLabel = new QLabel(overlay);
+captionLabel->setTextFormat(Qt::RichText);
+captionLabel->setWordWrap(true);
+captionLabel->setContentsMargins(9, 7, 9, 7);
+captionLabel->setMaximumWidth(420);
+captionLabel->hide();
+overlayColumn->addWidget(captionLabel);
+showCaption = [captionLabel, overlay](const QString &html, bool shown) {
+    captionLabel->setText(html);
+    captionLabel->setVisible(shown && !html.isEmpty());
+    overlay->adjustSize();
+};

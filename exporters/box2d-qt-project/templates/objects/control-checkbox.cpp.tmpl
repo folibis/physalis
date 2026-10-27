@@ -1,0 +1,6 @@
+auto *{{VAR}} = new QCheckBox(panel);
+panelColumn->addWidget({{VAR}});
+QObject::connect({{VAR}}, &QCheckBox::toggled, [](bool on) {
+    controls[{{ID}}].on = on;
+    controlChangedNow.insert({{ID}});
+});

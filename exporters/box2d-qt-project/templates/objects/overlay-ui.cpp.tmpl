@@ -1,0 +1,22 @@
+//! The caption and the scene's own controls, stacked over the canvas in its
+//! top-left corner under the log, the way the editor stacks them. Parented to
+//! the viewport rather than the view, so they stay put as it scrolls.
+auto *overlay = new QWidget(scroll->viewport());
+auto *overlayColumn = new QVBoxLayout(overlay);
+overlayColumn->setContentsMargins(0, 0, 0, 0);
+overlayColumn->setSpacing(8);
+overlay->setStyleSheet("QWidget { background: rgba(255, 255, 255, 200);"
+                       " border: 1px solid #b4b4b4; border-radius: 4px; }"
+                       "QWidget#clear { background: transparent; border: none; }");
+overlay->setObjectName("clear");
+{{CAPTION_LABEL}}
+{{CONTROL_WIDGETS}}
+overlay->move(8, 8);
+overlay->adjustSize();
+overlay->raise();
+//! The log is painted on the view, so the stack starts under whatever it took.
+afterDraw = [overlay] {
+    const int top = 8 + logHeight;
+    if (overlay->y() != top)
+        overlay->move(8, top);
+};

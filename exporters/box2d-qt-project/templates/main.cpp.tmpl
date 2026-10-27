@@ -13,9 +13,17 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QCheckBox>
+#include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QMainWindow>
 #include <QPainter>
+#include <QPushButton>
+#include <QSet>
+#include <QSignalBlocker>
+#include <QSlider>
+#include <QVBoxLayout>
 #include <QPainterPath>
 #include <QPainterPathStroker>
 #include <QScrollArea>
@@ -24,6 +32,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <functional>
 #include <QDateTime>
 #include <utility>
 #include <vector>
@@ -56,6 +65,9 @@ b2WorldId world;
 // rule is: the view carries it out once the step is over.
 int pendingRun = 0;
 {{IDS}}
+{{KEYS_STATE}}
+{{CONTROLS_STATE}}
+{{CAPTION}}
 {{STATE}}
 
 {{HELPERS}}
@@ -309,7 +321,16 @@ void drawAxes(QPainter &painter, b2BodyId body)
     drawTransform(transform, &painter);
 }
 
+{{FOLLOW}}
+
+// Whatever the window stacks over the canvas, placed once it has been painted:
+// the log is drawn on the view itself and the rest goes under it. How tall the
+// log came out is what says where that is; zero where there is no log.
+int logHeight = 0;
+std::function<void()> afterDraw = [] {};
+
 {{DRAW_RAY}}
+{{LOG}}
 
 // --- the window ------------------------------------------------------------
 
@@ -359,6 +380,8 @@ public:
     {
         b2DestroyWorld(world);
         createWorld();
+        {{CONTROLS_RESET}}
+        {{CAPTION_RESET}}
         run(false);
         update();
     }
@@ -393,21 +416,28 @@ protected:
         b2World_Draw(world, &draw);
 
         {{DEBUG_DRAWING}}
+        {{DRAW_LOG}}
+        afterDraw();
+        {{FOLLOW_CALL}}
     }
 
     // Space runs and pauses, R goes back to the beginning, D shows joints and
-    // centres of mass.
+    // centres of mass -- unless the scene's own rules take that key, in which
+    // case it is the scene's.
     void keyPressEvent(QKeyEvent *event) override
     {
-        if (event->key() == Qt::Key_Space)
+        {{KEY_PRESSED}}
+        if (event->key() == Qt::Key_Space && !{{TAKES_SPACE}})
             run(!isRunning());
-        else if (event->key() == Qt::Key_R)
+        else if (event->key() == Qt::Key_R && !{{TAKES_R}})
             reset();
-        else if (event->key() == Qt::Key_D)
+        else if (event->key() == Qt::Key_D && !{{TAKES_D}})
             setDebug(!debug);
         else
             QWidget::keyPressEvent(event);
     }
+
+    {{KEY_EVENTS}}
 
 private:
     QTimer timer;
@@ -427,6 +457,7 @@ int main(int argc, char *argv[])
     window.setCentralWidget(scroll);
 
     {{CONTROLS}}
+    {{OVERLAY_UI}}
 
     window.resize(std::min({{WIDTH}}, 1400), std::min({{HEIGHT}}, 800));
     window.show();

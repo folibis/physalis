@@ -1013,10 +1013,16 @@ void Box2DEngine::performAction(const QString &id, BodyHandle target,
             return static_cast<float>(from.value(QLatin1String(key), 0.0).toDouble()
                                       / m_pixelsPerMeter);
         };
-        const b2Vec2 impulse { metres(params, "impulseX"), metres(params, "impulseY") };
+        b2Vec2 impulse { metres(params, "impulseX"), metres(params, "impulseY") };
+        b2Vec2 offset { metres(params, "offsetX"), metres(params, "offsetY") };
+        // Read in the body's own directions, which turn with it, rather than
+        // the world's: a ship's engine points where the ship points.
+        if (params.value(QStringLiteral("relative"), false).toBool()) {
+            impulse = b2Body_GetWorldVector(body, impulse);
+            offset = b2Body_GetWorldVector(body, offset);
+        }
         const b2Vec2 centre = b2Body_GetWorldCenter(body);
-        const b2Vec2 point { centre.x + metres(params, "offsetX"),
-                             centre.y + metres(params, "offsetY") };
+        const b2Vec2 point { centre.x + offset.x, centre.y + offset.y };
         b2Body_ApplyLinearImpulse(body, impulse, point, true);
         return;
     }
@@ -1028,10 +1034,14 @@ void Box2DEngine::performAction(const QString &id, BodyHandle target,
             return static_cast<float>(from.value(QLatin1String(key), 0.0).toDouble()
                                       / m_pixelsPerMeter);
         };
-        const b2Vec2 force { metres(params, "impulseX"), metres(params, "impulseY") };
+        b2Vec2 force { metres(params, "impulseX"), metres(params, "impulseY") };
+        b2Vec2 offset { metres(params, "offsetX"), metres(params, "offsetY") };
+        if (params.value(QStringLiteral("relative"), false).toBool()) {
+            force = b2Body_GetWorldVector(body, force);
+            offset = b2Body_GetWorldVector(body, offset);
+        }
         const b2Vec2 centre = b2Body_GetWorldCenter(body);
-        const b2Vec2 point { centre.x + metres(params, "offsetX"),
-                             centre.y + metres(params, "offsetY") };
+        const b2Vec2 point { centre.x + offset.x, centre.y + offset.y };
         b2Body_ApplyForce(body, force, point, true);
         return;
     }

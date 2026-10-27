@@ -1,0 +1,56 @@
+//! The readout the editor keeps in a corner of the canvas while a run is going:
+//! one line per property the scene was told to watch. Painted in screen pixels,
+//! not scene units, so panning and zooming leave it where it is.
+// A number the way the editor writes it: two decimals, or three figures for
+// something smaller than one.
+QString logNumber(double v)
+{
+    if (v == 0.0 || std::abs(v) >= 1.0)
+        return QString::number(v, 'f', 2);
+    return QString::number(v, 'g', 3);
+}
+
+QStringList logLines()
+{
+    QStringList rows;
+    {{ROWS}}
+    return rows;
+}
+
+void drawLog(QPainter &painter, const QSize &viewport)
+{
+    const QStringList rows = logLines();
+    logHeight = 0;
+    if (rows.isEmpty())
+        return;
+
+    painter.save();
+    painter.resetTransform();
+    QFont font = painter.font();
+    font.setPointSize({{FONT_SIZE}});
+    {{FONT_FAMILY}}
+    painter.setFont(font);
+
+    const QFontMetrics metrics(font);
+    const int pad = 8, gap = 4;
+    const int line = metrics.lineSpacing();
+    int width = 0;
+    for (const QString &row : rows)
+        width = std::max(width, metrics.horizontalAdvance(row));
+
+    const int boxW = width + pad * 2, boxH = rows.size() * line + pad * 2;
+    const int x = {{AT_RIGHT}} ? viewport.width() - boxW - gap : gap;
+    const int y = {{AT_BOTTOM}} ? viewport.height() - boxH - gap : gap;
+
+    painter.setPen(QColor(200, 200, 200));
+    painter.setBrush(QColor(255, 255, 255, 190));
+    painter.drawRect(x, y, boxW, boxH);
+
+    painter.setPen(QColor("{{TEXT_COLOR}}"));
+    for (int r = 0; r < rows.size(); ++r)
+        painter.drawText(x + pad, y + pad + r * line + metrics.ascent(), rows.at(r));
+    painter.restore();
+    //! Only a log in that corner is in the way of what stacks there.
+    if (!{{AT_BOTTOM}} && !{{AT_RIGHT}})
+        logHeight = boxH + gap;
+}

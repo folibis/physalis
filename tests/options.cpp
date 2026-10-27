@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Ruslan Muhlinin. See LICENSE.
 #include "CanvasScene.h"
+#include "RectangleItem.h"
+#include "ShapeItem.h"
 #include "OptionsDialog.h"
 #include "ShapeStyle.h"
 
@@ -13,6 +15,25 @@
 #include <QIcon>
 #include <QImage>
 #include <QPixmap>
+#include "PhysicsBody.h"
+#include "SceneSerializer.h"
+#include "PhysicsTypes.h"
+#include "SceneControl.h"
+#include "SimulationController.h"
+#include "Rule.h"
+#include "SceneVariable.h"
+#include <QtTest/QTest>
+#include <QPushButton>
+#include <QSlider>
+#include "ControlsPanel.h"
+#include <QFrame>
+#include <QLineEdit>
+#include <QGraphicsView>
+#include "PropertyPanel.h"
+#include <QTableWidget>
+#include <QScrollBar>
+#include <QLabel>
+#include <QTextDocument>
 #include <gtest/gtest.h>
 #include "MainWindow.h"
 #include <QAction>
@@ -397,4 +418,649 @@ TEST(Options, EveryIconActuallyDraws)
             << " pixels at 20px -- Qt could not render it";
     }
     EXPECT_GT(checked, 20) << "the icon resource looks empty";
+}
+
+// A caption wraps, and a wrapped label cannot size itself: its size hint is
+// the width the text would want on one line, so asking it to adjust gave a box
+// too narrow for what it then wrapped and the last words were cut off.
+TEST(Options, ACaptionIsTallEnoughForWhatItWraps)
+{
+    MainWindow window;
+    window.resize(900, 700);
+    // Shown, or the label is never laid out and never "visible".
+    window.show();
+    QCoreApplication::processEvents();
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+
+    QLabel *caption = window.findChild<QLabel *>(QStringLiteral("SceneCaption"));
+    ASSERT_TRUE(caption) << "the window has no caption label";
+
+    const QString words =
+        QStringLiteral("Press <b>Space</b> for start/stop. Press Arrow <b>Up</b>/Down for"
+                       " increment/decrement the motor speed, and keep going until there is"
+                       " plainly more here than fits on one line.");
+    scene->setCaption(words, true);
+    QCoreApplication::processEvents();
+
+    ASSERT_TRUE(caption->isVisible());
+    EXPECT_LE(caption->width(), caption->maximumWidth()) << "the caption ignored its width limit";
+
+    // What the text needs at that width, laid out the same way the label lays
+    // it out. The label has to be at least that tall, or it is clipping.
+    QTextDocument wrapped;
+    wrapped.setDefaultFont(caption->font());
+    wrapped.setHtml(words);
+    wrapped.setTextWidth(caption->contentsRect().width());
+    EXPECT_GE(caption->contentsRect().height(), int(wrapped.size().height()))
+        << "the caption is shorter than the text it wrapped -- the end is cut off";
+    EXPECT_GT(wrapped.size().height(), caption->fontMetrics().height() * 2)
+        << "the test text did not actually wrap";
+}
+
+// The caption sits under the log, and the log grows every time a watch is
+// added. Placed once and left alone, it was overlapped the moment the log
+// gained a line.
+TEST(Options, ACaptionStaysClearOfTheLog)
+{
+    MainWindow window;
+    window.resize(900, 700);
+    window.show();
+    QCoreApplication::processEvents();
+
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    QLabel *caption = window.findChild<QLabel *>(QStringLiteral("SceneCaption"));
+    QLabel *log = window.findChild<QLabel *>(QStringLiteral("LogOverlay"));
+    ASSERT_TRUE(caption);
+    ASSERT_TRUE(log);
+
+    RectangleItem *box = scene->addRectangle(QPointF(0, 0));
+    ASSERT_TRUE(box);
+    // The log only appears while a run is going: outside one the values are
+    // what the property table already shows.
+    scene->setEditorMode(EditorMode::Physics);
+    scene->selectForPhysics(box, true);
+    ASSERT_TRUE(scene->createBodyFromSelection());
+    window.startRunForTest();
+    QCoreApplication::processEvents();
+
+    scene->setCaption(QStringLiteral("Press <b>Space</b> to start, and read this to the end."),
+                      true);
+    QCoreApplication::processEvents();
+    ASSERT_TRUE(caption->isVisible());
+
+    const auto clear = [&] {
+        if (!log->isVisible())
+            return true;
+        return !log->geometry().intersects(caption->geometry());
+    };
+    EXPECT_TRUE(clear()) << "the caption overlaps the log with nothing logged yet";
+
+    // Every watch the log gains makes it taller, and the caption has to move.
+    for (int i = 0; i < 4; ++i) {
+        scene->addWatch({ box->name(), QStringLiteral("rotation"),
+                          QStringLiteral("turn%1").arg(i) });
+        QCoreApplication::processEvents();
+        ASSERT_TRUE(log->isVisible()) << "the log did not appear";
+        EXPECT_TRUE(clear()) << "the caption overlaps the log after " << (i + 1) << " watches";
+        EXPECT_GE(caption->y(), log->y() + log->height())
+            << "the caption is not below the log after " << (i + 1) << " watches";
+    }
+}
+
+// A control declared in the scene appears on the canvas and works: ticking the
+// box on screen is what a rule hears, and a rule writing it moves the widget.
+TEST(Options, ControlsAppearOnTheCanvasAndWork)
+{
+    MainWindow window;
+    window.resize(900, 700);
+    window.show();
+    QCoreApplication::processEvents();
+
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+
+    SceneControl tick;
+    tick.id = QStringLiteral("go");
+    tick.kind = SceneControl::Kind::Checkbox;
+    tick.initial = false;
+    SceneControl pull;
+    pull.id = QStringLiteral("speed");
+    pull.kind = SceneControl::Kind::Slider;
+    pull.minimum = 0.0;
+    pull.maximum = 10.0;
+    pull.step = 1.0;
+    pull.initial = 2.0;
+    SceneControl press;
+    press.id = QStringLiteral("fire");
+    press.kind = SceneControl::Kind::Button;
+    scene->setControls({ tick, pull, press });
+
+    // They are only up while a run is: see ControlsAreOnlyThereWhileARunIs.
+    RectangleItem *ground = scene->addRectangle(QPointF(0, 0));
+    scene->setEditorMode(EditorMode::Physics);
+    scene->selectForPhysics(ground, true);
+    ASSERT_TRUE(scene->createBodyFromSelection());
+    window.startRunForTest();
+    QCoreApplication::processEvents();
+
+    QWidget *panel = window.findChild<QWidget *>(QStringLiteral("SceneControls"));
+    ASSERT_TRUE(panel) << "the canvas has no controls panel";
+    EXPECT_TRUE(panel->isVisible()) << "the controls did not appear";
+
+    QCheckBox *box = nullptr;
+    QPushButton *button = nullptr;
+    QSlider *slider = nullptr;
+    for (QCheckBox *one : panel->findChildren<QCheckBox *>())
+        box = one;
+    for (QPushButton *one : panel->findChildren<QPushButton *>())
+        button = one;
+    for (QSlider *one : panel->findChildren<QSlider *>())
+        slider = one;
+    ASSERT_TRUE(box) << "no checkbox on the canvas";
+    ASSERT_TRUE(button) << "no button on the canvas";
+    ASSERT_TRUE(slider) << "no slider on the canvas";
+    EXPECT_EQ(box->text(), QStringLiteral("go")) << "the name is not what it shows";
+
+    // A hand on the widgets is what the scene hears.
+    box->setChecked(true);
+    EXPECT_TRUE(scene->controlValue(QStringLiteral("go")).toBool())
+        << "ticking the box on screen did not reach the scene";
+    slider->setValue(7);
+    EXPECT_DOUBLE_EQ(scene->controlValue(QStringLiteral("speed")).toDouble(), 7.0)
+        << "pulling the slider did not reach the scene";
+
+    button->pressed();
+    EXPECT_TRUE(scene->controlValue(QStringLiteral("fire")).toBool());
+    button->released();
+    EXPECT_FALSE(scene->controlValue(QStringLiteral("fire")).toBool());
+
+    // And a rule writing one moves the widget, without the widget answering
+    // back and writing it again.
+    scene->setControlValue(QStringLiteral("speed"), 3.0);
+    QCoreApplication::processEvents();
+    EXPECT_EQ(slider->value(), 3) << "the slider did not follow the scene";
+    EXPECT_DOUBLE_EQ(scene->controlValue(QStringLiteral("speed")).toDouble(), 3.0)
+        << "the widget answered back and overwrote the value";
+
+    scene->setControlEnabled(QStringLiteral("speed"), false);
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(slider->isEnabled()) << "greying the control out did not reach the widget";
+
+    // A rule that changes what the button says must not cost it its press. The
+    // caption used to count as a different set of controls, which rebuilt the
+    // widgets while the button was still down: the release never arrived, the
+    // value stayed true, and the press after it did nothing at all.
+    SceneVariable count;
+    count.name = QStringLiteral("presses");
+    count.type = SceneVariable::Type::Integer;
+    count.initial = 0;
+    scene->setVariables({ count });
+
+    Rule counting;
+    counting.conditions.resize(1);
+    counting.conditions[0].subjectName = Rule::controls();
+    counting.conditions[0].eventId = Rule::controlPressedEvent();
+    counting.conditions[0].conditionValue = press.id;
+    counting.actions.resize(2);
+    counting.actions[0].targetName = Rule::variables();
+    counting.actions[0].propertyKey = count.name;
+    counting.actions[0].op = Rule::Op::Add;
+    counting.actions[0].value = 1;
+    counting.actions[1].targetName = Rule::controls();
+    counting.actions[1].propertyKey = press.captionKey();
+    counting.actions[1].op = Rule::Op::Set;
+    counting.actions[1].value = QStringLiteral("Again");
+    scene->setRules({ counting });
+
+    SimulationController *sim = window.findChild<SimulationController *>();
+    ASSERT_TRUE(sim);
+    for (int click = 1; click <= 2; ++click) {
+        QTest::mouseClick(button, Qt::LeftButton);
+        QCoreApplication::processEvents();
+        sim->stepFrame();
+        QCoreApplication::processEvents();
+        EXPECT_FALSE(scene->controlValue(press.id).toBool())
+            << "click " << click << " left the button held down";
+        EXPECT_EQ(sim->readValue(Rule::variables(), count.name).toInt(), click)
+            << "click " << click << " did not reach the rule";
+    }
+    EXPECT_EQ(button->text(), QStringLiteral("Again"))
+        << "the button does not say what the rule set";
+
+    // They sit below the caption, not over it.
+    scene->setCaption(QStringLiteral("Hello"), true);
+    QCoreApplication::processEvents();
+    QLabel *caption = window.findChild<QLabel *>(QStringLiteral("SceneCaption"));
+    ASSERT_TRUE(caption);
+    EXPECT_GE(panel->y(), caption->y() + caption->height())
+        << "the controls overlap the caption";
+}
+
+// One body can be kept in view: while a run is going the view follows it, so
+// it stays in the middle of the screen and the scene moves around it. One,
+// because a view has one middle -- giving it to another takes it off the
+// first.
+TEST(Options, TheViewFollowsTheBodyKeptInView)
+{
+    MainWindow window;
+    window.resize(900, 700);
+    window.show();
+    QCoreApplication::processEvents();
+
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    QGraphicsView *view = window.findChild<QGraphicsView *>();
+    ASSERT_TRUE(scene);
+    ASSERT_TRUE(view);
+    scene->setEditorMode(EditorMode::Physics);
+
+    const auto makeBody = [&](const QPointF &at, physics::BodyType type) {
+        RectangleItem *shape = scene->addRectangle(at);
+        shape->setRect(QRectF(-20, -10, 40, 20));
+        scene->clearPhysicsSelection();
+        scene->selectForPhysics(shape, true);
+        PhysicsBody *body = scene->createBodyFromSelection();
+        body->props().type = type;
+        return body;
+    };
+    PhysicsBody *faller = makeBody(QPointF(-300, -200), physics::BodyType::Dynamic);
+    PhysicsBody *other = makeBody(QPointF(300, 150), physics::BodyType::Dynamic);
+    ASSERT_TRUE(faller);
+    ASSERT_TRUE(other);
+    EXPECT_EQ(scene->focusedBody(), nullptr) << "a scene follows nothing until it is told to";
+
+    scene->setFocusedBody(faller);
+    EXPECT_EQ(scene->focusedBody(), faller);
+    scene->setFocusedBody(other);
+    EXPECT_EQ(scene->focusedBody(), other) << "the second body was not given it";
+    EXPECT_FALSE(faller->isFocused()) << "two bodies are kept in view at once";
+    scene->setFocusedBody(faller);
+
+    // It survives the file, and only the one body carries it.
+    CanvasScene read;
+    QString error;
+    ASSERT_TRUE(SceneSerializer::load(&read, SceneSerializer::save(scene), &error))
+        << error.toStdString();
+    ASSERT_TRUE(read.focusedBody());
+    EXPECT_EQ(read.focusedBody()->name(), faller->name());
+    int followed = 0;
+    for (PhysicsBody *body : read.bodies())
+        followed += body->isFocused() ? 1 : 0;
+    EXPECT_EQ(followed, 1);
+
+    // While the run goes, the view keeps it in the middle.
+    const QPointF started = faller->originScenePos();
+    window.startRunForTest();
+    QCoreApplication::processEvents();
+    SimulationController *sim = window.findChild<SimulationController *>();
+    ASSERT_TRUE(sim);
+    for (int i = 0; i < 20; ++i)
+        sim->stepFrame();
+    QCoreApplication::processEvents();
+
+    const QPointF middle = view->mapToScene(view->viewport()->rect().center());
+    const QPointF where = faller->originScenePos();
+    EXPECT_LT(QLineF(middle, where).length(), 40.0)
+        << "the view is at " << middle.x() << "," << middle.y() << " and the body at "
+        << where.x() << "," << where.y();
+
+    // And it moved to get there: following something standing still proves
+    // nothing.
+    EXPECT_GT(where.y() - started.y(), 20.0) << "the body did not fall";
+    sim->stop();
+
+    // A rule can hand the view to another body while the run is going, and
+    // the scene's own choice comes back when it stops.
+    Rule handover;
+    handover.name = QStringLiteral("watch the other one");
+    handover.conditions[0].subjectName = Rule::world();
+    handover.conditions[0].eventId = Rule::runStartedEvent();
+    handover.actions[0].targetName = other->name();
+    handover.actions[0].actionId = Rule::keepInViewAction();
+    handover.actions[0].actionParams.insert(Rule::keepInViewParam(), true);
+    scene->setRules({ handover });
+
+    window.startRunForTest();
+    QCoreApplication::processEvents();
+    for (int i = 0; i < 10; ++i)
+        sim->stepFrame();
+    QCoreApplication::processEvents();
+    EXPECT_EQ(scene->focusedBody(), other) << "the rule did not hand the view over";
+    EXPECT_LT(QLineF(view->mapToScene(view->viewport()->rect().center()),
+                     other->originScenePos()).length(), 40.0)
+        << "the view did not follow the body the rule named";
+
+    sim->stop();
+    EXPECT_EQ(scene->focusedBody(), faller)
+        << "stopping did not put back the body the scene itself keeps in view";
+}
+
+// The field is the scene's: its size, its background and its grid travel in
+// the file, and opening one brings its own. What Options holds is the field a
+// *new* scene starts with -- changing it does not repaint the scene that is
+// open, and the scene's own colour does not creep into the settings and from
+// there into every scene after it.
+TEST(Options, TheFieldBelongsToTheSceneAndOptionsHoldsTheDefault)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+
+    // What this scene is drawn on.
+    scene->setBackgroundColor(QColor(200, 30, 30));
+    scene->setShowGrid(false);
+    scene->setGridCellSize(37.0);
+    scene->setFieldSize(1234.0, 567.0);
+
+    // Somebody sets a different default in Options.
+    OptionsDialog::Settings defaults = window.settingsSnapshotForTest();
+    defaults.backgroundColor = QColor(20, 40, 200);
+    defaults.showGrid = true;
+    defaults.gridCellSize = 50.0;
+    defaults.fieldWidth = 800.0;
+    defaults.fieldHeight = 600.0;
+    window.applySettingsForTest(defaults);
+
+    EXPECT_EQ(scene->backgroundColor(), QColor(200, 30, 30))
+        << "a default repainted the scene that was open";
+    EXPECT_FALSE(scene->showGrid()) << "a default turned the open scene's grid back on";
+    EXPECT_DOUBLE_EQ(scene->gridCellSize(), 37.0);
+    EXPECT_DOUBLE_EQ(scene->fieldWidth(), 1234.0);
+
+    // And what would be written to the settings file is the default, not
+    // whatever the open scene happens to be drawn on.
+    const OptionsDialog::Settings saved = window.settingsSnapshotForTest();
+    EXPECT_EQ(saved.backgroundColor, QColor(20, 40, 200))
+        << "the open scene's background became the setting";
+    EXPECT_TRUE(saved.showGrid);
+    EXPECT_DOUBLE_EQ(saved.gridCellSize, 50.0);
+
+    // The scene carries its own through the file.
+    CanvasScene read;
+    QString error;
+    ASSERT_TRUE(SceneSerializer::load(&read, SceneSerializer::save(scene), &error))
+        << error.toStdString();
+    EXPECT_EQ(read.backgroundColor(), QColor(200, 30, 30)) << "the file lost the background";
+    EXPECT_FALSE(read.showGrid()) << "the file lost whether the grid is shown";
+    EXPECT_DOUBLE_EQ(read.gridCellSize(), 37.0);
+    EXPECT_DOUBLE_EQ(read.fieldWidth(), 1234.0);
+
+    // A new scene is where the default is for.
+    QAction *newScene = window.findChild<QAction *>(QStringLiteral("actionNewScene"));
+    ASSERT_TRUE(newScene);
+    newScene->trigger();
+    QCoreApplication::processEvents();
+    EXPECT_EQ(scene->backgroundColor(), QColor(20, 40, 200))
+        << "a new scene did not start with the default background";
+    EXPECT_TRUE(scene->showGrid()) << "a new scene did not start with the default grid";
+    EXPECT_DOUBLE_EQ(scene->gridCellSize(), 50.0);
+    EXPECT_DOUBLE_EQ(scene->fieldWidth(), 800.0);
+}
+
+// The Controls tab is cards, not a table: a slider has four numbers to declare
+// and a row of cells too narrow to read is no way to show them. Each card
+// carries the control's fields on rows of its own, the way a rule card does.
+TEST(Options, TheControlsTabIsOneCardPerControl)
+{
+    MainWindow window;
+    window.resize(900, 700);
+    window.show();
+    QCoreApplication::processEvents();
+
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ControlsPanel *panel = window.findChild<ControlsPanel *>();
+    ASSERT_TRUE(scene);
+    ASSERT_TRUE(panel) << "there is no Controls tab";
+
+    const auto cards = [&] { return panel->findChildren<QFrame *>(QStringLiteral("controlCard")); };
+    EXPECT_TRUE(cards().isEmpty()) << "a scene with no controls shows a card";
+
+    SceneControl tick;
+    tick.id = QStringLiteral("go");
+    tick.kind = SceneControl::Kind::Checkbox;
+    SceneControl pull;
+    pull.id = QStringLiteral("speed");
+    pull.kind = SceneControl::Kind::Slider;
+    pull.minimum = 0.0;
+    pull.maximum = 10.0;
+    pull.step = 0.5;
+    pull.initial = 4.0;
+    scene->setControls({ tick, pull });
+    QCoreApplication::processEvents();
+
+    ASSERT_EQ(cards().size(), 2) << "one card per control";
+
+    // The checkbox card: its id, its caption, its kind, and where it starts.
+    QFrame *box = cards().at(0);
+    const QList<QLineEdit *> words = box->findChildren<QLineEdit *>();
+    ASSERT_EQ(words.size(), 2) << "the id a rule uses and the caption it shows";
+    EXPECT_EQ(words.at(0)->text(), QStringLiteral("go"));
+    EXPECT_TRUE(words.at(1)->text().isEmpty()) << "no caption declared";
+    EXPECT_EQ(words.at(1)->placeholderText(), QStringLiteral("go"))
+        << "an empty caption says what it falls back to";
+    EXPECT_EQ(box->findChildren<QComboBox *>().size(), 1) << "the kind";
+    EXPECT_TRUE(box->findChildren<QDoubleSpinBox *>().isEmpty())
+        << "a checkbox has no numbers to declare";
+
+    // The slider card: all four of its numbers, each on a row of its own.
+    QFrame *slider = cards().at(1);
+    EXPECT_EQ(slider->findChildren<QDoubleSpinBox *>().size(), 4)
+        << "a slider declares where it starts, its lowest, its highest and its step";
+
+    // Editing one writes it through.
+    QDoubleSpinBox *step = slider->findChildren<QDoubleSpinBox *>().at(3);
+    step->setValue(2.0);
+    QCoreApplication::processEvents();
+    EXPECT_DOUBLE_EQ(scene->controls().at(1).step, 2.0) << "the step did not reach the scene";
+}
+
+// Controls are how a running scene is worked: outside a run there is nothing
+// for a press to reach, and a slider left standing over a scene being edited
+// is just something in the way.
+TEST(Options, ControlsAreOnlyThereWhileARunIs)
+{
+    MainWindow window;
+    window.resize(900, 700);
+    window.show();
+    QCoreApplication::processEvents();
+
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+
+    SceneControl pull;
+    pull.id = QStringLiteral("speed");
+    pull.kind = SceneControl::Kind::Slider;
+    pull.minimum = 0.0;
+    pull.maximum = 10.0;
+    pull.step = 1.0;
+    pull.initial = 2.0;
+    scene->setControls({ pull });
+    QCoreApplication::processEvents();
+
+    QWidget *panel = window.findChild<QWidget *>(QStringLiteral("SceneControls"));
+    ASSERT_TRUE(panel);
+    EXPECT_FALSE(panel->isVisible()) << "the controls are up with no run going";
+
+    RectangleItem *box = scene->addRectangle(QPointF(0, 0));
+    scene->setEditorMode(EditorMode::Physics);
+    scene->selectForPhysics(box, true);
+    ASSERT_TRUE(scene->createBodyFromSelection());
+    window.startRunForTest();
+    QCoreApplication::processEvents();
+    EXPECT_TRUE(panel->isVisible()) << "the controls did not appear when the run started";
+
+    window.stopRunForTest();
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(panel->isVisible()) << "the controls are still up after the run stopped";
+}
+
+// A full-screen run is a different view, and the log, the caption and the
+// controls are children of a view. Left behind, they stayed on the editor's
+// window where nobody was looking -- and the keys went to a window that had
+// never been given the focus.
+TEST(Options, TheOverlaysFollowAFullScreenRun)
+{
+    MainWindow window;
+    window.resize(900, 700);
+    window.show();
+    QCoreApplication::processEvents();
+
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+
+    SceneControl pull;
+    pull.id = QStringLiteral("speed");
+    pull.kind = SceneControl::Kind::Slider;
+    pull.minimum = 0.0;
+    pull.maximum = 10.0;
+    pull.step = 1.0;
+    pull.initial = 2.0;
+    scene->setControls({ pull });
+
+    RectangleItem *box = scene->addRectangle(QPointF(0, 0));
+    scene->setEditorMode(EditorMode::Physics);
+    scene->selectForPhysics(box, true);
+    ASSERT_TRUE(scene->createBodyFromSelection());
+    scene->addWatch({ box->name(), QStringLiteral("rotation"), QStringLiteral("turn") });
+
+    window.startRunForTest();
+    QCoreApplication::processEvents();
+
+    QGraphicsView *editorView = window.findChild<QGraphicsView *>();
+    ASSERT_TRUE(editorView);
+    QLabel *log = window.findChild<QLabel *>(QStringLiteral("LogOverlay"));
+    QWidget *controls = window.findChild<QWidget *>(QStringLiteral("SceneControls"));
+    ASSERT_TRUE(log);
+    ASSERT_TRUE(controls);
+    scene->setCaption(QStringLiteral("Hello"), true);
+    QCoreApplication::processEvents();
+    QLabel *caption = window.findChild<QLabel *>(QStringLiteral("SceneCaption"));
+    ASSERT_TRUE(caption);
+    EXPECT_EQ(log->parentWidget(), editorView);
+
+    // Handed to another view the way the full-screen run hands them over.
+    // Driven directly rather than by opening a real full-screen window, which
+    // needs a screen this may not have.
+    QGraphicsView other;
+    other.setScene(scene);
+    other.resize(800, 600);
+    window.moveOverlaysForTest(&other);
+    QCoreApplication::processEvents();
+
+    EXPECT_EQ(log->parentWidget(), &other) << "the log stayed on the editor's window";
+    EXPECT_EQ(caption->parentWidget(), &other) << "the caption stayed behind";
+    EXPECT_EQ(controls->parentWidget(), &other) << "the controls stayed behind";
+
+    window.moveOverlaysForTest(editorView);
+    QCoreApplication::processEvents();
+    EXPECT_EQ(log->parentWidget(), editorView) << "the log did not come back";
+    EXPECT_EQ(caption->parentWidget(), editorView) << "the caption did not come back";
+    EXPECT_EQ(controls->parentWidget(), editorView) << "the controls did not come back";
+
+    window.stopRunForTest();
+}
+
+// The table opens the next object where the last one was left. Scrolled half
+// way down, another shape of the same kind opens half way down -- that is how
+// a value is compared across objects. Scrolled back to the top, it opens at
+// the top: the place was recorded only when it was not zero, so going back up
+// left the old offset standing and the next shape opened at it.
+TEST(Options, AnotherObjectOpensWhereTheLastOneWasLeft)
+{
+    MainWindow window;
+    window.resize(700, 420);
+    window.show();
+    QCoreApplication::processEvents();
+
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    PropertyPanel *panel = window.findChild<PropertyPanel *>();
+    ASSERT_TRUE(scene);
+    ASSERT_TRUE(panel);
+    scene->setEditorMode(EditorMode::Edit);
+
+    RectangleItem *first = scene->addRectangle(QPointF(0, 0));
+    RectangleItem *second = scene->addRectangle(QPointF(200, 0));
+    scene->notifyShapesChanged();
+
+    const auto table = [&] {
+        QTableWidget *tallest = nullptr;
+        for (QTableWidget *one : panel->findChildren<QTableWidget *>()) {
+            if (!tallest || one->verticalScrollBar()->maximum()
+                                > tallest->verticalScrollBar()->maximum()) {
+                tallest = one;
+            }
+        }
+        return tallest;
+    };
+
+    scene->selectShape(first);
+    QCoreApplication::processEvents();
+    ASSERT_TRUE(table());
+    ASSERT_GT(table()->verticalScrollBar()->maximum(), 0)
+        << "the table fits without scrolling, so this proves nothing";
+
+    // Left part way down: the next shape opens there. The bottom rather than
+    // the middle, because a table only a step or two taller than the panel has
+    // no middle to speak of.
+    const int middle = table()->verticalScrollBar()->maximum();
+    ASSERT_GT(middle, 0);
+    table()->verticalScrollBar()->setValue(middle);
+    QCoreApplication::processEvents();
+
+    scene->selectShape(second);
+    QCoreApplication::processEvents();
+    EXPECT_EQ(table()->verticalScrollBar()->value(), middle)
+        << "the next shape did not open where the last one was left";
+
+    // Left at the top: the next shape opens at the top.
+    table()->verticalScrollBar()->setValue(0);
+    QCoreApplication::processEvents();
+
+    scene->selectShape(first);
+    QCoreApplication::processEvents();
+    EXPECT_EQ(table()->verticalScrollBar()->value(), 0)
+        << "scrolled back to the top, the next shape still opened half way down";
+}
+
+// A short caption should take the room a short caption needs. Sized to the
+// widest it was allowed, a line and a half of text put a 420-pixel box of
+// white space over the scene.
+TEST(Options, AShortCaptionDoesNotTakeTheWholeWidth)
+{
+    MainWindow window;
+    window.resize(900, 700);
+    window.show();
+    QCoreApplication::processEvents();
+
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    QLabel *caption = window.findChild<QLabel *>(QStringLiteral("SceneCaption"));
+    ASSERT_TRUE(caption);
+
+    scene->setCaption(QStringLiteral("Use <b>Left/Right</b> arrow key<br>to control the"
+                                     " flippers."),
+                      true);
+    QCoreApplication::processEvents();
+    ASSERT_TRUE(caption->isVisible());
+    const int shortWidth = caption->width();
+    EXPECT_LT(shortWidth, caption->maximumWidth())
+        << "a two-line caption took the whole width it was allowed";
+
+    // Still wide enough for what it says.
+    QTextDocument shown;
+    shown.setDefaultFont(caption->font());
+    shown.setHtml(scene->caption());
+    shown.setTextWidth(caption->contentsRect().width());
+    EXPECT_GE(caption->contentsRect().height(), int(shown.size().height()))
+        << "shrinking it cut the text off";
+
+    // A long one still grows to the limit and wraps there.
+    QString much;
+    for (int i = 0; i < 40; ++i)
+        much += QStringLiteral("every word here is one more than the box can take. ");
+    scene->setCaption(much, true);
+    QCoreApplication::processEvents();
+    EXPECT_GT(caption->width(), shortWidth) << "a long caption did not grow";
+    EXPECT_LE(caption->width(), caption->maximumWidth()) << "it grew past its limit";
 }

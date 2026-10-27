@@ -3,6 +3,9 @@
 #pragma once
 
 #include <QString>
+#include <Qt>
+#include <QSet>
+#include <QPair>
 #include <QVariant>
 #include <QVariantMap>
 #include <QVector>
@@ -187,9 +190,134 @@ struct Rule {
     // its first step: where a rule sets things up.
     static QString runStartedEvent() { return QStringLiteral("@runStarted"); }
 
+    // The keyboard, as something a rule can watch. No engine knows a key has
+    // been pressed, so this is the application's own, and it is one object
+    // carrying every key the way the variables are one object carrying every
+    // variable. Which key is the "other object" the event happened with.
+    static QString keyboard() { return QStringLiteral("@keyboard"); }
+
+    // The scene's own controls -- a box to tick, a button, a slider -- as one
+    // object carrying all of them, the way the variables are one object. Each
+    // control contributes two properties, "<name>.value" and "<name>.enabled",
+    // and the three events below name which control they happened to.
+    static QString controls() { return QStringLiteral("@controls"); }
+    static QString controlChangedEvent() { return QStringLiteral("@controlChanged"); }
+    static QString controlPressedEvent() { return QStringLiteral("@controlPressed"); }
+    static QString controlReleasedEvent() { return QStringLiteral("@controlReleased"); }
+    static QString keyPressedEvent() { return QStringLiteral("@keyPressed"); }
+    static QString keyReleasedEvent() { return QStringLiteral("@keyReleased"); }
+    // Raised on every step the key is down, where a press and a release happen
+    // once each. A thruster burns for as long as the key is held, and holding
+    // a key is not a thing that happens once.
+    static QString keyHeldEvent() { return QStringLiteral("@keyHeld"); }
+
+    // What a rule may name. Plain keys only: a rule asking for Ctrl+S would be
+    // asking for Save. Stored by name rather than by Qt's number so a file
+    // written today still reads in a build with a different Qt.
+    static QVector<QPair<QString, int>> offerableKeys()
+    {
+        QVector<QPair<QString, int>> keys;
+        for (int c = Qt::Key_A; c <= Qt::Key_Z; ++c)
+            keys.append({ QString(QChar(c)), c });
+        for (int d = Qt::Key_0; d <= Qt::Key_9; ++d)
+            keys.append({ QString(QChar(d)), d });
+        keys.append({ QStringLiteral("Left"), Qt::Key_Left });
+        keys.append({ QStringLiteral("Right"), Qt::Key_Right });
+        keys.append({ QStringLiteral("Up"), Qt::Key_Up });
+        keys.append({ QStringLiteral("Down"), Qt::Key_Down });
+        keys.append({ QStringLiteral("Space"), Qt::Key_Space });
+        keys.append({ QStringLiteral("Enter"), Qt::Key_Return });
+        keys.append({ QStringLiteral("Tab"), Qt::Key_Tab });
+        keys.append({ QStringLiteral("Backspace"), Qt::Key_Backspace });
+        keys.append({ QStringLiteral("Delete"), Qt::Key_Delete });
+
+        // Every one of them. The run used to keep Space for holding itself and
+        // Right for stepping, which took them away from every scene that
+        // wanted them -- and a scene that does want them can say so: holding
+        // and ending a run are rule actions like any other. The buttons are
+        // still there for anyone who has not bound a key.
+        return keys;
+    }
+
+    static int keyFromName(const QString &name)
+    {
+        for (const auto &key : offerableKeys()) {
+            if (key.first.compare(name, Qt::CaseInsensitive) == 0)
+                return key.second;
+        }
+        return 0;
+    }
+
+    // A key with its modifiers, written the way a menu writes one. Stored and
+    // compared as this text, so a rule asking for Ctrl+A is not fired by a
+    // bare A -- and a scene written today still reads in a build with a
+    // different Qt, which a raw number would not survive.
+    static QString chordName(int key, Qt::KeyboardModifiers held)
+    {
+        const QString base = nameOfKey(key);
+        if (base.isEmpty())
+            return QString();
+        QString chord;
+        if (held & Qt::ControlModifier)
+            chord += QStringLiteral("Ctrl+");
+        if (held & Qt::ShiftModifier)
+            chord += QStringLiteral("Shift+");
+        if (held & Qt::AltModifier)
+            chord += QStringLiteral("Alt+");
+        return chord + base;
+    }
+
+    // The key out of such a chord, and the modifiers out of it.
+    static QString keyOfChord(const QString &chord)
+    {
+        const int last = chord.lastIndexOf(QLatin1Char('+'));
+        return last < 0 ? chord : chord.mid(last + 1);
+    }
+
+    static Qt::KeyboardModifiers modifiersOfChord(const QString &chord)
+    {
+        Qt::KeyboardModifiers held;
+        if (chord.contains(QLatin1String("Ctrl+")))
+            held |= Qt::ControlModifier;
+        if (chord.contains(QLatin1String("Shift+")))
+            held |= Qt::ShiftModifier;
+        if (chord.contains(QLatin1String("Alt+")))
+            held |= Qt::AltModifier;
+        return held;
+    }
+
+    static QString nameOfKey(int key)
+    {
+        // The keypad has an Enter of its own, and nobody pressing it means
+        // anything different by it.
+        if (key == Qt::Key_Enter)
+            key = Qt::Key_Return;
+        for (const auto &known : offerableKeys()) {
+            if (known.second == key)
+                return known.first;
+        }
+        return QString();
+    }
+
     // An action on a body, the application's own: put it back where it stood
     // when the run started, facing the same way, and stop it moving.
+    // An action on the world, the application's own: put some words on the
+    // canvas, under the log. No engine has anything to say about text. The
+    // caption lasts as long as the run does, like every other thing a rule
+    // does to a scene.
+    static QString showCaptionAction() { return QStringLiteral("@showCaption"); }
+    static QString captionTextParam() { return QStringLiteral("text"); }
+    static QString captionShownParam() { return QStringLiteral("shown"); }
+
     static QString initStateAction() { return QStringLiteral("@initState"); }
+
+    // An action on a body, the application's own: the view follows this one
+    // from now on. Where a camera points is nothing an engine has an opinion
+    // about. Its one parameter turns following off again, the way the
+    // caption's "shown" takes a caption down -- and like the caption, it is
+    // the run's: stopping puts back whatever the scene itself says.
+    static QString keepInViewAction() { return QStringLiteral("@keepInView"); }
+    static QString keepInViewParam() { return QStringLiteral("follow"); }
     static QString holdRunAction() { return QStringLiteral("@holdRun"); }
 
     // An action on a body, the application's own: a new body just like it --

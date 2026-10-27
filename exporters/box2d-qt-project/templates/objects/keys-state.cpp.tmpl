@@ -1,0 +1,36 @@
+//! Which keys are down, and which were pressed or let go on this step. A chord
+//! is named the way the editor names one -- "Ctrl+Shift+A", "Enter", "Up" --
+//! so a rule written there reads the same here.
+QSet<QString> keyHeld;
+QSet<QString> keyPressedNow;
+QSet<QString> keyReleasedNow;
+
+//! Which chords the scene's own rules take, so the window leaves them alone.
+const QSet<QString> TAKES_KEYS = { {{TAKEN}} };
+
+QString chordOf(QKeyEvent *event)
+{
+    static const QHash<int, QString> named = {
+        { Qt::Key_Up, "Up" }, { Qt::Key_Down, "Down" }, { Qt::Key_Left, "Left" },
+        { Qt::Key_Right, "Right" }, { Qt::Key_Space, "Space" }, { Qt::Key_Return, "Enter" },
+        { Qt::Key_Enter, "Enter" }, { Qt::Key_Tab, "Tab" }, { Qt::Key_Backspace, "Backspace" },
+        { Qt::Key_Delete, "Delete" }, { Qt::Key_Escape, "Esc" }, { Qt::Key_Home, "Home" },
+        { Qt::Key_End, "End" }, { Qt::Key_PageUp, "PageUp" }, { Qt::Key_PageDown, "PageDown" },
+        { Qt::Key_Insert, "Insert" },
+    };
+    QString base = named.value(event->key());
+    if (base.isEmpty()) {
+        const QString text = QKeySequence(event->key()).toString();
+        if (text.isEmpty())
+            return QString();
+        base = text;
+    }
+    QString chord;
+    if (event->modifiers() & Qt::ControlModifier)
+        chord += "Ctrl+";
+    if (event->modifiers() & Qt::ShiftModifier)
+        chord += "Shift+";
+    if (event->modifiers() & Qt::AltModifier)
+        chord += "Alt+";
+    return chord + base;
+}

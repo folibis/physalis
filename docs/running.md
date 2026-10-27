@@ -46,15 +46,57 @@ Tick any combination:
 These choices affect only the running simulation. While you edit, everything
 is always drawn, because that is when you need to see and place it.
 
+In the top-left corner, stacked under one another, are the three things a run
+shows that are not part of the scene's drawing: the **log** of values being
+watched, the **caption** a rule has put up, and the scene's own **controls**.
+Each appears only if there is something to show, and they are gone again when
+the run stops.
+
+## Keeping one body in view
+
+A scene bigger than the window leaves whatever you are watching sliding off the
+edge. Tick **Keep In View** on a body's properties and the view follows it
+instead: it stays in the middle of the screen and the scene moves around it.
+
+A rule can hand the view over while the run is going -- the action is **Keep in
+view** on a body, so *when the ball falls in the pocket, watch the next one*
+works -- and when the run ends the view goes back to the body the scene itself
+names.
+
+One body at a time -- a view has one middle, so giving it to another takes it
+off the first. It applies while the simulation runs, not while you edit, where
+panning is yours; and it follows the body past the edge of the field, so a
+body thrown out of the world is still watched. The full-screen window follows
+the same body, and so does an [exported](exporting.md) scene.
+
+## Working the scene while it runs
+
+A scene is not only watched. Two things reach into a run:
+
+- **The keyboard.** A rule can watch for a key being pressed, held or
+  released, on its own or with Ctrl, Shift or Alt. Held is the one that keeps
+  a force on for as long as the key is down. Click the canvas first, so the keys go to
+  the scene rather than to the panel you last used. No key is reserved: if a
+  scene wants the space bar, it has it.
+- **The scene's own controls.** A checkbox, a button or a slider declared on
+  the **Controls** tab appears over the canvas while the run is going. Rules
+  read what each one is set to, fire on a press, a release or a change, and can
+  grey one out or change what it says.
+
+Both are described under [Rules](rules.md#keys-and-controls). A control is run
+state, like everything else a run produces: it starts each run where the scene
+says, and goes back there when the run stops.
+
 ## Full screen
 
 With **Full Screen** ticked, Simulate opens the simulation in a window of its
-own that fills the screen, with the field as large as it fits. The keys there
-are:
+own that fills the screen, with the field as large as it fits. **Esc** ends the
+simulation and returns to the editor.
 
-- **Space** holds the simulation, and releases it again;
-- **→** (right arrow) moves on by one frame while it is held;
-- **Esc** ends the simulation and returns to the editor.
+Esc is the only key the window keeps. Every other key goes to the scene, so a
+rule watching the keyboard works there exactly as it does in the editor -- and
+a scene that uses the arrows or the space bar is not fighting the window for
+them. The caption, the log and the scene's controls are all shown there too.
 
 Drag to move the view, turn the mouse wheel to zoom, and press **0** to fit the
 whole field again.

@@ -1,0 +1,24 @@
+//! The body the view keeps in the middle. The scene names one to begin with
+//! and a rule may hand the view to another, so it is a variable rather than a
+//! fixed id; a null id follows nothing and leaves the view where it is.
+void followFocused(QWidget *view)
+{
+    //! Not at startup: the bodies do not exist until createWorld has run, and
+    //! a reset makes new ones.
+    if (!followArmed) {
+        followed = {{START}};
+        followArmed = true;
+    }
+    if (!b2Body_IsValid(followed))
+        return;
+    auto *area = qobject_cast<QScrollArea *>(view->parentWidget()
+                                                 ? view->parentWidget()->parentWidget()
+                                                 : nullptr);
+    if (!area)
+        return;
+    const b2Vec2 at = b2Body_GetPosition(followed);
+    const QPoint middle(int(view->width() / 2.0 + at.x * PIXELS_PER_METER),
+                        int(view->height() / 2.0 + at.y * PIXELS_PER_METER));
+    area->ensureVisible(middle.x(), middle.y(),
+                        area->viewport()->width() / 2, area->viewport()->height() / 2);
+}

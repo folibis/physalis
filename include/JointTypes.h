@@ -19,6 +19,10 @@ enum class ParamType {
     Real,     // plain number, shown with `decimals` and stepped by `step`
     Integer,
     Choice,   // one of `choices`, stored as the index
+    // Words, edited behind a button rather than in the row: a caption worth
+    // writing does not fit in a cell. No engine publishes one -- this is for
+    // the actions the application performs itself.
+    Text,
 };
 
 // A property is the engine's to name, but two of them the editor also has to

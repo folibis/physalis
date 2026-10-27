@@ -9,11 +9,25 @@ body { margin: 0; background: {{BACKGROUND}}; color: #e6e6e6;
 #controls { display: flex; gap: 6px; align-items: center; padding: 8px; }
 canvas { display: block; touch-action: none; cursor: grab; }
 canvas.dragging { cursor: grabbing; }
+/* The caption and the scene's own controls sit over the canvas in its top-left
+   corner, under the log, which is painted on the canvas itself. */
+#stage { position: relative; }
+#overlay { position: absolute; left: 8px; top: 8px; display: flex;
+           flex-direction: column; gap: 8px; align-items: flex-start;
+           pointer-events: none; }
+#caption, #sceneControls { pointer-events: auto; max-width: 40vw;
+           background: rgba(255, 255, 255, 0.784); color: #141414;
+           border: 1px solid #b4b4b4; border-radius: 4px; padding: 7px 9px; }
+#sceneControls { display: flex; flex-direction: column; gap: 4px; }
+#sceneControls label.control { display: flex; gap: 6px; align-items: center; }
 </style>
 </head>
 <body>
 {{CONTROLS}}
+<div id="stage">
 <canvas id="canvas" width="{{WIDTH}}" height="{{HEIGHT}}"></canvas>
+{{OVERLAY}}
+</div>
 
 //! Where the engine comes from is a converter setting. Built in, it is these
 //! two: the wasm as base64 in a script the browser does not execute, and
@@ -64,6 +78,8 @@ function frame(at, radians) {
 var world = null;
 {{IDS}}
 {{RANDOM}}
+{{CONTROLS_STATE}}
+{{KEYS_STATE}}
 {{STATE}}
 
 // Every body and shape as it was built, so drawing needs no introspection:
@@ -96,6 +112,16 @@ function step(dt) {
 // --- drawing ---------------------------------------------------------------
 
 var canvas = document.getElementById("canvas");
+
+// Short enough to use where the editor would name a widget.
+function dom(id) { return document.getElementById(id); }
+
+// Which chords the scene's own rules take, so the page leaves them alone.
+var TAKES_KEYS = {{TAKES_KEYS}};
+
+// How tall the log came out, so whatever is stacked under it starts below
+// rather than over it -- the editor's own layout. Zero where there is no log.
+var logHeight = 0;
 var ctx = canvas.getContext("2d");
 var debug = {{DEBUG_VIEW}};
 
@@ -219,7 +245,10 @@ function drawAxes(body) {
 
 {{DRAW_RAY}}
 {{LOG}}
+{{CAPTION}}
+{{CONTROLS_SHOW}}
 {{SLINGSHOT}}
+{{KEYS_WIRING}}
 
 // Scene units to pixels one for one, with the field's centre in the middle --
 // and whatever the viewer has panned and zoomed to on top of that.
@@ -233,7 +262,12 @@ function applyView() {
     ctx.translate(camera.x - {{VIEW_CENTER_X}}, camera.y - {{VIEW_CENTER_Y}});
 }
 
+// The scene can name one body to keep in view: the camera is put on it before
+// anything is drawn, so it stays in the middle and the scene moves around it.
+{{FOLLOW}}
+
 function draw() {
+    followFocused();
     applyView();
     ctx.lineWidth = 2 / camera.scale;
 
@@ -258,6 +292,7 @@ function draw() {
     {{DEBUG_DRAWING}}
     {{DRAW_SHOT}}
     {{DRAW_LOG}}
+    {{PLACE_OVERLAY}}
 }
 
 // A body that can be flung wears a second, dotted outline just inside its own --
@@ -386,15 +421,18 @@ function reset() {
     if (world && b2.b2World_IsValid(world))
         b2.b2DestroyWorld(world);
     createWorld();
+    {{CONTROLS_RESET}}
+    {{CAPTION_RESET}}
     draw();
 }
 
 // Space runs and pauses, R goes back to the beginning, D shows the helpers.
 document.addEventListener("keydown", function (event) {
     {{SHOT_CANCEL}}
-    if (event.key === " ") { run(!timer); event.preventDefault(); }
-    else if (event.key === "r" || event.key === "R") reset();
-    else if (event.key === "d" || event.key === "D") { debug = !debug; draw(); }
+    // A key the scene's own rules use is the scene's, not the page's.
+    if (event.key === " " && !TAKES_KEYS["Space"]) { run(!timer); event.preventDefault(); }
+    else if ((event.key === "r" || event.key === "R") && !TAKES_KEYS["R"]) reset();
+    else if ((event.key === "d" || event.key === "D") && !TAKES_KEYS["D"]) { debug = !debug; draw(); }
 });
 
 // Drag to move the view, wheel to zoom about the pointer, the way the editor's
@@ -453,6 +491,7 @@ function begin(engine) {
     createWorld();
     draw();
     {{CONTROL_WIRING}}
+    {{SCENE_CONTROL_WIRING}}
     run(true);
 }
 {{BOOT}}

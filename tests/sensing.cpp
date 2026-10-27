@@ -13,7 +13,12 @@
 #include "ShapeItem.h"
 #include "SimulationController.h"
 
+#include <QImage>
+#include <QPainter>
 #include <QJsonObject>
+#include "MainWindow.h"
+#include <QAction>
+#include <QCoreApplication>
 #include <gtest/gtest.h>
 
 // The three things a scene can sense or push with that are not bodies: rays,
@@ -284,4 +289,100 @@ TEST(Sensing, RaysAndExplosionsSurviveTheFile)
     EXPECT_NEAR(loadedBlast->params().value(QStringLiteral("radius")).toDouble(), 275.0, 1e-6);
     EXPECT_NEAR(loadedBlast->pos().x(), 60.0, 1e-6);
     EXPECT_NEAR(loadedBlast->pos().y(), -40.0, 1e-6);
+}
+
+// A sensor is scenery for the rules rather than something to look at, and a
+// table covered in them hides what is actually moving. The run's view list
+// turns them off -- a run's business only: they are always drawn while editing,
+// which is when they are placed.
+TEST(Sensing, TheViewListHidesSensorsDuringARun)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setEditorMode(EditorMode::Edit);
+
+    auto *pad = new RectangleItem;
+    pad->setRect(QRectF(0, 0, 120, 60));
+    pad->setPos(0, 0);
+    pad->setName(QStringLiteral("pad"));
+    scene.addItem(pad);
+    scene.notifyShapesChanged();
+    scene.setEditorMode(EditorMode::Physics);
+    scene.selectForPhysics(pad, false);
+    PhysicsBody *body = scene.createBodyFromSelection();
+    ASSERT_TRUE(body);
+    pad->part().params[QStringLiteral("isSensor")] = true;
+    ASSERT_TRUE(scene.isSensorShape(pad));
+
+    // The whole scene is rendered, background and all, so what matters is
+    // whether the picture changes when the layer does -- not how many pixels
+    // are lit.
+    const auto picture = [&] {
+        QImage image(200, 140, QImage::Format_ARGB32);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        scene.render(&painter, QRectF(0, 0, 200, 140), QRectF(-20, -20, 200, 140));
+        painter.end();
+        return image;
+    };
+
+    scene.setRunLayer(CanvasScene::RunLayer::Sensors, true);
+    const QImage shown = picture();
+    scene.setRunLayer(CanvasScene::RunLayer::Sensors, false);
+    EXPECT_EQ(picture(), shown)
+        << "the layer hid the sensor while editing, where it has to be placed";
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+
+    scene.setRunLayer(CanvasScene::RunLayer::Sensors, true);
+    const QImage running = picture();
+    scene.setRunLayer(CanvasScene::RunLayer::Sensors, false);
+    EXPECT_NE(picture(), running) << "the sensor was still drawn with its layer off";
+
+    scene.setRunLayer(CanvasScene::RunLayer::Sensors, true);
+    EXPECT_EQ(picture(), running) << "the sensor stayed hidden with its layer back on";
+    sim.stop();
+}
+
+// Delete takes whatever is picked. A ray and a blast are selected on their
+// own, not as the active shape, so the handler reached its "no active shape"
+// guard and did nothing: the key appeared dead.
+TEST(Sensing, DeleteRemovesTheSelectedRayOrExplosion)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Physics);
+
+    RayItem *ray = scene->addRay(QPointF(100, 100));
+    ExplosionItem *blast = scene->addExplosion(QPointF(300, 100));
+    ASSERT_TRUE(ray);
+    ASSERT_TRUE(blast);
+    scene->notifyShapesChanged();
+    ASSERT_EQ(scene->rays().size(), 1);
+    ASSERT_EQ(scene->explosions().size(), 1);
+
+    QAction *remove = window.findChild<QAction *>(QStringLiteral("actionDelete"));
+    ASSERT_TRUE(remove);
+
+    scene->selectRay(ray);
+    QCoreApplication::processEvents();
+    EXPECT_TRUE(remove->isEnabled()) << "a selected ray left Delete greyed out";
+    remove->trigger();
+    EXPECT_TRUE(scene->rays().isEmpty()) << "Delete did not remove the ray";
+    EXPECT_EQ(scene->explosions().size(), 1) << "Delete took the explosion as well";
+
+    scene->selectExplosion(blast);
+    QCoreApplication::processEvents();
+    EXPECT_TRUE(remove->isEnabled()) << "a selected explosion left Delete greyed out";
+    remove->trigger();
+    EXPECT_TRUE(scene->explosions().isEmpty()) << "Delete did not remove the explosion";
+
+    // With nothing picked it stays off.
+    scene->selectRay(nullptr);
+    scene->selectExplosion(nullptr);
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(remove->isEnabled()) << "Delete is on with nothing picked";
 }

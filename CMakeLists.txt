@@ -176,6 +176,7 @@ add_library(PhysalisCore OBJECT
     src/RulesPanel.cpp
     src/VariablesPanel.h
     src/VariablesPanel.cpp
+    src/ControlsPanel.cpp
     src/HelpWindow.cpp
     src/PlotPanel.cpp
     src/ToolOptionsBar.cpp
@@ -188,6 +189,7 @@ add_library(PhysalisCore OBJECT
     src/PropertyPane/ExplosionPropertyPane.cpp
     src/PropertyPane/RayPropertyPane.h
     src/PropertyPane/RayPropertyPane.cpp
+    src/PropertyPane/SelectionPropertyPane.cpp
     src/PropertyPane/SensorPropertyPane.h
     src/PropertyPane/SensorPropertyPane.cpp
     src/PropertyPane/PropertyPaneFactory.h

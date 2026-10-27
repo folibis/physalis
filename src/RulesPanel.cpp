@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "RulesPanel.h"
 
 #include "CanvasScene.h"
@@ -12,6 +13,14 @@
 
 #include <QMenu>
 #include <QApplication>
+#include <QTextDocument>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QTextEdit>
+#include <QTextCharFormat>
+#include <QColorDialog>
+#include <QFontComboBox>
+#include <QSpinBox>
 #include <QCheckBox>
 #include <QMouseEvent>
 #include <algorithm>
@@ -55,15 +64,24 @@ void setFormRowVisible(QFormLayout *form, int row, bool on)
 }
 
 } // namespace
-
 class ObjectComboBox : public QComboBox
 {
 public:
     using Source = std::function<QVector<RuleChoice>()>;
 
-    ObjectComboBox(Source source, QWidget *parent)
+    // When the list goes into the box. The lists of what a rule can name are
+    // the same for every box on every card and run to every shape in the
+    // scene, so those wait until the box is opened -- which is the only moment
+    // anyone can read them, and putting them in fifteen cards' worth of boxes
+    // was most of what made a rules panel slow to show. A list of one object's
+    // own properties is short and is what the card is about, so it is in the
+    // box from the start.
+    enum class Fill { WhenOpened, AtOnce };
+
+    ObjectComboBox(Source source, QWidget *parent, Fill fill = Fill::AtOnce)
         : QComboBox(parent)
         , m_source(std::move(source))
+        , m_fill(fill)
     {
         setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
         setMinimumContentsLength(10);
@@ -72,35 +90,70 @@ public:
 
     // Keeps the chosen entry selected by data, not index: a position is not
     // stable across a rename or a deletion.
-    void refill()
+    void refill() { put(currentData().toString()); }
+
+    void selectData(const QString &data) { put(data); }
+
+    void put(const QString &wanted)
     {
-        const QString chosen = currentData().toString();
-        const QSignalBlocker blocker(this);
-        clear();
-        for (const auto &choice : m_source())
-            addItem(choice.icon, choice.label, choice.data);
-        if (count() == 0)
-            addItem(m_emptyText, QString());
-        setCurrentIndex(qMax(0, findData(chosen)));
+        if (m_fill == Fill::AtOnce)
+            fillAndKeep(wanted);
+        else
+            showOnly(wanted);
     }
 
-    void selectData(const QString &data)
+    void showOnly(const QString &wanted)
     {
-        refill();
         const QSignalBlocker blocker(this);
-        setCurrentIndex(qMax(0, findData(data)));
+        clear();
+        for (const RuleChoice &choice : m_source()) {
+            if (choice.data != wanted)
+                continue;
+            addItem(choice.icon, choice.label, choice.data);
+            break;
+        }
+        // A name the list has never heard of is kept rather than swapped for
+        // something else -- the same reason fillAndKeep() does it.
+        if (count() == 0 && !wanted.isEmpty())
+            addItem(Icons::warning(), wanted, wanted);
+        if (count() == 0)
+            addItem(m_emptyText, QString());
+        setCurrentIndex(0);
     }
 
     void setEmptyText(const QString &text) { m_emptyText = text; }
 
+    // Keeps the chosen entry selected by data, not index: a position is not
+    // stable across a rename or a deletion.
+    //
+    // And keeps it even when the refilled list does not offer it. Falling back
+    // to the first entry is what this used to do, and it is silent theft: the
+    // card then showed a different object than the rule held, and the next
+    // thing touched on that card wrote that wrong name back into the rule. A
+    // name the list has never heard of is put in as an entry of its own, so
+    // what the rule says is always what the card shows.
+    void fillAndKeep(const QString &wanted)
+    {
+        const QSignalBlocker blocker(this);
+        clear();
+        for (const auto &choice : m_source())
+            addItem(choice.icon, choice.label, choice.data);
+        if (!wanted.isEmpty() && findData(wanted) < 0)
+            addItem(Icons::warning(), wanted, wanted);
+        if (count() == 0)
+            addItem(m_emptyText, QString());
+        setCurrentIndex(qMax(0, findData(wanted)));
+    }
+
     void showPopup() override
     {
-        refill();
+        fillAndKeep(currentData().toString());
         QComboBox::showPopup();
     }
 
 private:
     Source m_source;
+    Fill m_fill = Fill::AtOnce;
     QString m_emptyText = QObject::tr("(nothing to choose)");
 };
 
@@ -117,6 +170,7 @@ RulesPanel::RulesPanel(CanvasScene *scene, QWidget *parent)
     buildUi();
     setScene(scene);
 }
+
 
 void RulesPanel::setScene(CanvasScene *scene)
 {
@@ -291,16 +345,58 @@ void RulesPanel::buildUi()
     scroll->setWidget(host);
     layout->addWidget(scroll, 1);
 
+    // The four looks a card can wear, in one place. Complete or not decides
+    // the colour, since an unfinished rule is the one that wants attention;
+    // switched on or off decides whether the border is solid, which is the
+    // weaker signal of the two and so the quieter mark. A card says which it
+    // is with two properties -- see setCardLook() -- rather than carrying a
+    // sheet of its own, because a sheet per card is a sheet parsed per card
+    // and re-resolved over every widget under it.
+    setStyleSheet(QStringLiteral(
+        "QFrame#ruleCard { border-radius: 4px; }"
+        "QFrame#ruleCard[complete=\"true\"][live=\"true\"]"
+        " { border: 1px solid #c9c9c9; background: #f4f4f4; }"
+        "QFrame#ruleCard[complete=\"true\"][live=\"false\"]"
+        " { border: 1px dashed #cfcfcf; background: #fafafa; }"
+        "QFrame#ruleCard[complete=\"false\"][live=\"true\"]"
+        " { border: 1px solid #d9534f; background: #fdf5f5; }"
+        "QFrame#ruleCard[complete=\"false\"][live=\"false\"]"
+        " { border: 1px dashed #e0a3a0; background: #fdf9f9; }"
+        "QWidget#ruleCardHeader { border-top-left-radius: 3px;"
+        " border-top-right-radius: 3px; }"
+        "QWidget#ruleCardHeader[complete=\"true\"][live=\"true\"]"
+        " { background: #dcdcdc; border-bottom: 1px solid #c9c9c9; }"
+        "QWidget#ruleCardHeader[complete=\"true\"][live=\"false\"]"
+        " { background: #eeeeee; border-bottom: 1px solid #dcdcdc; }"
+        "QWidget#ruleCardHeader[complete=\"false\"][live=\"true\"]"
+        " { background: #f3c9c6; border-bottom: 1px solid #d9534f; }"
+        "QWidget#ruleCardHeader[complete=\"false\"][live=\"false\"]"
+        " { background: #f6e2e0; border-bottom: 1px solid #e0a3a0; }"
+        "QLabel#ruleHeading { font-weight: bold; }"
+        "QLabel#ruleHeading[complete=\"true\"][live=\"true\"]  { color: #6f6f6f; }"
+        "QLabel#ruleHeading[complete=\"true\"][live=\"false\"] { color: #b0b0b0; }"
+        "QLabel#ruleHeading[complete=\"false\"][live=\"true\"] { color: #a33a35; }"
+        "QLabel#ruleHeading[complete=\"false\"][live=\"false\"] { color: #c48f8c; }"));
+
 }
 
 void RulesPanel::connectScene()
 {
     if (m_scene) {
         connect(m_scene, &CanvasScene::rulesChanged, this, &RulesPanel::rebuild);
-        // A variable added, removed or renamed changes what a rule can name.
-        connect(m_scene, &CanvasScene::variablesChanged, this, &RulesPanel::rebuild);
-        connect(m_scene, &CanvasScene::bodiesChanged, this, &RulesPanel::rebuild);
-        connect(m_scene, &CanvasScene::jointsChanged, this, &RulesPanel::rebuild);
+        // A body, a joint or a variable added, removed or renamed changes what
+        // a rule can name -- which is what the boxes offer, not what the cards
+        // are made of. See refreshChoices().
+        // Everything those lists are made of, so the one they keep cannot go
+        // stale: shapes and rays are in them as much as bodies are.
+        for (void (CanvasScene::*changed)() : { &CanvasScene::variablesChanged,
+                                                &CanvasScene::bodiesChanged,
+                                                &CanvasScene::jointsChanged,
+                                                &CanvasScene::shapesChanged,
+                                                &CanvasScene::raysChanged,
+                                                &CanvasScene::explosionsChanged,
+                                                &CanvasScene::controlsChanged })
+            connect(m_scene, changed, this, &RulesPanel::refreshChoices);
         // Editing rules mid-run would change the thing being watched.
         connect(m_scene, &CanvasScene::simulationRunningChanged, this,
                 [this](bool running) { setEnabled(!running); });
@@ -343,18 +439,46 @@ void RulesPanel::rebuild()
     emit incompleteCountChanged(incompleteCount());
 }
 
+void RulesPanel::forgetChoices()
+{
+    m_choices.clear();
+}
+
+void RulesPanel::refreshChoices()
+{
+    forgetChoices();
+    // Each box already reads its own list -- that is what the source it was
+    // built with is for, and it refills itself when it is opened. This is for
+    // the entry showing while it is shut, which is the one a rename leaves
+    // wrong. Nothing is created and nothing is destroyed.
+    for (const Row &row : std::as_const(m_rows)) {
+        for (const ConditionRow &condition : row.conditions) {
+            if (condition.source)
+                condition.source->refill();
+        }
+        for (const ActionRow &action : row.actions) {
+            for (ObjectComboBox *box : { action.target, action.source2 }) {
+                if (box)
+                    box->refill();
+            }
+        }
+    }
+}
+
 QWidget *RulesPanel::buildCard(int index)
 {
     const Rule rule = m_scene->rules().at(index);
 
-    auto *card = new QFrame;
+    // Parented where it is going to live. Built loose, the whole card -- a
+    // couple of hundred widgets -- is reparented when it joins the column,
+    // and every one of them is told about it.
+    auto *card = new QFrame(m_cards->parentWidget());
     card->setObjectName(QStringLiteral("ruleCard"));
     card->setFrameShape(QFrame::NoFrame);
     // Drawn here rather than left to the style: QFrame::StyledPanel gave some
     // cards no top border at all, and the panel behind is the same grey.
     // Styled through the helper, so the switched-off look and the live one
     // are described in one place.
-    setCardLook(card, nullptr, rule.enabled, rule.isValid());
     // No margins of its own: the header band has to reach the card's edges,
     // so the padding belongs to the header and the body separately.
     auto *outer = new QVBoxLayout(card);
@@ -408,7 +532,7 @@ QWidget *RulesPanel::buildCard(int index)
     titleRow->addWidget(warning);
 
     auto *heading = new QLabel(card);
-    heading->setStyleSheet(QStringLiteral("font-weight: bold; color: #6f6f6f;"));
+    heading->setObjectName(QStringLiteral("ruleHeading"));
     heading->setAlignment(Qt::AlignCenter);
     // The caption gives up width before the buttons either side of it do, so
     // a narrow dock does not grow a scrollbar -- but never all of it. Ignored,
@@ -485,7 +609,7 @@ QWidget *RulesPanel::buildCard(int index)
 
     // Now the caption exists, so the pale look can reach it too.
     const Rule::Problem problem = rule.problem(knownProperty());
-    setCardLook(card, heading, rule.enabled, problem == Rule::Problem::None);
+    setCardLook(card, headerBand, heading, rule.enabled, problem == Rule::Problem::None);
     if (problem != Rule::Problem::None) {
         warning->setVisible(true);
         warning->setToolTip(problemText(problem));
@@ -509,6 +633,7 @@ QWidget *RulesPanel::buildCard(int index)
 
     Row row;
     row.card = card;
+    row.header = headerBand;
     row.warning = warning;
     row.collapse = collapse;
     row.heading = heading;
@@ -632,7 +757,8 @@ QWidget *RulesPanel::buildConditionBlock(int index, int slot)
     form->setRowWrapPolicy(QFormLayout::DontWrapRows);
     stack->addLayout(form);
 
-    cond.source = new ObjectComboBox([this] { return sourceChoices(); }, block);
+    cond.source = new ObjectComboBox([this] { return sourceChoices(); }, block,
+                                     ObjectComboBox::Fill::WhenOpened);
     cond.source->setEmptyText(tr("(no objects yet)"));
     offerToReveal(cond.source);
     cond.source->selectData(condition.subjectName);
@@ -767,7 +893,8 @@ QWidget *RulesPanel::buildActionBlock(int index, int slot)
     form->setRowWrapPolicy(QFormLayout::DontWrapRows);
     stack->addLayout(form);
 
-    act.target = new ObjectComboBox([this] { return targetChoices(); }, block);
+    act.target = new ObjectComboBox([this] { return targetChoices(); }, block,
+                                    ObjectComboBox::Fill::WhenOpened);
     act.target->selectData(action.targetName);
     connect(act.target, qOverload<int>(&QComboBox::currentIndexChanged), this,
             [this, index, slot](int) {
@@ -952,15 +1079,24 @@ QWidget *RulesPanel::buildActionBlock(int index, int slot)
 
 QVector<RuleChoice> RulesPanel::sourceChoices() const
 {
+    const auto known = m_choices.constFind(int(ChoiceList::Subject));
+    if (known != m_choices.constEnd())
+        return *known;
     QVector<RuleChoice> choices;
     if (!m_scene)
-        return choices;
+        return *m_choices.insert(int(ChoiceList::Subject), choices);
     // The world itself, so a rule can fire on how long it has been running.
     choices.append({Rule::world(), tr("World"), Icons::world()});
+    // The keyboard, as one object carrying every key -- the same bargain the
+    // variables make, and for the same reason: a row per key would be a list
+    // nobody could read.
+    choices.append({Rule::keyboard(), tr("Keyboard"), Icons::keyboard()});
     // And the scene's own variables, as one object carrying all of them. Left
     // out where there are none, so a scene that uses none never sees it.
     if (!m_scene->variables().isEmpty())
         choices.append({Rule::variables(), tr("Variables"), Icons::variable()});
+    if (!m_scene->controls().isEmpty())
+        choices.append({Rule::controls(), tr("Controls"), Icons::keyboard()});
     for (RayItem *ray : m_scene->rays())
         choices.append({ray->name(), ray->name(), Icons::ray()});
     for (Joint *joint : m_scene->joints())
@@ -971,18 +1107,23 @@ QVector<RuleChoice> RulesPanel::sourceChoices() const
                         ObjectIcons::forBody(m_scene->bodyColor(body->props().type))});
     for (ShapeItem *shape : m_scene->shapes())
         choices.append({shape->name(), shape->name(), ObjectIcons::forShape(shape)});
-    return choices;
+    return *m_choices.insert(int(ChoiceList::Subject), choices);
 }
 
 QVector<RuleChoice> RulesPanel::sourceObjectChoices() const
 {
+    const auto known = m_choices.constFind(int(ChoiceList::SourceObject));
+    if (known != m_choices.constEnd())
+        return *known;
     QVector<RuleChoice> choices;
     if (!m_scene)
-        return choices;
+        return *m_choices.insert(int(ChoiceList::SourceObject), choices);
 
     choices.append({Rule::world(), tr("World"), Icons::world()});
     if (!m_scene->variables().isEmpty())
         choices.append({Rule::variables(), tr("Variables"), Icons::variable()});
+    if (!m_scene->controls().isEmpty())
+        choices.append({Rule::controls(), tr("Controls"), Icons::keyboard()});
     for (RayItem *ray : m_scene->rays())
         choices.append({ray->name(), ray->name(), Icons::ray()});
     for (Joint *joint : m_scene->joints())
@@ -993,7 +1134,7 @@ QVector<RuleChoice> RulesPanel::sourceObjectChoices() const
                         ObjectIcons::forBody(m_scene->bodyColor(body->props().type))});
     for (ShapeItem *shape : m_scene->shapes())
         choices.append({shape->name(), shape->name(), ObjectIcons::forShape(shape)});
-    return choices;
+    return *m_choices.insert(int(ChoiceList::SourceObject), choices);
 }
 
 QVector<RuleChoice> RulesPanel::readablesOf(const QString &name) const
@@ -1010,9 +1151,12 @@ QVector<RuleChoice> RulesPanel::readablesOf(const QString &name) const
 
 QVector<RuleChoice> RulesPanel::targetChoices() const
 {
+    const auto known = m_choices.constFind(int(ChoiceList::Target));
+    if (known != m_choices.constEnd())
+        return *known;
     QVector<RuleChoice> choices;
     if (!m_scene)
-        return choices;
+        return *m_choices.insert(int(ChoiceList::Target), choices);
     choices.append({Rule::otherObject(), tr("the shape that touched it")});
     choices.append({Rule::otherObjectBody(), tr("the body that touched it")});
     // The world is a target as well as a subject: gravity and the solver's own
@@ -1020,6 +1164,8 @@ QVector<RuleChoice> RulesPanel::targetChoices() const
     choices.append({Rule::world(), tr("World"), Icons::world()});
     if (!m_scene->variables().isEmpty())
         choices.append({Rule::variables(), tr("Variables"), Icons::variable()});
+    if (!m_scene->controls().isEmpty())
+        choices.append({Rule::controls(), tr("Controls"), Icons::keyboard()});
     for (Joint *joint : m_scene->joints())
         choices.append({joint->name(), joint->name(),
                         ObjectIcons::forJoint(m_scene->jointTypeColor(joint->typeId()))});
@@ -1030,7 +1176,7 @@ QVector<RuleChoice> RulesPanel::targetChoices() const
         choices.append({shape->name(), shape->name(), ObjectIcons::forShape(shape)});
     for (ExplosionItem *explosion : m_scene->explosions())
         choices.append({explosion->name(), explosion->name(), Icons::explosion()});
-    return choices;
+    return *m_choices.insert(int(ChoiceList::Target), choices);
 }
 
 void RulesPanel::refreshEvents(int index, int slot)
@@ -1072,6 +1218,50 @@ QVector<physics::EventType> RulesPanel::eventsFor(const QString &name) const
     if (m_scene->rayNamed(name)) {
         return { {QStringLiteral("rayDetects"), tr("detects"),
                   tr("Raised while the ray is looking at the named shape."), true} };
+    }
+
+    // A key going down and coming back up, the application's own: no engine
+    // knows a keyboard exists, so this is answered before one is even asked
+    // for. Which key is the other object.
+    if (name == Rule::controls()) {
+        physics::EventType changed;
+        changed.id = Rule::controlChangedEvent();
+        changed.label = tr("changed");
+        changed.description = tr("Raised when the control is worked, or when a rule writes to"
+                                 " it.");
+        changed.namesOther = true;
+        physics::EventType pressed;
+        pressed.id = Rule::controlPressedEvent();
+        pressed.label = tr("pressed");
+        pressed.description = tr("Raised as a button goes down.");
+        pressed.namesOther = true;
+        physics::EventType released;
+        released.id = Rule::controlReleasedEvent();
+        released.label = tr("released");
+        released.description = tr("Raised as a button comes back up.");
+        released.namesOther = true;
+        return { changed, pressed, released };
+    }
+
+    if (name == Rule::keyboard()) {
+        physics::EventType down;
+        down.id = Rule::keyPressedEvent();
+        down.label = tr("key pressed");
+        down.description = tr("Raised once as the key goes down, while a run is going.");
+        down.namesOther = true;
+        physics::EventType up;
+        up.id = Rule::keyReleasedEvent();
+        up.label = tr("key released");
+        up.description = tr("Raised once as the key comes back up.");
+        up.namesOther = true;
+        physics::EventType held;
+        held.id = Rule::keyHeldEvent();
+        held.label = tr("key held");
+        held.description = tr("Raised on every step the key is down, which is how a rule keeps"
+                              " doing something for as long as it is held -- a thruster, a"
+                              " motor. A press and a release happen once each.");
+        held.namesOther = true;
+        return { down, held, up };
     }
 
     auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName());
@@ -1133,6 +1323,15 @@ QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
     if (!m_scene)
         return choices;
 
+    // The keyboard has no readings at all, only its two events -- and no
+    // engine to ask about them, which is why it is answered before the engine
+    // is fetched. Left below it, the card offered "(nothing readable)".
+    if (name == Rule::keyboard()) {
+        for (const physics::EventType &e : eventsFor(name))
+            choices.append({kEventPrefix + e.id, e.label});
+        return choices;
+    }
+
     auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName());
     if (!engine)
         return choices;
@@ -1156,6 +1355,21 @@ QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
         choices.append({QStringLiteral("hit"), tr("Hit")});
         choices.append({QStringLiteral("hitX"), tr("Hit X")});
         choices.append({QStringLiteral("hitY"), tr("Hit Y")});
+        return choices;
+    }
+
+    // Every control contributes a value and an enabled flag, and the three
+    // events below say which control they happened to.
+    if (name == Rule::controls()) {
+        for (const physics::EventType &e : eventsFor(name))
+            choices.append({kEventPrefix + e.id, e.label});
+        for (const SceneControl &control : m_scene->controls()) {
+            // Shown exactly as a rule spells it, so what is read off the
+            // card is what the rule holds.
+            choices.append({control.valueKey(), control.valueKey()});
+            choices.append({control.enabledKey(), control.enabledKey()});
+            choices.append({control.captionKey(), control.captionKey()});
+        }
         return choices;
     }
 
@@ -1263,6 +1477,88 @@ void RulesPanel::refreshConditionEditor(int index, int slot)
         // Nothing to choose. A joint arriving at its limit, a body coming to
         // rest -- these happen to one object, and offering "or anything" here
         // only invited the question of what the objects had to do with it.
+    } else if (condition.isEvent() && condition.subjectName == Rule::keyboard()) {
+        // A keyboard event names a key, and a key may be held with modifiers.
+        // Three boxes and the key itself, written out as "Ctrl+Shift+A" -- one
+        // string, so the rest of the machinery compares it the way it compares
+        // the name of a shape.
+        const QString chord = condition.conditionValue.toString();
+        auto *holder = new QWidget(row.conditionHolder);
+        auto *line = new QHBoxLayout(holder);
+        line->setContentsMargins(0, 0, 0, 0);
+        line->setSpacing(4);
+
+        struct Flag { const char *text; Qt::KeyboardModifier bit; };
+        static const Flag flags[] = { { "Ctrl", Qt::ControlModifier },
+                                      { "Shift", Qt::ShiftModifier },
+                                      { "Alt", Qt::AltModifier } };
+        const Qt::KeyboardModifiers held = Rule::modifiersOfChord(chord);
+        QVector<QCheckBox *> boxes;
+        for (const Flag &flag : flags) {
+            auto *check = new QCheckBox(QString::fromLatin1(flag.text), holder);
+            check->setChecked(held.testFlag(flag.bit));
+            line->addWidget(check);
+            boxes.append(check);
+        }
+
+        auto *combo = new ObjectComboBox(
+            [] {
+                QVector<RuleChoice> choices;
+                for (const auto &key : Rule::offerableKeys())
+                    choices.append({key.first, key.first});
+                return choices;
+            },
+            holder);
+        combo->setObjectName(QStringLiteral("conditionOther"));
+        combo->setToolTip(tr("Which key. Escape is kept for leaving a full-screen run;"
+                             " everything else is yours."));
+        combo->selectData(Rule::keyOfChord(chord));
+        line->addWidget(combo, 1);
+
+        const auto write = [this, index, slot, combo, boxes] {
+            if (m_building)
+                return;
+            Qt::KeyboardModifiers now;
+            if (boxes.at(0)->isChecked())
+                now |= Qt::ControlModifier;
+            if (boxes.at(1)->isChecked())
+                now |= Qt::ShiftModifier;
+            if (boxes.at(2)->isChecked())
+                now |= Qt::AltModifier;
+            Rule updated = m_scene->rules().at(index);
+            updated.conditions[slot].conditionValue =
+                Rule::chordName(Rule::keyFromName(combo->currentData().toString()), now);
+            commit(index, updated);
+        };
+        for (QCheckBox *check : boxes)
+            connect(check, &QCheckBox::toggled, this, [write](bool) { write(); });
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this,
+                [write](int) { write(); });
+        row.condition = holder;
+    } else if (condition.isEvent() && condition.subjectName == Rule::controls()) {
+        // A control event names a control, not a shape.
+        auto *combo = new ObjectComboBox(
+            [this] {
+                QVector<RuleChoice> choices;
+                choices.append({QString(), tr("any control")});
+                for (const SceneControl &control : m_scene->controls()) {
+                    choices.append({control.id, control.id});
+                }
+                return choices;
+            },
+            row.conditionHolder);
+        combo->setObjectName(QStringLiteral("conditionOther"));
+        combo->setToolTip(tr("Which control, or any of them."));
+        combo->selectData(condition.conditionValue.toString());
+        connect(combo, qOverload<int>(&QComboBox::currentIndexChanged), this,
+                [this, index, slot, combo](int) {
+                    if (m_building)
+                        return;
+                    Rule updated = m_scene->rules().at(index);
+                    updated.conditions[slot].conditionValue = combo->currentData().toString();
+                    commit(index, updated);
+                });
+        row.condition = combo;
     } else if (condition.isEvent()) {
         auto *combo = new ObjectComboBox(
             [this] {
@@ -1368,6 +1664,17 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
         }
     };
 
+    if (name == Rule::controls()) {
+        for (const SceneControl &control : m_scene->controls()) {
+            // A button is worked by hand, not set: there is nothing to write.
+            if (control.kind != SceneControl::Kind::Button)
+                result.append({control.valueKey(), control.valueKey()});
+            result.append({control.enabledKey(), control.enabledKey()});
+            result.append({control.captionKey(), control.captionKey()});
+        }
+        return result;
+    }
+
     if (name == Rule::variables()) {
         for (const SceneVariable &variable : m_scene->variables())
             result.append({variable.name, variable.name});
@@ -1379,6 +1686,7 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
         // The run itself, which is the application's to end or hold.
         result.append({actionKey(Rule::stopRunAction()), tr("Stop the simulation")});
         result.append({actionKey(Rule::holdRunAction()), tr("Hold the simulation")});
+        result.append({actionKey(Rule::showCaptionAction()), tr("Show a caption")});
         return result;
     }
 
@@ -1406,6 +1714,7 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
     const auto addInitState = [&result] {
         result.append({actionKey(Rule::initStateAction()), tr("Init state")});
         result.append({actionKey(Rule::cloneAction()), tr("Clone")});
+        result.append({actionKey(Rule::keepInViewAction()), tr("Keep in view")});
     };
 
     if (m_scene->explosionNamed(name)) {
@@ -1413,10 +1722,10 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
         return result;
     }
 
-    // Bodies and shapes get the engine's body actions as well as its
-    // properties -- the same dropdown offers both, and a rule that names a
-    // shape performs the action on the body that owns it. Without this the
-    // actions existed and were reachable only by editing a scene file.
+    // A body offers the engine's body properties and its body actions. A shape
+    // offers the engine's shape properties and nothing else: the engine
+    // publishes actions for bodies, and a shape is not one. An impulse is a
+    // body's -- offering it on a shape promised something no engine can do.
     for (PhysicsBody *body : m_scene->bodies()) {
         if (body->name() == name) {
             addSettable(engine->bodyProperties(), false);
@@ -1428,16 +1737,14 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
     for (ShapeItem *shape : m_scene->shapes()) {
         if (shape->name() == name) {
             addSettable(engine->shapeProperties(), false);
-            addActions();
-            addInitState();
             return result;
         }
     }
 
+    // "The shape that touched it" is a shape; "the body that touched it" is
+    // the body it belongs to, and that is the one with actions.
     if (name == Rule::otherObject()) {
         addSettable(engine->shapeProperties(), false);
-        addActions();
-        addInitState();
     } else if (name == Rule::otherObjectBody()) {
         addSettable(engine->bodyProperties(), false);
         addActions();
@@ -1450,6 +1757,47 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
 static physics::ActionType applicationAction(const QString &id)
 {
     physics::ActionType action;
+    if (id == Rule::showCaptionAction()) {
+        action.id = id;
+        action.description = QObject::tr("Puts some words on the canvas, under the log. They"
+                                         " stay until another rule changes them and go when the"
+                                         " run ends.");
+        physics::JointParam text;
+        text.key = Rule::captionTextParam();
+        text.label = QObject::tr("Text");
+        text.type = physics::ParamType::Text;
+        text.defaultValue = QString();
+        text.tooltip = QObject::tr("Write it in the editor behind the button.");
+        action.params.append(text);
+
+        physics::JointParam shown;
+        shown.key = Rule::captionShownParam();
+        shown.label = QObject::tr("Shown");
+        shown.type = physics::ParamType::Bool;
+        shown.defaultValue = true;
+        shown.tooltip = QObject::tr("Off hides the caption, whatever it says -- which is how a"
+                                    " rule takes one back down.");
+        action.params.append(shown);
+        return action;
+    }
+
+    if (id == Rule::keepInViewAction()) {
+        action.id = id;
+        action.description = QObject::tr("The view follows this body from now on: it stays in"
+                                         " the middle of the screen and the scene moves around"
+                                         " it. One body at a time, and the scene's own choice"
+                                         " comes back when the run ends.");
+        physics::JointParam follow;
+        follow.key = Rule::keepInViewParam();
+        follow.label = QObject::tr("Follow");
+        follow.type = physics::ParamType::Bool;
+        follow.defaultValue = true;
+        follow.tooltip = QObject::tr("Off stops the view following anything, which is how a rule"
+                                     " lets a body go.");
+        action.params.append(follow);
+        return action;
+    }
+
     if (id != Rule::cloneAction())
         return action;
     action.id = id;
@@ -1647,6 +1995,49 @@ QWidget *RulesPanel::buildActionParamEditor(int index, int slot, const RuleActio
     for (const physics::JointParam &param : params) {
         const QVariant current = ruleAction.actionParams.value(param.key, param.defaultValue);
 
+        if (param.type == physics::ParamType::Text) {
+            // Behind a button: a caption worth writing does not fit in a row,
+            // and the editor is where the formatting is done.
+            auto *line = new QWidget(holder);
+            auto *across = new QHBoxLayout(line);
+            across->setContentsMargins(0, 0, 0, 0);
+            across->setSpacing(4);
+            auto *preview = new QLabel(line);
+            preview->setTextFormat(Qt::PlainText);
+            preview->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+            auto *open = new QToolButton(line);
+            open->setText(QStringLiteral("…"));
+            open->setToolTip(param.tooltip);
+            across->addWidget(preview, 1);
+            across->addWidget(open);
+
+            const auto summarise = [preview](const QString &rich) {
+                QTextDocument plain;
+                plain.setHtml(rich);
+                QString line = plain.toPlainText().simplified();
+                if (line.size() > 40)
+                    line = line.left(39) + QChar(0x2026);
+                preview->setText(line.isEmpty() ? QObject::tr("(empty)") : line);
+            };
+            summarise(current.toString());
+
+            connect(open, &QToolButton::clicked, this,
+                    [this, index, slot, key = param.key, summarise] {
+                        Rule rule = m_scene->rules().at(index);
+                        const QString was =
+                            rule.actions[slot].actionParams.value(key).toString();
+                        QString now = was;
+                        if (!editCaptionText(&now))
+                            return;
+                        Rule updated = m_scene->rules().at(index);
+                        updated.actions[slot].actionParams.insert(key, now);
+                        commit(index, updated);
+                        summarise(now);
+                    });
+            form->addRow(param.label, line);
+            continue;
+        }
+
         if (param.type == physics::ParamType::Bool) {
             auto *check = new QCheckBox(holder);
             check->setChecked(current.toBool());
@@ -1671,6 +2062,123 @@ QWidget *RulesPanel::buildActionParamEditor(int index, int slot, const RuleActio
                                        }));
     }
     return holder;
+}
+
+// A caption is written here rather than in the rule card: a line editor in a
+// row is no place to compose a sentence, let alone format one. Rich text,
+// because that is what the canvas shows -- the three buttons cover what a
+// caption actually needs and the rest of a word processor would be noise.
+bool RulesPanel::editCaptionText(QString *text)
+{
+    if (!text)
+        return false;
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Caption"));
+    dialog.resize(420, 260);
+
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *tools = new QHBoxLayout;
+    tools->setContentsMargins(0, 0, 0, 0);
+    layout->addLayout(tools);
+
+    auto *edit = new QTextEdit(&dialog);
+    edit->setAcceptRichText(true);
+    edit->setHtml(*text);
+    layout->addWidget(edit, 1);
+
+    // All one size, and marked rather than lettered: three buttons of
+    // different widths because "B" is narrower than "U" is not a toolbar.
+    struct Mark { const char *text; const char *tip; };
+    const Mark marks[] = { { "B", QT_TR_NOOP("Bold") },
+                           { "I", QT_TR_NOOP("Italic") },
+                           { "U", QT_TR_NOOP("Underline") } };
+    for (int i = 0; i < 3; ++i) {
+        auto *button = new QToolButton(&dialog);
+        button->setText(QString::fromLatin1(marks[i].text));
+        button->setToolTip(tr(marks[i].tip));
+        button->setCheckable(true);
+        button->setFixedSize(28, 28);
+        QFont face = button->font();
+        face.setBold(i == 0);
+        face.setItalic(i == 1);
+        face.setUnderline(i == 2);
+        button->setFont(face);
+        tools->addWidget(button);
+        connect(button, &QToolButton::toggled, edit, [edit, i](bool on) {
+            QTextCharFormat format;
+            if (i == 0)
+                format.setFontWeight(on ? QFont::Bold : QFont::Normal);
+            else if (i == 1)
+                format.setFontItalic(on);
+            else
+                format.setFontUnderline(on);
+            edit->mergeCurrentCharFormat(format);
+            edit->setFocus();
+        });
+    }
+
+    // The face, its size and its colour -- which is as much as a caption on a
+    // canvas ever wants, and the rest of a word processor would be noise.
+    auto *face = new QFontComboBox(&dialog);
+    face->setMaximumWidth(150);
+    face->setToolTip(tr("Typeface"));
+    tools->addWidget(face);
+    connect(face, &QFontComboBox::currentFontChanged, edit, [edit](const QFont &chosen) {
+        QTextCharFormat format;
+        format.setFontFamilies({ chosen.family() });
+        edit->mergeCurrentCharFormat(format);
+        edit->setFocus();
+    });
+
+    auto *size = new QSpinBox(&dialog);
+    size->setRange(6, 96);
+    size->setValue(qMax(6, edit->font().pointSize()));
+    size->setFixedWidth(56);
+    size->setToolTip(tr("Size, in points"));
+    tools->addWidget(size);
+    connect(size, &QSpinBox::valueChanged, edit, [edit](int points) {
+        QTextCharFormat format;
+        format.setFontPointSize(points);
+        edit->mergeCurrentCharFormat(format);
+        edit->setFocus();
+    });
+
+    auto *colour = new QToolButton(&dialog);
+    colour->setFixedSize(28, 28);
+    colour->setToolTip(tr("Colour"));
+    const auto showColour = [colour](const QColor &shown) {
+        colour->setStyleSheet(QStringLiteral("QToolButton { background: %1;"
+                                             " border: 1px solid #8f8f8f; }")
+                                  .arg(shown.name()));
+    };
+    showColour(edit->textColor());
+    tools->addWidget(colour);
+    connect(colour, &QToolButton::clicked, edit, [this, edit, showColour] {
+        const QColor picked = QColorDialog::getColor(edit->textColor(), this, tr("Caption"));
+        if (!picked.isValid())
+            return;
+        QTextCharFormat format;
+        format.setForeground(picked);
+        edit->mergeCurrentCharFormat(format);
+        showColour(picked);
+        edit->setFocus();
+    });
+
+    tools->addStretch(1);
+
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                                         &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted)
+        return false;
+    // Empty is empty, not an empty document's worth of markup -- a caption
+    // that says nothing should read as nothing to whatever shows it.
+    *text = edit->toPlainText().trimmed().isEmpty() ? QString() : edit->toHtml();
+    return true;
 }
 
 QString RulesPanel::actionKey(const QString &id)
@@ -1977,6 +2485,22 @@ void RulesPanel::refreshValueEditor(int index, int slot)
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
         label->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
         row.value = label;
+    } else if (propertyIsText(action.targetName, action.propertyKey)) {
+        auto *edit = new QLineEdit(action.value.toString(), row.valueHolder);
+        edit->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+        edit->setPlaceholderText(tr("(its name)"));
+        edit->setToolTip(tr("What the control says from then on. Empty puts back what the"
+                            " scene declared."));
+        connect(edit, &QLineEdit::editingFinished, this, [this, index, slot, edit] {
+            if (m_building)
+                return;
+            Rule updated = m_scene->rules().at(index);
+            if (updated.actions[slot].value.toString() == edit->text())
+                return;
+            updated.actions[slot].value = edit->text();
+            commit(index, updated);
+        });
+        row.value = edit;
     } else if (propertyIsFlag(action.targetName, action.propertyKey)) {
         auto *check = new QCheckBox(row.valueHolder);
         check->setChecked(action.value.toBool());
@@ -2074,7 +2598,8 @@ void RulesPanel::refreshValueEditor(int index, int slot)
         auto *layout = qobject_cast<QFormLayout *>(row.sourceHolder->layout());
 
         auto *from = new ObjectComboBox([this] { return sourceObjectChoices(); },
-                                        row.sourceHolder);
+                                        row.sourceHolder,
+                                        ObjectComboBox::Fill::WhenOpened);
         from->setMinimumContentsLength(10);
         from->selectData(action.sourceObject);
         from->setToolTip(tr("Which object the value is read from."));
@@ -2168,6 +2693,37 @@ const physics::JointParam *RulesPanel::describe(const QString &objectName,
 
     // A variable describes itself: the rule cards ask what a property is and
     // render it, and have no idea this one belongs to no engine.
+    if (objectName == Rule::controls()) {
+        const SceneControl::Address address = SceneControl::parse(key);
+        if (!address.isValid())
+            return nullptr;
+        const SceneControl *control = m_scene->controlWithId(address.control);
+        if (!control)
+            return nullptr;
+        found = physics::JointParam();
+        found.key = key;
+        found.label = key;
+        if (address.property == SceneControl::captionProperty()) {
+            found.type = physics::ParamType::Text;
+            found.defaultValue = control->caption.isEmpty() ? control->id
+                                                             : control->caption;
+            return &found;
+        }
+        if (address.property == SceneControl::enabledProperty()
+            || control->kind != SceneControl::Kind::Slider) {
+            found.type = physics::ParamType::Bool;
+            found.defaultValue = false;
+        } else {
+            found.type = physics::ParamType::Real;
+            found.defaultValue = control->startingValue();
+            found.minValue = control->minimum;
+            found.maxValue = control->maximum;
+            found.step = control->step;
+            found.decimals = control->decimals;
+        }
+        return &found;
+    }
+
     if (objectName == Rule::variables()) {
         const SceneVariable *variable = m_scene->variableNamed(key);
         if (!variable)
@@ -2253,6 +2809,12 @@ const physics::JointParam *RulesPanel::describe(const QString &objectName,
         }
     }
     return nullptr;
+}
+
+bool RulesPanel::propertyIsText(const QString &objectName, const QString &key) const
+{
+    const physics::JointParam *param = describe(objectName, key);
+    return param && param->type == physics::ParamType::Text;
 }
 
 bool RulesPanel::propertyIsFlag(const QString &objectName, const QString &key) const
@@ -2452,46 +3014,28 @@ QString RulesPanel::problemText(Rule::Problem problem)
     return QString();
 }
 
-void RulesPanel::setCardLook(QWidget *card, QLabel *heading, bool enabled, bool complete)
+void RulesPanel::setCardLook(QWidget *card, QWidget *header, QLabel *heading,
+                             bool enabled, bool complete)
 {
-    // Four looks over two questions. Complete or not decides the colour, since
-    // an unfinished rule is the one that wants attention; switched on or off
-    // decides whether the border is solid, which is the weaker signal of the
-    // two and so the quieter mark.
-    QString border;
-    QString background;
-    QString band;
-    QString bandBorder;
-    QString captionColor;
-    if (complete) {
-        border = enabled ? QStringLiteral("1px solid #c9c9c9")
-                         : QStringLiteral("1px dashed #cfcfcf");
-        background = enabled ? QStringLiteral("#f4f4f4") : QStringLiteral("#fafafa");
-        // A band across the top, darker than the card, so where one rule ends
-        // and the next begins is obvious down a column.
-        band = enabled ? QStringLiteral("#dcdcdc") : QStringLiteral("#eeeeee");
-        bandBorder = enabled ? QStringLiteral("#c9c9c9") : QStringLiteral("#dcdcdc");
-        captionColor = enabled ? QStringLiteral("#6f6f6f") : QStringLiteral("#b0b0b0");
-    } else {
-        border = enabled ? QStringLiteral("1px solid #d9534f")
-                         : QStringLiteral("1px dashed #e0a3a0");
-        background = enabled ? QStringLiteral("#fdf5f5") : QStringLiteral("#fdf9f9");
-        band = enabled ? QStringLiteral("#f3c9c6") : QStringLiteral("#f6e2e0");
-        bandBorder = enabled ? QStringLiteral("#d9534f") : QStringLiteral("#e0a3a0");
-        captionColor = enabled ? QStringLiteral("#a33a35") : QStringLiteral("#c48f8c");
-    }
-
-    card->setStyleSheet(
-        QStringLiteral("QFrame#ruleCard { border: %1; border-radius: 4px;"
-                       " background: %2; }"
-                       "QWidget#ruleCardHeader { background: %3;"
-                       " border-bottom: 1px solid %4;"
-                       " border-top-left-radius: 3px; border-top-right-radius: 3px; }")
-            .arg(border, background, band, bandBorder));
-    if (heading) {
-        heading->setStyleSheet(
-            QStringLiteral("font-weight: bold; color: %1;").arg(captionColor));
-    }
+    // Repolished only where something changed: a card is told its look twice
+    // while it is built and again on every edit, and re-resolving a sheet runs
+    // over every widget under the one it is set on.
+    const auto wear = [enabled, complete](QWidget *widget) {
+        if (!widget)
+            return;
+        const QVariant live = widget->property("live");
+        if (live.isValid() && live.toBool() == enabled
+            && widget->property("complete").toBool() == complete) {
+            return;
+        }
+        widget->setProperty("live", enabled);
+        widget->setProperty("complete", complete);
+        widget->style()->unpolish(widget);
+        widget->style()->polish(widget);
+    };
+    wear(card);
+    wear(header);
+    wear(heading);
 }
 
 void RulesPanel::refreshCardLook(int index)
@@ -2506,7 +3050,8 @@ void RulesPanel::refreshCardLook(int index)
 
     const Rule &rule = m_scene->rules().at(index);
     const Rule::Problem problem = rule.problem(knownProperty());
-    setCardLook(row.card, row.heading, rule.enabled, problem == Rule::Problem::None);
+    setCardLook(row.card, row.header, row.heading, rule.enabled,
+                problem == Rule::Problem::None);
     if (row.warning) {
         row.warning->setVisible(problem != Rule::Problem::None);
         row.warning->setToolTip(problemText(problem));
