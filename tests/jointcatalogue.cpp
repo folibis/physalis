@@ -503,3 +503,28 @@ TEST(JointCatalogue, ChipmunkKeepsItsLimitsInOrder)
 {
     limitsStayInOrder(QStringLiteral("Chipmunk2D"));
 }
+
+// One thing is picked at a time. A joint used to let go of nothing, so the
+// body under it stayed picked and the Properties tab was showing one while the
+// Remove button pointed at the other.
+TEST(JointCatalogue, PickingOneThingLetsTheOthersGo)
+{
+    auto engine = physics::EngineRegistry::create(QStringLiteral("Box2D"));
+    ASSERT_TRUE(engine);
+    ASSERT_FALSE(engine->jointTypes().isEmpty());
+
+    TwoBodies bench(QStringLiteral("Box2D"));
+    Joint *joint = bench.join(engine->jointTypes().first());
+    ASSERT_TRUE(joint);
+
+    bench.scene.selectForPhysics(bench.hanging->shapes().first(), true);
+    ASSERT_FALSE(bench.scene.physicsSelection().isEmpty());
+
+    bench.scene.selectJoint(joint);
+    EXPECT_TRUE(bench.scene.physicsSelection().isEmpty())
+        << "the body stayed picked behind the joint";
+
+    bench.scene.selectForPhysics(bench.hanging->shapes().first(), true);
+    EXPECT_EQ(bench.scene.selectedJoint(), nullptr)
+        << "the joint stayed picked behind the body";
+}

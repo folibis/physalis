@@ -469,6 +469,19 @@ void CanvasScene::removeExplosion(ExplosionItem *explosion)
     {
         return;
     }
+    // Let go of it before it is deleted, the way a ray is let go of below:
+    // whoever hears explosionsChanged asks the scene what is selected, and a
+    // pointer to a deleted item answers that question on Windows and crashes
+    // on Linux.
+    if (m_selectedExplosion == explosion)
+    {
+        m_selectedExplosion = nullptr;
+        emit selectedExplosionChanged(nullptr);
+    }
+    if (m_draggedExplosion == explosion)
+    {
+        m_draggedExplosion = nullptr;
+    }
     removeItem(explosion);
     delete explosion;
     emit explosionsChanged();
@@ -520,6 +533,26 @@ RayItem *CanvasScene::rayNamed(const QString &name) const
     return nullptr;
 }
 
+void CanvasScene::letOthersGo(Picked keep)
+{
+    if (keep != Picked::Shapes)
+    {
+        clearPhysicsSelection();
+    }
+    if (keep != Picked::Joint)
+    {
+        selectJoint(nullptr);
+    }
+    if (keep != Picked::Ray)
+    {
+        selectRay(nullptr);
+    }
+    if (keep != Picked::Explosion)
+    {
+        selectExplosion(nullptr);
+    }
+}
+
 void CanvasScene::selectRay(RayItem *ray)
 {
     if (m_selectedRay == ray)
@@ -528,9 +561,7 @@ void CanvasScene::selectRay(RayItem *ray)
     }
     if (ray)
     {
-        clearPhysicsSelection();
-        selectJoint(nullptr);
-        selectExplosion(nullptr);
+        letOthersGo(Picked::Ray);
     }
     if (m_selectedRay)
     {
@@ -552,9 +583,7 @@ void CanvasScene::selectExplosion(ExplosionItem *explosion)
     }
     if (explosion)
     {
-        clearPhysicsSelection();
-        selectJoint(nullptr);
-        selectRay(nullptr);
+        letOthersGo(Picked::Explosion);
     }
     if (m_selectedExplosion)
     {
@@ -708,9 +737,9 @@ void CanvasScene::selectForPhysics(ShapeItem *shape, bool additive)
         return;
     }
 
-    // Picking a body is picking something else: the explosion stops being
-    // what the panel and the Remove button are pointed at.
-    selectExplosion(nullptr);
+    // Picking a body is picking something else: the joint, the ray and the
+    // explosion stop being what the panel and the Remove button are pointed at.
+    letOthersGo(Picked::Shapes);
 
     if (additive)
     {
@@ -1699,6 +1728,10 @@ void CanvasScene::selectJoint(Joint *joint)
     if (m_selectedJoint == joint)
     {
         return;
+    }
+    if (joint)
+    {
+        letOthersGo(Picked::Joint);
     }
     m_selectedJoint = joint;
     update();

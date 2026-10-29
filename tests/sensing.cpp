@@ -373,12 +373,17 @@ TEST(Sensing, DeleteRemovesTheSelectedRayOrExplosion)
     remove->trigger();
     EXPECT_TRUE(scene->rays().isEmpty()) << "Delete did not remove the ray";
     EXPECT_EQ(scene->explosions().size(), 1) << "Delete took the explosion as well";
+    EXPECT_EQ(scene->selectedRay(), nullptr) << "the scene still holds the deleted ray";
 
     scene->selectExplosion(blast);
     QCoreApplication::processEvents();
     EXPECT_TRUE(remove->isEnabled()) << "a selected explosion left Delete greyed out";
     remove->trigger();
     EXPECT_TRUE(scene->explosions().isEmpty()) << "Delete did not remove the explosion";
+    // What crashed on Linux: deleted, but still the scene's answer to what is
+    // selected, for everything listening to explosionsChanged to walk into.
+    EXPECT_EQ(scene->selectedExplosion(), nullptr)
+        << "the scene still holds the deleted explosion";
 
     // With nothing picked it stays off.
     scene->selectRay(nullptr);

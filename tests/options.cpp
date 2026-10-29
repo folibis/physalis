@@ -30,6 +30,7 @@
 #include <QLineEdit>
 #include <QGraphicsView>
 #include "PropertyPanel.h"
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QScrollBar>
 #include <QLabel>
@@ -983,43 +984,56 @@ TEST(Options, AnotherObjectOpensWhereTheLastOneWasLeft)
     RectangleItem *second = scene->addRectangle(QPointF(200, 0));
     scene->notifyShapesChanged();
 
-    const auto table = [&] {
-        QTableWidget *tallest = nullptr;
-        for (QTableWidget *one : panel->findChildren<QTableWidget *>()) {
-            if (!tallest || one->verticalScrollBar()->maximum()
-                                > tallest->verticalScrollBar()->maximum()) {
-                tallest = one;
+    // By the name of the section, not by which table happens to be the
+    // tallest: at this size more than one of them scrolls by a single step,
+    // and which of those is "tallest" comes down to the order the panel built
+    // them in.
+    const auto tableOf = [&](const QString &section) -> QTableWidget * {
+        for (QTabWidget *tabs : panel->findChildren<QTabWidget *>()) {
+            for (int i = 0; i < tabs->count(); ++i) {
+                if (tabs->tabText(i) == section)
+                    return qobject_cast<QTableWidget *>(tabs->widget(i));
             }
         }
-        return tallest;
+        return nullptr;
     };
 
     scene->selectShape(first);
     QCoreApplication::processEvents();
-    ASSERT_TRUE(table());
-    ASSERT_GT(table()->verticalScrollBar()->maximum(), 0)
-        << "the table fits without scrolling, so this proves nothing";
+
+    QString section;
+    for (QTabWidget *tabs : panel->findChildren<QTabWidget *>()) {
+        for (int i = 0; i < tabs->count(); ++i) {
+            auto *one = qobject_cast<QTableWidget *>(tabs->widget(i));
+            if (one && one->verticalScrollBar()->maximum() > 0)
+                section = tabs->tabText(i);
+        }
+    }
+    ASSERT_FALSE(section.isEmpty())
+        << "every section fits without scrolling, so this proves nothing";
 
     // Left part way down: the next shape opens there. The bottom rather than
     // the middle, because a table only a step or two taller than the panel has
     // no middle to speak of.
-    const int middle = table()->verticalScrollBar()->maximum();
+    const int middle = tableOf(section)->verticalScrollBar()->maximum();
     ASSERT_GT(middle, 0);
-    table()->verticalScrollBar()->setValue(middle);
+    tableOf(section)->verticalScrollBar()->setValue(middle);
     QCoreApplication::processEvents();
+    ASSERT_EQ(tableOf(section)->verticalScrollBar()->value(), middle)
+        << "the table would not scroll there at all";
 
     scene->selectShape(second);
     QCoreApplication::processEvents();
-    EXPECT_EQ(table()->verticalScrollBar()->value(), middle)
+    EXPECT_EQ(tableOf(section)->verticalScrollBar()->value(), middle)
         << "the next shape did not open where the last one was left";
 
     // Left at the top: the next shape opens at the top.
-    table()->verticalScrollBar()->setValue(0);
+    tableOf(section)->verticalScrollBar()->setValue(0);
     QCoreApplication::processEvents();
 
     scene->selectShape(first);
     QCoreApplication::processEvents();
-    EXPECT_EQ(table()->verticalScrollBar()->value(), 0)
+    EXPECT_EQ(tableOf(section)->verticalScrollBar()->value(), 0)
         << "scrolled back to the top, the next shape still opened half way down";
 }
 

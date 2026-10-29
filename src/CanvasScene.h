@@ -1018,6 +1018,14 @@ private:
     RayItem *m_selectedRay = nullptr;
     RayItem *m_draggedRay = nullptr;
     ExplosionItem *m_selectedExplosion = nullptr;
+
+    // One thing is picked on the canvas at a time: a body, a joint, a ray or
+    // an explosion. Picking any of them lets the others go, and this is the
+    // only place that says what "the others" are -- each of the four used to
+    // carry its own idea of it, and a joint carried none at all, so the body
+    // under it stayed picked behind the joint's own property pane.
+    enum class Picked { Shapes, Joint, Ray, Explosion };
+    void letOthersGo(Picked keep);
     ExplosionItem *m_draggedExplosion = nullptr;
     physics::WorldDesc m_world;
     bool m_fieldBoundsSolid = false;
