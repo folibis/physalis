@@ -2137,7 +2137,7 @@ bool RulesPanel::editCaptionText(QString *text)
     size->setFixedWidth(56);
     size->setToolTip(tr("Size, in points"));
     tools->addWidget(size);
-    connect(size, &QSpinBox::valueChanged, edit, [edit](int points) {
+    connect(size, qOverload<int>(&QSpinBox::valueChanged), edit, [edit](int points) {
         QTextCharFormat format;
         format.setFontPointSize(points);
         edit->mergeCurrentCharFormat(format);

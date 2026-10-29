@@ -1729,7 +1729,7 @@ void MainWindow::rebuildControls()
             connect(slider, &QSlider::valueChanged, this, [this, name, control](int at) {
                 m_scene->setControlValue(name, control.minimum + at * control.step);
             });
-            connect(spin, &QDoubleSpinBox::valueChanged, this, [this, name](double v) {
+            connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, name](double v) {
                 m_scene->setControlValue(name, v);
             });
             widget = holder;

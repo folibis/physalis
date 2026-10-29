@@ -72,7 +72,8 @@ void ToolOptionsBar::begin(const QString &title, const QVector<ToolOption> &opti
             auto *pick = new QComboBox(this);
             pick->addItems(option.choices);
             pick->setCurrentIndex(qBound(0, int(option.value), option.choices.size() - 1));
-            connect(pick, &QComboBox::currentIndexChanged, this, &ToolOptionsBar::valueChanged);
+            connect(pick, qOverload<int>(&QComboBox::currentIndexChanged), this,
+                    &ToolOptionsBar::valueChanged);
             m_form->addRow(option.label, pick);
             m_picks.insert(option.key, pick);
             continue;
@@ -86,7 +87,8 @@ void ToolOptionsBar::begin(const QString &title, const QVector<ToolOption> &opti
         if (!option.suffix.isEmpty())
             box->setSuffix(option.suffix);
         box->setKeyboardTracking(false);   // one re-run per entry, not per digit
-        connect(box, &QDoubleSpinBox::valueChanged, this, &ToolOptionsBar::valueChanged);
+        connect(box, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+                &ToolOptionsBar::valueChanged);
         m_form->addRow(option.label, box);
         m_boxes.insert(option.key, box);
     }

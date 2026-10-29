@@ -170,7 +170,7 @@ QWidget *ControlsPanel::buildCard(int row, const SceneControl &control)
         kind->addItem(SceneControl::kindLabel(one), SceneControl::kindName(one));
     }
     kind->setCurrentIndex(kind->findData(SceneControl::kindName(control.kind)));
-    connect(kind, &QComboBox::currentIndexChanged, this, [this, row, kind](int) {
+    connect(kind, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, row, kind](int) {
         if (m_building || !m_scene || row >= m_scene->controls().size())
             return;
         SceneControl changed = m_scene->controls().at(row);
@@ -204,7 +204,7 @@ QWidget *ControlsPanel::buildCard(int row, const SceneControl &control)
             box->setRange(which == 3 ? 0.0001 : -1e7, 1e7);
             box->setValue(values[which]);
             box->setKeyboardTracking(false);
-            connect(box, &QDoubleSpinBox::valueChanged, this, [this, row, which](double v) {
+            connect(box, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, row, which](double v) {
                 if (m_building || !m_scene || row >= m_scene->controls().size())
                     return;
                 SceneControl changed = m_scene->controls().at(row);
