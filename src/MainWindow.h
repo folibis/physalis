@@ -295,6 +295,7 @@ public:
     bool adoptEngineForTest(const QString &name) { return adoptEngine(name); }
     bool saveSceneForTest() { return onSaveScene(); }
     bool saveSceneAsForTest(const QString &path) { return saveSceneAs(path); }
+    static QString settingsFilePathForTest() { return settingsFilePath(); }
 
 private:
     void buildAlignMenu();

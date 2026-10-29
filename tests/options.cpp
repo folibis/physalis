@@ -30,6 +30,7 @@
 #include <QLineEdit>
 #include <QGraphicsView>
 #include "PropertyPanel.h"
+#include <QStandardPaths>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QScrollBar>
@@ -1077,4 +1078,28 @@ TEST(Options, AShortCaptionDoesNotTakeTheWholeWidth)
     QCoreApplication::processEvents();
     EXPECT_GT(caption->width(), shortWidth) << "a long caption did not grow";
     EXPECT_LE(caption->width(), caption->maximumWidth()) << "it grew past its limit";
+}
+
+// Settings go where the platform keeps a user's own, not beside the
+// executable: installed, that is Program Files on Windows and
+// <libdir>/physalis on Linux, neither of which the user can write -- so every
+// setting was dropped on exit and only a build run from its own folder kept
+// any. Qt's test mode moves the answer somewhere harmless, so asking the
+// question here cannot touch the real one.
+TEST(Options, SettingsAreKeptWhereTheUserCanWriteThem)
+{
+    const QByteArray redirect = qgetenv("PHYSALIS_SETTINGS");
+    ASSERT_FALSE(redirect.isEmpty()) << "the suite runs without its own settings file";
+
+    QStandardPaths::setTestModeEnabled(true);
+    qunsetenv("PHYSALIS_SETTINGS");
+    const QString chosen = MainWindow::settingsFilePathForTest();
+    qputenv("PHYSALIS_SETTINGS", redirect);
+    QStandardPaths::setTestModeEnabled(false);
+
+    EXPECT_FALSE(chosen.startsWith(QCoreApplication::applicationDirPath()))
+        << "beside the executable, which an installed copy cannot write: "
+        << chosen.toStdString();
+    EXPECT_EQ(MainWindow::settingsFilePathForTest(), QString::fromLocal8Bit(redirect))
+        << "a test no longer gets a settings file of its own";
 }

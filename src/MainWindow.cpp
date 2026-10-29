@@ -62,7 +62,9 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QStandardPaths>
 #include <QAction>
 #include <QKeySequence>
 #include <QPainter>
@@ -3544,9 +3546,33 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
 QString MainWindow::settingsFilePath()
 {
     const QString redirect = qEnvironmentVariable("PHYSALIS_SETTINGS");
-    return redirect.isEmpty()
-               ? QCoreApplication::applicationDirPath() + QStringLiteral("/settings.ini")
-               : redirect;
+    if (!redirect.isEmpty())
+        return redirect;
+
+    // Worked out once: every setting read or written asks for this, and the
+    // carrying over below is a one-off.
+    static const QString chosen = [] {
+        const QString beside = QCoreApplication::applicationDirPath()
+                               + QStringLiteral("/settings.ini");
+
+        // Where the platform keeps a user's own settings, which is what Qt
+        // answers here. It used to go beside the executable, and that is a
+        // place an installed program cannot write -- Program Files on Windows,
+        // <libdir>/physalis on Linux -- so every setting was dropped on exit
+        // and only a build run from its own folder ever kept any.
+        const QString dir =
+            QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+        if (dir.isEmpty() || !QDir().mkpath(dir))
+            return beside; // nowhere better to go
+
+        const QString own = dir + QStringLiteral("/settings.ini");
+        // Carried over once, so a copy that has been run from its own folder
+        // keeps what it had when its settings move here.
+        if (!QFileInfo::exists(own) && QFileInfo::exists(beside))
+            QFile::copy(beside, own);
+        return own;
+    }();
+    return chosen;
 }
 
 OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
