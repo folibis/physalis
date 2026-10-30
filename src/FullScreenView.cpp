@@ -35,13 +35,15 @@ FullScreenView::FullScreenView(CanvasScene *scene, QWidget *parent)
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     setFocusPolicy(Qt::StrongFocus);
 
-    // Which keys do what, said once. There is no toolbar in here to find out
-    // from, and a full screen with no way back is a trap.
+    // What this view still does, said once: a full screen with no way back is
+    // a trap and there is no toolbar in here to find Escape from. It says
+    // nothing about Space, the arrows or 0 any more -- those keys belong to
+    // the scene now, and a hint naming them would be claiming keys a rule may
+    // have given quite another meaning.
     // Each part translated whole, joined by a bar rather than a bullet -- the
     // label is rich text for the sake of the bar being bold.
     const QStringList parts { tr("Drag to pan"), tr("Wheel to zoom"),
-                              tr("0 fits the field"), tr("Space holds"),
-                              tr("→ steps a frame"), tr("Esc ends the run") };
+                              tr("Esc ends the run") };
     m_hint = new QLabel(parts.join(QStringLiteral("  <b>|</b>  ")), this);
     m_hint->setTextFormat(Qt::RichText);
     m_hint->setStyleSheet(QStringLiteral(

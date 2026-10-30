@@ -349,3 +349,80 @@ TEST(RulesPanel, AddingShapesLeavesTheRulesAlone)
     }
     EXPECT_TRUE(shown) << "no box on the card is showing the object the rule names";
 }
+
+// The buttons that make a card longer or shorter. The one that adds used to
+// sit on the first row, though it added at the bottom, and the first row
+// carried no remove at all -- so the only way to be rid of what was written
+// there was to write over it.
+TEST(RulesPanel, OneAddPerListAndEveryRowCanBeTakenAway)
+{
+    CanvasScene scene;
+    scene.setEditorMode(EditorMode::Physics);
+
+    QVector<SceneVariable> variables;
+    for (const char *name : { "a", "b", "c" }) {
+        SceneVariable variable;
+        variable.name = QString::fromLatin1(name);
+        variable.type = SceneVariable::Type::Integer;
+        variable.initial = 0;
+        variables.append(variable);
+    }
+    scene.setVariables(variables);
+
+    Rule rule;
+    rule.conditions[0].subjectName = Rule::world();
+    rule.conditions[0].eventId = Rule::runStartedEvent();
+    rule.actions.clear();
+    for (const char *name : { "a", "b", "c" }) {
+        RuleAction action;
+        action.targetName = Rule::variables();
+        action.propertyKey = QString::fromLatin1(name);
+        action.value = 1;
+        rule.actions.append(action);
+    }
+    scene.setRules({ rule });
+
+    const auto buttons = [](RulesPanel *panel, const char *tip) {
+        QVector<QToolButton *> found;
+        for (QToolButton *button : panel->findChildren<QToolButton *>()) {
+            if (button->toolTip() == QString::fromLatin1(tip))
+                found.append(button);
+        }
+        return found;
+    };
+
+    RulesPanel panel(&scene, nullptr);
+
+    // The lone condition cannot be removed -- a rule with none could not say
+    // when -- but the button is there, greyed, rather than missing.
+    const QVector<QToolButton *> dropWhen = buttons(&panel, "Remove this condition");
+    ASSERT_EQ(dropWhen.size(), 1);
+    EXPECT_FALSE(dropWhen.at(0)->isEnabled()) << "the only condition was offered for removal";
+    EXPECT_EQ(buttons(&panel, "Add another condition").size(), 1)
+        << "the When list wants one add button, under its last row";
+
+    // One add for the whole list, under the last row -- not one per row.
+    const QVector<QToolButton *> addThen = buttons(&panel, "Add another action");
+    ASSERT_EQ(addThen.size(), 1) << "the Then list wants one add button, under its last row";
+    addThen.at(0)->click();     // the buttons are queued: they outlive their own click
+    QCoreApplication::processEvents();
+
+    ASSERT_EQ(scene.rules().size(), 1);
+    QVector<RuleAction> actions = scene.rules().at(0).actions;
+    ASSERT_EQ(actions.size(), 4);
+    EXPECT_EQ(actions.at(0).propertyKey, QStringLiteral("a"));
+    EXPECT_EQ(actions.at(1).propertyKey, QStringLiteral("b"));
+    EXPECT_EQ(actions.at(2).propertyKey, QStringLiteral("c")) << "the new action went in the middle";
+    EXPECT_EQ(actions.at(3).targetName, Rule::variables()) << "it was not seeded from the last row";
+
+    const QVector<QToolButton *> dropThen = buttons(&panel, "Remove this action");
+    ASSERT_EQ(dropThen.size(), 4);
+    EXPECT_TRUE(dropThen.at(0)->isEnabled()) << "the first action could not be removed";
+    dropThen.at(0)->click();
+    QCoreApplication::processEvents();
+
+    actions = scene.rules().at(0).actions;
+    ASSERT_EQ(actions.size(), 3);
+    EXPECT_EQ(actions.at(0).propertyKey, QStringLiteral("b")) << "the wrong action was removed";
+    EXPECT_EQ(actions.at(1).propertyKey, QStringLiteral("c"));
+}

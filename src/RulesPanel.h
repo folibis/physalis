@@ -183,6 +183,7 @@ private:
     QWidget *buildActionBlock(int index, int slot);
     // The and/or drawn in the gap between two conditions.
     QWidget *buildJoiner(int index, QWidget *parent);
+    QWidget *buildAddRow(int index, bool condition, QWidget *parent);
     // The small add/remove button at the end of a When or Then row.
     QToolButton *rowButton(QWidget *parent, const QIcon &icon, const QString &tip,
                            const std::function<void()> &onClick);

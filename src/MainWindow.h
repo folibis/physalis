@@ -295,7 +295,11 @@ public:
     bool adoptEngineForTest(const QString &name) { return adoptEngine(name); }
     bool saveSceneForTest() { return onSaveScene(); }
     bool saveSceneAsForTest(const QString &path) { return saveSceneAs(path); }
-    static QString settingsFilePathForTest() { return settingsFilePath(); }
+    // Which of the three candidates the settings live in. Kept apart from
+    // asking the environment and the platform for them, so what it decides can
+    // be read -- and checked -- without either.
+    static QString chooseSettingsFile(const QString &redirect, const QString &configDir,
+                                      const QString &besideExecutable);
 
 private:
     void buildAlignMenu();

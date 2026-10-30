@@ -405,6 +405,12 @@ public:
     };
     JointLimits jointLimits(const Joint *joint) const;
 
+    // Where a sliding joint's travel reads zero, in scene units: anchor B as
+    // the scene stands at rest. Kept in body A's frame, because that is the
+    // body the rail belongs to -- the axis is read in A's frame and the travel
+    // is B measured against it.
+    QPointF railOrigin(const Joint *joint) const;
+
     // How solidly a joint's anchors and shaft are filled. An anchor sits on
     // top of the very place it is holding, and drawn solid it hides it -- most
     // of all where several joints meet on one body. The outline stays at full
@@ -914,6 +920,9 @@ private:
     // and held through the run, so the turns spread and pack rather than being
     // counted afresh every frame.
     mutable QHash<QString, int> m_springTurns;
+    // See railOrigin(): worked out while the scene stands still and held
+    // through the run, the same way the spring turns above are.
+    mutable QHash<QString, QPointF> m_railOrigins;
 
     int springTurns(const Joint *joint, qreal spanLength) const;
     QPainterPath springPath(const Joint *joint, const QPointF &a, const QPointF &b) const;

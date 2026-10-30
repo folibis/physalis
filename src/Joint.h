@@ -40,6 +40,12 @@ public:
     QPointF axisScene() const;
     void setAxisScene(const QPointF &direction);
 
+    // A scene point held in body A's frame, and back again. A sliding joint's
+    // rail belongs to the body its axis is read in, so where that rail starts
+    // travels with that body rather than with the anchor sliding along it.
+    QPointF inBodyAFrame(const QPointF &scenePos) const { return toBodyFrame(m_bodyA, scenePos); }
+    QPointF fromBodyAFrame(const QPointF &localPos) const { return toSceneFrame(m_bodyA, localPos); }
+
     const QVariantMap &params() const { return m_params; }
     QVariantMap &params() { return m_params; }
     void notifyPropertyChanged() { emit propertyChanged(); }

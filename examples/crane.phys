@@ -1,0 +1,1132 @@
+{
+    "bodies": [
+        {
+            "isEnabled": true,
+            "name": "leg_left",
+            "physics": {},
+            "shapes": [
+                1
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "bridge",
+            "physics": {},
+            "shapes": [
+                2
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "trolley",
+            "physics": {},
+            "shapes": [
+                3
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "hoist_block",
+            "physics": {},
+            "shapes": [
+                4
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "jaw_left",
+            "physics": {},
+            "shapes": [
+                7,
+                5
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "jaw_right",
+            "physics": {},
+            "shapes": [
+                8,
+                6
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "ground",
+            "physics": {},
+            "shapes": [
+                10
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "leg_right",
+            "physics": {},
+            "shapes": [
+                9
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "item_1",
+            "physics": {},
+            "shapes": [
+                11
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "item_2",
+            "physics": {},
+            "shapes": [
+                13
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "item_3",
+            "physics": {},
+            "shapes": [
+                12
+            ],
+            "type": "dynamic"
+        }
+    ],
+    "engine": "Box2D",
+    "field": {
+        "backgroundColor": "#fffffeed",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 1000,
+        "showGrid": true,
+        "width": 1200
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+        {
+            "anchorA": {
+                "x": -260,
+                "y": -100
+            },
+            "anchorB": {
+                "x": -260,
+                "y": -100
+            },
+            "axis": {
+                "x": 0.4367711095751721,
+                "y": -0.8995726751299603
+            },
+            "bodyA": "jaw_left",
+            "bodyB": "hoist_block",
+            "collideConnected": false,
+            "name": "hinge_left",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": true,
+                "enableMotor": true,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerAngle": -25,
+                "maxMotorTorque": 200,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": -220,
+                "y": -100
+            },
+            "anchorB": {
+                "x": -220,
+                "y": -100
+            },
+            "axis": {
+                "x": -0.45136692220306734,
+                "y": -0.8923384456252741
+            },
+            "bodyA": "jaw_right",
+            "bodyB": "hoist_block",
+            "collideConnected": false,
+            "name": "hinge_right",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": true,
+                "enableMotor": true,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerAngle": 0,
+                "maxMotorTorque": 200,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "upperAngle": 25
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": -360,
+                "y": -160
+            },
+            "anchorB": {
+                "x": -240,
+                "y": -160
+            },
+            "axis": {
+                "x": 1,
+                "y": 0
+            },
+            "bodyA": "leg_left",
+            "bodyB": "trolley",
+            "collideConnected": false,
+            "name": "traverse",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "enableLimit": true,
+                "enableMotor": true,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerTranslation": -20,
+                "maxMotorForce": 50,
+                "motorSpeed": 120,
+                "referenceAngle": 0,
+                "targetTranslation": 0,
+                "upperTranslation": 500
+            },
+            "type": "prismatic"
+        },
+        {
+            "anchorA": {
+                "x": -240,
+                "y": -160
+            },
+            "anchorB": {
+                "x": -240,
+                "y": -120
+            },
+            "axis": {
+                "x": 0,
+                "y": 1
+            },
+            "bodyA": "trolley",
+            "bodyB": "hoist_block",
+            "collideConnected": false,
+            "name": "hoist",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "enableLimit": true,
+                "enableMotor": true,
+                "enableSpring": false,
+                "hertz": 0,
+                "lowerTranslation": 0,
+                "maxMotorForce": 200,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetTranslation": 0,
+                "upperTranslation": 250
+            },
+            "type": "prismatic"
+        }
+    ],
+    "log": [
+        {
+            "label": "counter",
+            "object": "@variables",
+            "plotted": false,
+            "property": "counter"
+        }
+    ],
+    "rays": [
+        {
+            "angle": 0,
+            "length": 140,
+            "maskBits": "ffffffffffffffff",
+            "name": "ray_1",
+            "x": 401,
+            "y": 160
+        }
+    ],
+    "rules": [
+        {
+            "action": "@clone",
+            "actionParams": {
+                "x": {
+                    "from": -300,
+                    "step": 10,
+                    "to": 300
+                },
+                "y": 100
+            },
+            "actions": [
+                {
+                    "action": "@clone",
+                    "actionParams": {
+                        "x": {
+                            "from": -300,
+                            "step": 10,
+                            "to": 300
+                        },
+                        "y": 100
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "item_1",
+                    "value": false
+                },
+                {
+                    "action": "@clone",
+                    "actionParams": {
+                        "x": {
+                            "from": -300,
+                            "step": 10,
+                            "to": 300
+                        },
+                        "y": 100
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "item_2",
+                    "value": 0
+                },
+                {
+                    "action": "@clone",
+                    "actionParams": {
+                        "x": {
+                            "from": -300,
+                            "step": 10,
+                            "to": 300
+                        },
+                        "y": 100
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "item_3",
+                    "value": 0
+                }
+            ],
+            "compare": "<",
+            "conditions": [
+                {
+                    "compare": "<",
+                    "subject": "@world",
+                    "watch": "frame",
+                    "when": 40
+                },
+                {
+                    "compare": "%",
+                    "subject": "@world",
+                    "watch": "frame",
+                    "when": 2
+                }
+            ],
+            "join": "all",
+            "name": "generate items",
+            "op": "set",
+            "property": "",
+            "subject": "@world",
+            "target": "item_1",
+            "value": false,
+            "watch": "frame",
+            "when": 40
+        },
+        {
+            "event": "limitEither",
+            "name": "slide left-right",
+            "op": "negate",
+            "property": "motorSpeed",
+            "subject": "traverse",
+            "target": "traverse",
+            "when": ""
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "traverse",
+                    "value": 0
+                },
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hoist",
+                    "value": 100
+                },
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hinge_left",
+                    "value": -20
+                },
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hinge_right",
+                    "value": 20
+                }
+            ],
+            "conditions": [
+                {
+                    "event": "@keyPressed",
+                    "subject": "@keyboard",
+                    "when": "Space"
+                },
+                {
+                    "compare": "=",
+                    "subject": "@variables",
+                    "watch": "full",
+                    "when": false
+                }
+            ],
+            "event": "@keyPressed",
+            "join": "all",
+            "name": "space: open and go down",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "@keyboard",
+            "target": "traverse",
+            "value": 0,
+            "when": "Space"
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hoist",
+                    "value": 0
+                },
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hinge_left",
+                    "value": 20
+                },
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hinge_right",
+                    "value": -20
+                }
+            ],
+            "compare": ">=",
+            "conditions": [
+                {
+                    "compare": ">=",
+                    "subject": "hoist",
+                    "watch": "translation",
+                    "when": 249
+                },
+                {
+                    "compare": ">=",
+                    "subject": "hoist",
+                    "watch": "motorForce",
+                    "when": 190
+                }
+            ],
+            "join": "any",
+            "name": "at the bottom: close the claws",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "hoist",
+            "target": "hoist",
+            "value": 0,
+            "watch": "translation",
+            "when": 249
+        },
+        {
+            "compare": ">=",
+            "conditions": [
+                {
+                    "compare": ">=",
+                    "subject": "hoist",
+                    "watch": "translation",
+                    "when": 100
+                },
+                {
+                    "compare": ">=",
+                    "subject": "hinge_left",
+                    "watch": "motorTorque",
+                    "when": 190
+                }
+            ],
+            "join": "all",
+            "name": "gripped: lift",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "hoist",
+            "target": "hoist",
+            "value": -100,
+            "watch": "translation",
+            "when": 100
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hoist",
+                    "value": 0
+                },
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "traverse",
+                    "value": 120
+                },
+                {
+                    "op": "set",
+                    "property": "full",
+                    "target": "@variables",
+                    "value": true
+                },
+                {
+                    "op": "set",
+                    "property": "upperTranslation",
+                    "target": "traverse",
+                    "value": 700
+                }
+            ],
+            "event": "limitLower",
+            "name": "back at the top: carry it away",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "hoist",
+            "target": "hoist",
+            "value": 0
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "traverse",
+                    "value": 0
+                },
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hinge_left",
+                    "value": -10
+                },
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hinge_right",
+                    "value": 10
+                }
+            ],
+            "conditions": [
+                {
+                    "event": "limitUpper",
+                    "subject": "traverse"
+                },
+                {
+                    "compare": "=",
+                    "subject": "@variables",
+                    "watch": "full",
+                    "when": true
+                }
+            ],
+            "event": "limitUpper",
+            "join": "all",
+            "name": "at the far end: let go",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "traverse",
+            "target": "traverse",
+            "value": 0
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "traverse",
+                    "value": -120
+                },
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hinge_left",
+                    "value": 20
+                },
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "hinge_right",
+                    "value": -20
+                }
+            ],
+            "compare": "<=",
+            "conditions": [
+                {
+                    "compare": "<=",
+                    "subject": "hinge_left",
+                    "watch": "angle",
+                    "when": -24
+                },
+                {
+                    "compare": ">=",
+                    "subject": "traverse",
+                    "watch": "translation",
+                    "when": 650
+                }
+            ],
+            "join": "all",
+            "name": "dropped: go back",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "hinge_left",
+            "target": "traverse",
+            "value": -120,
+            "watch": "angle",
+            "when": -24
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "upperTranslation",
+                    "target": "traverse",
+                    "value": 500
+                },
+                {
+                    "op": "set",
+                    "property": "full",
+                    "target": "@variables",
+                    "value": false
+                }
+            ],
+            "compare": "<=",
+            "name": "back inside: the rail and the crane are free again",
+            "op": "set",
+            "property": "upperTranslation",
+            "subject": "traverse",
+            "target": "traverse",
+            "value": 500,
+            "watch": "translation",
+            "when": 500
+        },
+        {
+            "action": "removeBody",
+            "actionParams": {},
+            "actions": [
+                {
+                    "action": "removeBody",
+                    "actionParams": {},
+                    "op": "set",
+                    "property": "",
+                    "target": "@otherBody",
+                    "value": false
+                },
+                {
+                    "op": "add",
+                    "property": "counter",
+                    "target": "@variables",
+                    "value": 1
+                }
+            ],
+            "event": "rayDetects",
+            "name": "score",
+            "op": "set",
+            "property": "",
+            "subject": "ray_1",
+            "target": "@otherBody",
+            "value": false,
+            "when": ""
+        }
+    ],
+    "shapes": [
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {},
+            "pos": {
+                "x": -300,
+                "y": 250
+            },
+            "rect": {
+                "height": 500,
+                "width": 60,
+                "x": -100,
+                "y": -450
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "rectangle_2",
+            "origin": {
+                "x": 350,
+                "y": -20
+            },
+            "outline": false,
+            "physics": {},
+            "pos": {
+                "x": -300,
+                "y": -210
+            },
+            "rect": {
+                "height": 60,
+                "width": 940,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "rectangle_3",
+            "origin": {
+                "x": -40,
+                "y": -30
+            },
+            "outline": false,
+            "physics": {},
+            "pos": {
+                "x": -200,
+                "y": -130
+            },
+            "rect": {
+                "height": 40,
+                "width": 120,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 4,
+            "joinStyle": "round",
+            "name": "rectangle_4",
+            "origin": {
+                "x": -40,
+                "y": -30
+            },
+            "outline": false,
+            "physics": {},
+            "pos": {
+                "x": -200,
+                "y": -90
+            },
+            "rect": {
+                "height": 40,
+                "width": 120,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 5,
+            "joinStyle": "round",
+            "name": "polygon_1",
+            "origin": {
+                "x": 41.5,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {},
+            "points": [
+                {
+                    "x": 80,
+                    "y": 60
+                },
+                {
+                    "x": 19,
+                    "y": 42
+                },
+                {
+                    "x": 0,
+                    "y": 0
+                },
+                {
+                    "x": 20,
+                    "y": 0
+                }
+            ],
+            "pos": {
+                "x": -320,
+                "y": -20
+            },
+            "rect": {
+                "height": 60,
+                "width": 80,
+                "x": 0,
+                "y": 0
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 6,
+            "joinStyle": "round",
+            "name": "polygon_2",
+            "origin": {
+                "x": 41.5,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {},
+            "points": [
+                {
+                    "x": 0,
+                    "y": 60
+                },
+                {
+                    "x": 64,
+                    "y": 42
+                },
+                {
+                    "x": 80,
+                    "y": 0
+                },
+                {
+                    "x": 60,
+                    "y": 0
+                }
+            ],
+            "pos": {
+                "x": -240,
+                "y": -20
+            },
+            "rect": {
+                "height": 60,
+                "width": 80,
+                "x": 0,
+                "y": 0
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 7,
+            "joinStyle": "round",
+            "name": "polygon_3",
+            "origin": {
+                "x": 30,
+                "y": 38.5
+            },
+            "outline": false,
+            "physics": {},
+            "points": [
+                {
+                    "x": -1,
+                    "y": 79
+                },
+                {
+                    "x": 19,
+                    "y": 19
+                },
+                {
+                    "x": 59,
+                    "y": -1
+                },
+                {
+                    "x": 60,
+                    "y": 39
+                },
+                {
+                    "x": 19,
+                    "y": 79
+                }
+            ],
+            "pos": {
+                "x": -319,
+                "y": -99
+            },
+            "rect": {
+                "height": 80,
+                "width": 61,
+                "x": -1,
+                "y": -1
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 8,
+            "joinStyle": "round",
+            "name": "polygon_4",
+            "origin": {
+                "x": 30,
+                "y": 38.5
+            },
+            "outline": false,
+            "physics": {},
+            "points": [
+                {
+                    "x": 60,
+                    "y": 79
+                },
+                {
+                    "x": 41,
+                    "y": 19
+                },
+                {
+                    "x": 1,
+                    "y": -1
+                },
+                {
+                    "x": 0,
+                    "y": 39
+                },
+                {
+                    "x": 40,
+                    "y": 79
+                }
+            ],
+            "pos": {
+                "x": -220,
+                "y": -99
+            },
+            "rect": {
+                "height": 80,
+                "width": 60,
+                "x": 0,
+                "y": -1
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 9,
+            "joinStyle": "round",
+            "name": "rectangle_5",
+            "origin": {
+                "x": -70,
+                "y": -60
+            },
+            "outline": false,
+            "physics": {},
+            "pos": {
+                "x": 440,
+                "y": 170
+            },
+            "rect": {
+                "height": 240,
+                "width": 60,
+                "x": -100,
+                "y": -110
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 10,
+            "joinStyle": "round",
+            "name": "rectangle_6",
+            "origin": {
+                "x": 350,
+                "y": -20
+            },
+            "outline": false,
+            "physics": {},
+            "pos": {
+                "x": -300,
+                "y": 350
+            },
+            "rect": {
+                "height": 60,
+                "width": 940,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 11,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "density": 0.4,
+                "friction": 0.05,
+                "restitution": 0.6000000000000001
+            },
+            "pos": {
+                "x": 220,
+                "y": 160
+            },
+            "rect": {
+                "height": 20,
+                "width": 20,
+                "x": -10,
+                "y": -10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 12,
+            "joinStyle": "round",
+            "name": "circle_2",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "density": 0.4,
+                "friction": 0.05,
+                "restitution": 0.6000000000000001
+            },
+            "pos": {
+                "x": 70,
+                "y": 190
+            },
+            "rect": {
+                "height": 40,
+                "width": 40,
+                "x": -20,
+                "y": -20
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 13,
+            "joinStyle": "round",
+            "name": "circle_3",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "density": 0.4,
+                "friction": 0.05,
+                "restitution": 0.6000000000000001
+            },
+            "pos": {
+                "x": -105,
+                "y": 155
+            },
+            "rect": {
+                "height": 30,
+                "width": 30,
+                "x": -15,
+                "y": -15
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        }
+    ],
+    "variables": [
+        {
+            "name": "full",
+            "type": "bool",
+            "value": false
+        },
+        {
+            "name": "counter",
+            "type": "int",
+            "value": 0
+        }
+    ],
+    "version": 1,
+    "world": {
+        "physics": {},
+        "pixelsPerMeter": 100,
+        "randomSeed": 0,
+        "solidBounds": false
+    }
+}

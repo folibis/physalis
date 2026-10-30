@@ -12,10 +12,10 @@ class QLabel;
 // reparented, the editor stays as it was underneath, and closing this window
 // leaves no trace.
 //
-// It shows and does not edit -- dragging moves the view, never a body. The
-// wheel zooms about the pointer and 0 fits the field again; the keys are the
-// transport: space holds the run and lets it go again, the right arrow advances
-// one frame, escape ends the run and comes back to the editor.
+// It shows and does not edit -- dragging moves the view, never a body, and the
+// wheel zooms about the pointer. Escape is the only key it keeps, to end the
+// run and come back to the editor; every other key goes to the scene, so a
+// rule can watch it here as it does in the editor.
 class FullScreenView : public QGraphicsView
 {
     Q_OBJECT

@@ -659,8 +659,12 @@ QWidget *RulesPanel::buildCard(int index)
         stack->addWidget(buildConditionBlock(index, slot));
     }
 
+    stack->addWidget(buildAddRow(index, true, body));
+
     for (int slot = 0; slot < rule.actions.size(); ++slot)
         stack->addWidget(buildActionBlock(index, slot));
+
+    stack->addWidget(buildAddRow(index, false, body));
 
     connect(collapse, &QToolButton::clicked, this, [this, index] {
         setCollapsed(index, !m_collapsed.contains(index));
@@ -715,9 +719,30 @@ QWidget *RulesPanel::buildJoiner(int index, QWidget *parent)
     return holder;
 }
 
-// The small button at the end of a When or Then row: one more of these, or
-// this one gone. Rebuilding deletes the button, which cannot happen while its
-// own click is still on the stack, so both are queued.
+// One more When, or one more Then. It belongs to the list rather than to any
+// row in it, so there is one of these under the last row rather than a button
+// on every one -- and it adds at the end, which is where it sits.
+QWidget *RulesPanel::buildAddRow(int index, bool condition, QWidget *parent)
+{
+    auto *holder = new QWidget(parent);
+    auto *layout = new QHBoxLayout(holder);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+    layout->addStretch(1);
+    layout->addWidget(rowButton(holder, Icons::add(),
+                                condition ? tr("Add another condition") : tr("Add another action"),
+                                [this, index, condition] {
+        if (condition)
+            addCondition(index);
+        else
+            addAction(index);
+    }));
+    return holder;
+}
+
+// The small button at the end of a When or Then row: this one gone.
+// Rebuilding deletes the button, which cannot happen while its own click is
+// still on the stack, so it is queued.
 QToolButton *RulesPanel::rowButton(QWidget *parent, const QIcon &icon, const QString &tip,
                                    const std::function<void()> &onClick)
 {
@@ -781,9 +806,10 @@ QWidget *RulesPanel::buildConditionBlock(int index, int slot)
             scheduleValueEditorRefresh(index, a);
         }
     });
-    // The first one carries the caption and the button that adds another; the
-    // ones below it carry a button to take themselves away again. The mark for
-    // the row sits on the same line, so it is beside the field it is about.
+    // Every row carries the button that takes it away, the first one included:
+    // it used to be missing from the first, so the only way to be rid of what
+    // was written there was to write over it. The mark for the row sits on the
+    // same line, so it is beside the field it is about.
     auto *whenRow = new QHBoxLayout;
     whenRow->setSpacing(4);
     whenRow->addWidget(cond.source, 1);
@@ -793,13 +819,11 @@ QWidget *RulesPanel::buildConditionBlock(int index, int slot)
     cond.warning->setVisible(false);
     whenRow->addWidget(cond.warning);
 
-    if (slot == 0) {
-        whenRow->addWidget(rowButton(block, Icons::add(), tr("Add another condition"),
-                                     [this, index] { addCondition(index); }));
-    } else {
-        whenRow->addWidget(rowButton(block, Icons::deleteShape(), tr("Remove this condition"),
-                                     [this, index, slot] { removeCondition(index, slot); }));
-    }
+    auto *dropWhen = rowButton(block, Icons::deleteShape(), tr("Remove this condition"),
+                               [this, index, slot] { removeCondition(index, slot); });
+    // A rule with no condition could not say when, so the last one stays.
+    dropWhen->setEnabled(rule.conditions.size() > 1);
+    whenRow->addWidget(dropWhen);
     // Each block has its own form, and a form sizes its label column to what
     // is in it -- so a block whose labels are all blank would start its fields
     // hard against the left edge while the first block's began past "When:".
@@ -920,13 +944,10 @@ QWidget *RulesPanel::buildActionBlock(int index, int slot)
     act.warning->setVisible(false);
     thenRow->addWidget(act.warning);
 
-    if (slot == 0) {
-        thenRow->addWidget(rowButton(block, Icons::add(), tr("Add another action"),
-                                     [this, index] { addAction(index); }));
-    } else {
-        thenRow->addWidget(rowButton(block, Icons::deleteShape(), tr("Remove this action"),
-                                     [this, index, slot] { removeAction(index, slot); }));
-    }
+    auto *dropThen = rowButton(block, Icons::deleteShape(), tr("Remove this action"),
+                               [this, index, slot] { removeAction(index, slot); });
+    dropThen->setEnabled(rule.actions.size() > 1);
+    thenRow->addWidget(dropThen);
     form->addRow(tr("Then:"), thenRow);
 
     act.property = new ObjectComboBox(

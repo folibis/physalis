@@ -351,9 +351,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_fullScreenCheck = new QCheckBox(tr("Full Screen"), toolBar);
     m_fullScreenCheck->setToolTip(tr("Run the simulation on a screen of its own, with the"
-                                     " field as large as it will go. Space holds it and lets"
-                                     " it go again, the right arrow advances one frame, and"
-                                     " Esc ends the run and comes back here."));
+                                     " field as large as it will go. Esc ends the run and"
+                                     " comes back here; every other key goes to the scene."));
     m_transportActions << toolBar->addWidget(m_fullScreenCheck);
     connect(m_fullScreenCheck, &QCheckBox::toggled, this, [this](bool) {
         updateFullScreenView();
@@ -3543,6 +3542,16 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
         m_ui->propertyPanel->setActiveItem(m_scene->activeItem());
 }
 
+QString MainWindow::chooseSettingsFile(const QString &redirect, const QString &configDir,
+                                       const QString &besideExecutable)
+{
+    if (!redirect.isEmpty())
+        return redirect;
+    if (configDir.isEmpty())
+        return besideExecutable; // nowhere better to go
+    return configDir + QStringLiteral("/settings.ini");
+}
+
 QString MainWindow::settingsFilePath()
 {
     const QString redirect = qEnvironmentVariable("PHYSALIS_SETTINGS");
@@ -3556,19 +3565,18 @@ QString MainWindow::settingsFilePath()
                                + QStringLiteral("/settings.ini");
 
         // Where the platform keeps a user's own settings, which is what Qt
-        // answers here. It used to go beside the executable, and that is a
+        // answers here. They used to go beside the executable, and that is a
         // place an installed program cannot write -- Program Files on Windows,
         // <libdir>/physalis on Linux -- so every setting was dropped on exit
         // and only a build run from its own folder ever kept any.
-        const QString dir =
-            QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-        if (dir.isEmpty() || !QDir().mkpath(dir))
-            return beside; // nowhere better to go
+        QString dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+        if (!dir.isEmpty() && !QDir().mkpath(dir))
+            dir.clear();
 
-        const QString own = dir + QStringLiteral("/settings.ini");
+        const QString own = chooseSettingsFile(QString(), dir, beside);
         // Carried over once, so a copy that has been run from its own folder
         // keeps what it had when its settings move here.
-        if (!QFileInfo::exists(own) && QFileInfo::exists(beside))
+        if (own != beside && !QFileInfo::exists(own) && QFileInfo::exists(beside))
             QFile::copy(beside, own);
         return own;
     }();

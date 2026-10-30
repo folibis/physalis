@@ -30,7 +30,6 @@
 #include <QLineEdit>
 #include <QGraphicsView>
 #include "PropertyPanel.h"
-#include <QStandardPaths>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QScrollBar>
@@ -1083,23 +1082,20 @@ TEST(Options, AShortCaptionDoesNotTakeTheWholeWidth)
 // Settings go where the platform keeps a user's own, not beside the
 // executable: installed, that is Program Files on Windows and
 // <libdir>/physalis on Linux, neither of which the user can write -- so every
-// setting was dropped on exit and only a build run from its own folder kept
-// any. Qt's test mode moves the answer somewhere harmless, so asking the
-// question here cannot touch the real one.
+// setting was dropped on exit, and only a build run from its own folder ever
+// kept any. Three paths in, one out: nothing here reads an environment or a
+// real settings file.
 TEST(Options, SettingsAreKeptWhereTheUserCanWriteThem)
 {
-    const QByteArray redirect = qgetenv("PHYSALIS_SETTINGS");
-    ASSERT_FALSE(redirect.isEmpty()) << "the suite runs without its own settings file";
+    const QString beside = QStringLiteral("/usr/lib/physalis/settings.ini");
+    const QString config = QStringLiteral("/home/someone/.config/Physalis");
 
-    QStandardPaths::setTestModeEnabled(true);
-    qunsetenv("PHYSALIS_SETTINGS");
-    const QString chosen = MainWindow::settingsFilePathForTest();
-    qputenv("PHYSALIS_SETTINGS", redirect);
-    QStandardPaths::setTestModeEnabled(false);
-
-    EXPECT_FALSE(chosen.startsWith(QCoreApplication::applicationDirPath()))
-        << "beside the executable, which an installed copy cannot write: "
-        << chosen.toStdString();
-    EXPECT_EQ(MainWindow::settingsFilePathForTest(), QString::fromLocal8Bit(redirect))
-        << "a test no longer gets a settings file of its own";
+    EXPECT_EQ(MainWindow::chooseSettingsFile(QString(), config, beside),
+              config + QStringLiteral("/settings.ini"))
+        << "settings went beside the executable, where an installed copy cannot write them";
+    EXPECT_EQ(MainWindow::chooseSettingsFile(QStringLiteral("/tmp/own.ini"), config, beside),
+              QStringLiteral("/tmp/own.ini"))
+        << "a settings file named outright no longer wins, so a test cannot have its own";
+    EXPECT_EQ(MainWindow::chooseSettingsFile(QString(), QString(), beside), beside)
+        << "with no place to put them they have to go somewhere";
 }

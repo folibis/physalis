@@ -1546,6 +1546,28 @@ bool CanvasScene::isSpringJoint(const Joint *joint) const
 // and pack instead of being recounted as the spring moves. An engine that lets
 // a rest length of zero mean "wherever the anchors start" leaves the span to
 // say, which is the same thing while nothing is running.
+QPointF CanvasScene::railOrigin(const Joint *joint) const
+{
+    // Measured while the scene stands still, because that is when a sliding
+    // joint is at rest and its travel reads zero -- the same reason
+    // springTurns() counts its turns there -- and held through the run. Hung
+    // off anchor B as it stands instead, the whole range slid along with the
+    // body, so it never showed where in its travel that body had got to.
+    const QString name = joint->name();
+    if (simulationRunning())
+    {
+        const auto held = m_railOrigins.constFind(name);
+        if (held != m_railOrigins.constEnd())
+        {
+            return joint->fromBodyAFrame(*held);
+        }
+    }
+
+    const QPointF restingB = joint->anchorScenePos(Joint::End::B);
+    m_railOrigins.insert(name, joint->inBodyAFrame(restingB));
+    return restingB;
+}
+
 int CanvasScene::springTurns(const Joint *joint, qreal spanLength) const
 {
     const QString name = joint->name();
@@ -4304,15 +4326,16 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
                 const QPointF along = joint->axisScene();
                 const QPointF across(-along.y(), along.x());
 
-                const QVariantMap &params = joint->params();
-                qreal lower = params.value(QStringLiteral("lowerTranslation")).toDouble();
-                qreal upper = params.value(QStringLiteral("upperTranslation")).toDouble();
+                // By role, like everywhere else the editor reads a limit: the
+                // keys belong to the engine and this used to spell out Box2D's.
+                const JointLimits stops = jointLimits(joint);
+                qreal lower = stops.lower;
+                qreal upper = stops.upper;
                 if (lower > upper)
                 {
                     std::swap(lower, upper);
                 }
-                const bool limited = params.value(QStringLiteral("enableLimit")).toBool()
-                                     && !qFuzzyCompare(lower, upper);
+                const bool limited = stops.enforced && !qFuzzyCompare(lower, upper);
                 if (!limited)
                 {
                     // Unlimited travel has no length to draw, so this is a
@@ -4323,16 +4346,14 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
                     lower = -upper;
                 }
 
-                // Measured from the second anchor, not the first. A sliding
-                // joint's travel is where end B stands relative to end A, and
-                // it reads zero where the joint was made -- so zero is at
-                // anchor B, wherever that was dropped. Hanging the band off
-                // anchor A instead drew the whole range in the wrong place the
-                // moment the two anchors were not on the same point: a lift
-                // whose rail runs up and away had its limits drawn running
-                // down and away, off the picture entirely.
-                const QPointF from = b + along * lower;
-                const QPointF to = b + along * upper;
+                // From where the travel reads zero -- anchor B at rest, held
+                // on body A -- not from anchor B as it stands now. The rail
+                // belongs to the body the axis belongs to; what moves along it
+                // is anchor B, which is drawn on top of it and says where in
+                // its travel the joint has got to.
+                const QPointF zero = railOrigin(joint);
+                const QPointF from = zero + along * lower;
+                const QPointF to = zero + along * upper;
 
                 // Darker than the joint's own colour and as thick as its shaft:
                 // the pale type colour at outline width disappears against a
@@ -4349,18 +4370,7 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
                 painter->setBrush(Qt::NoBrush);
                 painter->drawLine(from, to);
 
-                if (limited)
-                {
-                    QPen stopPen(axisColor);
-                    stopPen.setWidthF(qMax(waist * 2.5, 1.5));
-                    stopPen.setCapStyle(Qt::RoundCap);
-                    painter->setPen(stopPen);
-                    painter->drawLine(from - across * ring, from + across * ring);
-                    painter->drawLine(to - across * ring, to + across * ring);
-                }
-
                 const qreal head = ring * 1.3;
-                const qreal inset = limited ? waist * 2.5 + head * 0.3 : 0.0;
                 const auto arrowAt = [&](const QPointF &tip, const QPointF &direction) {
                     const QPointF back = tip - direction * head;
                     const QPointF side(-direction.y() * head * 0.55, direction.x() * head * 0.55);
@@ -4372,8 +4382,27 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
                     painter->setBrush(axisColor);
                     painter->drawPolygon(arrow);
                 };
-                arrowAt(to - along * inset, along);
-                arrowAt(from + along * inset, -along);
+                if (limited)
+                {
+                    // A stop at each end is the whole of it. Arrowheads there
+                    // as well said "this way" at the one place it cannot go
+                    // any further, which is the opposite of what they mean on
+                    // the open-ended rail below.
+                    QPen stopPen(axisColor);
+                    stopPen.setWidthF(qMax(waist * 2.5, 1.5));
+                    stopPen.setCapStyle(Qt::RoundCap);
+                    painter->setPen(stopPen);
+                    painter->drawLine(from - across * ring, from + across * ring);
+                    painter->drawLine(to - across * ring, to + across * ring);
+                }
+                else
+                {
+                    // Nothing to measure, so the heads say which way it slides
+                    // rather than how far -- and the line they sit on is
+                    // dashed, which is what says there is no end to it.
+                    arrowAt(to, along);
+                    arrowAt(from, -along);
+                }
             }
 
             if (anchors == 0)
@@ -4466,9 +4495,11 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
                 painter->setBrush(Qt::NoBrush);
 
                 const qreal tick = qMax(5.0, ring * 1.6);
-                if ((kind == physics::JointVisual::Segment
-                     || kind == physics::JointVisual::Axis)
-                    && span.length() > 0.01)
+                // Not the sliding kinds: their travel is drawn along the axis
+                // above, from where it reads zero. Here it would be measured
+                // from anchor A along the shaft instead -- a second band in a
+                // second place, saying the same thing wrongly.
+                if (kind == physics::JointVisual::Segment && span.length() > 0.01)
                 {
                     const QPointF along = (b - a) / span.length();
                     const QPointF across(-along.y(), along.x());
