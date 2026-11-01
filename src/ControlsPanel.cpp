@@ -4,6 +4,7 @@
 
 #include "CanvasScene.h"
 #include "Icons.h"
+#include "Theme.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -21,6 +22,8 @@ ControlsPanel::ControlsPanel(QWidget *parent)
     : QWidget(parent)
 {
     buildUi();
+    // Each card carries its corners in a sheet of its own.
+    connect(Theme::instance(), &Theme::changed, this, &ControlsPanel::rebuild);
 }
 
 void ControlsPanel::buildUi()
@@ -98,11 +101,13 @@ QWidget *ControlsPanel::buildCard(int row, const SceneControl &control)
     card->setObjectName(QStringLiteral("controlCard"));
     card->setFrameShape(QFrame::NoFrame);
     card->setStyleSheet(QStringLiteral(
-        "QFrame#controlCard { border: 1px solid #c8c8c8; border-radius: 4px;"
-        " background: #fcfcfc; }"
-        "QWidget#controlCardHeader { background: #ececec;"
-        " border-bottom: 1px solid #c8c8c8;"
-        " border-top-left-radius: 3px; border-top-right-radius: 3px; }"));
+        "QFrame#controlCard { border: 1px solid palette(mid); border-radius: %1px;"
+        " background: palette(base); }"
+        "QWidget#controlCardHeader { background: palette(midlight);"
+        " border-bottom: 1px solid palette(mid);"
+        " border-top-left-radius: %2px; border-top-right-radius: %2px; }")
+        .arg(Theme::cardRadius())
+        .arg(qMax(0, Theme::cardRadius() - 1)));
 
     auto *column = new QVBoxLayout(card);
     column->setContentsMargins(0, 0, 0, 0);

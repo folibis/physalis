@@ -30,6 +30,7 @@
 #include "SimulationController.h"
 #include "SceneExporter.h"
 #include "SceneScreenshot.h"
+#include "Theme.h"
 
 #include <QTextDocument>
 #include <cmath>
@@ -144,6 +145,41 @@ MainWindow::MainWindow(QWidget *parent)
     // setupUi() ends in connectSlotsByName(), which binds the on_<object>_
     // <signal>() slots to their actions.
     m_ui->setupUi(this);
+
+    // Here rather than in the form: uic would build plain icons, and these
+    // have to follow the theme.
+    const std::pair<QAction *, QIcon> actionIcons[] = {
+        { m_ui->actionNewScene, Icons::newScene() },
+        { m_ui->actionLoadScene, Icons::loadScene() },
+        { m_ui->actionSaveScene, Icons::saveScene() },
+        { m_ui->actionSaveSceneAs, Icons::saveSceneAs() },
+        { m_ui->actionOptions, Icons::options() },
+        { m_ui->actionExit, Icons::exit() },
+        { m_ui->actionUndo, Icons::undo() },
+        { m_ui->actionRedo, Icons::redo() },
+        { m_ui->actionCopy, Icons::copy() },
+        { m_ui->actionPaste, Icons::paste() },
+        { m_ui->actionSaveScreenshot, Icons::screenshot() },
+        { m_ui->actionAddRectangle, Icons::rectangle() },
+        { m_ui->actionAddCircle, Icons::circle() },
+        { m_ui->actionAddPolygon, Icons::polygon() },
+        { m_ui->actionAddShape, Icons::add() },
+        { m_ui->actionDelete, Icons::deleteShape() },
+        { m_ui->actionMoveScale, Icons::move() },
+        { m_ui->actionEditNodes, Icons::edit() },
+        { m_ui->actionRotate, Icons::rotate() },
+        { m_ui->actionAddRay, Icons::ray() },
+        { m_ui->actionAddExplosion, Icons::explosion() },
+        { m_ui->actionCreateBody, Icons::createBody() },
+        { m_ui->actionDissolveBody, Icons::dissolveBody() },
+        { m_ui->actionAddJoint, Icons::add() },
+        { m_ui->actionDeleteJoint, Icons::deleteShape() },
+        { m_ui->actionSimulate, Icons::simulate() },
+        { m_ui->actionStep, Icons::step() },
+        { m_ui->actionStop, Icons::stop() },
+    };
+    for (const auto &[action, icon] : actionIcons)
+        action->setIcon(icon);
 
     m_scene = new CanvasScene(this);
     m_undo = new UndoStack(m_scene, this);
@@ -411,7 +447,8 @@ MainWindow::MainWindow(QWidget *parent)
     toolBar->addWidget(toolBarSpacer);
 
     auto *modeLabel = new QLabel(tr("Mode"), toolBar);
-    modeLabel->setStyleSheet(QStringLiteral("color: #777; padding-right: 10px;"));
+    modeLabel->setProperty("muted", true);
+    modeLabel->setStyleSheet(QStringLiteral("padding-right: 10px;"));
     toolBar->addWidget(modeLabel);
 
     // A widget added straight to a toolbar is stretched to its full height, so
@@ -425,7 +462,8 @@ MainWindow::MainWindow(QWidget *parent)
     // The ID selector matters: an unqualified rule would cascade into the child
     // buttons and fight the per-button styling in onEditorModeChanged().
     modeSwitch->setStyleSheet(QStringLiteral(
-        "#ModeSwitch { background: #e4e4e4; border: 1px solid #d2d2d2; border-radius: 15px; }"));
+        "#ModeSwitch { background: palette(midlight); border: 1px solid palette(mid);"
+        " border-radius: 15px; }"));
 
     auto *modeLayout = new QHBoxLayout(modeSwitch);
     modeLayout->setContentsMargins(3, 3, 3, 3);
@@ -459,6 +497,8 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_scene, &CanvasScene::shotReleased, m_simulation, &SimulationController::shoot);
 
     connect(m_scene, &CanvasScene::editorModeChanged, this, &MainWindow::onEditorModeChanged);
+    connect(Theme::instance(), &Theme::changed, this,
+            [this] { styleModeButtons(m_scene->editorMode()); });
     connect(m_scene, &CanvasScene::physicsSelectionChanged, this, &MainWindow::onPhysicsSelectionChanged);
     // Selecting an explosion is a different signal, and Remove depends on it.
     connect(m_scene, &CanvasScene::selectedRayChanged, this, [this](RayItem *) {
@@ -539,6 +579,10 @@ MainWindow::MainWindow(QWidget *parent)
     // so padding put there came out of the text's height instead of being
     // added to it -- and the last line was cut off.
     m_caption->setContentsMargins(9, 7, 9, 7);
+    // It and the controls stand on the field, whose colour is the scene's and
+    // not the theme's, behind a pale backing of their own -- so they keep a
+    // light palette whatever the application is wearing.
+    m_caption->setPalette(Theme::lightPalette());
     m_caption->setStyleSheet(QStringLiteral(
         "#SceneCaption { background: rgba(255, 255, 255, 200); border: 1px solid #b4b4b4;"
         " border-radius: 4px; }"));
@@ -550,6 +594,7 @@ MainWindow::MainWindow(QWidget *parent)
     auto *controlColumn = new QVBoxLayout(m_controls);
     controlColumn->setContentsMargins(9, 7, 9, 7);
     controlColumn->setSpacing(4);
+    m_controls->setPalette(Theme::lightPalette());
     m_controls->setStyleSheet(QStringLiteral(
         "#SceneControls { background: rgba(255, 255, 255, 200); border: 1px solid #b4b4b4;"
         " border-radius: 4px; }"));
@@ -2337,31 +2382,7 @@ void MainWindow::showIncompleteRules(int count)
 
 void MainWindow::onEditorModeChanged(EditorMode mode)
 {
-    for (EditorMode buttonMode : EditorModes::kAll) {
-        QToolButton *button = m_modeButtons.value(static_cast<int>(buttonMode));
-        if (!button)
-            continue;
-
-        const bool active = buttonMode == mode;
-        const QColor accent = EditorModes::accent(buttonMode);
-
-        button->setChecked(active);
-
-        button->setStyleSheet(QStringLiteral(
-            "QToolButton {"
-            "  border: none;"
-            "  border-radius: 12px;"
-            "  padding: 5px 18px;"
-            "  font-weight: %1;"
-            "  color: %2;"
-            "  background: %3;"
-            "}"
-            "QToolButton:hover:!checked { background: #d5d5d5; }"
-            "QToolButton:disabled { color: #aaaaaa; background: transparent; }")
-            .arg(active ? QStringLiteral("bold") : QStringLiteral("normal"),
-                 active ? QStringLiteral("white") : QStringLiteral("#4f4f4f"),
-                 active ? accent.name() : QStringLiteral("transparent")));
-    }
+    styleModeButtons(mode);
 
     for (QAction *action : std::as_const(m_editModeActions))
         action->setVisible(mode == EditorMode::Edit);
@@ -2384,6 +2405,36 @@ void MainWindow::onEditorModeChanged(EditorMode mode)
     onJointSelectionChanged();
     if (mode == EditorMode::Edit)
         onActiveItemChanged(m_scene->activeItem());
+}
+
+void MainWindow::styleModeButtons(EditorMode mode)
+{
+    for (EditorMode buttonMode : EditorModes::kAll) {
+        QToolButton *button = m_modeButtons.value(static_cast<int>(buttonMode));
+        if (!button)
+            continue;
+
+        const bool active = buttonMode == mode;
+        const QColor accent = EditorModes::accent(buttonMode);
+
+        button->setChecked(active);
+
+        button->setStyleSheet(QStringLiteral(
+            "QToolButton {"
+            "  border: none;"
+            "  border-radius: 12px;"
+            "  padding: 5px 18px;"
+            "  font-weight: %1;"
+            "  color: %2;"
+            "  background: %3;"
+            "}"
+            "QToolButton:hover:!checked { background: palette(mid); }"
+            "QToolButton:disabled { color: %4; background: transparent; }")
+            .arg(active ? QStringLiteral("bold") : QStringLiteral("normal"),
+                 active ? QStringLiteral("white") : QStringLiteral("palette(window-text)"),
+                 active ? accent.name() : QStringLiteral("transparent"),
+                 Theme::colors().faintText.name()));
+    }
 }
 
 // Lining shapes up: one button with the six edges under it, used from the
@@ -3346,6 +3397,8 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     OptionsDialog::Settings current;
     current.converterPath = m_converterPath;
     current.defaultEngineName = engineForNewScenes();
+    current.theme = Theme::current();
+    current.controls = Theme::currentControls();
     current.converterSettings = m_converterSettings;
     // The field belongs to the scene and travels in its file; what Options
     // holds is what the next new scene starts with.
@@ -3449,6 +3502,7 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_converterPath = s.converterPath;
     // Only new scenes: what is open was built for the engine it names.
     m_defaultEngineName = s.defaultEngineName;
+    Theme::apply(s.theme, s.controls);
     m_converterSettings = s.converterSettings;
     // Kept for the next new scene. Changing it does not repaint the scene
     // that is open: that one's field came from its own file, and is saved
@@ -3589,6 +3643,8 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
 
     QSettings settings(settingsFilePath(), QSettings::IniFormat);
     s.defaultEngineName = settings.value("Engine/default", s.defaultEngineName).toString();
+    s.theme = settings.value("Appearance/theme", s.theme).toString();
+    s.controls = settings.value("Appearance/controls", s.controls).toString();
     settings.beginGroup("Field");
     s.fieldWidth = settings.value("width", s.fieldWidth).toDouble();
     s.fieldHeight = settings.value("height", s.fieldHeight).toDouble();
@@ -3769,6 +3825,8 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
 {
     QSettings settings(settingsFilePath(), QSettings::IniFormat);
     settings.setValue("Engine/default", s.defaultEngineName);
+    settings.setValue("Appearance/theme", s.theme);
+    settings.setValue("Appearance/controls", s.controls);
     settings.beginGroup("Field");
     settings.setValue("width", s.fieldWidth);
     settings.setValue("height", s.fieldHeight);

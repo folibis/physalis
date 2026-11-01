@@ -148,6 +148,8 @@ OptionsDialog::Settings distinctive()
     s.jointSelectionColor = QColor(210, 120, 30);
     s.simulationEngineName = QStringLiteral("Box2D");
     s.defaultEngineName = QStringLiteral("Box2D");
+    s.theme = QStringLiteral("nord");
+    s.controls = QStringLiteral("material");
     s.jointOutlineColor = QColor(15, 25, 35);
     s.jointAnchorRadius = 9.0;
     s.jointAxisLength = 65.0;
@@ -231,7 +233,7 @@ void everyFieldComesBack(const OptionsDialog::Settings &in, const OptionsDialog:
     EXPECT_EQ(int(out.jointSelectionLineStyle), int(in.jointSelectionLineStyle))
         << "Options lost or changed jointSelectionLineStyle";
     SAME(jointSelectionLineWidth); SAME(jointSelectionColor);
-    SAME(simulationEngineName); SAME(defaultEngineName);
+    SAME(simulationEngineName); SAME(defaultEngineName); SAME(theme); SAME(controls);
     SAME(jointOutlineColor); SAME(jointAnchorRadius); SAME(jointAxisLength);
     SAME(jointWaistWidth); SAME(jointOutlineWidth);
 

@@ -55,6 +55,34 @@
             </property>
            </widget>
           </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="theme_label">
+            <property name="text">
+             <string>Theme:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="theme">
+            <property name="toolTip">
+             <string>How the application's own windows and panels look. System follows the desktop. The scene's field keeps its own colours.</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="controls_label">
+            <property name="text">
+             <string>Controls:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="controls">
+            <property name="toolTip">
+             <string>The shape of fields, buttons, tabs and checkboxes, whichever theme colours them.</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
         <item>

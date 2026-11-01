@@ -15,6 +15,11 @@ them in the scene's own properties, shown when nothing is selected.
 ![Options, Common tab](images/options-common.png)
 
 - **Physics engine** chooses the [engine](engines.md) that new scenes use.
+- **Theme** is how the windows and panels look: Light, Dark, Nord,
+  Catppuccin Latte, Catppuccin Mocha, or System to follow the desktop. The
+  field keeps its own colours.
+- **Controls** is the shape of fields, buttons, tabs and checkboxes --
+  Rounded, Pill, Sharp, Material or Minimal -- and goes with any theme.
 - **Field** sets the default size and background colour of the field for new
   scenes, and how far you can zoom in and out.
 - **Grid** sets whether the grid is shown by default, the size of its cells and

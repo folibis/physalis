@@ -22,8 +22,8 @@ ToolOptionsBar::ToolOptionsBar(QWidget *parent)
     setObjectName(QStringLiteral("ToolOptionsBar"));
     setStyleSheet(QStringLiteral(
         "#ToolOptionsBar {"
-        "  background: #f4f4f4;"
-        "  border: 1px solid #a8a8a8;"
+        "  background: palette(window);"
+        "  border: 1px solid palette(mid);"
         "  border-radius: 6px;"
         "}"));
 

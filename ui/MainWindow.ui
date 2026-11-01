@@ -25,7 +25,7 @@
     <item row="0" column="0">
      <widget class="QWidget" name="rulerCorner" native="true">
       <property name="styleSheet">
-       <string notr="true">background-color: rgb(248,248,248); border-right: 1px solid rgb(200,200,200); border-bottom: 1px solid rgb(200,200,200);</string>
+       <string notr="true">background-color: palette(window); border-right: 1px solid palette(mid); border-bottom: 1px solid palette(mid);</string>
       </property>
      </widget>
     </item>
@@ -252,10 +252,6 @@
    </widget>
   </widget>
   <action name="actionNewScene">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/new_scene.svg</normaloff>:/icons/new_scene.svg</iconset>
-   </property>
    <property name="text">
     <string>&amp;New Scene</string>
    </property>
@@ -264,10 +260,6 @@
    </property>
   </action>
   <action name="actionLoadScene">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/load_scene.svg</normaloff>:/icons/load_scene.svg</iconset>
-   </property>
    <property name="text">
     <string>&amp;Load Scene...</string>
    </property>
@@ -276,10 +268,6 @@
    </property>
   </action>
   <action name="actionSaveScene">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/save_scene.svg</normaloff>:/icons/save_scene.svg</iconset>
-   </property>
    <property name="text">
     <string>&amp;Save Scene</string>
    </property>
@@ -288,10 +276,6 @@
    </property>
   </action>
   <action name="actionSaveSceneAs">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/save_as.svg</normaloff>:/icons/save_as.svg</iconset>
-   </property>
    <property name="text">
     <string>Save Scene &amp;As...</string>
    </property>
@@ -308,28 +292,16 @@
    </property>
   </action>
   <action name="actionOptions">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/options.svg</normaloff>:/icons/options.svg</iconset>
-   </property>
    <property name="text">
     <string>Options...</string>
    </property>
   </action>
   <action name="actionExit">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/exit.svg</normaloff>:/icons/exit.svg</iconset>
-   </property>
    <property name="text">
     <string>Exit</string>
    </property>
   </action>
   <action name="actionUndo">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/undo.svg</normaloff>:/icons/undo.svg</iconset>
-   </property>
    <property name="text">
     <string>&amp;Undo</string>
    </property>
@@ -338,10 +310,6 @@
    </property>
   </action>
   <action name="actionRedo">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/redo.svg</normaloff>:/icons/redo.svg</iconset>
-   </property>
    <property name="text">
     <string>&amp;Redo</string>
    </property>
@@ -350,10 +318,6 @@
    </property>
   </action>
   <action name="actionCopy">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/copy.svg</normaloff>:/icons/copy.svg</iconset>
-   </property>
    <property name="text">
     <string>&amp;Copy</string>
    </property>
@@ -362,10 +326,6 @@
    </property>
   </action>
   <action name="actionPaste">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/paste.svg</normaloff>:/icons/paste.svg</iconset>
-   </property>
    <property name="text">
     <string>&amp;Paste</string>
    </property>
@@ -382,10 +342,6 @@
    </property>
   </action>
   <action name="actionSaveScreenshot">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/screenshot.svg</normaloff>:/icons/screenshot.svg</iconset>
-   </property>
    <property name="text">
     <string>Save &amp;Screenshot...</string>
    </property>
@@ -397,37 +353,21 @@
    </property>
   </action>
   <action name="actionAddRectangle">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/rectangle.svg</normaloff>:/icons/rectangle.svg</iconset>
-   </property>
    <property name="text">
     <string>Rectangle</string>
    </property>
   </action>
   <action name="actionAddCircle">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/circle.svg</normaloff>:/icons/circle.svg</iconset>
-   </property>
    <property name="text">
     <string>Circle</string>
    </property>
   </action>
   <action name="actionAddPolygon">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/polygon.svg</normaloff>:/icons/polygon.svg</iconset>
-   </property>
    <property name="text">
     <string>Polygon</string>
    </property>
   </action>
   <action name="actionAddShape">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/add.svg</normaloff>:/icons/add.svg</iconset>
-   </property>
    <property name="text">
     <string>Add</string>
    </property>
@@ -436,10 +376,6 @@
    </property>
   </action>
   <action name="actionDelete">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/delete.svg</normaloff>:/icons/delete.svg</iconset>
-   </property>
    <property name="text">
     <string>Delete</string>
    </property>
@@ -451,10 +387,6 @@
    </property>
   </action>
   <action name="actionMoveScale">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/move.svg</normaloff>:/icons/move.svg</iconset>
-   </property>
    <property name="text">
     <string>Move / Scale</string>
    </property>
@@ -466,10 +398,6 @@
    </property>
   </action>
   <action name="actionEditNodes">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/edit.svg</normaloff>:/icons/edit.svg</iconset>
-   </property>
    <property name="text">
     <string>Edit</string>
    </property>
@@ -481,10 +409,6 @@
    </property>
   </action>
   <action name="actionRotate">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/rotate.svg</normaloff>:/icons/rotate.svg</iconset>
-   </property>
    <property name="text">
     <string>Rotate</string>
    </property>
@@ -496,10 +420,6 @@
    </property>
   </action>
   <action name="actionAddRay">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/ray.svg</normaloff>:/icons/ray.svg</iconset>
-   </property>
    <property name="text">
     <string>Add &amp;Ray</string>
    </property>
@@ -508,10 +428,6 @@
    </property>
   </action>
   <action name="actionAddExplosion">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/explosion.svg</normaloff>:/icons/explosion.svg</iconset>
-   </property>
    <property name="text">
     <string>Add &amp;Explosion</string>
    </property>
@@ -520,10 +436,6 @@
    </property>
   </action>
   <action name="actionCreateBody">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/create_body.svg</normaloff>:/icons/create_body.svg</iconset>
-   </property>
    <property name="text">
     <string>Create Body</string>
    </property>
@@ -532,10 +444,6 @@
    </property>
   </action>
   <action name="actionDissolveBody">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/dissolve_body.svg</normaloff>:/icons/dissolve_body.svg</iconset>
-   </property>
    <property name="text">
     <string>Remove</string>
    </property>
@@ -544,10 +452,6 @@
    </property>
   </action>
   <action name="actionAddJoint">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/add.svg</normaloff>:/icons/add.svg</iconset>
-   </property>
    <property name="text">
     <string>Add Joint</string>
    </property>
@@ -556,10 +460,6 @@
    </property>
   </action>
   <action name="actionDeleteJoint">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/delete.svg</normaloff>:/icons/delete.svg</iconset>
-   </property>
    <property name="text">
     <string>Delete Joint</string>
    </property>
@@ -568,19 +468,11 @@
    </property>
   </action>
   <action name="actionSimulate">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/simulate.svg</normaloff>:/icons/simulate.svg</iconset>
-   </property>
    <property name="text">
     <string>Simulate</string>
    </property>
   </action>
   <action name="actionStep">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/step.svg</normaloff>:/icons/step.svg</iconset>
-   </property>
    <property name="text">
     <string>Step</string>
    </property>
@@ -589,10 +481,6 @@
    </property>
   </action>
   <action name="actionStop">
-   <property name="icon">
-    <iconset resource="../resources/icons.qrc">
-     <normaloff>:/icons/stop.svg</normaloff>:/icons/stop.svg</iconset>
-   </property>
    <property name="text">
     <string>Stop</string>
    </property>

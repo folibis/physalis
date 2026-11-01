@@ -1,5 +1,7 @@
 #include "RulerWidget.h"
 
+#include "Theme.h"
+
 #include <QGraphicsView>
 #include <QScrollBar>
 #include <QPainter>
@@ -66,8 +68,8 @@ QSize RulerWidget::sizeHint() const
 void RulerWidget::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(248, 248, 248));
-    painter.setPen(QColor(150, 150, 150));
+    painter.fillRect(rect(), palette().window());
+    painter.setPen(palette().color(QPalette::Mid));
     if (m_orientation == Orientation::Horizontal)
         painter.drawLine(0, height() - 1, width() - 1, height() - 1);
     else
@@ -100,7 +102,7 @@ void RulerWidget::paintEvent(QPaintEvent *)
         const bool isMajor = (roundedCoord % kMajorStep == 0);
 
         const int tickLen = isMajor ? 10 : 5;
-        painter.setPen(QColor(120, 120, 120));
+        painter.setPen(Theme::colors().mutedText);
         if (horizontal)
             painter.drawLine(p, height() - tickLen, p, height() - 1);
         else
@@ -108,7 +110,7 @@ void RulerWidget::paintEvent(QPaintEvent *)
 
         if (isMajor) {
             const QString label = QString::number(roundedCoord);
-            painter.setPen(QColor(90, 90, 90));
+            painter.setPen(palette().color(QPalette::WindowText));
             const int gap = 2;
             if (horizontal) {
                 painter.drawText(QRect(p - 20, 0, 40, height() - tickLen - gap),

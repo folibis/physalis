@@ -8,6 +8,7 @@
 #include "PhysicsBody.h"
 #include "PropertyPane/PropertyPaneFactory.h"
 #include "Icons.h"
+#include "Theme.h"
 
 #include <QScrollBar>
 #include <QTableWidget>
@@ -46,6 +47,8 @@ PropertyPanel::PropertyPanel(QWidget *parent)
 
     setEditorMode(m_mode);
     setActiveItem(nullptr);
+
+    connect(Theme::instance(), &Theme::changed, this, &PropertyPanel::updateWatchMarks);
 }
 
 void PropertyPanel::setEditorMode(EditorMode mode)
@@ -592,7 +595,8 @@ void PropertyPanel::updateWatchMarks()
         // Blue and bold: the same property can be in the log or not, and the
         // table is the only place that says which.
         row.nameLabel->setStyleSheet(watched
-                                         ? QStringLiteral("color: #1E6FD9; font-weight: bold;")
+                                         ? QStringLiteral("color: %1; font-weight: bold;")
+                                               .arg(Theme::colors().accent.name())
                                          : QString());
     }
 }

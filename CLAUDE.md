@@ -160,6 +160,24 @@ is built without knowing the scene's scale, so a scene at a very different one
 wants different numbers. Making them follow `pixelsPerMeter` needs the scale to
 reach the engine before the catalogue is asked.
 
+**The chrome is themed; the canvas is not.** `Theme::apply` puts Fusion, a
+palette and one application stylesheet on everything (Options -> Common ->
+Theme, `Appearance/theme`; System follows the desktop where Qt can tell). A
+theme is one line of ten colours in `kSpecs` in `Theme.cpp`; the palette, the
+derived colours and the sheet are all worked out from it. The shape of the
+controls is a second, independent choice (Controls, `Appearance/controls`):
+one `kShapes` entry of radii and paddings that fill the sheet's `@r...`
+placeholders, plus a few rules of its own appended after the shared ones. The combo and spin
+arrows and the checkbox tick are images under `:/theme`, one per ink. A widget's colour is a `palette(...)` role where one fits and a
+`Theme::colors()` field where none does -- never a hex literal -- and a
+"muted" label is `setProperty("muted", true)`, which the app sheet colours.
+Whatever bakes a colour in -- a panel's own sheet, a painted pixmap -- redoes
+it on `Theme::changed`. Icons go through `ThemedSvgEngine` in `Icons.cpp`,
+which draws their greys lighter on dark at paint time, so a switch needs no
+icon set again. The field, the grid and the physics view's colours are the
+scene's and Options' and are left alone; the caption and controls standing
+on the field keep `Theme::lightPalette()` for that reason.
+
 **The side panel's tabs are icons.** Six names across a narrow panel left no
 room for any of them, so each tab keeps its name in a tooltip and only the one
 you are on spells it out (`MainWindow::updateSidePanelTabLabels`). **View** on

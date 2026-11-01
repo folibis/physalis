@@ -12,7 +12,15 @@ QIcon app();
 QIcon newScene();
 QIcon loadScene();
 QIcon saveScene();
+QIcon saveSceneAs();
 QIcon exportScene();
+QIcon screenshot();
+QIcon options();
+QIcon exit();
+QIcon undo();
+QIcon redo();
+QIcon copy();
+QIcon paste();
 
 QIcon add();
 QIcon rectangle();

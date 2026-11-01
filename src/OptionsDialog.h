@@ -12,6 +12,7 @@
 #include <QHash>
 #include <QVariantMap>
 #include "CanvasScene.h"
+#include "Theme.h"
 
 class QDoubleSpinBox;
 class QSpinBox;
@@ -132,6 +133,10 @@ public:
         // Which engine a *new* scene is built for. An existing scene keeps the
         // one it was saved with, whatever this says.
         QString defaultEngineName;
+        // A key from Theme::available().
+        QString theme = QStringLiteral("system");
+        // A key from Theme::availableControls().
+        QString controls = QStringLiteral("rounded");
         QColor jointOutlineColor { 0x5A, 0x4A, 0x21 };
         qreal jointAnchorRadius = 7.0;
         // How long a sliding joint's axis explosion is drawn when its travel is

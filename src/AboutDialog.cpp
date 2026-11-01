@@ -32,7 +32,7 @@ AboutDialog::AboutDialog(const QString &version, QWidget *parent)
     m_ui->authorLabel->setText(
         tr("Created by: <a href=\"mailto:%1\">%1</a>")
             .arg(QStringLiteral("ruslan@muhlinin.com")));
-    m_ui->authorLabel->setStyleSheet(QStringLiteral("color: #6f6f6f;"));
+    m_ui->authorLabel->setProperty("muted", true);
 
     // Bold heading with a bulleted, indented list under it -- which is why
     // this label is rich text and left-aligned rather than centred.

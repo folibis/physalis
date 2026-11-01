@@ -226,6 +226,8 @@ add_library(PhysalisCore OBJECT
     src/Icons.h
     src/Icons.cpp
     src/ObjectIcons.cpp
+    src/Theme.h
+    src/Theme.cpp
     include/PhysicsTypes.h
     include/IPhysicsEngine.h
     include/EngineRegistry.h

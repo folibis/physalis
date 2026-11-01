@@ -62,4 +62,12 @@
     <qresource prefix="/app">
         <file alias="icon.svg">physalis.svg</file>
     </qresource>
+    <qresource prefix="/theme">
+        <file alias="down-dark.svg">theme/down-dark.svg</file>
+        <file alias="down-light.svg">theme/down-light.svg</file>
+        <file alias="up-dark.svg">theme/up-dark.svg</file>
+        <file alias="up-light.svg">theme/up-light.svg</file>
+        <file alias="check-dark.svg">theme/check-dark.svg</file>
+        <file alias="check-light.svg">theme/check-light.svg</file>
+    </qresource>
 </RCC>

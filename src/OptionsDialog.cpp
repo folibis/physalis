@@ -184,6 +184,12 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     m_ui->defaultEngine->addItems(physics::EngineRegistry::availableEngines());
     m_ui->defaultEngine->setCurrentIndex(
         qMax(0, m_ui->defaultEngine->findText(current.defaultEngineName)));
+    for (const Theme::Choice &choice : Theme::available())
+        m_ui->theme->addItem(choice.label, choice.key);
+    m_ui->theme->setCurrentIndex(qMax(0, m_ui->theme->findData(current.theme)));
+    for (const Theme::Choice &choice : Theme::availableControls())
+        m_ui->controls->addItem(choice.label, choice.key);
+    m_ui->controls->setCurrentIndex(qMax(0, m_ui->controls->findData(current.controls)));
 
     m_ui->converterPath->setText(current.converterPath);
     m_converterSettings = current.converterSettings;
@@ -479,7 +485,8 @@ void OptionsDialog::buildShapeStyleRows()
 
     auto *heading = new QLabel(tr("Fill, border, width and line, for each kind of shape."),
                                m_ui->defaultStyleGroup);
-    heading->setStyleSheet(QStringLiteral("color: #8a8a8a; font-size: 11px;"));
+    heading->setProperty("muted", true);
+    heading->setStyleSheet(QStringLiteral("font-size: 11px;"));
     heading->setWordWrap(true);
     form->addRow(heading);
 
@@ -726,12 +733,12 @@ void OptionsDialog::rebuildExportTab(const QString &path)
         if (!converter.description.isEmpty()) {
             auto *about = new QLabel(converter.description, page);
             about->setWordWrap(true);
-            about->setStyleSheet(QStringLiteral("color: #6f6f6f;"));
+            about->setProperty("muted", true);
             form->addRow(about);
         }
         if (converter.settings.isEmpty()) {
             auto *none = new QLabel(tr("This converter has nothing to set."), page);
-            none->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
+            none->setProperty("muted", true);
             form->addRow(none);
         }
 
@@ -799,6 +806,8 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.undoDepth = m_ui->undoDepth->value();
     s.converterPath = m_ui->converterPath->text().trimmed();
     s.defaultEngineName = m_ui->defaultEngine->currentText();
+    s.theme = m_ui->theme->currentData().toString();
+    s.controls = m_ui->controls->currentData().toString();
     s.jointKindColors = m_jointKindColors;
     s.jointKindStyles = m_jointKindStyles;
     s.shotLightColor = m_shotLightColor;

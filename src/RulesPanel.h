@@ -163,6 +163,9 @@ private:
     };
 
     void buildUi();
+    // The card sheet, in the theme's colours. Run again, with the cards, when
+    // the theme changes: their painted marks are baked into pixmaps.
+    void restyle();
     void connectScene();
     void rebuild();
     // Two things feed a card and only one of them is the rule: what rows it

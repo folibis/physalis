@@ -154,6 +154,9 @@ private:
     void saveSettingsToFile(const OptionsDialog::Settings &s) const;
     void applySettings(const OptionsDialog::Settings &s);
     OptionsDialog::Settings currentSettingsSnapshot() const;
+    // The Edit / Physics pill: the mode picks which one is lit, the theme
+    // what the unlit one is drawn in.
+    void styleModeButtons(EditorMode mode);
 
     // Every widget, action and menu from ui/MainWindow.ui.
     std::unique_ptr<Ui::MainWindow> m_ui;

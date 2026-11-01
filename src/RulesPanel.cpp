@@ -9,6 +9,7 @@
 #include "Icons.h"
 #include "RayItem.h"
 #include "ObjectIcons.h"
+#include "Theme.h"
 #include "EngineRegistry.h"
 
 #include <QMenu>
@@ -209,7 +210,7 @@ QIcon arrowIcon(bool up)
     QPainter painter(&pm);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(0x50, 0x50, 0x50));
+    painter.setBrush(Theme::colors().glyph);
 
     QPolygonF head;
     if (up) {
@@ -231,7 +232,7 @@ QIcon arrowIcon(bool up)
     QPainter faded(&off);
     faded.setRenderHint(QPainter::Antialiasing, true);
     faded.setPen(Qt::NoPen);
-    faded.setBrush(QColor(0xc4, 0xc4, 0xc4));
+    faded.setBrush(Theme::colors().glyphDisabled);
     if (up) {
         faded.drawPolygon(QPolygonF({QPointF(7, 2), QPointF(12, 7.5), QPointF(2, 7.5)}));
         faded.drawRect(QRectF(5.5, 7.0, 3.0, 5.0));
@@ -345,6 +346,15 @@ void RulesPanel::buildUi()
     scroll->setWidget(host);
     layout->addWidget(scroll, 1);
 
+    restyle();
+    connect(Theme::instance(), &Theme::changed, this, [this] {
+        restyle();
+        rebuild();
+    });
+}
+
+void RulesPanel::restyle()
+{
     // The four looks a card can wear, in one place. Complete or not decides
     // the colour, since an unfinished rule is the one that wants attention;
     // switched on or off decides whether the border is solid, which is the
@@ -352,32 +362,38 @@ void RulesPanel::buildUi()
     // is with two properties -- see setCardLook() -- rather than carrying a
     // sheet of its own, because a sheet per card is a sheet parsed per card
     // and re-resolved over every widget under it.
+    const Theme::Colors &c = Theme::colors();
     setStyleSheet(QStringLiteral(
-        "QFrame#ruleCard { border-radius: 4px; }"
+        "QFrame#ruleCard { border-radius: %11px; }"
         "QFrame#ruleCard[complete=\"true\"][live=\"true\"]"
-        " { border: 1px solid #c9c9c9; background: #f4f4f4; }"
+        " { border: 1px solid palette(mid); background: palette(base); }"
         "QFrame#ruleCard[complete=\"true\"][live=\"false\"]"
-        " { border: 1px dashed #cfcfcf; background: #fafafa; }"
+        " { border: 1px dashed palette(mid); background: palette(window); }"
         "QFrame#ruleCard[complete=\"false\"][live=\"true\"]"
-        " { border: 1px solid #d9534f; background: #fdf5f5; }"
+        " { border: 1px solid %1; background: %2; }"
         "QFrame#ruleCard[complete=\"false\"][live=\"false\"]"
-        " { border: 1px dashed #e0a3a0; background: #fdf9f9; }"
-        "QWidget#ruleCardHeader { border-top-left-radius: 3px;"
-        " border-top-right-radius: 3px; }"
+        " { border: 1px dashed %3; background: %4; }"
+        "QWidget#ruleCardHeader { border-top-left-radius: %12px;"
+        " border-top-right-radius: %12px; }"
         "QWidget#ruleCardHeader[complete=\"true\"][live=\"true\"]"
-        " { background: #dcdcdc; border-bottom: 1px solid #c9c9c9; }"
+        " { background: palette(midlight); border-bottom: 1px solid palette(mid); }"
         "QWidget#ruleCardHeader[complete=\"true\"][live=\"false\"]"
-        " { background: #eeeeee; border-bottom: 1px solid #dcdcdc; }"
+        " { background: palette(window); border-bottom: 1px solid palette(midlight); }"
         "QWidget#ruleCardHeader[complete=\"false\"][live=\"true\"]"
-        " { background: #f3c9c6; border-bottom: 1px solid #d9534f; }"
+        " { background: %5; border-bottom: 1px solid %1; }"
         "QWidget#ruleCardHeader[complete=\"false\"][live=\"false\"]"
-        " { background: #f6e2e0; border-bottom: 1px solid #e0a3a0; }"
+        " { background: %6; border-bottom: 1px solid %3; }"
         "QLabel#ruleHeading { font-weight: bold; }"
-        "QLabel#ruleHeading[complete=\"true\"][live=\"true\"]  { color: #6f6f6f; }"
-        "QLabel#ruleHeading[complete=\"true\"][live=\"false\"] { color: #b0b0b0; }"
-        "QLabel#ruleHeading[complete=\"false\"][live=\"true\"] { color: #a33a35; }"
-        "QLabel#ruleHeading[complete=\"false\"][live=\"false\"] { color: #c48f8c; }"));
-
+        "QLabel#ruleHeading[complete=\"true\"][live=\"true\"]  { color: %7; }"
+        "QLabel#ruleHeading[complete=\"true\"][live=\"false\"] { color: %8; }"
+        "QLabel#ruleHeading[complete=\"false\"][live=\"true\"] { color: %9; }"
+        "QLabel#ruleHeading[complete=\"false\"][live=\"false\"] { color: %10; }")
+        .arg(c.error.name(), c.errorBackground.name(), c.errorOff.name(),
+             c.errorBackgroundOff.name(), c.errorHeader.name(), c.errorHeaderOff.name(),
+             c.mutedText.name(), c.faintText.name(), c.errorText.name())
+        .arg(c.errorTextOff.name())
+        .arg(Theme::cardRadius())
+        .arg(qMax(0, Theme::cardRadius() - 1)));
 }
 
 void RulesPanel::connectScene()
@@ -1890,7 +1906,7 @@ QWidget *RulesPanel::buildNumberEditor(QWidget *parent, const physics::JointPara
     };
     const auto caption = [&](const QString &text) {
         auto *label = new QLabel(text, holder);
-        label->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
+        label->setProperty("muted", true);
         label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         return label;
     };
@@ -2001,7 +2017,7 @@ QWidget *RulesPanel::buildActionParamEditor(int index, int slot, const RuleActio
         // the whole of it.
         auto *label = new QLabel(tr("(nothing to set)"), parent);
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-        label->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
+        label->setProperty("muted", true);
         label->setToolTip(description);
         return label;
     }
@@ -2492,7 +2508,7 @@ void RulesPanel::refreshValueEditor(int index, int slot)
         // placed, sized and tuned on the canvas, and the rule only says when.
         auto *label = new QLabel(tr("(set on the object)"), row.valueHolder);
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-        label->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
+        label->setProperty("muted", true);
         row.value = label;
     } else if (action.isAction()) {
         // Aimed at anything else there is no object to carry them, so the
@@ -2504,7 +2520,7 @@ void RulesPanel::refreshValueEditor(int index, int slot)
                                                             : tr("(current value)"),
                                  row.valueHolder);
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-        label->setStyleSheet(QStringLiteral("color: #8f8f8f;"));
+        label->setProperty("muted", true);
         row.value = label;
     } else if (propertyIsText(action.targetName, action.propertyKey)) {
         auto *edit = new QLineEdit(action.value.toString(), row.valueHolder);
@@ -3144,7 +3160,7 @@ void RulesPanel::setCollapseLook(QToolButton *button, bool collapsed)
     QPainter painter(&pm);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(0x90, 0x90, 0x90));
+    painter.setBrush(Theme::colors().mutedText);
 
     QPolygonF triangle;
     if (collapsed)
