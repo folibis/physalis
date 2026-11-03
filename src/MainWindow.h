@@ -150,7 +150,10 @@ private slots:
     void onFieldSettingsChanged();
 
 private:
-    OptionsDialog::Settings loadSettingsFromFile() const;
+    // The settings file by default; any other path for the read below.
+    OptionsDialog::Settings loadSettingsFromFile(const QString &path = QString()) const;
+    // What the program uses when it has never been configured.
+    OptionsDialog::Settings defaultSettings() const;
     void saveSettingsToFile(const OptionsDialog::Settings &s) const;
     void applySettings(const OptionsDialog::Settings &s);
     OptionsDialog::Settings currentSettingsSnapshot() const;
@@ -285,6 +288,7 @@ public:
     // the dialog itself is modal, so a test cannot work it from the outside.
     void applySettingsForTest(const OptionsDialog::Settings &s) { applySettings(s); }
     OptionsDialog::Settings settingsSnapshotForTest() const { return currentSettingsSnapshot(); }
+    OptionsDialog::Settings defaultSettingsForTest() const { return defaultSettings(); }
     void stopRunForTest();
     void setFullScreenForTest(bool on);
     void moveOverlaysForTest(QGraphicsView *host);

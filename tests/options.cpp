@@ -23,6 +23,9 @@
 #include "Rule.h"
 #include "SceneVariable.h"
 #include <QtTest/QTest>
+#include <QMessageBox>
+#include <QTimer>
+#include <QSettings>
 #include <QPushButton>
 #include <QSlider>
 #include "ControlsPanel.h"
@@ -1100,4 +1103,65 @@ TEST(Options, SettingsAreKeptWhereTheUserCanWriteThem)
         << "a settings file named outright no longer wins, so a test cannot have its own";
     EXPECT_EQ(MainWindow::chooseSettingsFile(QString(), QString(), beside), beside)
         << "with no place to put them they have to go somewhere";
+}
+
+// The Reset button throws away every page at once, so it asks first, and what
+// it puts back is the read the program does when it has never been configured
+// -- not a second list of defaults kept beside it.
+TEST(Options, ResetToDefaultsAsksFirstAndThenGivesTheDefaults)
+{
+    // Answers the next modal question with the button in this role.
+    const auto answer = [](QMessageBox::ButtonRole role) {
+        QTimer::singleShot(0, qApp, [role] {
+            auto *ask = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+            ASSERT_TRUE(ask) << "the reset was carried out with nothing asked";
+            for (QAbstractButton *button : ask->buttons()) {
+                if (ask->buttonRole(button) == role) {
+                    button->click();
+                    return;
+                }
+            }
+            FAIL() << "the question had no button in the role the test wanted";
+        });
+    };
+
+    OptionsDialog::Settings mine;
+    mine.fieldWidth = 4321.0;
+    mine.undoDepth = 7;
+    OptionsDialog dialog(mine, nullptr);
+    auto *reset = dialog.findChild<QPushButton *>(QStringLiteral("resetToDefaults"));
+    ASSERT_TRUE(reset) << "Options has no way back to its defaults";
+    EXPECT_FALSE(reset->styleSheet().isEmpty()) << "the button is not marked as the drastic one";
+
+    answer(QMessageBox::RejectRole);
+    reset->click();
+    EXPECT_FALSE(dialog.resetToDefaults()) << "No was taken for Yes";
+    EXPECT_EQ(dialog.settings().fieldWidth, 4321.0) << "the pages were thrown away anyway";
+
+    answer(QMessageBox::AcceptRole);
+    reset->click();
+    EXPECT_TRUE(dialog.resetToDefaults()) << "Yes left the settings alone";
+    EXPECT_EQ(dialog.result(), int(QDialog::Accepted)) << "the dialog stayed open over its own reset";
+
+    // What the caller then puts back: the defaults, whatever the settings file
+    // on disk says -- the one place they come from is the read itself.
+    const QString path = qEnvironmentVariable("PHYSALIS_SETTINGS");
+    ASSERT_FALSE(path.isEmpty());
+    {
+        QSettings settings(path, QSettings::IniFormat);
+        settings.setValue("Field/width", 333.0);
+        settings.setValue("Appearance/theme", "mocha");
+    }
+    MainWindow window;
+    const OptionsDialog::Settings fresh = window.defaultSettingsForTest();
+    const OptionsDialog::Settings none;
+    EXPECT_EQ(fresh.fieldWidth, none.fieldWidth) << "reset handed back what was on disk";
+    EXPECT_EQ(fresh.fieldHeight, none.fieldHeight);
+    EXPECT_EQ(fresh.theme, none.theme) << "reset kept the theme it was asked to drop";
+    EXPECT_EQ(fresh.undoDepth, none.undoDepth);
+    // The few the read works out for itself are still worked out.
+    EXPECT_FALSE(fresh.shapeStyles.isEmpty()) << "reset left a scene with no shape styles at all";
+    QSettings settings(path, QSettings::IniFormat);
+    settings.remove("Field/width");
+    settings.remove("Appearance/theme");
 }

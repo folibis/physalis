@@ -3,6 +3,7 @@
 #include "Theme.h"
 
 #include <QApplication>
+#include <QStyle>
 #include <QStyleFactory>
 #include <QStyleHints>
 
@@ -29,6 +30,8 @@ struct Spec {
     QRgb accentText;
 };
 
+// The two plain ones first, then the palettes people know by name -- each
+// family's light before its dark, so a pair sits together in the list.
 const Spec kSpecs[] = {
     { "light", QT_TRANSLATE_NOOP("Theme", "Light"), false,
       0xEEF1F5, 0xF8F9FB, 0xFFFFFF, 0xF5F7FA, 0x1F2328, 0x667085,
@@ -36,15 +39,54 @@ const Spec kSpecs[] = {
     { "dark", QT_TRANSLATE_NOOP("Theme", "Dark"), true,
       0x2B2D30, 0x1F2023, 0x1E1F22, 0x313338, 0xDFE1E5, 0x8C9099,
       0x4A4D52, 0x3A3C40, 0x3574F0, 0xFFFFFF },
-    { "nord", QT_TRANSLATE_NOOP("Theme", "Nord"), true,
-      0x3B4252, 0x2E3440, 0x2E3440, 0x434C5E, 0xECEFF4, 0xA3ABB9,
-      0x56607A, 0x4C566A, 0x88C0D0, 0x2E3440 },
     { "latte", QT_TRANSLATE_NOOP("Theme", "Catppuccin Latte"), false,
       0xE6E9EF, 0xDCE0E8, 0xEFF1F5, 0xE6E9EF, 0x4C4F69, 0x6C6F85,
       0xBCC0CC, 0xCCD0DA, 0x8839EF, 0xFFFFFF },
     { "mocha", QT_TRANSLATE_NOOP("Theme", "Catppuccin Mocha"), true,
       0x1E1E2E, 0x181825, 0x181825, 0x313244, 0xCDD6F4, 0xA6ADC8,
       0x45475A, 0x313244, 0xCBA6F7, 0x1E1E2E },
+    { "dracula", QT_TRANSLATE_NOOP("Theme", "Dracula"), true,
+      0x282A36, 0x21222C, 0x21222C, 0x44475A, 0xF8F8F2, 0x9AA3C7,
+      0x565A72, 0x44475A, 0xBD93F9, 0x282A36 },
+    { "everforest-light", QT_TRANSLATE_NOOP("Theme", "Everforest Light"), false,
+      0xF2EFDF, 0xFFFBEF, 0xFFFBEF, 0xF8F5E4, 0x5C6A72, 0x939F91,
+      0xDDD8C0, 0xEDEADA, 0x8DA101, 0x2D353B },
+    { "everforest", QT_TRANSLATE_NOOP("Theme", "Everforest Dark"), true,
+      0x2D353B, 0x232A2E, 0x232A2E, 0x343F44, 0xD3C6AA, 0x9DA9A0,
+      0x4F585E, 0x3D484D, 0xA7C080, 0x232A2E },
+    { "gruvbox-light", QT_TRANSLATE_NOOP("Theme", "Gruvbox Light"), false,
+      0xF2E5BC, 0xFBF1C7, 0xFBF1C7, 0xEBDBB2, 0x3C3836, 0x7C6F64,
+      0xD5C4A1, 0xE4D5AC, 0xAF3A03, 0xFBF1C7 },
+    { "gruvbox", QT_TRANSLATE_NOOP("Theme", "Gruvbox Dark"), true,
+      0x282828, 0x1D2021, 0x1D2021, 0x3C3836, 0xEBDBB2, 0xA89984,
+      0x504945, 0x3C3836, 0xFE8019, 0x1D2021 },
+    { "monokai", QT_TRANSLATE_NOOP("Theme", "Monokai"), true,
+      0x272822, 0x1E1F1C, 0x1E1F1C, 0x3E3D32, 0xF8F8F2, 0xA59F85,
+      0x4F4E43, 0x3E3D32, 0xF92672, 0x1E1F1C },
+    { "nord", QT_TRANSLATE_NOOP("Theme", "Nord"), true,
+      0x3B4252, 0x2E3440, 0x2E3440, 0x434C5E, 0xECEFF4, 0xA3ABB9,
+      0x56607A, 0x4C566A, 0x88C0D0, 0x2E3440 },
+    { "one-light", QT_TRANSLATE_NOOP("Theme", "One Light"), false,
+      0xF0F0F0, 0xFAFAFA, 0xFFFFFF, 0xF5F5F5, 0x383A42, 0x8B8C92,
+      0xD3D3D6, 0xE5E5E6, 0x4078F2, 0xFFFFFF },
+    { "one-dark", QT_TRANSLATE_NOOP("Theme", "One Dark"), true,
+      0x282C34, 0x21252B, 0x21252B, 0x2F343E, 0xABB2BF, 0x8A919E,
+      0x4B5263, 0x3A3F4B, 0x61AFEF, 0x21252B },
+    { "rose-pine-dawn", QT_TRANSLATE_NOOP("Theme", "Rosé Pine Dawn"), false,
+      0xF2E9E1, 0xFFFAF3, 0xFFFAF3, 0xFAF4ED, 0x575279, 0x797593,
+      0xDFDAD9, 0xEDE5DF, 0x907AA9, 0xFFFAF3 },
+    { "rose-pine", QT_TRANSLATE_NOOP("Theme", "Rosé Pine"), true,
+      0x1F1D2E, 0x191724, 0x191724, 0x26233A, 0xE0DEF4, 0x908CAA,
+      0x403D52, 0x26233A, 0xC4A7E7, 0x191724 },
+    { "solarized-light", QT_TRANSLATE_NOOP("Theme", "Solarized Light"), false,
+      0xEEE8D5, 0xFDF6E3, 0xFDF6E3, 0xF5EFDC, 0x586E75, 0x8A9A98,
+      0xC9C2AE, 0xE0DAC6, 0x268BD2, 0xFDF6E3 },
+    { "solarized", QT_TRANSLATE_NOOP("Theme", "Solarized Dark"), true,
+      0x002B36, 0x00212B, 0x00212B, 0x073642, 0x93A1A1, 0x768C8C,
+      0x46606A, 0x073642, 0x268BD2, 0x002B36 },
+    { "tokyo-night", QT_TRANSLATE_NOOP("Theme", "Tokyo Night"), true,
+      0x1A1B26, 0x16161E, 0x16161E, 0x292E42, 0xC0CAF5, 0x8B95C4,
+      0x3B4261, 0x292E42, 0x7AA2F7, 0x16161E },
 };
 
 // The shape of the controls, apart from their colour: how round, where the
@@ -74,34 +116,136 @@ struct Shape {
     "QTabBar::tab:selected { background: transparent; color: palette(window-text);" \
     " border-bottom: 2px solid palette(highlight); }"
 
+// What separates these is not how round they are. Each sets its own density
+// -- the paddings below run from tight to roomy -- its own way of filling a
+// button, and its own tick, radio, slider and scroll bar. A style that left
+// those to the shared sheet would be the same controls at another radius,
+// which is what these all were once.
+//
+// System is not one of them: it is the absence of all of them, so it has no
+// row here any more than a theme has one in kSpecs.
+//
+// Qt draws a sub-control square when its border-radius is more than half the
+// box, and a checked radio is a different box from an unchecked one -- its
+// thick border stands in for the dot. Size the two to match, or the tick goes
+// round and the dot comes out a square.
 const Shape kShapes[] = {
+    // The middle of the road, and what a new installation wears: the shared
+    // sheet as it stands, which is why this one adds nothing.
     { "rounded", QT_TRANSLATE_NOOP("Theme", "Rounded"),
-      6, 6, 4, 8, 8, 4, 6, "2px 6px", "5px 16px", "" },
-    { "pill", QT_TRANSLATE_NOOP("Theme", "Pill"),
-      11, 12, 8, 8, 14, 5, 0, "2px 10px", "5px 18px", "" },
+      6, 6, 4, 8, 8, 4, 6, "3px 8px", "5px 16px", "" },
+    // Dense and flat, the way an IDE is: a third of the padding of Material,
+    // small square ticks, a slider that is a square grip on a thin line, and
+    // a scroll bar with a channel it runs in. The tab in hand is marked by a
+    // bar above it.
     { "sharp", QT_TRANSLATE_NOOP("Theme", "Sharp"),
-      0, 0, 0, 0, 0, 0, 0, "2px 6px", "5px 14px", UNDERLINE_TABS },
-    // Filled fields with a line under them that lights up, and flat buttons.
+      0, 0, 0, 0, 0, 0, 0, "1px 5px", "3px 10px",
+      "QPushButton { background: palette(base); border: 1px solid @borderStrong;"
+      " min-height: 14px; }"
+      "QPushButton:hover { background: @accentSoft; border-color: palette(highlight); }"
+      "QLineEdit, QAbstractSpinBox, QComboBox, QTextEdit, QPlainTextEdit {"
+      " border: 1px solid @borderStrong; }"
+      "QCheckBox::indicator, QGroupBox::indicator { width: 12px; height: 12px;"
+      " border: 1px solid @borderStrong; border-radius: 0; }"
+      "QRadioButton::indicator { width: 12px; height: 12px; border-radius: 0;"
+      " border: 1px solid @borderStrong; }"
+      "QRadioButton::indicator:checked { width: 6px; height: 6px;"
+      " border: 4px solid palette(highlight); border-radius: 0; }"
+      "QSlider::groove:horizontal { height: 2px; border-radius: 0; }"
+      "QSlider::sub-page:horizontal { border-radius: 0; }"
+      "QSlider::handle:horizontal { width: 7px; height: 16px; margin: -8px 0;"
+      " border-radius: 0; border: 1px solid @borderStrong; background: palette(base); }"
+      "QScrollBar:vertical { width: 11px; background: palette(window);"
+      " border-left: 1px solid palette(midlight); }"
+      "QScrollBar:horizontal { height: 11px; background: palette(window);"
+      " border-top: 1px solid palette(midlight); }"
+      "QScrollBar::handle { background: palette(mid); border-radius: 0; margin: 0; }"
+      "QGroupBox { border: 1px solid @borderStrong; margin-top: 11px;"
+      " padding: 7px 6px 6px 6px; }"
+      "QTabBar::tab { border-radius: 0; margin: 0 1px; padding: 5px 12px;"
+      " border-top: 2px solid transparent; }"
+      "QTabBar::tab:hover { background: @hover; color: palette(window-text); }"
+      "QTabBar::tab:selected { background: palette(base); color: palette(window-text);"
+      " border-top: 2px solid palette(highlight); }" },
+    // Windows 11's: a button lit from the top and darker along its bottom
+    // edge, a field whose bottom stroke thickens and turns accent as it takes
+    // focus, a rounded-square tick, and the ringed thumb WinUI slides along a
+    // thin rail. Its scroll bar runs in a pale channel.
+    { "fluent", QT_TRANSLATE_NOOP("Theme", "Fluent"),
+      4, 4, 4, 9, 7, 3, 3, "5px 9px", "6px 18px",
+      UNDERLINE_TABS
+      "QPushButton { background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+      " stop:0 palette(base), stop:1 palette(alternate-base));"
+      " border-bottom-color: @borderStrong; min-height: 20px; }"
+      "QPushButton:hover { background: @hover; }"
+      "QLineEdit, QAbstractSpinBox, QComboBox, QTextEdit, QPlainTextEdit {"
+      " border: 1px solid palette(mid); border-bottom: 2px solid @borderStrong; }"
+      "QLineEdit:hover, QAbstractSpinBox:hover, QComboBox:hover {"
+      " background: palette(alternate-base); border-color: palette(mid);"
+      " border-bottom-color: @borderStrong; }"
+      "QLineEdit:focus, QAbstractSpinBox:focus, QComboBox:focus, QTextEdit:focus,"
+      " QPlainTextEdit:focus { border-color: palette(mid);"
+      " border-bottom: 2px solid palette(highlight); }"
+      "QLineEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled {"
+      " border-color: palette(midlight); border-bottom-color: palette(midlight); }"
+      "QCheckBox::indicator, QGroupBox::indicator { width: 17px; height: 17px; }"
+      "QRadioButton::indicator { width: 17px; height: 17px; border-radius: 9px; }"
+      "QRadioButton::indicator:checked { width: 9px; height: 9px; border-radius: 9px;"
+      " border: 5px solid palette(highlight); }"
+      "QSlider::groove:horizontal { height: 4px; }"
+      "QSlider::handle:horizontal { width: 10px; height: 10px; margin: -7px 0;"
+      " border: 4px solid palette(base); border-radius: 9px;"
+      " background: palette(highlight); }"
+      "QSlider::handle:horizontal:hover { border-width: 3px; }"
+      "QScrollBar:vertical { width: 12px; background: palette(base);"
+      " border-left: 1px solid palette(midlight); }"
+      "QScrollBar:horizontal { height: 12px; background: palette(base);"
+      " border-top: 1px solid palette(midlight); }"
+      "QScrollBar::handle { margin: 4px; }" },
+    // Material 3: the roomiest of them, its button a tonal capsule with no
+    // edge at all and its label in medium, its field filled, square along the
+    // bottom and underlined there. Its slider is the 2024 one -- a tall pill
+    // of a track with a thin upright handle standing in a gap of its own --
+    // and its tick carries the thick unchecked border Material draws.
     { "material", QT_TRANSLATE_NOOP("Theme", "Material"),
-      4, 4, 2, 8, 6, 4, 0, "3px 8px", "6px 16px",
+      4, 8, 2, 2, 12, 5, 0, "8px 12px", "9px 22px",
       UNDERLINE_TABS
       "QLineEdit, QAbstractSpinBox, QComboBox, QTextEdit, QPlainTextEdit {"
-      " background: palette(alternate-base); border: none; border-bottom: 2px solid palette(mid);"
+      " background: palette(alternate-base); border: none;"
+      " border-bottom: 2px solid palette(mid);"
       " border-bottom-left-radius: 0; border-bottom-right-radius: 0; }"
-      "QLineEdit:hover, QAbstractSpinBox:hover, QComboBox:hover { border-bottom-color: @borderStrong; }"
+      "QLineEdit:hover, QAbstractSpinBox:hover, QComboBox:hover {"
+      " border-bottom-color: @borderStrong; }"
       "QLineEdit:focus, QAbstractSpinBox:focus, QComboBox:focus, QTextEdit:focus,"
       " QPlainTextEdit:focus { border-bottom-color: palette(highlight); }"
       "QLineEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled {"
       " border-bottom-color: palette(midlight); }"
-      "QPushButton { border: none; background: palette(midlight); }"
+      "QPushButton { border: none; border-radius: 16px; background: palette(midlight);"
+      " font-weight: 600; min-height: 22px; }"
       "QPushButton:hover { background: @accentSoft; }"
       "QPushButton:default { background: palette(highlight); }"
       "QPushButton:disabled { background: palette(window); }"
-      "QGroupBox { border: none; border-top: 2px solid palette(midlight); border-radius: 0; }" },
+      "QCheckBox::indicator, QGroupBox::indicator { width: 16px; height: 16px;"
+      " border: 2px solid @borderStrong; }"
+      "QRadioButton::indicator { width: 16px; height: 16px; border: 2px solid @borderStrong;"
+      " border-radius: 10px; }"
+      "QRadioButton::indicator:checked { width: 10px; height: 10px; border-radius: 10px;"
+      " border: 5px solid palette(highlight); }"
+      "QSlider::groove:horizontal { height: 16px; border-radius: 8px; }"
+      "QSlider::sub-page:horizontal { border-radius: 8px; }"
+      "QSlider::handle:horizontal { width: 4px; height: 26px; margin: -5px 0;"
+      " border-radius: 2px; background: palette(highlight);"
+      " border-left: 6px solid palette(window); border-right: 6px solid palette(window); }"
+      "QScrollBar:vertical { width: 14px; }"
+      "QScrollBar:horizontal { height: 14px; }"
+      "QScrollBar::handle { margin: 3px; }"
+      "QGroupBox { border: none; border-top: 2px solid palette(midlight); border-radius: 0;"
+      " margin-top: 18px; padding: 14px 8px 8px 8px; }" },
     // Nothing drawn until it is wanted: tinted fields that outline on focus,
-    // buttons that are only their words.
+    // buttons that are only their words, a tick with no edge at all, a slider
+    // reduced to a hairline and a dot, and a scroll bar that is barely there.
     { "minimal", QT_TRANSLATE_NOOP("Theme", "Minimal"),
-      8, 8, 4, 8, 10, 4, 0, "3px 8px", "5px 16px",
+      8, 8, 5, 7, 10, 3, 0, "6px 10px", "7px 18px",
       "QLineEdit, QAbstractSpinBox, QComboBox, QTextEdit, QPlainTextEdit {"
       " background: palette(midlight); border: 1px solid transparent; }"
       "QLineEdit:hover, QAbstractSpinBox:hover, QComboBox:hover {"
@@ -110,14 +254,30 @@ const Shape kShapes[] = {
       " QPlainTextEdit:focus { background: palette(base); border-color: palette(highlight); }"
       "QLineEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled {"
       " background: palette(window); border-color: transparent; }"
-      "QPushButton { background: transparent; border: 1px solid transparent; color: @accent; }"
+      "QPushButton { background: transparent; border: 1px solid transparent; color: @accent;"
+      " font-weight: 600; }"
       "QPushButton:hover { background: @accentSoft; border-color: transparent; }"
       "QPushButton:default { background: palette(highlight); color: palette(highlighted-text); }"
       "QPushButton:disabled { background: transparent; color: @faint; border-color: transparent; }"
       "QTabBar::tab, QTabBar::tab:hover, QTabBar::tab:selected { background: transparent; }"
       "QTabBar::tab:selected { color: @accent; }"
-      "QCheckBox::indicator, QRadioButton::indicator { border-color: palette(mid); }"
-      "QGroupBox { border: none; border-top: 1px solid palette(midlight); border-radius: 0; }" },
+      "QCheckBox::indicator, QGroupBox::indicator { width: 16px; height: 16px;"
+      " border: none; background: palette(midlight); }"
+      "QCheckBox::indicator:hover, QGroupBox::indicator:hover { background: @accentSoft; }"
+      "QRadioButton::indicator { width: 16px; height: 16px; border: none;"
+      " border-radius: 8px; background: palette(midlight); }"
+      "QRadioButton::indicator:hover { background: @accentSoft; }"
+      "QRadioButton::indicator:checked { width: 6px; height: 6px; border-radius: 8px;"
+      " border: 5px solid palette(highlight); }"
+      "QSlider::groove:horizontal { height: 2px; background: palette(mid); }"
+      "QSlider::handle:horizontal { width: 10px; height: 10px; margin: -5px 0;"
+      " border: none; border-radius: 5px; background: palette(highlight); }"
+      "QScrollBar:vertical { width: 7px; }"
+      "QScrollBar:horizontal { height: 7px; }"
+      "QScrollBar::handle { margin: 1px; background: palette(midlight); }"
+      "QScrollBar::handle:hover { background: palette(mid); }"
+      "QGroupBox { border: none; border-radius: 0; margin-top: 20px;"
+      " padding: 12px 2px 6px 2px; }" },
 };
 
 #undef UNDERLINE_TABS
@@ -125,12 +285,17 @@ const Shape kShapes[] = {
 const QString kSystem = QStringLiteral("system");
 
 QString s_key = kSystem;
+// The shape as chosen, so "system" stays "system": s_shape is then the first
+// of them, for the card radii the panels still ask for.
+QString s_controls = QLatin1String(kShapes[0].key);
 const Spec *s_spec = &kSpecs[0];
 const Shape *s_shape = &kShapes[0];
 bool s_styled = false;
 // The palette the platform handed over before Fusion and ours replaced it:
 // where Qt cannot say whether the desktop is dark, its own window colour can.
+// Both are what the System controls go back to.
 QPalette s_platformPalette;
+QString s_platformStyle;
 
 QColor mix(const QColor &a, const QColor &b, qreal t)
 {
@@ -245,6 +410,11 @@ QTabBar::tab { background: transparent; color: @muted; border: none; border-radi
                padding: 5px 10px; margin: 4px 2px; }
 QTabBar::tab:hover { background: @hover; color: palette(window-text); }
 QTabBar::tab:selected { background: @accentSoft; color: @accent; }
+
+/* A strip of icons with no words under them needs none of the room a word
+   would have taken: the padding here is for a label, and Qt adds its own
+   frame on top of it. */
+QTabBar[iconsOnly="true"]::tab { padding: 4px 2px; margin: 4px 1px; }
 
 QPushButton { background: palette(button); color: palette(button-text); border: 1px solid palette(mid);
               border-radius: @r; padding: @bpad; min-height: 18px; }
@@ -422,7 +592,7 @@ QVector<Theme::Choice> Theme::available()
 
 QVector<Theme::Choice> Theme::availableControls()
 {
-    QVector<Choice> choices;
+    QVector<Choice> choices { { kSystem, tr("System") } };
     for (const Shape &shape : kShapes)
         choices.append({ QString::fromLatin1(shape.key), tr(shape.label) });
     return choices;
@@ -431,15 +601,19 @@ QVector<Theme::Choice> Theme::availableControls()
 void Theme::apply(const QString &theme, const QString &controls)
 {
     const QString chosen = findSpec(theme) ? theme : kSystem;
-    const QString shape = findShape(controls) ? controls : QString::fromLatin1(kShapes[0].key);
+    // An unknown shape falls back to the first real one rather than to System:
+    // a key nobody knows is a typo in the settings file, not a request for the
+    // platform's own look.
+    const QString shape = (controls == kSystem || findShape(controls))
+        ? controls : QString::fromLatin1(kShapes[0].key);
     // Options hands every setting over each time it closes, and polishing
     // every widget again is not free.
-    if (s_styled && chosen == s_key && shape == QLatin1String(s_shape->key))
+    if (s_styled && chosen == s_key && shape == s_controls)
         return;
 
     if (!s_styled) {
         s_platformPalette = QApplication::palette();
-        QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
+        s_platformStyle = QApplication::style()->objectName();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
         QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged,
                          instance(), [] {
@@ -455,17 +629,29 @@ void Theme::apply(const QString &theme, const QString &controls)
 void Theme::restyle(const QString &theme, const QString &controls)
 {
     s_key = theme;
-    s_spec = findSpec(theme);
+    s_controls = controls;
+    s_shape = findShape(controls);
+    if (!s_shape)
+        s_shape = &kShapes[0];
+    // The native style paints its own chrome and reads little of a palette, so
+    // a theme laid over it would be half applied -- light text on a button
+    // still drawn light. It wears the platform's own instead, and the cards
+    // the panels paint follow the desktop so they match what is around them.
+    const bool native = controls == kSystem;
+    s_spec = native ? nullptr : findSpec(theme);
     if (!s_spec)
         s_spec = findSpec(systemIsDark() ? QStringLiteral("dark") : QStringLiteral("light"));
-    s_shape = findShape(controls);
     s_colors = makeColors(*s_spec);
 
-    QApplication::setPalette(makePalette(*s_spec));
+    // Before the palette: a style brings its own, and would undo ours.
+    if (QStyle *style = QStyleFactory::create(native ? s_platformStyle
+                                                     : QStringLiteral("Fusion")))
+        QApplication::setStyle(style);
+    QApplication::setPalette(native ? s_platformPalette : makePalette(*s_spec));
     // Set after the palette, and set every time: it is what makes Qt polish
     // every widget again, and so what makes the palette() references in it
     // read the new one.
-    qApp->setStyleSheet(makeStyleSheet(*s_spec, *s_shape, s_colors));
+    qApp->setStyleSheet(native ? QString() : makeStyleSheet(*s_spec, *s_shape, s_colors));
 
     emit instance()->changed();
 }
@@ -477,7 +663,7 @@ QString Theme::current()
 
 QString Theme::currentControls()
 {
-    return QString::fromLatin1(s_shape->key);
+    return s_controls;
 }
 
 int Theme::cardRadius()

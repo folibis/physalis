@@ -35,8 +35,8 @@ class OptionsDialog : public QDialog
 
 public:
     struct Settings {
-        qreal fieldWidth = 1000.0;
-        qreal fieldHeight = 1000.0;
+        qreal fieldWidth = 1200.0;
+        qreal fieldHeight = 800.0;
         QColor backgroundColor { Qt::white };
         bool showGrid = true;
         qreal gridCellSize = 20.0;
@@ -164,8 +164,14 @@ public:
     ~OptionsDialog() override;
 
     Settings settings() const;
+    // Set by the Reset button, which closes the dialog: the caller puts back
+    // its own defaults rather than reading pages that are about to be thrown
+    // away. settings() is not asked for and would answer with the old values.
+    bool resetToDefaults() const { return m_resetToDefaults; }
 
 private:
+    bool askToReset();
+    bool m_resetToDefaults = false;
 
     // What the application had when the dialog opened, so the settings it
     // hands back carry the fields it never shows.

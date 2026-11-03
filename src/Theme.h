@@ -53,7 +53,8 @@ public:
     // them.
     static QVector<Choice> available();
     // The shapes the controls can take -- corners, borders, how a field shows
-    // focus -- which go with any of the themes.
+    // focus -- which go with any of the themes. System first, which is no
+    // shape at all: the platform's style, with no sheet of ours over it.
     static QVector<Choice> availableControls();
 
     // Sets the style, palette and sheet on the whole application. "system"

@@ -1011,8 +1011,8 @@ private:
     qreal m_rotateTurned = 0.0;
     qreal m_itemStartRotation = 0.0;
 
-    qreal m_fieldWidth = 1000.0;
-    qreal m_fieldHeight = 1000.0;
+    qreal m_fieldWidth = 1200.0;
+    qreal m_fieldHeight = 800.0;
     bool m_showGrid = true;
     qreal m_gridCellSize = 20.0;
     QColor m_gridColor = QColor(230, 230, 230);

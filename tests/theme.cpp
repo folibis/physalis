@@ -5,9 +5,13 @@
 #include "Theme.h"
 
 #include <QApplication>
+#include <QComboBox>
 #include <QImage>
 #include <QLabel>
 #include <QSettings>
+#include <QTabBar>
+#include <QTabWidget>
+#include <QVector>
 #include <gtest/gtest.h>
 
 namespace {
@@ -62,15 +66,30 @@ TEST(Theme, OptionsSwitchesItWhileTheWindowIsOpen)
 }
 
 // Every theme Options offers has to be one that can be put on: a key that
-// fell through to System would leave the user looking at something else.
+// fell through to System would leave the user looking at something else. With a
+// list this long the cheap mistakes are a copied line and a dark palette whose
+// row still says light, so both are checked here rather than by eye.
 TEST(Theme, EveryThemeOfferedCanBeWorn)
 {
     KeepTheme keep;
+    QVector<QColor> windows;
     for (const Theme::Choice &choice : Theme::available()) {
         Theme::apply(choice.key);
         EXPECT_EQ(Theme::current(), choice.key) << choice.key.toStdString() << " was not taken";
         EXPECT_FALSE(qApp->styleSheet().contains(QLatin1Char('@')))
             << choice.key.toStdString() << " left a placeholder in the stylesheet";
+
+        const QColor window = QApplication::palette().color(QPalette::Window);
+        const QColor text = QApplication::palette().color(QPalette::WindowText);
+        if (choice.key != QStringLiteral("system")) {
+            EXPECT_FALSE(windows.contains(window))
+                << choice.key.toStdString() << " is the same colour as a theme before it";
+            windows.append(window);
+        }
+        EXPECT_EQ(Theme::isDark(), window.lightness() < text.lightness())
+            << choice.key.toStdString() << " disagrees with its own palette about being dark";
+        EXPECT_GT(qAbs(window.lightness() - text.lightness()), 100)
+            << choice.key.toStdString() << " writes in a colour too close to its background";
     }
     Theme::apply(QStringLiteral("no such theme"));
     EXPECT_EQ(Theme::current(), QStringLiteral("system")) << "an unknown key was kept";
@@ -92,9 +111,21 @@ TEST(Theme, EveryControlsStyleCanBeWornAndDiffers)
             << choice.key.toStdString() << " looks exactly like a style before it";
         sheets.append(qApp->styleSheet());
     }
+
+    // The first of them is not a shape at all: Qt draws the controls and
+    // nothing of ours is laid over them.
+    Theme::apply(QStringLiteral("light"), QStringLiteral("system"));
+    EXPECT_TRUE(qApp->styleSheet().isEmpty())
+        << "System controls still carried a sheet of ours";
+    Theme::apply(QStringLiteral("light"), QStringLiteral("sharp"));
+    EXPECT_FALSE(qApp->styleSheet().isEmpty())
+        << "a style after System never got its sheet back";
+
+    // A key nobody knows is a typo in the settings file, and falls back to the
+    // first real shape rather than to no styling at all.
     Theme::apply(QStringLiteral("light"), QStringLiteral("no such style"));
-    EXPECT_EQ(Theme::currentControls(), Theme::availableControls().first().key)
-        << "an unknown controls style was kept";
+    EXPECT_EQ(Theme::currentControls(), QStringLiteral("rounded"))
+        << "an unknown controls style was kept, or left the controls unstyled";
 }
 
 // Both choices are written when Options closes, and a window opened later --
@@ -109,18 +140,69 @@ TEST(Theme, TheChoiceIsReadBackFromTheSettingsFile)
     {
         QSettings settings(path, QSettings::IniFormat);
         settings.setValue("Appearance/theme", "mocha");
-        settings.setValue("Appearance/controls", "pill");
+        settings.setValue("Appearance/controls", "material");
     }
     {
         MainWindow window;
         EXPECT_EQ(Theme::current(), QStringLiteral("mocha"))
             << "a window opened with the theme the settings file names ignored it";
-        EXPECT_EQ(Theme::currentControls(), QStringLiteral("pill"))
+        EXPECT_EQ(Theme::currentControls(), QStringLiteral("material"))
             << "a window opened with the controls the settings file names ignored them";
     }
     QSettings settings(path, QSettings::IniFormat);
     settings.remove("Appearance/theme");
     settings.remove("Appearance/controls");
+}
+
+// The two Appearance choices are worn as they are picked, so what you are
+// choosing is the dialog in front of you. OK only writes the choice down.
+TEST(Theme, OptionsPutsTheChoiceOnAsItIsMade)
+{
+    KeepTheme keep;
+    OptionsDialog::Settings s;
+    s.theme = QStringLiteral("light");
+    s.controls = QStringLiteral("rounded");
+    OptionsDialog dialog(s, nullptr);
+
+    auto *controls = dialog.findChild<QComboBox *>(QStringLiteral("controls"));
+    ASSERT_TRUE(controls);
+    const int material = controls->findData(QStringLiteral("material"));
+    ASSERT_GE(material, 0);
+    controls->setCurrentIndex(material);
+    EXPECT_EQ(Theme::currentControls(), QStringLiteral("material"))
+        << "the shape was picked in the list and never put on";
+
+    auto *theme = dialog.findChild<QComboBox *>(QStringLiteral("theme"));
+    ASSERT_TRUE(theme);
+    const int mocha = theme->findData(QStringLiteral("mocha"));
+    ASSERT_GE(mocha, 0);
+    theme->setCurrentIndex(mocha);
+    EXPECT_TRUE(Theme::isDark()) << "the theme was picked in the list and never put on";
+    EXPECT_EQ(Theme::currentControls(), QStringLiteral("material"))
+        << "choosing a theme threw away the shape chosen beside it";
+}
+
+// The side panel's tabs are icons with the name only on the one in hand, and
+// the sheet's padding is sized for a word. Every style has to take it off them
+// again, or six icons no longer fit across the panel.
+TEST(Theme, AnIconTabIsNoWiderThanItsIcon)
+{
+    KeepTheme keep;
+    MainWindow window;
+    auto *tabs = window.findChild<QTabWidget *>(QStringLiteral("sidePanel"));
+    ASSERT_TRUE(tabs);
+    ASSERT_GT(tabs->count(), 1);
+
+    for (const Theme::Choice &choice : Theme::availableControls()) {
+        if (choice.key == QStringLiteral("system"))
+            continue; // Qt's own metrics, which are not ours to answer for.
+        Theme::apply(QStringLiteral("dark"), choice.key);
+        QTabBar *bar = tabs->tabBar();
+        const int at = tabs->currentIndex() == 0 ? 1 : 0;
+        ASSERT_TRUE(bar->tabText(at).isEmpty());
+        EXPECT_LE(bar->tabRect(at).width(), tabs->iconSize().width() + 24)
+            << choice.key.toStdString() << " gives an icon the room of a label";
+    }
 }
 
 // The grey strokes are ink: on a dark panel they would all but vanish, so

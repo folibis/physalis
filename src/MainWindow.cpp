@@ -66,6 +66,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QAction>
 #include <QKeySequence>
 #include <QPainter>
@@ -2047,6 +2048,9 @@ void MainWindow::buildSidePanelTabs()
         tabs->setTabToolTip(at, name);
     }
     tabs->setIconSize(QSize(20, 20));
+    // Tabs of this width are icons, not labels, and the sheet gives them a
+    // label's padding unless it is told otherwise.
+    tabs->tabBar()->setProperty("iconsOnly", true);
 
     // View says which panels to keep. Built when it opens rather than once,
     // so it cannot drift from what is actually on the strip.
@@ -3376,7 +3380,10 @@ void MainWindow::on_actionOptions_triggered()
 {
     OptionsDialog dialog(currentSettingsSnapshot(), this);
     if (dialog.exec() == QDialog::Accepted) {
-        OptionsDialog::Settings s = dialog.settings();
+        // Reset closes the dialog, so the pages are never read: what they show
+        // is what is being thrown away.
+        OptionsDialog::Settings s = dialog.resetToDefaults() ? defaultSettings()
+                                                             : dialog.settings();
         // The engine is the one setting that reaches the open scene, because a
         // scene is built for one. Keeping the scene keeps its engine too.
         if (!adoptEngine(s.defaultEngineName))
@@ -3384,6 +3391,16 @@ void MainWindow::on_actionOptions_triggered()
         applySettings(s);
         saveSettingsToFile(s);
     }
+}
+
+// The same read as always, over a file with nothing in it. A default has one
+// home -- the Settings struct, and the few the read above works out for itself
+// -- and a second list of them here would drift from it the first time one
+// changed.
+OptionsDialog::Settings MainWindow::defaultSettings() const
+{
+    QTemporaryDir empty;
+    return loadSettingsFromFile(empty.filePath(QStringLiteral("settings.ini")));
 }
 
 void MainWindow::onFieldSettingsChanged()
@@ -3637,11 +3654,11 @@ QString MainWindow::settingsFilePath()
     return chosen;
 }
 
-OptionsDialog::Settings MainWindow::loadSettingsFromFile() const
+OptionsDialog::Settings MainWindow::loadSettingsFromFile(const QString &path) const
 {
     OptionsDialog::Settings s; // defaults
 
-    QSettings settings(settingsFilePath(), QSettings::IniFormat);
+    QSettings settings(path.isEmpty() ? settingsFilePath() : path, QSettings::IniFormat);
     s.defaultEngineName = settings.value("Engine/default", s.defaultEngineName).toString();
     s.theme = settings.value("Appearance/theme", s.theme).toString();
     s.controls = settings.value("Appearance/controls", s.controls).toString();

@@ -162,12 +162,38 @@ reach the engine before the catalogue is asked.
 
 **The chrome is themed; the canvas is not.** `Theme::apply` puts Fusion, a
 palette and one application stylesheet on everything (Options -> Common ->
-Theme, `Appearance/theme`; System follows the desktop where Qt can tell). A
+Colour scheme, `Appearance/theme`; System follows the desktop where Qt can
+tell -- the dialog says colour scheme and style, the code says theme and
+controls, which is what the INI keeps). A
 theme is one line of ten colours in `kSpecs` in `Theme.cpp`; the palette, the
 derived colours and the sheet are all worked out from it. The shape of the
-controls is a second, independent choice (Controls, `Appearance/controls`):
+controls is a second, independent choice (Style, `Appearance/controls`):
 one `kShapes` entry of radii and paddings that fill the sheet's `@r...`
-placeholders, plus a few rules of its own appended after the shared ones. The combo and spin
+placeholders, plus a few rules of its own appended after the shared ones. A
+style that is only a different radius is a name in a list and nothing else, so
+corners are the least of what separates them. Each sets its own **density** --
+the paddings run from Sharp, at a third of Material's, up to Material itself --
+its own way of filling a button (bordered, a Fluent gradient, a bold tonal
+capsule, or only its words), its own field (bordered, bottom-stroked, filled
+and underlined, or tinted until focus) and its own mark on the tab in hand (a
+soft pill, a bar above, a bar below, or just the accent in the word).
+
+**The tick, the radio, the slider and the scroll bar are each style's own
+too**, and that is most of what tells them apart: left to the shared sheet
+they were the same controls at another radius, which is what these all were
+once. Material's slider is the 2024 one -- a tall pill of a track with a thin
+upright handle standing in a gap of its own; Fluent's is the ringed WinUI
+thumb on a thin rail; Sharp's is a square grip on a hairline, with its ticks
+and scroll bars sized down to match; Minimal's is a dot on a line and a scroll
+bar barely there.
+
+**System is the one that is not a shape**, and so has no `kShapes` row, the way
+System has no `kSpecs` row: the platform's own style with no sheet of ours over
+it. It wears the platform's palette too, and the panels' cards follow the
+desktop's light or dark rather than the chosen theme -- a native style reads
+little of a palette, so a theme laid over it would be half applied, light text
+on a button still drawn light. An unknown key in the settings file falls back
+to the first real shape instead, since that is a typo and not a request. The combo and spin
 arrows and the checkbox tick are images under `:/theme`, one per ink. A widget's colour is a `palette(...)` role where one fits and a
 `Theme::colors()` field where none does -- never a hex literal -- and a
 "muted" label is `setProperty("muted", true)`, which the app sheet colours.

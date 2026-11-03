@@ -24,6 +24,9 @@
 #include <QLabel>
 #include <QSlider>
 #include <QSpinBox>
+#include <QDialogButtonBox>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QToolButton>
 
 namespace {
@@ -190,6 +193,16 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     for (const Theme::Choice &choice : Theme::availableControls())
         m_ui->controls->addItem(choice.label, choice.key);
     m_ui->controls->setCurrentIndex(qMax(0, m_ui->controls->findData(current.controls)));
+    // Worn as it is picked, not on OK: a theme and a shape are things you
+    // choose by looking at them, and the dialog is the largest thing on the
+    // screen to look at. Connected after the two are filled in, so setting
+    // them up does not count as a choice.
+    const auto wear = [this] {
+        Theme::apply(m_ui->theme->currentData().toString(),
+                     m_ui->controls->currentData().toString());
+    };
+    connect(m_ui->theme, qOverload<int>(&QComboBox::currentIndexChanged), this, wear);
+    connect(m_ui->controls, qOverload<int>(&QComboBox::currentIndexChanged), this, wear);
 
     m_ui->converterPath->setText(current.converterPath);
     m_converterSettings = current.converterSettings;
@@ -399,6 +412,35 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     capSensitivity(m_ui->snapStep->value());
     m_ui->snapSensitivity->setValue(qMin(current.snapSensitivity, m_ui->snapSensitivity->maximum()));
 
+    // Every page back to what the program ships with. On the left, away from
+    // OK and Cancel, and in the colour the rest of the application uses for
+    // something going wrong: it throws away every page at once, not the one
+    // being looked at, and it closes the dialog to say so.
+    auto *reset = m_ui->buttonBox->addButton(tr("Reset to Defaults"),
+                                             QDialogButtonBox::ResetRole);
+    reset->setObjectName(QStringLiteral("resetToDefaults"));
+    reset->setToolTip(tr("Put every setting on every page back to its default. The scene"
+                         " itself is not touched."));
+    const auto paintReset = [reset] {
+        const QColor red = Theme::colors().error;
+        reset->setStyleSheet(QStringLiteral(
+                                 "QPushButton { background: %1; color: palette(bright-text);"
+                                 " border-color: %1; }"
+                                 "QPushButton:hover { background: %2; border-color: %2; }"
+                                 "QPushButton:pressed { background: %3; border-color: %3; }")
+                                 .arg(red.name(), red.lighter(112).name(), red.darker(112).name()));
+    };
+    paintReset();
+    // The theme can change under the dialog -- the two combos above do it as
+    // they are picked -- and a colour baked into a sheet does not follow.
+    connect(Theme::instance(), &Theme::changed, reset, paintReset);
+    connect(reset, &QPushButton::clicked, this, [this] {
+        if (!askToReset())
+            return;
+        m_resetToDefaults = true;
+        accept();
+    });
+
     // Sized to what it holds, not to the window it was opened from. Taking a
     // share of the main window made the dialog grow with it -- on a maximised
     // window it opened nearly full height whatever was on the page, and every
@@ -421,6 +463,20 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
 }
 
 OptionsDialog::~OptionsDialog() = default;
+
+// Asked rather than undone: nothing here can be put back afterwards, and the
+// colours and sizes on the other pages may have been years in the making.
+bool OptionsDialog::askToReset()
+{
+    QMessageBox ask(QMessageBox::Warning, tr("Reset to Defaults"),
+                    tr("Put every setting back to its default?"), QMessageBox::NoButton, this);
+    ask.setInformativeText(tr("Every page goes, not only this one. The scene and what is drawn"
+                              " on it are not touched."));
+    QPushButton *go = ask.addButton(tr("Reset"), QMessageBox::AcceptRole);
+    ask.setDefaultButton(ask.addButton(QMessageBox::Cancel));
+    ask.exec();
+    return ask.clickedButton() == go;
+}
 
 void OptionsDialog::bindSliderValue(QSlider *slider, QLabel *label, const QString &suffix)
 {
