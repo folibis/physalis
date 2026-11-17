@@ -12,8 +12,11 @@
 #include <QPointer>
 #include "OptionsDialog.h"
 #include "EditorMode.h"
+// For CanvasScene::Restack, which restack() takes.
+#include "CanvasScene.h"
 
 #include <QJsonObject>
+#include <QUrl>
 #include "ToolOptionsBar.h"
 
 #include <functional>
@@ -57,6 +60,12 @@ protected:
 
     void showEvent(QShowEvent *event) override;
 
+    // A scene file dropped on the window opens it, the same as File -> Open:
+    // the unsaved-changes prompt and the recent list are openScene's already.
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dragMoveEvent(QDragMoveEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
+
 private slots:
     void on_actionUndo_triggered();
     void on_actionRedo_triggered();
@@ -95,9 +104,18 @@ private slots:
     void updateDeleteAction();
     bool clipboardHasShape() const;
     QVector<ShapeItem *> clipboardShapes() const;
+    // What a paste or a duplicate leaves picked, by mode.
+    void selectPasted(const QVector<ShapeItem *> &made);
     QVector<ShapeItem *> selectedShapes() const;
     void on_actionCopy_triggered();
     void on_actionPaste_triggered();
+    void on_actionDuplicate_triggered();
+    void on_actionSelectAll_triggered();
+    void on_actionFitToField_triggered();
+    void on_actionBringToFront_triggered();
+    void on_actionBringForward_triggered();
+    void on_actionSendBackward_triggered();
+    void on_actionSendToBack_triggered();
     void on_actionSaveScreenshot_triggered();
 
 private:
@@ -111,7 +129,6 @@ public:
 private:
     // Where the export converters live. Not a scene property, so unlike the
     // rest of the settings it has nowhere else to be kept.
-    QString m_converterPath;
     // Which engine a new scene is built for. An open scene keeps its own.
     QString m_defaultEngineName;
     // The field a new scene is given: its size, its background and its grid.
@@ -156,7 +173,13 @@ private:
     OptionsDialog::Settings defaultSettings() const;
     void saveSettingsToFile(const OptionsDialog::Settings &s) const;
     void applySettings(const OptionsDialog::Settings &s);
+    // How a scene is drawn, from Options: the open one, and each run's copy of it.
+    static void applySceneLook(CanvasScene *scene, const OptionsDialog::Settings &s);
+    // The scene on the canvas: a run's copy while one is going, else the open one.
+    CanvasScene *shownScene() const;
     OptionsDialog::Settings currentSettingsSnapshot() const;
+    // Both rulers at once, since they are two edges of one canvas.
+    void applyRulerUnit(Units::Unit unit);
     // The Edit / Physics pill: the mode picks which one is lit, the theme
     // what the unlit one is drawn in.
     void styleModeButtons(EditorMode mode);
@@ -295,10 +318,16 @@ public:
     QWidget *overlayHostForTest() const;
     void openSegmentsToolForTest(ShapeItem *shape) { shapeToSegments(shape); }
     void openChainToolForTest(ShapeItem *shape) { circleToChain(shape); }
+    void openConvexToolForTest(ShapeItem *shape) { splitIntoConvexPieces(shape); }
     void runToolForTest() { runTool(); }
     void applyToolForTest() { applyTool(); }
     void cancelToolForTest() { cancelTool(); }
     bool openSceneForTest(const QString &path) { return openScene(path); }
+    void fitToFieldForTest() { on_actionFitToField_triggered(); }
+    // Qt delivers a drop through its own drag manager rather than through
+    // sendEvent, so a test cannot post one at the window.
+    bool dropUrlsForTest(const QList<QUrl> &urls) { return openDroppedUrls(urls); }
+    void addCanvasActionsForTest(QMenu *menu) { addCanvasActions(menu); }
     bool adoptEngineForTest(const QString &name) { return adoptEngine(name); }
     bool saveSceneForTest() { return onSaveScene(); }
     bool saveSceneAsForTest(const QString &path) { return saveSceneAs(path); }
@@ -332,7 +361,15 @@ private:
                                          qreal margin);
     void circleToChain(ShapeItem *item);
     void shapeToSegments(ShapeItem *item);
+    void splitIntoConvexPieces(ShapeItem *item);
     void duplicateShape(ShapeItem *item);
+    void duplicateShapes(const QVector<ShapeItem *> &source);
+    static QString sceneFileAmong(const QList<QUrl> &urls);
+    void restack(CanvasScene::Restack where);
+    // The commands that belong to the canvas rather than to what is on it, so
+    // every context menu offers the same ones in the same order.
+    void addCanvasActions(QMenu *menu);
+    bool openDroppedUrls(const QList<QUrl> &urls);
     void flipShape(ShapeItem *item, bool horizontally);
     void convertToPolygon(ShapeItem *item);
 

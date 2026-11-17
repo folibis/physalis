@@ -1,0 +1,15 @@
+{
+    "label": "Nord",
+    "order": 110,
+    "dark": true,
+    "window": "#3B4252",
+    "surface": "#2E3440",
+    "base": "#2E3440",
+    "alternate": "#434C5E",
+    "text": "#ECEFF4",
+    "muted": "#A3ABB9",
+    "border": "#56607A",
+    "soft": "#4C566A",
+    "accent": "#88C0D0",
+    "accentText": "#2E3440"
+}

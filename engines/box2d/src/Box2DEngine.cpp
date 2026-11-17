@@ -485,6 +485,7 @@ void Box2DEngine::step(qreal dt)
     // After the solver, so a joint reports where it actually ended up rather
     // than where it was before the step that carried it into its limit.
     detectLimitEvents();
+    collectJointEvents();
     collectContactEvents();
     collectBodyEvents();
 }

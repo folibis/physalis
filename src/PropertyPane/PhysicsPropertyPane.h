@@ -5,6 +5,8 @@
 #include "PropertyPane.h"
 #include "PhysicsTypes.h"
 
+#include <QVariantMap>
+#include <QVector>
 #include <functional>
 
 class CanvasScene;
@@ -32,7 +34,13 @@ private:
     static std::vector<PropertyRow> shotRows(ShotSettings *shot, const std::function<void()> &changed);
     // Not static: taking the focus off whatever had it is the scene's to do.
     PropertyRow focusRow(PhysicsBody *body) const;
-    static std::vector<PropertyRow> shapeIdentityRows(ShapeItem *shape);
+    PropertyRow trailRow(PhysicsBody *body, const std::function<void()> &changed) const;
+    // `picked` is how many shapes the section is speaking for, which only the
+    // name row cares about -- see there.
+    static std::vector<PropertyRow> shapeIdentityRows(ShapeItem *shape, int picked);
+    static std::vector<PropertyRow> shapeCountRow(const QVector<ShapeItem *> &selection);
+    // Each selected shape's own property map, for a row that writes them all.
+    static std::vector<QVariantMap *> partsOf(const QVector<ShapeItem *> &selection);
 
     CanvasScene *m_scene = nullptr;
 };

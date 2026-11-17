@@ -1,0 +1,17 @@
+{
+    "label": "Rounded",
+    "order": 10,
+    "radius": {
+        "field": 6,
+        "small": 6,
+        "check": 4,
+        "handle": 8,
+        "card": 8,
+        "scroll": 4,
+        "spin": 6
+    },
+    "padding": {
+        "field": "3px 8px",
+        "button": "5px 16px"
+    }
+}

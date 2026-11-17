@@ -20,4 +20,6 @@
     jointDef.motorSpeed = len({{MOTOR_SPEED}});
     {{ID}} = b2.b2CreateDistanceJoint(world, jointDef);
     b2.b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
+    b2.b2Joint_SetForceThreshold({{ID}}, {{FORCE_THRESHOLD}});
+    b2.b2Joint_SetTorqueThreshold({{ID}}, {{TORQUE_THRESHOLD}});
 }

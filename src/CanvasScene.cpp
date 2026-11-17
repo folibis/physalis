@@ -8,6 +8,7 @@
 #include "ExplosionItem.h"
 #include "RayItem.h"
 #include "PolygonItem.h"
+#include "ConvexPieces.h"
 #include "PropertyPane/FieldPropertyPane.h"
 #include "SceneSerializer.h"
 
@@ -415,6 +416,88 @@ QVector<ShapeItem *> CanvasScene::convertToSegments(ShapeItem *shape, int segmen
     return made;
 }
 
+bool CanvasScene::canSplitIntoConvexPieces(const ShapeItem *shape) const
+{
+    const auto *polygon = dynamic_cast<const PolygonItem *>(shape);
+    if (!polygon || !polygon->isClosed() || polygon->points().size() < 4)
+    {
+        return false;
+    }
+    return polygon->points().size() > m_maxPolygonVertices
+           || !physics::isConvex(QVector<QPointF>(polygon->points().begin(),
+                                                  polygon->points().end()));
+}
+
+QVector<ShapeItem *> CanvasScene::splitIntoConvexPieces(ShapeItem *shape, int maxCorners)
+{
+    QVector<ShapeItem *> made;
+    auto *polygon = dynamic_cast<PolygonItem *>(shape);
+    if (!polygon || polygon->scene() != this || !polygon->isClosed())
+    {
+        return made;
+    }
+
+    const QVector<QPolygonF> pieces =
+        ConvexPieces::split(polygon->points(), qMin(maxCorners, m_maxPolygonVertices));
+    if (pieces.isEmpty())
+    {
+        return made;
+    }
+
+    // Every piece keeps the polygon's own frame and only its points change: the
+    // first shape of a body is the body's transform, which joints are anchored
+    // in, so moving its origin would move every joint on the body.
+    const QJsonObject source = SceneSerializer::shapeToJson(polygon);
+    const QString stem = polygon->name();
+    const qreal z = polygon->zValue();
+    PhysicsBody *body = polygon->body();
+
+    for (int i = 0; i < pieces.size(); ++i)
+    {
+        QJsonArray points;
+        for (const QPointF &p : pieces.at(i))
+        {
+            points.append(QJsonObject { { "x", p.x() }, { "y", p.y() } });
+        }
+        QJsonObject json = source;
+        json.insert(QStringLiteral("points"), points);
+        json.insert(QStringLiteral("closed"), true);
+        json.insert(QStringLiteral("outline"), false);
+        json.insert(QStringLiteral("smoothChain"), false);
+
+        if (i == 0)
+        {
+            ShapeItem *first = replaceShape(polygon, json);
+            if (!first)
+            {
+                return made;
+            }
+            made.append(first);
+            continue;
+        }
+        ShapeItem *piece = SceneSerializer::shapeFromJson(json);
+        if (!piece)
+        {
+            continue;
+        }
+        piece->setZValue(z);
+        addItem(piece);
+        piece->setName(Naming::nextName(stem, takenNames(piece)));
+        if (body)
+        {
+            body->addShape(piece);
+        }
+        made.append(piece);
+    }
+
+    announceChange(Change::Shapes);
+    if (body)
+    {
+        announceChange(Change::Bodies);
+    }
+    return made;
+}
+
 ShapeItem *CanvasScene::convertCircleToChain(ShapeItem *shape, int segments, qreal startAngle)
 {
     if (!shape || shape->scene() != this || segments < 3)
@@ -473,14 +556,15 @@ void CanvasScene::removeExplosion(ExplosionItem *explosion)
     // whoever hears explosionsChanged asks the scene what is selected, and a
     // pointer to a deleted item answers that question on Windows and crashes
     // on Linux.
-    if (m_selectedExplosion == explosion)
+    if (m_explosionSelection.removeOne(explosion))
     {
-        m_selectedExplosion = nullptr;
-        emit selectedExplosionChanged(nullptr);
+        emit selectedExplosionChanged(m_explosionSelection.value(0));
     }
-    if (m_draggedExplosion == explosion)
+    const int dragged = m_bodyDragExplosions.indexOf(explosion);
+    if (dragged >= 0)
     {
-        m_draggedExplosion = nullptr;
+        m_bodyDragExplosions.removeAt(dragged);
+        m_bodyDragExplosionStarts.removeAt(dragged);
     }
     removeItem(explosion);
     delete explosion;
@@ -506,14 +590,15 @@ void CanvasScene::removeRay(RayItem *ray)
     {
         return;
     }
-    if (m_selectedRay == ray)
+    if (m_raySelection.removeOne(ray))
     {
-        m_selectedRay = nullptr;
-        emit selectedRayChanged(nullptr);
+        emit selectedRayChanged(m_raySelection.value(0));
     }
-    if (m_draggedRay == ray)
+    const int dragged = m_bodyDragRays.indexOf(ray);
+    if (dragged >= 0)
     {
-        m_draggedRay = nullptr;
+        m_bodyDragRays.removeAt(dragged);
+        m_bodyDragRayStarts.removeAt(dragged);
     }
     removeItem(ray);
     delete ray;
@@ -535,66 +620,138 @@ RayItem *CanvasScene::rayNamed(const QString &name) const
 
 void CanvasScene::letOthersGo(Picked keep)
 {
-    if (keep != Picked::Shapes)
-    {
-        clearPhysicsSelection();
-    }
+    // Shapes, rays and explosions no longer let one another go: they are one
+    // selection spanning kinds, which is what lets a box take two blasts, two
+    // rangefinders and a body together. Only the joint is exclusive -- see the
+    // Picked declaration for why. Replacing a selection rather than adding to
+    // it is the caller's business now, because only the caller knows whether
+    // the modifier was held.
     if (keep != Picked::Joint)
     {
         selectJoint(nullptr);
+        return;
     }
-    if (keep != Picked::Ray)
+    clearPhysicsSelection();
+    selectRays({}, false);
+    selectExplosions({}, false);
+}
+
+// What a Physics-mode drag carries beside the shapes. Both press branches
+// want it: whatever is picked travels, whichever kind was grabbed.
+void CanvasScene::carryPickedPoints()
+{
+    m_bodyDragRays = m_raySelection;
+    m_bodyDragRayStarts.clear();
+    for (RayItem *ray : std::as_const(m_bodyDragRays))
     {
-        selectRay(nullptr);
+        m_bodyDragRayStarts.append(ray->pos());
     }
-    if (keep != Picked::Explosion)
+    m_bodyDragExplosions = m_explosionSelection;
+    m_bodyDragExplosionStarts.clear();
+    for (ExplosionItem *explosion : std::as_const(m_bodyDragExplosions))
     {
-        selectExplosion(nullptr);
+        m_bodyDragExplosionStarts.append(explosion->pos());
     }
+}
+
+// A drag begun on a rangefinder or a blast. The whole selection travels, and
+// the grabbed point is what every piece's move is measured from.
+void CanvasScene::carryPickedForDrag(const QPointF &leadPos, bool leadIsPoint, const QString &label)
+{
+    m_bodyDragShapes.clear();
+    m_bodyDragStartPositions.clear();
+    for (ShapeItem *shape : std::as_const(m_physicsSelection))
+    {
+        m_bodyDragShapes.append(shape);
+        m_bodyDragStartPositions.append(shape->pos());
+    }
+    carryPickedPoints();
+    m_bodyDragLeadStart = leadPos;
+    m_bodyDragLeadIsPoint = leadIsPoint;
+    const int pieces = m_bodyDragShapes.size() + m_bodyDragRays.size()
+                       + m_bodyDragExplosions.size();
+    m_bodyDragLabel = pieces > 1 ? tr("%n object(s)", nullptr, pieces) : label;
+    m_moveDragVirtualPos = leadPos;
+}
+
+void CanvasScene::clearCanvasSelection()
+{
+    clearPhysicsSelection();
+    selectJoint(nullptr);
+    selectRays({}, false);
+    selectExplosions({}, false);
 }
 
 void CanvasScene::selectRay(RayItem *ray)
 {
-    if (m_selectedRay == ray)
+    selectRays(ray ? QVector<RayItem *> { ray } : QVector<RayItem *> {}, false);
+}
+
+void CanvasScene::selectRays(const QVector<RayItem *> &wanted, bool additive)
+{
+    QVector<RayItem *> picked = additive ? m_raySelection : QVector<RayItem *> {};
+    for (RayItem *ray : wanted)
+    {
+        if (ray && m_rays.contains(ray) && !picked.contains(ray))
+        {
+            picked.append(ray);
+        }
+    }
+    if (picked == m_raySelection)
     {
         return;
     }
-    if (ray)
+    if (!picked.isEmpty())
     {
         letOthersGo(Picked::Ray);
     }
-    if (m_selectedRay)
+    for (RayItem *ray : std::as_const(m_raySelection))
     {
-        m_selectedRay->setSelectedForPhysics(false);
+        ray->setSelectedForPhysics(false);
     }
-    m_selectedRay = ray;
-    if (m_selectedRay)
+    m_raySelection = picked;
+    for (RayItem *ray : std::as_const(m_raySelection))
     {
-        m_selectedRay->setSelectedForPhysics(true);
+        ray->setSelectedForPhysics(true);
     }
-    emit selectedRayChanged(ray);
+    emit selectedRayChanged(m_raySelection.value(0));
 }
 
 void CanvasScene::selectExplosion(ExplosionItem *explosion)
 {
-    if (m_selectedExplosion == explosion)
+    selectExplosions(explosion ? QVector<ExplosionItem *> { explosion }
+                               : QVector<ExplosionItem *> {},
+                     false);
+}
+
+void CanvasScene::selectExplosions(const QVector<ExplosionItem *> &wanted, bool additive)
+{
+    QVector<ExplosionItem *> picked = additive ? m_explosionSelection : QVector<ExplosionItem *> {};
+    for (ExplosionItem *explosion : wanted)
+    {
+        if (explosion && m_explosions.contains(explosion) && !picked.contains(explosion))
+        {
+            picked.append(explosion);
+        }
+    }
+    if (picked == m_explosionSelection)
     {
         return;
     }
-    if (explosion)
+    if (!picked.isEmpty())
     {
         letOthersGo(Picked::Explosion);
     }
-    if (m_selectedExplosion)
+    for (ExplosionItem *explosion : std::as_const(m_explosionSelection))
     {
-        m_selectedExplosion->setSelectedForPhysics(false);
+        explosion->setSelectedForPhysics(false);
     }
-    m_selectedExplosion = explosion;
-    if (m_selectedExplosion)
+    m_explosionSelection = picked;
+    for (ExplosionItem *explosion : std::as_const(m_explosionSelection))
     {
-        m_selectedExplosion->setSelectedForPhysics(true);
+        explosion->setSelectedForPhysics(true);
     }
-    emit selectedExplosionChanged(explosion);
+    emit selectedExplosionChanged(m_explosionSelection.value(0));
 }
 
 bool CanvasScene::revealObjectNamed(const QString &name)
@@ -612,25 +769,19 @@ bool CanvasScene::revealObjectNamed(const QString &name)
         {
             continue;
         }
-        clearPhysicsSelection();
-        selectExplosion(nullptr);
-        selectRay(nullptr);
+        clearCanvasSelection();
         selectJoint(joint);
         return true;
     }
     if (RayItem *ray = rayNamed(name))
     {
-        clearPhysicsSelection();
-        selectJoint(nullptr);
-        selectExplosion(nullptr);
+        clearCanvasSelection();
         selectRay(ray);
         return true;
     }
     if (ExplosionItem *explosion = explosionNamed(name))
     {
-        clearPhysicsSelection();
-        selectJoint(nullptr);
-        selectRay(nullptr);
+        clearCanvasSelection();
         selectExplosion(explosion);
         return true;
     }
@@ -638,10 +789,7 @@ bool CanvasScene::revealObjectNamed(const QString &name)
     {
         if (shape->name() == name)
         {
-            selectJoint(nullptr);
-            selectRay(nullptr);
-            selectExplosion(nullptr);
-            clearPhysicsSelection();
+            clearCanvasSelection();
             selectForPhysics(shape, true);
             return true;
         }
@@ -650,10 +798,7 @@ bool CanvasScene::revealObjectNamed(const QString &name)
     {
         if (body->name() == name && !body->shapes().isEmpty())
         {
-            selectJoint(nullptr);
-            selectRay(nullptr);
-            selectExplosion(nullptr);
-            clearPhysicsSelection();
+            clearCanvasSelection();
             selectForPhysics(body->shapes().first(), true);
             return true;
         }
@@ -711,10 +856,12 @@ void CanvasScene::setEditorMode(EditorMode mode)
     selectJoint(nullptr);
     m_draggedJoint = nullptr;
 
-    selectExplosion(nullptr);
-    selectRay(nullptr);
-    m_draggedExplosion = nullptr;
-    m_draggedRay = nullptr;
+    selectExplosions({}, false);
+    selectRays({}, false);
+    m_bodyDragRays.clear();
+    m_bodyDragRayStarts.clear();
+    m_bodyDragExplosions.clear();
+    m_bodyDragExplosionStarts.clear();
     const bool physics = m_editorMode != EditorMode::Edit;
     for (ExplosionItem *explosion : std::as_const(m_explosions))
     {
@@ -785,7 +932,13 @@ void CanvasScene::selectForPhysics(ShapeItem *shape, bool additive)
 // near is not.
 void CanvasScene::applyRubberBand(const QRectF &band, bool additive)
 {
+    // The box looked for shapes and nothing else, so sweeping a field of
+    // rangefinders and blasts did nothing whatever. It takes all three kinds,
+    // and all of each: a selection spans kinds now, so two blasts, two
+    // rangefinders and a body come back from one sweep as one selection.
     QVector<ShapeItem *> caught;
+    QVector<RayItem *> rays;
+    QVector<ExplosionItem *> blasts;
     const QList<QGraphicsItem *> under = items(band, Qt::IntersectsItemShape, Qt::AscendingOrder);
     for (QGraphicsItem *candidate : under)
     {
@@ -793,52 +946,46 @@ void CanvasScene::applyRubberBand(const QRectF &band, bool additive)
         {
             caught.append(shape);
         }
+        else if (auto *swept = qgraphicsitem_cast<RayItem *>(candidate))
+        {
+            rays.append(swept);
+        }
+        else if (auto *swept = qgraphicsitem_cast<ExplosionItem *>(candidate))
+        {
+            blasts.append(swept);
+        }
     }
+
+    // A sweep in Physics mode says what the whole selection is, across all
+    // three kinds: a box that caught no blasts leaves none picked. Asking the
+    // press to have cleared them instead left a body picked behind a box drawn
+    // round two rangefinders.
+    if (m_editorMode != EditorMode::Edit)
+    {
+        selectRays(rays, additive);
+        selectExplosions(blasts, additive);
+        if (!caught.isEmpty())
+        {
+            selectShapes(caught, additive);
+        }
+        else if (!additive)
+        {
+            clearPhysicsSelection();
+        }
+        return;
+    }
+
+    // Rangefinders and blasts are not on the canvas in Edit mode at all, so a
+    // box there can only have caught shapes. It adds whatever the modifier
+    // says, because the press that started it has already cleared the
+    // selection unless Shift was held -- and a shape the box covers must end
+    // up picked whether it was before or not, which is the one thing
+    // addToEditSelection() cannot do, since it toggles.
     if (caught.isEmpty())
     {
         return;
     }
-
-    if (m_editorMode != EditorMode::Edit)
-    {
-        // A body comes whole: one of its shapes swept up brings the rest, as
-        // a Shift+click on it does.
-        QVector<ShapeItem *> wanted = additive ? m_physicsSelection : QVector<ShapeItem *>();
-        for (ShapeItem *shape : std::as_const(caught))
-        {
-            const QVector<ShapeItem *> group =
-                shape->body() ? shape->body()->shapes() : QVector<ShapeItem *> { shape };
-            for (ShapeItem *member : group)
-            {
-                if (!wanted.contains(member))
-                {
-                    wanted.append(member);
-                }
-            }
-        }
-        if (wanted == m_physicsSelection)
-        {
-            return;
-        }
-        selectRay(nullptr);
-        selectExplosion(nullptr);
-        m_physicsSelection = wanted;
-        update();
-        emit physicsSelectionChanged();
-        return;
-    }
-
-    for (ShapeItem *shape : std::as_const(caught))
-    {
-        // addToEditSelection() toggles, which is what a Shift+click wants and
-        // not what a box does: a shape the box covers ends up picked whether
-        // it was before or not.
-        if (shape == m_active || m_editSelection.contains(shape))
-        {
-            continue;
-        }
-        addToEditSelection(shape);
-    }
+    selectShapes(caught, true);
 }
 
 void CanvasScene::clearPhysicsSelection()
@@ -893,7 +1040,7 @@ PhysicsBody *CanvasScene::createEmptyBody(bool announce)
 void CanvasScene::clearContents()
 {
     deactivate();
-    clearPhysicsSelection();
+    clearCanvasSelection();
     clearWatches();
 
     m_rules.clear();
@@ -903,8 +1050,6 @@ void CanvasScene::clearContents()
     m_explosions.clear();
     emit explosionsChanged();
 
-    m_selectedRay = nullptr;
-    m_draggedRay = nullptr;
     qDeleteAll(m_rays);
     m_rays.clear();
     emit raysChanged();
@@ -1546,26 +1691,45 @@ bool CanvasScene::isSpringJoint(const Joint *joint) const
 // and pack instead of being recounted as the spring moves. An engine that lets
 // a rest length of zero mean "wherever the anchors start" leaves the span to
 // say, which is the same thing while nothing is running.
-QPointF CanvasScene::railOrigin(const Joint *joint) const
+CanvasScene::Rail CanvasScene::railOf(const Joint *joint) const
 {
+    const QPointF axis = joint->axisScene();
+
+    // Which end holds still, and so which one the rail belongs to. Only a
+    // static body can hold still; where neither does, body A is the engine's
+    // own reference and so it is ours. The anchor that runs along the rail is
+    // then the *other* one, and it travels the opposite way -- which is why
+    // the direction turns round with the end.
+    const auto holds = [](PhysicsBody *body) {
+        return body && body->props().type == physics::BodyType::Static;
+    };
+    const bool onB = !holds(joint->bodyA()) && holds(joint->bodyB());
+
+    // The limits are offsets from where the joint starts -- the gap between
+    // the anchors along the axis, which the engine adds to both of them when
+    // it builds the joint (`travelOrigin` in Box2DJoints.cpp). So zero is the
+    // far anchor as the scene stands at rest, which is also why a rail hung
+    // off anchor A came out short of the real travel by that whole gap.
+    //
     // Measured while the scene stands still, because that is when a sliding
     // joint is at rest and its travel reads zero -- the same reason
-    // springTurns() counts its turns there -- and held through the run. Hung
-    // off anchor B as it stands instead, the whole range slid along with the
-    // body, so it never showed where in its travel that body had got to.
+    // springTurns() counts its turns there -- and held for the length of a run
+    // in the frame of the body that holds still, so the rail stays where the
+    // travel is while the other end runs along it.
+    const QPointF along = onB ? -axis : axis;
     const QString name = joint->name();
     if (simulationRunning())
     {
         const auto held = m_railOrigins.constFind(name);
         if (held != m_railOrigins.constEnd())
         {
-            return joint->fromBodyAFrame(*held);
+            return {onB ? joint->fromBodyBFrame(*held) : joint->fromBodyAFrame(*held), along};
         }
     }
 
-    const QPointF restingB = joint->anchorScenePos(Joint::End::B);
-    m_railOrigins.insert(name, joint->inBodyAFrame(restingB));
-    return restingB;
+    const QPointF resting = joint->anchorScenePos(onB ? Joint::End::A : Joint::End::B);
+    m_railOrigins.insert(name, onB ? joint->inBodyBFrame(resting) : joint->inBodyAFrame(resting));
+    return {resting, along};
 }
 
 int CanvasScene::springTurns(const Joint *joint, qreal spanLength) const
@@ -2725,6 +2889,16 @@ void CanvasScene::setSimulationRunning(bool running)
     {
         return;
     }
+    // Measured now, at rest: a run's copy of the scene is never drawn before it moves.
+    if (running)
+    {
+        for (const Joint *joint : std::as_const(m_joints))
+        {
+            railOf(joint);
+            springTurns(joint, QLineF(joint->anchorScenePos(Joint::End::A),
+                                      joint->anchorScenePos(Joint::End::B)).length());
+        }
+    }
     m_simulationRunning = running;
     update();
     emit simulationRunningChanged(running);
@@ -2743,6 +2917,16 @@ void CanvasScene::setRandomSeed(quint32 seed)
         return;
     }
     m_randomSeed = seed;
+    emit fieldPropertyChanged();
+}
+
+void CanvasScene::setStartsPaused(bool paused)
+{
+    if (m_startsPaused == paused)
+    {
+        return;
+    }
+    m_startsPaused = paused;
     emit fieldPropertyChanged();
 }
 
@@ -2931,6 +3115,14 @@ void CanvasScene::drawBackground(QPainter *painter, const QRectF &rect)
     }
     painter->fillRect(rect, background);
 
+    drawGrid(painter, rect);
+    // On the field and under the shapes: a trail is where a body has been,
+    // and the body rides over its own line rather than being scribbled on.
+    drawTrails(painter);
+}
+
+void CanvasScene::drawGrid(QPainter *painter, const QRectF &rect)
+{
     if (!m_showGrid || !layerVisible(RunLayer::Grid))
     {
         return;
@@ -3015,6 +3207,219 @@ void CanvasScene::drawBackground(QPainter *painter, const QRectF &rect)
 
 // Matches the origin marker a single shape draws while it is being rotated.
 static constexpr qreal kGroupOriginRadius = 7.0;
+
+// One transaction, not one call per shape. Written as a loop over
+// selectForPhysics / addToEditSelection it was quadratic and took seconds on a
+// few hundred shapes: each of those repaints the whole scene and emits its
+// selection signal, and every panel listening rebuilds on each one. Picking
+// every shape also makes the per-shape work pointless -- there is no
+// part-picked body to complete when the answer is all of them.
+void CanvasScene::selectAllShapes()
+{
+    selectShapes(shapes(), false);
+}
+
+// Picking a group of shapes, and the only place that knows how. Every caller
+// used to loop over selectForPhysics() or addToEditSelection(), each of which
+// repaints the scene and makes every panel watching the selection rebuild --
+// once per shape, so a few hundred of them took seconds. The work is done
+// first and the signal goes out once, at the end.
+void CanvasScene::selectShapes(const QVector<ShapeItem *> &wanted, bool additive)
+{
+    QVector<ShapeItem *> fresh;
+    fresh.reserve(wanted.size());
+    for (ShapeItem *shape : wanted)
+    {
+        if (shape && shape->scene() == this)
+        {
+            fresh.append(shape);
+        }
+    }
+    if (fresh.isEmpty())
+    {
+        return;
+    }
+
+    if (m_editorMode != EditorMode::Edit)
+    {
+        // A body comes whole: one of its shapes picked brings the rest, the
+        // same as a click on it does. Membership is asked of a set rather than
+        // of the list being built, which is what keeps this linear.
+        QVector<ShapeItem *> picked;
+        QSet<ShapeItem *> seen;
+        if (additive)
+        {
+            picked = m_physicsSelection;
+            seen = QSet<ShapeItem *>(picked.cbegin(), picked.cend());
+        }
+        for (ShapeItem *shape : std::as_const(fresh))
+        {
+            const QVector<ShapeItem *> group =
+                shape->body() ? shape->body()->shapes() : QVector<ShapeItem *> { shape };
+            for (ShapeItem *member : group)
+            {
+                if (!seen.contains(member))
+                {
+                    picked.append(member);
+                    seen.insert(member);
+                }
+            }
+        }
+        if (picked == m_physicsSelection)
+        {
+            return;
+        }
+        // The joint, the ray and the explosion stop being what the panel and
+        // the Remove button are pointed at, the same as picking one shape does.
+        letOthersGo(Picked::Shapes);
+        m_physicsSelection = picked;
+        update();
+        emit physicsSelectionChanged();
+        return;
+    }
+
+    // Edit mode keeps one shape carrying the handles, deliberately not in the
+    // co-selection, so the lead is activated and the rest go beside it.
+    // activate() clears what was picked before; asked to add to a selection
+    // that already has a lead, it is left where it is.
+    if (!additive || !m_active)
+    {
+        activate(fresh.first());
+    }
+
+    QSet<ShapeItem *> seen(m_editSelection.cbegin(), m_editSelection.cend());
+    seen.insert(m_active);
+    bool grew = false;
+    for (ShapeItem *shape : std::as_const(fresh))
+    {
+        if (seen.contains(shape))
+        {
+            continue;
+        }
+        m_editSelection.append(shape);
+        shape->setCoSelected(true);
+        seen.insert(shape);
+        grew = true;
+    }
+    if (!grew)
+    {
+        return;
+    }
+    m_groupOriginPlaced = false;
+    refreshGroupOrigin();
+    emit editSelectionChanged();
+}
+
+// The scene's own answer, not a sort of our own: items() in ascending order
+// already settles shapes that share a z by the order they were added, which is
+// exactly how they are painted.
+QVector<ShapeItem *> CanvasScene::shapesInStackOrder() const
+{
+    QVector<ShapeItem *> ordered;
+    const QList<QGraphicsItem *> all = items(Qt::AscendingOrder);
+    ordered.reserve(all.size());
+    for (QGraphicsItem *candidate : all)
+    {
+        if (auto *shape = qgraphicsitem_cast<ShapeItem *>(candidate))
+        {
+            ordered.append(shape);
+        }
+    }
+    return ordered;
+}
+
+bool CanvasScene::restackShapes(const QVector<ShapeItem *> &shapes, Restack where)
+{
+    if (shapes.isEmpty())
+    {
+        return false;
+    }
+
+    const QVector<ShapeItem *> was = shapesInStackOrder();
+    QVector<ShapeItem *> moving;
+    for (ShapeItem *shape : was)
+    {
+        if (shapes.contains(shape))
+        {
+            moving.append(shape); // kept in stack order, so a group keeps its own
+        }
+    }
+    if (moving.isEmpty())
+    {
+        return false;
+    }
+
+    QVector<ShapeItem *> now;
+    switch (where)
+    {
+    case Restack::ToBack:
+        now = moving;
+        for (ShapeItem *shape : was)
+        {
+            if (!moving.contains(shape))
+            {
+                now.append(shape);
+            }
+        }
+        break;
+    case Restack::ToFront:
+        for (ShapeItem *shape : was)
+        {
+            if (!moving.contains(shape))
+            {
+                now.append(shape);
+            }
+        }
+        now += moving;
+        break;
+    case Restack::Forward:
+    case Restack::Backward:
+    {
+        now = was;
+        const bool up = where == Restack::Forward;
+        // Walked from the end it is moving towards, so two picked shapes next
+        // to each other do not swap with one another and stand still.
+        for (int i = up ? now.size() - 1 : 0; up ? i >= 0 : i < now.size(); up ? --i : ++i)
+        {
+            if (!moving.contains(now.at(i)))
+            {
+                continue;
+            }
+            const int to = up ? i + 1 : i - 1;
+            if (to < 0 || to >= now.size() || moving.contains(now.at(to)))
+            {
+                continue; // at the end, or the neighbour is coming along too
+            }
+            now.swapItemsAt(i, to);
+        }
+        break;
+    }
+    }
+
+    if (now == was)
+    {
+        return false;
+    }
+    // Renumbered from the bottom rather than nudged: a z of its index keeps
+    // the values small and the order exact however often this is done.
+    for (int i = 0; i < now.size(); ++i)
+    {
+        now.at(i)->setZValue(i);
+    }
+    update();
+    return true;
+}
+
+void CanvasScene::setObjectNamesShown(bool on)
+{
+    if (m_objectNamesShown == on)
+    {
+        return;
+    }
+    m_objectNamesShown = on;
+    update();
+    emit objectNamesShownChanged(on);
+}
 
 void CanvasScene::clearEditSelection()
 {
@@ -3771,17 +4176,6 @@ void CanvasScene::setControlCaption(const QString &id, const QString &caption)
     emit controlValuesChanged();
 }
 
-void CanvasScene::resetControls()
-{
-    m_controlEvents.clear();
-    m_controlCaptions.clear();
-    for (const SceneControl &control : std::as_const(m_controls))
-    {
-        m_controlValues.insert(control.id, control.startingValue());
-        m_controlEnabled.insert(control.id, true);
-    }
-    emit controlValuesChanged();
-}
 
 QVector<CanvasScene::ControlEvent> CanvasScene::takeControlEvents()
 {
@@ -4048,19 +4442,24 @@ void CanvasScene::deleteActiveItem()
 {
     // A ray and a blast are selected on their own, not as the active shape,
     // so Delete reached the guard below and did nothing at all. They are what
-    // is picked, so they are what goes.
-    if (RayItem *ray = m_selectedRay)
+    // is picked, so they are what goes -- all of them, since a selection holds
+    // as many of each as the box swept up.
+    const QVector<RayItem *> rays = m_raySelection;
+    const QVector<ExplosionItem *> blasts = m_explosionSelection;
+    if (!rays.isEmpty() || !blasts.isEmpty())
     {
-        const QString name = ray->name();
-        removeRay(ray);
-        notifyEdit(tr("Delete %1").arg(name));
-        return;
-    }
-    if (ExplosionItem *explosion = m_selectedExplosion)
-    {
-        const QString name = explosion->name();
-        removeExplosion(explosion);
-        notifyEdit(tr("Delete %1").arg(name));
+        const QString what = rays.size() + blasts.size() == 1
+                                 ? (rays.isEmpty() ? blasts.first()->name() : rays.first()->name())
+                                 : tr("%n object(s)", nullptr, int(rays.size() + blasts.size()));
+        for (RayItem *ray : rays)
+        {
+            removeRay(ray);
+        }
+        for (ExplosionItem *explosion : blasts)
+        {
+            removeExplosion(explosion);
+        }
+        notifyEdit(tr("Delete %1").arg(what));
         return;
     }
 
@@ -4161,8 +4560,106 @@ void CanvasScene::cancelPolygonDrawing()
     update();
 }
 
-void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
+// Names are drawn at a fixed size whatever the zoom, the way the log and the
+// controls are: a label that shrinks with the drawing stops being readable at
+// the zoom you most want it at. So the painter works in device pixels here and
+// maps each anchor itself.
+void CanvasScene::drawObjectNames(QPainter *painter, const QRectF &visible) const
 {
+    const QTransform toDevice = painter->worldTransform();
+
+    painter->save();
+    painter->resetTransform();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+
+    QFont font = painter->font();
+    font.setPointSizeF(8.5);
+    painter->setFont(font);
+    const QFontMetricsF metrics(font);
+
+    const auto label = [&](const QPointF &at, const QString &text) {
+        if (text.isEmpty())
+        {
+            return;
+        }
+        const QPointF where = toDevice.map(at);
+        QRectF box = metrics.boundingRect(text).adjusted(-3.0, -1.0, 3.0, 1.0);
+        box.moveTo(where.x() - box.width() / 2.0, where.y() - box.height() - 2.0);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(QColor(0, 0, 0, 150));
+        painter->drawRoundedRect(box, 2.0, 2.0);
+        painter->setPen(QColor(255, 255, 255, 230));
+        painter->drawText(box, Qt::AlignCenter, text);
+    };
+
+    // A body speaks for its shapes: the shapes' own names under a body would
+    // be two labels on one drawing, and the body is what a rule usually names.
+    QSet<const ShapeItem *> spokenFor;
+    for (PhysicsBody *body : m_bodies)
+    {
+        if (!body || body->shapes().isEmpty() || body->isRunOnly())
+        {
+            continue;
+        }
+        QRectF reach;
+        for (ShapeItem *shape : body->shapes())
+        {
+            spokenFor.insert(shape);
+            const QRectF box = shape->mapToScene(shape->rect()).boundingRect();
+            reach = reach.isNull() ? box : reach.united(box);
+        }
+        if (reach.intersects(visible))
+        {
+            label(QPointF(reach.center().x(), reach.top()), body->name());
+        }
+    }
+
+    for (ShapeItem *shape : shapes())
+    {
+        if (spokenFor.contains(shape))
+        {
+            continue;
+        }
+        const QRectF box = shape->mapToScene(shape->rect()).boundingRect();
+        if (box.intersects(visible))
+        {
+            label(QPointF(box.center().x(), box.top()), shape->name());
+        }
+    }
+
+    for (Joint *joint : m_joints)
+    {
+        const QPointF at = joint->anchorScenePos(Joint::End::A);
+        if (visible.contains(at))
+        {
+            label(at, joint->name());
+        }
+    }
+    for (RayItem *ray : m_rays)
+    {
+        if (visible.contains(ray->pos()))
+        {
+            label(ray->pos(), ray->name());
+        }
+    }
+    for (ExplosionItem *blast : m_explosions)
+    {
+        if (visible.contains(blast->pos()))
+        {
+            label(blast->pos(), blast->name());
+        }
+    }
+
+    painter->restore();
+}
+
+void CanvasScene::drawForeground(QPainter *painter, const QRectF &visibleForNames)
+{
+    if (m_objectNamesShown)
+    {
+        drawObjectNames(painter, visibleForNames);
+    }
+
     if (m_dragMode == DragMode::RubberBand && !m_bandRect.isNull())
     {
         const QColor colour =
@@ -4323,7 +4820,10 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
             // connection between them are not.
             if (kind == physics::JointVisual::Axis)
             {
-                const QPointF along = joint->axisScene();
+                // Both from the rail rather than from the axis: which way the
+                // travel runs depends on which end of the joint holds still.
+                const Rail rail = railOf(joint);
+                const QPointF along = rail.along;
                 const QPointF across(-along.y(), along.x());
 
                 // By role, like everywhere else the editor reads a limit: the
@@ -4346,12 +4846,10 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
                     lower = -upper;
                 }
 
-                // From where the travel reads zero -- anchor B at rest, held
-                // on body A -- not from anchor B as it stands now. The rail
-                // belongs to the body the axis belongs to; what moves along it
-                // is anchor B, which is drawn on top of it and says where in
-                // its travel the joint has got to.
-                const QPointF zero = railOrigin(joint);
+                // From where the travel reads zero. The rail belongs to the
+                // body that holds still; the other anchor is drawn on top of
+                // it and says where in its travel the joint has got to.
+                const QPointF zero = rail.zero;
                 const QPointF from = zero + along * lower;
                 const QPointF to = zero + along * upper;
 
@@ -4620,6 +5118,37 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &)
         painter->restore();
     }
 
+    // A body that draws wears its pen: a ring in the trail's own colour round
+    // the centre of mass, which is the point the line is drawn from. Apart
+    // from the axes block above on purpose -- the axes can be switched off,
+    // and with them went the only sign of which bodies were going to draw.
+    if (m_editorMode == EditorMode::Physics && layerVisible(RunLayer::Trails))
+    {
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        // Screen pixels, like the line itself: the mark is the same size at
+        // any zoom.
+        const qreal pixel = 1.0 / qMax(painter->transform().m11(), 1e-6);
+        for (PhysicsBody *body : std::as_const(m_bodies))
+        {
+            if (!body->drawsTrail() || body->isEmpty() || body->isRemoved()
+                || body->props().type == physics::BodyType::Static)
+            {
+                continue;
+            }
+            const QPointF at = body->centerOfMassScenePos();
+            QPen ring(m_trailColor, 1.5);
+            ring.setCosmetic(true);
+            painter->setPen(ring);
+            painter->setBrush(Qt::NoBrush);
+            painter->drawEllipse(at, 7.0 * pixel, 7.0 * pixel);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(m_trailColor);
+            painter->drawEllipse(at, 3.0 * pixel, 3.0 * pixel);
+        }
+        painter->restore();
+    }
+
     if (isAimingShot())
     {
         drawShot(painter);
@@ -4733,6 +5262,112 @@ void CanvasScene::setShotLineStyle(Qt::PenStyle style)
 {
     m_shotLineStyle = style;
     update();
+}
+
+namespace {
+constexpr int kMaxTrailPoints = 20000;
+}
+
+void CanvasScene::extendTrail(PhysicsBody *body, const QPointF &point)
+{
+    if (!body)
+    {
+        return;
+    }
+    Trail &trail = m_trails[body];
+    if (++trail.passed % trail.stride != 0)
+    {
+        return;
+    }
+    // A body at rest adds nothing: the same point again is no more line, and
+    // a scene left running overnight would spend its whole budget on it.
+    if (!trail.points.isEmpty()
+        && QLineF(trail.points.constLast(), point).length() < 0.05)
+    {
+        return;
+    }
+    trail.points.append(point);
+    if (trail.points.size() >= kMaxTrailPoints)
+    {
+        QVector<QPointF> kept;
+        kept.reserve(trail.points.size() / 2 + 1);
+        for (int i = 0; i < trail.points.size(); i += 2)
+        {
+            kept.append(trail.points.at(i));
+        }
+        trail.points = kept;
+        trail.stride *= 2;
+    }
+    update();
+}
+
+void CanvasScene::clearTrails()
+{
+    if (m_trails.isEmpty())
+    {
+        return;
+    }
+    m_trails.clear();
+    update();
+}
+
+QVector<QPointF> CanvasScene::trail(const PhysicsBody *body) const
+{
+    return m_trails.value(const_cast<PhysicsBody *>(body)).points;
+}
+
+QRectF CanvasScene::trailBounds() const
+{
+    QRectF bounds;
+    if (!layerVisible(RunLayer::Trails))
+    {
+        return bounds;
+    }
+    for (const Trail &trail : m_trails)
+    {
+        bounds |= QPolygonF(trail.points).boundingRect();
+    }
+    return bounds;
+}
+
+void CanvasScene::setTrailColor(const QColor &color)
+{
+    m_trailColor = color;
+    update();
+}
+
+void CanvasScene::setTrailLineWidth(qreal width)
+{
+    m_trailLineWidth = width;
+    update();
+}
+
+void CanvasScene::setTrailLineStyle(Qt::PenStyle style)
+{
+    m_trailLineStyle = style;
+    update();
+}
+
+void CanvasScene::drawTrails(QPainter *painter) const
+{
+    if (m_trails.isEmpty() || !layerVisible(RunLayer::Trails))
+    {
+        return;
+    }
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    QPen pen(m_trailColor, m_trailLineWidth, m_trailLineStyle, Qt::RoundCap, Qt::RoundJoin);
+    pen.setCosmetic(true);
+    painter->setPen(pen);
+    painter->setBrush(Qt::NoBrush);
+    for (const Trail &trail : m_trails)
+    {
+        if (trail.points.size() > 1)
+        {
+            painter->drawPolyline(trail.points.constData(), int(trail.points.size()));
+        }
+    }
+    painter->restore();
 }
 
 void CanvasScene::releaseShot()
@@ -4959,28 +5594,47 @@ bool CanvasScene::nudgeSelection(const QPointF &delta)
     }
 
     QString what;
-    if (!moving.isEmpty())
+    for (ShapeItem *shape : std::as_const(moving))
     {
-        for (ShapeItem *shape : std::as_const(moving))
-        {
-            shape->setPos(shape->pos() + delta);
-        }
+        shape->setPos(shape->pos() + delta);
+    }
+    for (RayItem *ray : std::as_const(m_raySelection))
+    {
+        ray->setPos(ray->pos() + delta);
+    }
+    for (ExplosionItem *explosion : std::as_const(m_explosionSelection))
+    {
+        explosion->setPos(explosion->pos() + delta);
+    }
+
+    const int kinds = (moving.isEmpty() ? 0 : 1) + (m_raySelection.isEmpty() ? 0 : 1)
+                      + (m_explosionSelection.isEmpty() ? 0 : 1);
+    if (kinds == 0)
+    {
+        return false;
+    }
+    if (kinds > 1)
+    {
+        what = tr("%n object(s)", nullptr,
+                  int(moving.size() + m_raySelection.size() + m_explosionSelection.size()));
+    }
+    else if (!moving.isEmpty())
+    {
         PhysicsBody *body = commonSelectedBody();
         what = body ? body->name() : moving.first()->name();
     }
-    if (m_selectedRay)
+    else if (m_raySelection.size() == 1)
     {
-        m_selectedRay->setPos(m_selectedRay->pos() + delta);
-        what = m_selectedRay->name();
+        what = m_raySelection.first()->name();
     }
-    if (m_selectedExplosion)
+    else if (m_explosionSelection.size() == 1)
     {
-        m_selectedExplosion->setPos(m_selectedExplosion->pos() + delta);
-        what = m_selectedExplosion->name();
+        what = m_explosionSelection.first()->name();
     }
-    if (what.isEmpty())
+    else
     {
-        return false;
+        what = tr("%n object(s)", nullptr,
+                  int(m_raySelection.size() + m_explosionSelection.size()));
     }
 
     update();
@@ -5189,55 +5843,70 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
 
     if (m_editorMode != EditorMode::Edit)
     {
+        const bool additive = event->modifiers().testFlag(Qt::ShiftModifier);
+
         // A ray or explosion sits above the shapes and is picked first, so
         // one dropped on top of something can still be grabbed.
+        RayItem *hitRay = nullptr;
+        ExplosionItem *hitBlast = nullptr;
         for (QGraphicsItem *candidate : items(scenePos))
         {
-            auto *ray = qgraphicsitem_cast<RayItem *>(candidate);
-            if (!ray)
+            if (auto *ray = qgraphicsitem_cast<RayItem *>(candidate))
             {
-                continue;
+                hitRay = ray;
+                break;
             }
-            selectRay(ray);
-            if (event->button() == Qt::LeftButton)
+            if (auto *explosion = qgraphicsitem_cast<ExplosionItem *>(candidate))
             {
-                m_bodyDragShapes.clear();
-                m_bodyDragStartPositions.clear();
-                m_draggedRay = ray;
-                m_dragMode = DragMode::MoveBody;
-                m_lastScenePos = scenePos;
-                m_moveDragVirtualPos = ray->pos();
-                m_bodyDragStartPositions.append(ray->pos());
-                m_bodyDragLabel = ray->name();
+                hitBlast = explosion;
+                break;
             }
-            event->accept();
-            return;
         }
-        selectRay(nullptr);
 
-        for (QGraphicsItem *candidate : items(scenePos))
+        if (hitRay || hitBlast)
         {
-            auto *explosion = qgraphicsitem_cast<ExplosionItem *>(candidate);
-            if (!explosion)
+            // A press on something already picked keeps the whole selection,
+            // so a mixed set of blasts, rangefinders and bodies can be dragged
+            // as one; narrowing to the one under the pointer happens on
+            // release, if the press turns out to have been a click.
+            const bool alreadyPicked = hitRay ? m_raySelection.contains(hitRay)
+                                              : m_explosionSelection.contains(hitBlast);
+            if (additive)
             {
-                continue;
+                if (hitRay)
+                {
+                    selectRays({ hitRay }, true);
+                }
+                else
+                {
+                    selectExplosions({ hitBlast }, true);
+                }
             }
-            selectExplosion(explosion);
+            else if (!alreadyPicked)
+            {
+                clearCanvasSelection();
+                if (hitRay)
+                {
+                    selectRay(hitRay);
+                }
+                else
+                {
+                    selectExplosion(hitBlast);
+                }
+            }
             if (event->button() == Qt::LeftButton)
             {
-                m_bodyDragShapes.clear();
-                m_bodyDragStartPositions.clear();
-                m_draggedExplosion = explosion;
+                m_pointClickRay = additive ? nullptr : hitRay;
+                m_pointClickExplosion = additive ? nullptr : hitBlast;
+                m_pressScenePos = scenePos;
+                carryPickedForDrag(hitRay ? hitRay->pos() : hitBlast->pos(), true,
+                                   hitRay ? hitRay->name() : hitBlast->name());
                 m_dragMode = DragMode::MoveBody;
                 m_lastScenePos = scenePos;
-                m_moveDragVirtualPos = explosion->pos();
-                m_bodyDragStartPositions.append(explosion->pos());
-                m_bodyDragLabel = explosion->name();
             }
             event->accept();
             return;
         }
-        selectExplosion(nullptr);
 
         const QVector<ShapeItem *> under = shapesAt(scenePos);
         ShapeItem *current = m_physicsSelection.size() == 1 ? m_physicsSelection.first() : nullptr;
@@ -5255,13 +5924,18 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
             // can still be dragged, or double-clicked into a body.
             hit = current && under.contains(current) ? current : under.value(0, nullptr);
         }
-        const bool additive = event->modifiers().testFlag(Qt::ShiftModifier);
         // A press on something already picked keeps the whole selection, so
         // several bodies can be dragged together -- narrowing to the one under
         // the pointer happens on release, if the press turned out to be a
         // click. Without this, pressing to drag threw the rest away first.
+        // Rangefinders and blasts count towards the group: a body picked
+        // beside two of them is a selection of three, not of one.
         m_physicsClickCandidate = nullptr;
-        const bool keepGroup = hit && !additive && m_physicsSelection.size() > 1
+        m_pointClickRay = nullptr;
+        m_pointClickExplosion = nullptr;
+        const int pickedAltogether =
+            m_physicsSelection.size() + m_raySelection.size() + m_explosionSelection.size();
+        const bool keepGroup = hit && !additive && pickedAltogether > 1
                                && m_physicsSelection.contains(hit);
         if (keepGroup)
         {
@@ -5272,6 +5946,13 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
         // about to be swept adds to it.
         else if (hit || !additive)
         {
+            if (!additive)
+            {
+                // Replacing the selection replaces all of it, whatever kind:
+                // picking one kind no longer lets the others go by itself.
+                selectRays({}, false);
+                selectExplosions({}, false);
+            }
             selectForPhysics(hit, additive);
         }
         if (!hit)
@@ -5327,9 +6008,12 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
                 }
             }
             m_bodyDragShapes = dragging;
-            if (bodies > 1)
+            const int points = m_raySelection.size() + m_explosionSelection.size();
+            if (bodies > 1 || points > 0)
             {
-                m_bodyDragLabel = tr("%n bodies", nullptr, bodies);
+                m_bodyDragLabel = points > 0
+                                      ? tr("%n object(s)", nullptr, int(dragging.size()) + points)
+                                      : tr("%n bodies", nullptr, bodies);
             }
             else if (PhysicsBody *body = hit->body())
             {
@@ -5343,11 +6027,15 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
             {
                 m_bodyDragStartPositions.append(shape->pos());
             }
+            // Whatever rangefinders and blasts are picked travel with them.
+            carryPickedPoints();
+            m_bodyDragLeadStart = m_bodyDragStartPositions.value(0);
+            m_bodyDragLeadIsPoint = false;
             m_dragMode = DragMode::MoveBody;
             m_lastScenePos = scenePos;
             // Tracked against the leading piece, since that is what the offset
             // is measured from -- the clicked shape may not be that one.
-            m_moveDragVirtualPos = m_bodyDragStartPositions.value(0);
+            m_moveDragVirtualPos = m_bodyDragLeadStart;
         }
         event->accept();
         return;
@@ -5651,7 +6339,13 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         QPointF shift = m_moveDragVirtualPos;
         if (m_snapToGrid)
         {
-            if (!m_bodyDragShapes.isEmpty())
+            if (m_bodyDragLeadIsPoint)
+            {
+                // A blast and a rangefinder are points: there is no corner or
+                // pivot to snap by, because the thing itself is the point.
+                shift = snapScenePoint(shift);
+            }
+            else if (!m_bodyDragShapes.isEmpty())
             {
                 ShapeItem *lead = m_bodyDragShapes.first();
                 const QPointF localReference = (m_snapPoint == SnapPoint::Position) ? lead->rect().topLeft()
@@ -5659,28 +6353,22 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
                 const QPointF referenceScene = shift + localReference;
                 shift += snapScenePoint(referenceScene) - referenceScene;
             }
-            else if (m_draggedExplosion || m_draggedRay)
-            {
-                // A blast and a rangefinder are points: there is no corner or
-                // pivot to snap by, because the thing itself is the point.
-                shift = snapScenePoint(shift);
-            }
         }
 
         // Every piece moves by what the leading one moved, so their relative
         // layout -- and the joints anchored to them -- survives the drag.
-        const QPointF applied = shift - m_bodyDragStartPositions.value(0);
-        if (m_draggedExplosion)
-        {
-            m_draggedExplosion->setPos(m_bodyDragStartPositions.value(0) + applied);
-        }
-        if (m_draggedRay)
-        {
-            m_draggedRay->setPos(m_bodyDragStartPositions.value(0) + applied);
-        }
+        const QPointF applied = shift - m_bodyDragLeadStart;
         for (int i = 0; i < m_bodyDragShapes.size(); ++i)
         {
             m_bodyDragShapes[i]->setPos(m_bodyDragStartPositions[i] + applied);
+        }
+        for (int i = 0; i < m_bodyDragRays.size(); ++i)
+        {
+            m_bodyDragRays[i]->setPos(m_bodyDragRayStarts[i] + applied);
+        }
+        for (int i = 0; i < m_bodyDragExplosions.size(); ++i)
+        {
+            m_bodyDragExplosions[i]->setPos(m_bodyDragExplosionStarts[i] + applied);
         }
 
         m_lastScenePos = scenePos;
@@ -5900,26 +6588,54 @@ void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         // the joints anchored to what moved need their cached ends refreshed.
         if (finished == DragMode::MoveBody)
         {
-            const QPointF now = m_draggedRay         ? m_draggedRay->pos()
-                                : m_draggedExplosion ? m_draggedExplosion->pos()
-                                                     : (m_bodyDragShapes.isEmpty() ? m_bodyDragStartPositions.value(0)
-                                                                                   : m_bodyDragShapes.first()->pos());
-            const bool moved = now != m_bodyDragStartPositions.value(0);
+            // Asked of every piece, because the drag may be carrying
+            // shapes, rangefinders and blasts at once and any of them answers
+            // for the move.
+            bool moved = false;
+            for (int i = 0; i < m_bodyDragShapes.size() && !moved; ++i)
+            {
+                moved = m_bodyDragShapes.at(i)->pos() != m_bodyDragStartPositions.at(i);
+            }
+            for (int i = 0; i < m_bodyDragRays.size() && !moved; ++i)
+            {
+                moved = m_bodyDragRays.at(i)->pos() != m_bodyDragRayStarts.at(i);
+            }
+            for (int i = 0; i < m_bodyDragExplosions.size() && !moved; ++i)
+            {
+                moved = m_bodyDragExplosions.at(i)->pos() != m_bodyDragExplosionStarts.at(i);
+            }
             // Pressed and released on one of several without moving: that is a
             // click, and a click without a modifier picks the one thing, the
             // same as it does everywhere else.
-            if (!moved && m_physicsClickCandidate
-                && QLineF(m_pressScenePos, event->scenePos()).length() < 3.0)
+            const bool wasClick = !moved
+                                  && QLineF(m_pressScenePos, event->scenePos()).length() < 3.0;
+            if (wasClick && m_physicsClickCandidate)
             {
                 ShapeItem *only = m_physicsClickCandidate;
-                m_physicsClickCandidate = nullptr;
+                clearCanvasSelection();
                 selectForPhysics(only, false);
             }
+            else if (wasClick && m_pointClickRay)
+            {
+                RayItem *only = m_pointClickRay;
+                clearCanvasSelection();
+                selectRay(only);
+            }
+            else if (wasClick && m_pointClickExplosion)
+            {
+                ExplosionItem *only = m_pointClickExplosion;
+                clearCanvasSelection();
+                selectExplosion(only);
+            }
             m_physicsClickCandidate = nullptr;
-            m_draggedExplosion = nullptr;
-            m_draggedRay = nullptr;
+            m_pointClickRay = nullptr;
+            m_pointClickExplosion = nullptr;
             m_bodyDragShapes.clear();
             m_bodyDragStartPositions.clear();
+            m_bodyDragRays.clear();
+            m_bodyDragRayStarts.clear();
+            m_bodyDragExplosions.clear();
+            m_bodyDragExplosionStarts.clear();
             if (moved)
             {
                 announceChange(Change::Bodies);
@@ -6070,10 +6786,17 @@ void CanvasScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
 
 void CanvasScene::wheelEvent(QGraphicsSceneWheelEvent *event)
 {
-    if (event->modifiers() & Qt::ShiftModifier)
+    // Ctrl is what every other editor zooms with; Shift stays because this one
+    // always has. A bare wheel scrolls, which is why either needs a modifier.
+    if (event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier))
     {
         const qreal notches = event->delta() / 120.0;
-        setCurrentScale(m_currentScale + notches * m_scaleStep);
+        // Proportional, not a flat number of percent: a step of ten added to
+        // the level took one notch to go from 100% to 110% and the same notch
+        // to go from 500% to 510%, so zooming out from far in barely moved.
+        // The step is read as a percentage of wherever the zoom already is,
+        // which is how the plot's own wheel has always worked.
+        setCurrentScale(m_currentScale * std::pow(1.0 + m_scaleStep / 100.0, notches));
         event->accept();
         return;
     }

@@ -1477,12 +1477,32 @@ TEST(Exporters, AnEventActsEveryStepAndACloneLandsWhereItIsSent)
     copy.actions[0].actionParams.insert(QStringLiteral("x"), -275.0);
     copy.actions[0].actionParams.insert(QStringLiteral("y"), 325.0);
 
-    scene.setRules({ push, copy });
+    // Box2D's own joint event, which names the joint and nothing else.
+    Rule snap;
+    snap.name = QStringLiteral("snapIt");
+    snap.conditions[0].subjectName = QStringLiteral("hatch");
+    snap.conditions[0].eventId = QStringLiteral("thresholdExceeded");
+    snap.actions[0].targetName = QStringLiteral("hatch");
+    snap.actions[0].actionId = QStringLiteral("breakJoint");
+    for (Joint *joint : scene.joints()) {
+        if (joint->name() == QLatin1String("hatch"))
+            joint->params().insert(QStringLiteral("forceThreshold"), 12.5);
+    }
+
+    scene.setRules({ push, copy, snap });
 
     for (const SceneExporter::Converter &converter : converters) {
         const Output out = exportWith(converter, &scene);
         ASSERT_TRUE(out.ok) << converter.id.toStdString() << ": " << out.error.toStdString();
         const std::string who = converter.id.toStdString();
+
+        EXPECT_FALSE(out.log.join(QLatin1Char(' ')).contains(QStringLiteral("snapIt")))
+            << who << " could not write a rule on a joint's threshold: "
+            << out.log.join(QLatin1Char(' ')).toStdString();
+        EXPECT_TRUE(out.text.contains(QRegularExpression(QStringLiteral("SetForceThreshold\\(hatch\\w*, 12\\.5"))))
+            << who << " does not carry the joint's force threshold";
+        EXPECT_TRUE(out.text.contains(QStringLiteral("GetJointEvents")))
+            << who << " does not read Box2D's joint events";
 
         // The clone's place goes in as the scene's own numbers, for the one
         // helper that turns a pair of them into metres.

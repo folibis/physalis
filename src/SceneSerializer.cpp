@@ -1,4 +1,5 @@
 #include "SceneSerializer.h"
+#include "Naming.h"
 
 #include "CanvasScene.h"
 #include "ShapeItem.h"
@@ -171,6 +172,11 @@ QJsonObject shapeGeometryToJson(const ShapeItem *shape)
         {"physics", partToJson(shape->part())},
     };
 
+    // Which shape is drawn over which. Left out while it is the default, so a
+    // scene that has never been restacked reads exactly as it did before.
+    if (!qFuzzyIsNull(shape->zValue()))
+        o.insert("z", shape->zValue());
+
     if (const auto *polygon = dynamic_cast<const PolygonItem *>(shape)) {
         o.insert("type", QStringLiteral("polygon"));
         o.insert("closed", polygon->isClosed());
@@ -222,6 +228,10 @@ void applyShapeProperties(const QJsonObject &o, ShapeItem *shape)
     shape->setFilled(o.value("filled").toBool(shape->filled()));
     shape->setCapStyle(capStyleFromName(o.value("capStyle").toString()));
     shape->setJoinStyle(joinStyleFromName(o.value("joinStyle").toString()));
+    // A scene written before stacking was a thing says nothing, and every
+    // shape in it keeps the zero it has always had -- which leaves them in the
+    // order they are read, as they were.
+    shape->setZValue(o.value("z").toDouble(0.0));
     partFromJson(o.value("physics").toObject(), &shape->part());
 }
 
@@ -294,6 +304,34 @@ ShapeItem *shapeFromJson(const QJsonObject &object)
     return shape;
 }
 
+// One joint, written the way the file writes it. Shared by save() and by the
+// clipboard, so a mechanism copied carries exactly what a mechanism saved
+// does -- the ends are named, which is what lets a paste re-point them at the
+// copies it has just made.
+QJsonObject jointToJson(const Joint *joint)
+{
+    QJsonObject params;
+    for (auto it = joint->params().constBegin(); it != joint->params().constEnd(); ++it)
+        params.insert(it.key(), QJsonValue::fromVariant(it.value()));
+
+    QJsonObject entry {
+        {"name", joint->name()},
+        {"type", joint->typeId()},
+        {"bodyA", joint->bodyA()->name()},
+        {"anchorA", toJson(joint->anchorScenePos(Joint::End::A))},
+        {"anchorB", toJson(joint->anchorScenePos(Joint::End::B))},
+        {"axis", toJson(joint->axisScene())},
+        {"collideConnected", joint->collideConnected()},
+        {"params", params},
+    };
+    // Absent rather than empty when the joint holds a body to a point in the
+    // world: there is no second body, and naming one that is not there would
+    // be read back as a joint that had lost an end.
+    if (joint->bodyB())
+        entry.insert(QStringLiteral("bodyB"), joint->bodyB()->name());
+    return entry;
+}
+
 QJsonObject save(const CanvasScene *scene)
 {
     QJsonObject document {
@@ -313,14 +351,17 @@ QJsonObject save(const CanvasScene *scene)
         {"gridColor", toJson(scene->gridColor())},
     });
 
-    document.insert("world", QJsonObject {
+    QJsonObject world {
         {"pixelsPerMeter", scene->world().pixelsPerMeter},
         {"solidBounds", scene->fieldBoundsSolid()},
         {"randomSeed", double(scene->randomSeed())},
         // Gravity, the solver's tuning, whether bodies may sleep: the engine
         // named every one of these, and they are written back as they came.
         {"physics", QJsonObject::fromVariantMap(scene->world().params)},
-    });
+    };
+    if (scene->startsPaused())
+        world.insert("startsPaused", true);
+    document.insert("world", world);
 
     // Ids are handed out here and only exist so bodies can name their shapes.
     QHash<const ShapeItem *, int> ids;
@@ -368,6 +409,8 @@ QJsonObject save(const CanvasScene *scene)
                 {"maxPull", shot.maxPull},
             });
         }
+        if (body->drawsTrail())
+            entry.insert("trail", true);
         // Only the one body that has it, so a scene with none says nothing.
         if (body->isFocused())
             entry.insert("focus", true);
@@ -379,27 +422,7 @@ QJsonObject save(const CanvasScene *scene)
     for (const Joint *joint : scene->joints()) {
         if (!joint->bodyA())
             continue;
-
-        QJsonObject params;
-        for (auto it = joint->params().constBegin(); it != joint->params().constEnd(); ++it)
-            params.insert(it.key(), QJsonValue::fromVariant(it.value()));
-
-        QJsonObject entry {
-            {"name", joint->name()},
-            {"type", joint->typeId()},
-            {"bodyA", joint->bodyA()->name()},
-            {"anchorA", toJson(joint->anchorScenePos(Joint::End::A))},
-            {"anchorB", toJson(joint->anchorScenePos(Joint::End::B))},
-            {"axis", toJson(joint->axisScene())},
-            {"collideConnected", joint->collideConnected()},
-            {"params", params},
-        };
-        // Absent rather than empty when the joint holds a body to a point in
-        // the world: there is no second body, and naming one that is not there
-        // would be read back as a joint that had lost an end.
-        if (joint->bodyB())
-            entry.insert(QStringLiteral("bodyB"), joint->bodyB()->name());
-        joints.append(entry);
+        joints.append(jointToJson(joint));
     }
     document.insert("joints", joints);
 
@@ -576,6 +599,246 @@ QJsonObject save(const CanvasScene *scene)
     return document;
 }
 
+// One body out of a document, with its shapes looked up by the ids the
+// document gave them. Shared by load() and by the clipboard, so a body pasted
+// carries exactly what a body loaded does.
+PhysicsBody *readBody(CanvasScene *scene, const QJsonObject &o,
+                      const QHash<int, ShapeItem *> &byId)
+{
+    QVector<ShapeItem *> members;
+    for (const QJsonValue &idValue : o.value("shapes").toArray()) {
+        if (ShapeItem *shape = byId.value(idValue.toInt(-1), nullptr))
+            members.append(shape);
+    }
+    if (members.isEmpty())
+        return nullptr;
+
+    PhysicsBody *body = scene->createEmptyBody();
+    body->setName(scene->uniqueName(o.value("name").toString(body->name()), body));
+
+    physics::BodyDesc &p = body->props();
+    const physics::BodyDesc d;
+    p.type = bodyTypeFromName(o.value("type").toString());
+    p.isEnabled = o.value("isEnabled").toBool(d.isEnabled);
+    p.params = o.value("physics").toObject().toVariantMap();
+
+    const QJsonObject shot = o.value("shot").toObject();
+    const ShotSettings untouched;
+    body->shot().enabled = shot.value("enabled").toBool(untouched.enabled);
+    body->shot().fullImpulse = shot.value("fullImpulse").toDouble(untouched.fullImpulse);
+    body->shot().maxPull = shot.value("maxPull").toDouble(untouched.maxPull);
+    body->setDrawsTrail(o.value("trail").toBool());
+    // Through the scene, which is what keeps it to one body -- a file with
+    // two of them marked leaves the last one followed rather than both.
+    if (o.value("focus").toBool())
+        scene->setFocusedBody(body);
+
+    // Older scenes kept the engine's settings loose in the body object,
+    // under Box2D's names -- which are the names its catalogue publishes.
+    if (!o.contains("physics")) {
+        const QJsonObject velocity = o.value("linearVelocity").toObject();
+        if (!velocity.isEmpty()) {
+            p.params.insert(QStringLiteral("velocityX"), velocity.value("x").toDouble());
+            p.params.insert(QStringLiteral("velocityY"), velocity.value("y").toDouble());
+        }
+        for (const char *key : { "angularVelocity", "linearDamping", "angularDamping",
+                                 "gravityScale", "fixedRotation", "isBullet",
+                                 "allowFastRotation", "enableSleep", "isAwake",
+                                 "sleepThreshold" }) {
+            const QJsonValue value = o.value(QLatin1String(key));
+            if (!value.isUndefined())
+                p.params.insert(QLatin1String(key), value.toVariant());
+        }
+    }
+
+    for (ShapeItem *shape : members)
+        body->addShape(shape);
+    return body;
+}
+
+// One joint, with its two ends looked up by the names the document used.
+// Those are not always the names the bodies ended up with -- a paste gives its
+// copies fresh ones -- so the caller hands over the map rather than the reader
+// going to the scene for it.
+Joint *readJoint(CanvasScene *scene, const QJsonObject &o,
+                 const QHash<QString, PhysicsBody *> &bodiesByName)
+{
+    PhysicsBody *bodyA = bodiesByName.value(o.value("bodyA").toString(), nullptr);
+    PhysicsBody *bodyB = bodiesByName.value(o.value("bodyB").toString(), nullptr);
+    // No "bodyB" at all is a joint to a point in the world; a "bodyB" that
+    // names a body no longer here is a joint that has lost an end.
+    if (!bodyA || bodyA == bodyB)
+        return nullptr;
+    if (o.contains(QStringLiteral("bodyB")) && !bodyB)
+        return nullptr;
+
+    const QString typeId = o.value("type").toString();
+    int anchorCount = 2;
+    if (auto engine = physics::EngineRegistry::create(scene->simulationEngineName())) {
+        for (const physics::JointType &type : engine->jointTypes()) {
+            if (type.id == typeId)
+                anchorCount = type.anchorCount;
+        }
+    }
+
+    Joint *joint = scene->createJoint(typeId, bodyA, bodyB, anchorCount,
+                                      o.value("params").toObject().toVariantMap());
+    if (!joint)
+        return nullptr;
+
+    joint->setName(scene->uniqueName(o.value("name").toString(joint->name()), joint));
+    joint->setAnchorScenePos(Joint::End::A, pointFromJson(o.value("anchorA").toObject()));
+    if (anchorCount > 1)
+        joint->setAnchorScenePos(Joint::End::B, pointFromJson(o.value("anchorB").toObject()));
+    joint->setAxisScene(pointFromJson(o.value("axis").toObject(), QPointF(1.0, 0.0)));
+    joint->setCollideConnected(o.value("collideConnected").toBool());
+    return joint;
+}
+
+// A piece of a scene, written the way the whole of one is: the shapes picked,
+// the bodies they belong to, and the joints between those bodies. Copying a
+// mechanism has to carry the mechanism -- two bodies and the joint holding
+// them together come back as two bodies still held together, or what came
+// back was not the thing that was copied.
+//
+// A joint with only one end in the selection is left out and counted: there
+// is nothing on this side for its other end to hold, and attaching the copy
+// to the original's partner would be inventing a linkage nobody asked for.
+QJsonObject fragmentToJson(const CanvasScene *scene, const QVector<ShapeItem *> &shapes,
+                           int *jointsLeftOut)
+{
+    QJsonObject fragment;
+    if (jointsLeftOut)
+        *jointsLeftOut = 0;
+
+    QHash<const ShapeItem *, int> ids;
+    QJsonArray shapeArray;
+    int nextId = 1;
+    for (ShapeItem *shape : shapes) {
+        if (!shape)
+            continue;
+        const int id = nextId++;
+        ids.insert(shape, id);
+        QJsonObject entry = shapeGeometryToJson(shape);
+        entry.insert("id", id);
+        shapeArray.append(entry);
+    }
+    if (shapeArray.isEmpty())
+        return fragment;
+    fragment.insert("shapes", shapeArray);
+
+    // Every body that owns one of them, carrying only the shapes that were
+    // picked: taking two plates off a five-plate body copies a body of two.
+    QSet<const PhysicsBody *> taken;
+    QJsonArray bodyArray;
+    for (ShapeItem *shape : shapes) {
+        const PhysicsBody *body = shape ? shape->body() : nullptr;
+        if (!body || taken.contains(body))
+            continue;
+        taken.insert(body);
+
+        QJsonArray members;
+        for (const ShapeItem *member : body->shapes()) {
+            if (ids.contains(member))
+                members.append(ids.value(member));
+        }
+        QJsonObject entry {
+            {"name", body->name()},
+            {"type", bodyTypeName(body->props().type)},
+            {"isEnabled", body->props().isEnabled},
+            {"physics", QJsonObject::fromVariantMap(body->props().params)},
+            {"shapes", members},
+        };
+        const ShotSettings &shot = body->shot();
+        const ShotSettings untouched;
+        if (shot.enabled != untouched.enabled || shot.fullImpulse != untouched.fullImpulse
+            || shot.maxPull != untouched.maxPull) {
+            entry.insert("shot", QJsonObject {
+                {"enabled", shot.enabled},
+                {"fullImpulse", shot.fullImpulse},
+                {"maxPull", shot.maxPull},
+            });
+        }
+        if (body->drawsTrail())
+            entry.insert("trail", true);
+        bodyArray.append(entry);
+    }
+    if (!bodyArray.isEmpty())
+        fragment.insert("bodies", bodyArray);
+
+    if (!scene)
+        return fragment;
+
+    QJsonArray jointArray;
+    for (const Joint *joint : scene->joints()) {
+        if (!joint->bodyA())
+            continue;
+        const bool haveA = taken.contains(joint->bodyA());
+        const bool haveB = !joint->bodyB() || taken.contains(joint->bodyB());
+        if (haveA && haveB) {
+            jointArray.append(jointToJson(joint));
+            continue;
+        }
+        // Half in, half out. Worth counting rather than dropping in silence:
+        // a mechanism that comes back unattached to what held it looks like a
+        // copy that went wrong.
+        if ((haveA || haveB) && jointsLeftOut)
+            ++*jointsLeftOut;
+    }
+    if (!jointArray.isEmpty())
+        fragment.insert("joints", jointArray);
+
+    return fragment;
+}
+
+QVector<ShapeItem *> fragmentFromJson(CanvasScene *scene, const QJsonObject &fragment,
+                                      const QPointF &offset)
+{
+    QVector<ShapeItem *> made;
+    if (!scene)
+        return made;
+
+    QHash<int, ShapeItem *> byId;
+    for (const QJsonValue &v : fragment.value("shapes").toArray()) {
+        QJsonObject o = v.toObject();
+        ShapeItem *shape = makeShape(o);
+        if (!shape)
+            continue;
+        applyShapeProperties(o, shape);
+        shape->setPos(shape->pos() + offset);
+        scene->addItem(shape);
+        // Named once it is in the scene and against what the scene already
+        // holds: a name chosen beforehand cannot be checked for collisions.
+        shape->setName(Naming::nextName(shape->typeName(), scene->takenNames(shape)));
+        made.append(shape);
+        const int id = o.value("id").toInt(-1);
+        if (id >= 0)
+            byId.insert(id, shape);
+    }
+    if (made.isEmpty())
+        return made;
+    scene->notifyShapesChanged();
+
+    // The copies answer to the names the fragment used, so the joints in it
+    // find the new bodies rather than the ones they were copied from.
+    QHash<QString, PhysicsBody *> bodiesByName;
+    for (const QJsonValue &v : fragment.value("bodies").toArray()) {
+        const QJsonObject o = v.toObject();
+        if (PhysicsBody *body = readBody(scene, o, byId))
+            bodiesByName.insert(o.value("name").toString(), body);
+    }
+
+    for (const QJsonValue &v : fragment.value("joints").toArray()) {
+        QJsonObject o = v.toObject();
+        // The anchors are scene positions, so they move with what they hold.
+        o.insert("anchorA", toJson(pointFromJson(o.value("anchorA").toObject()) + offset));
+        o.insert("anchorB", toJson(pointFromJson(o.value("anchorB").toObject()) + offset));
+        readJoint(scene, o, bodiesByName);
+    }
+
+    return made;
+}
+
 bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
 {
     const auto fail = [error](const QString &message) {
@@ -648,6 +911,7 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
     }
     scene->setFieldBoundsSolid(world.value("solidBounds").toBool(scene->fieldBoundsSolid()));
     scene->setRandomSeed(quint32(world.value("randomSeed").toDouble(0.0)));
+    scene->setStartsPaused(world.value("startsPaused").toBool(false));
 
     QHash<int, ShapeItem *> byId;
     const QJsonArray shapes = document.value("shapes").toArray();
@@ -666,57 +930,8 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
     }
 
     const QJsonArray bodies = document.value("bodies").toArray();
-    for (const QJsonValue &v : bodies) {
-        const QJsonObject o = v.toObject();
-
-        QVector<ShapeItem *> members;
-        for (const QJsonValue &idValue : o.value("shapes").toArray()) {
-            if (ShapeItem *shape = byId.value(idValue.toInt(-1), nullptr))
-                members.append(shape);
-        }
-        if (members.isEmpty())
-            continue;
-
-        PhysicsBody *body = scene->createEmptyBody();
-        body->setName(scene->uniqueName(o.value("name").toString(body->name()), body));
-
-        physics::BodyDesc &p = body->props();
-        const physics::BodyDesc d;
-        p.type = bodyTypeFromName(o.value("type").toString());
-        p.isEnabled = o.value("isEnabled").toBool(d.isEnabled);
-        p.params = o.value("physics").toObject().toVariantMap();
-
-        const QJsonObject shot = o.value("shot").toObject();
-        const ShotSettings untouched;
-        body->shot().enabled = shot.value("enabled").toBool(untouched.enabled);
-        body->shot().fullImpulse = shot.value("fullImpulse").toDouble(untouched.fullImpulse);
-        body->shot().maxPull = shot.value("maxPull").toDouble(untouched.maxPull);
-        // Through the scene, which is what keeps it to one body -- a file with
-        // two of them marked leaves the last one followed rather than both.
-        if (o.value("focus").toBool())
-            scene->setFocusedBody(body);
-
-        // Older scenes kept the engine's settings loose in the body object,
-        // under Box2D's names -- which are the names its catalogue publishes.
-        if (!o.contains("physics")) {
-            const QJsonObject velocity = o.value("linearVelocity").toObject();
-            if (!velocity.isEmpty()) {
-                p.params.insert(QStringLiteral("velocityX"), velocity.value("x").toDouble());
-                p.params.insert(QStringLiteral("velocityY"), velocity.value("y").toDouble());
-            }
-            for (const char *key : { "angularVelocity", "linearDamping", "angularDamping",
-                                     "gravityScale", "fixedRotation", "isBullet",
-                                     "allowFastRotation", "enableSleep", "isAwake",
-                                     "sleepThreshold" }) {
-                const QJsonValue value = o.value(QLatin1String(key));
-                if (!value.isUndefined())
-                    p.params.insert(QLatin1String(key), value.toVariant());
-            }
-        }
-
-        for (ShapeItem *shape : members)
-            body->addShape(shape);
-    }
+    for (const QJsonValue &v : bodies)
+        readBody(scene, v.toObject(), byId);
 
     // Joints last: both ends must exist before one can be attached.
     QHash<QString, PhysicsBody *> bodiesByName;
@@ -729,38 +944,8 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
     for (const QJsonValue &v : document.value("rays").toArray())
         rayFromJson(scene, v.toObject());
 
-    for (const QJsonValue &v : document.value("joints").toArray()) {
-        const QJsonObject o = v.toObject();
-        PhysicsBody *bodyA = bodiesByName.value(o.value("bodyA").toString(), nullptr);
-        PhysicsBody *bodyB = bodiesByName.value(o.value("bodyB").toString(), nullptr);
-        // No "bodyB" at all is a joint to a point in the world; a "bodyB" that
-        // names a body no longer here is a joint that has lost an end.
-        if (!bodyA || bodyA == bodyB)
-            continue;
-        if (o.contains(QStringLiteral("bodyB")) && !bodyB)
-            continue;
-
-        const QString typeId = o.value("type").toString();
-        int anchorCount = 2;
-        if (auto engine = physics::EngineRegistry::create(scene->simulationEngineName())) {
-            for (const physics::JointType &type : engine->jointTypes()) {
-                if (type.id == typeId)
-                    anchorCount = type.anchorCount;
-            }
-        }
-
-        Joint *joint = scene->createJoint(typeId, bodyA, bodyB, anchorCount,
-                                          o.value("params").toObject().toVariantMap());
-        if (!joint)
-            continue;
-
-        joint->setName(scene->uniqueName(o.value("name").toString(joint->name()), joint));
-        joint->setAnchorScenePos(Joint::End::A, pointFromJson(o.value("anchorA").toObject()));
-        if (anchorCount > 1)
-            joint->setAnchorScenePos(Joint::End::B, pointFromJson(o.value("anchorB").toObject()));
-        joint->setAxisScene(pointFromJson(o.value("axis").toObject(), QPointF(1.0, 0.0)));
-        joint->setCollideConnected(o.value("collideConnected").toBool());
-    }
+    for (const QJsonValue &v : document.value("joints").toArray())
+        readJoint(scene, v.toObject(), bodiesByName);
 
     QVector<SceneVariable> variables;
     {

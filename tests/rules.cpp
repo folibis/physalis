@@ -14,6 +14,7 @@
 #include "SceneSerializer.h"
 #include "ShapeItem.h"
 #include "SimulationController.h"
+#include "RunCopy.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -80,6 +81,15 @@ struct Bench {
         body->setName(name);
         scene.clearPhysicsSelection();
         return body;
+    }
+
+    // The run's copy of the scene while a run is going, else the scene.
+    CanvasScene &now() { return sim.runScene() ? *sim.runScene() : scene; }
+    template <class T>
+    T *at(T *item) const
+    {
+        T *copy = inRun(sim, item);
+        return copy ? copy : item;
     }
 
     void run(int steps)
@@ -152,8 +162,8 @@ void everyActionDoesSomething(const QString &engineName)
     {
         Bench bench(engineName, 0.0);
         bench.run(120);
-        withoutRule = bench.boxShape->pos();
-        boxSurvivedWithoutRule = bench.boxShape->isVisible();
+        withoutRule = bench.at(bench.boxShape)->pos();
+        boxSurvivedWithoutRule = bench.at(bench.boxShape)->isVisible();
         bench.sim.stop();
     }
     ASSERT_TRUE(boxSurvivedWithoutRule);
@@ -191,9 +201,9 @@ void everyActionDoesSomething(const QString &engineName)
         bench.scene.setRules({ rule });
 
         bench.run(120);
-        const QPointF withRule = bench.boxShape->pos();
-        const bool gone = !bench.boxShape->isVisible();
-        const int bodies = bench.scene.bodies().size();
+        const QPointF withRule = bench.at(bench.boxShape)->pos();
+        const bool gone = !bench.at(bench.boxShape)->isVisible();
+        const int bodies = bench.now().bodies().size();
         bench.sim.stop();
         ++checked;
 
@@ -234,7 +244,7 @@ TEST(Rules, InitStatePutsABodyBackWhereItStarted)
 {
     for (const char *engineName : kEngines) {
         Bench bench(QString::fromLatin1(engineName));
-        const QPointF started = bench.boxShape->pos();
+        const QPointF started = bench.at(bench.boxShape)->pos();
 
         // Fall for a while, then a rule puts it back on the sixtieth frame.
         Rule rule;
@@ -247,10 +257,10 @@ TEST(Rules, InitStatePutsABodyBackWhereItStarted)
         bench.scene.setRules({ rule });
 
         bench.run(59);
-        EXPECT_GT(bench.boxShape->pos().y(), started.y() + 10.0)
+        EXPECT_GT(bench.at(bench.boxShape)->pos().y(), started.y() + 10.0)
             << engineName << ": it should have fallen before the rule fires";
         bench.run(1);
-        EXPECT_NEAR(bench.boxShape->pos().y(), started.y(), 1.0)
+        EXPECT_NEAR(bench.at(bench.boxShape)->pos().y(), started.y(), 1.0)
             << engineName << ": Init State should have put it back where it started";
         bench.sim.stop();
     }
@@ -271,10 +281,10 @@ TEST(Rules, CloneMakesAnotherBodyAndStopEndsTheRun)
             bench.scene.setRules({ clone });
 
             bench.run(5);
-            EXPECT_EQ(bench.scene.bodies().size(), 3)
+            EXPECT_EQ(bench.now().bodies().size(), 3)
                 << engineName << ": cloning should have added a body";
             bench.sim.stop();
-            EXPECT_EQ(bench.scene.bodies().size(), 2)
+            EXPECT_EQ(bench.now().bodies().size(), 2)
                 << engineName << ": and the clone should be gone when the run ends";
         }
         {
@@ -324,14 +334,14 @@ TEST(Rules, ConditionsFireWhenTheyShould)
         bench.scene.setRules({ rule });
 
         bench.run(20);
-        EXPECT_LT(bench.boxShape->pos().y(), 100.0)
+        EXPECT_LT(bench.at(bench.boxShape)->pos().y(), 100.0)
             << engineName << ": twenty steps in it has not passed the line yet";
         // Falling from 0, it passes y = 100 after about 0.64 s; by two seconds
         // the rule must have caught it and put it back at least once.
         bench.run(100);
-        EXPECT_LT(bench.boxShape->pos().y(), 140.0)
+        EXPECT_LT(bench.at(bench.boxShape)->pos().y(), 140.0)
             << engineName << ": the rule should keep resetting it near the line, and it is at "
-            << bench.boxShape->pos().y();
+            << bench.at(bench.boxShape)->pos().y();
         bench.sim.stop();
     }
 }
@@ -352,11 +362,11 @@ TEST(Rules, EveryNthFrameFiresEveryNthFrame)
     bench.scene.setRules({ rule });
 
     bench.run(9);
-    EXPECT_EQ(bench.scene.bodies().size(), 2) << "nothing yet by the ninth frame";
+    EXPECT_EQ(bench.now().bodies().size(), 2) << "nothing yet by the ninth frame";
     bench.run(1);
-    EXPECT_EQ(bench.scene.bodies().size(), 3) << "the tenth frame is a multiple of ten";
+    EXPECT_EQ(bench.now().bodies().size(), 3) << "the tenth frame is a multiple of ten";
     bench.run(10);
-    EXPECT_EQ(bench.scene.bodies().size(), 4) << "and so is the twentieth";
+    EXPECT_EQ(bench.now().bodies().size(), 4) << "and so is the twentieth";
     bench.sim.stop();
 }
 
@@ -378,7 +388,7 @@ TEST(Rules, DisabledRulesAreSkippedAndOnceMeansOnce)
         bench.scene.setRules({ rule });
 
         bench.run(30);
-        EXPECT_EQ(bench.scene.bodies().size(), 2) << "a disabled rule did something";
+        EXPECT_EQ(bench.now().bodies().size(), 2) << "a disabled rule did something";
         bench.sim.stop();
     }
     {
@@ -396,7 +406,7 @@ TEST(Rules, DisabledRulesAreSkippedAndOnceMeansOnce)
         bench.scene.setRules({ rule });
 
         bench.run(30);
-        EXPECT_EQ(bench.scene.bodies().size(), 3)
+        EXPECT_EQ(bench.now().bodies().size(), 3)
             << "a rule marked once fired more than once in thirty frames";
         bench.sim.stop();
     }
@@ -421,14 +431,47 @@ TEST(Rules, ContactFiresWhenTwoShapesTouch)
 
         // It falls to the ground, touches, and the rule puts it back up.
         bench.run(20);
-        const qreal beforeLanding = bench.boxShape->pos().y();
+        const qreal beforeLanding = bench.at(bench.boxShape)->pos().y();
         EXPECT_GT(beforeLanding, 0.0) << engineName << ": it is on its way down";
         bench.run(200);
-        EXPECT_LT(bench.boxShape->pos().y(), 260.0)
+        EXPECT_LT(bench.at(bench.boxShape)->pos().y(), 260.0)
             << engineName << ": touching the ground should have sent it back to the start,"
-            << " and it is resting at " << bench.boxShape->pos().y();
+            << " and it is resting at " << bench.at(bench.boxShape)->pos().y();
         bench.sim.stop();
     }
+}
+
+// A joint held past its threshold is reported, and breaking it is a rule.
+TEST(Rules, AJointOverItsThresholdCanBeBroken)
+{
+    const auto hangAndRun = [](double forceThreshold) {
+        Bench bench(QStringLiteral("Box2D"));
+        ShapeItem *hookShape =
+            bench.add(QStringLiteral("hook"), QRectF(0, 0, 40, 40), QPointF(-20, -100));
+        bench.scene.notifyShapesChanged();
+        PhysicsBody *hook =
+            bench.bodyOf(hookShape, physics::BodyType::Static, QStringLiteral("hookBody"));
+        QVariantMap params;
+        params.insert(QStringLiteral("forceThreshold"), forceThreshold);
+        Joint *joint = bench.scene.createJoint(QStringLiteral("revolute"), hook, bench.box, 1, params);
+
+        Rule rule;
+        rule.conditions[0].subjectName = joint->name();
+        rule.conditions[0].eventId = QStringLiteral("thresholdExceeded");
+        rule.actions[0].targetName = joint->name();
+        rule.actions[0].actionId = QStringLiteral("breakJoint");
+        bench.scene.setRules({ rule });
+
+        // The box weighs about 1.6 N at the default density and scale.
+        bench.run(120);
+        const qreal y = bench.at(bench.boxShape)->pos().y();
+        bench.sim.stop();
+        return y;
+    };
+
+    EXPECT_GT(hangAndRun(0.5), 200.0) << "held past its threshold, the joint broke and let go";
+    EXPECT_LT(hangAndRun(20.0), 50.0) << "under its threshold, the joint still holds";
+    EXPECT_LT(hangAndRun(1e6), 50.0) << "at the top of its range a threshold is never reached";
 }
 
 // A card can watch more than one thing, and the join says how they are read
@@ -461,14 +504,14 @@ TEST(Rules, ConditionsJoinWithAllOfOrAnyOf)
         bench.scene.setRules({ cloneRule(Rule::Join::All, pastFrame(5), pastFrame(10),
                                          bench.box->name()) });
         bench.run(8);
-        EXPECT_EQ(bench.scene.bodies().size(), 2)
+        EXPECT_EQ(bench.now().bodies().size(), 2)
             << "all-of fired on the first condition alone";
         bench.run(4);
-        EXPECT_EQ(bench.scene.bodies().size(), 3) << "all-of did not fire once both were true";
+        EXPECT_EQ(bench.now().bodies().size(), 3) << "all-of did not fire once both were true";
         // The rule fires as the card becomes true, not for as long as it stays
         // true -- the same edge every other condition is read on.
         bench.run(30);
-        EXPECT_EQ(bench.scene.bodies().size(), 3) << "all-of fired again while it stayed true";
+        EXPECT_EQ(bench.now().bodies().size(), 3) << "all-of fired again while it stayed true";
         bench.sim.stop();
     }
     {
@@ -476,9 +519,9 @@ TEST(Rules, ConditionsJoinWithAllOfOrAnyOf)
         bench.scene.setRules({ cloneRule(Rule::Join::Any, pastFrame(5), pastFrame(10),
                                          bench.box->name()) });
         bench.run(8);
-        EXPECT_EQ(bench.scene.bodies().size(), 3) << "any-of did not fire on the first one";
+        EXPECT_EQ(bench.now().bodies().size(), 3) << "any-of did not fire on the first one";
         bench.run(30);
-        EXPECT_EQ(bench.scene.bodies().size(), 3)
+        EXPECT_EQ(bench.now().bodies().size(), 3)
             << "the second condition coming true fired any-of a second time";
         bench.sim.stop();
     }
@@ -508,11 +551,11 @@ TEST(Rules, EveryActionOnACardIsCarriedOut)
     bench.scene.setRules({ rule });
 
     bench.run(10);
-    ASSERT_EQ(bench.scene.bodies().size(), 5) << "not every action on the card happened";
+    ASSERT_EQ(bench.now().bodies().size(), 5) << "not every action on the card happened";
 
     QVector<qreal> xs;
-    for (PhysicsBody *body : bench.scene.bodies()) {
-        if (body != bench.box && body != bench.ground)
+    for (PhysicsBody *body : bench.now().bodies()) {
+        if (body->name() != bench.box->name() && body->name() != bench.ground->name())
             xs.append(body->shapes().isEmpty() ? 0.0 : body->shapes().first()->pos().x());
     }
     std::sort(xs.begin(), xs.end());
@@ -542,7 +585,7 @@ TEST(Rules, AnUnfinishedRuleIsKeptAndPassedOver)
     bench.scene.setRules({ half });
 
     bench.run(20);
-    EXPECT_EQ(bench.scene.bodies().size(), 2) << "an unfinished rule did something";
+    EXPECT_EQ(bench.now().bodies().size(), 2) << "an unfinished rule did something";
     EXPECT_TRUE(bench.sim.problems().isEmpty())
         << bench.sim.problems().join(QStringLiteral("; ")).toStdString();
     bench.sim.stop();
@@ -603,22 +646,22 @@ TEST(Rules, ChangedToAndChangedFromWatchTheStepBefore)
     // The flag starts false and stays false: nothing has changed, and a run
     // does not begin by firing every rule that watches a change.
     bench.run(4);
-    EXPECT_EQ(bench.scene.bodies().size(), 2) << "a change rule fired before anything changed";
+    EXPECT_EQ(bench.now().bodies().size(), 2) << "a change rule fired before anything changed";
 
     bench.run(6); // past frame 5, so the flag goes true
-    EXPECT_EQ(bench.scene.bodies().size(), 3) << "changed-to-true did not fire when it went true";
+    EXPECT_EQ(bench.now().bodies().size(), 3) << "changed-to-true did not fire when it went true";
 
     // It stays true for the next ten frames, and staying is not changing.
     bench.run(5);
-    EXPECT_EQ(bench.scene.bodies().size(), 3)
+    EXPECT_EQ(bench.now().bodies().size(), 3)
         << "changed-to fired again while the value merely stayed there";
 
     bench.run(6); // past frame 15, so the flag goes false again
-    EXPECT_EQ(bench.scene.bodies().size(), 4)
+    EXPECT_EQ(bench.now().bodies().size(), 4)
         << "changed-from-true did not fire when it stopped being true";
 
     bench.run(20);
-    EXPECT_EQ(bench.scene.bodies().size(), 4) << "a change rule fired with nothing changing";
+    EXPECT_EQ(bench.now().bodies().size(), 4) << "a change rule fired with nothing changing";
     bench.sim.stop();
 }
 
@@ -713,11 +756,11 @@ TEST(Rules, VariablesAreCountedWithAndResetByEachRun)
     bench.run(6); // frame 5 counted once
     EXPECT_EQ(bench.sim.readValue(Rule::variables(), QStringLiteral("score")).toInt(), 13);
     EXPECT_TRUE(bench.sim.readValue(Rule::variables(), QStringLiteral("running")).toBool());
-    EXPECT_EQ(bench.scene.bodies().size(), 2) << "the reward fired before the score passed 15";
+    EXPECT_EQ(bench.now().bodies().size(), 2) << "the reward fired before the score passed 15";
 
     bench.run(5); // frame 10
     EXPECT_EQ(bench.sim.readValue(Rule::variables(), QStringLiteral("score")).toInt(), 16);
-    EXPECT_EQ(bench.scene.bodies().size(), 3) << "a rule reading a variable did not fire";
+    EXPECT_EQ(bench.now().bodies().size(), 3) << "a rule reading a variable did not fire";
 
     // Renaming one carries every rule and log row that named it along, the way
     // renaming a body does -- otherwise each of them would quietly go
@@ -940,11 +983,11 @@ TEST(Rules, TimerVariableCountsOnlyWhileStarted)
     bench.scene.setRules({ verb(Rule::Op::TimerStart), far });
     bench.run(60);
     EXPECT_EQ(reading(), 1000) << "a timer lost the fraction of a millisecond in a step";
-    EXPECT_EQ(bench.scene.bodies().size(), 2) << "the rule fired before the timer passed 1500";
+    EXPECT_EQ(bench.now().bodies().size(), 2) << "the rule fired before the timer passed 1500";
 
     bench.run(31);
     EXPECT_GT(reading(), 1500);
-    EXPECT_EQ(bench.scene.bodies().size(), 3) << "a rule reading a timer did not fire";
+    EXPECT_EQ(bench.now().bodies().size(), 3) << "a rule reading a timer did not fire";
     bench.sim.stop();
 
     // And it goes back to what the scene declares when the run stops, like
@@ -1437,6 +1480,7 @@ TEST(RuleSource, AKeyPressFiresARule)
     SimulationController sim(&scene, nullptr);
     sim.setEngineName(QStringLiteral("Box2D"));
     sim.start();
+    CanvasScene &live = *sim.runScene();
 
     const auto step = [&] { sim.advance(1.0 / 60.0); };
     const auto count = [&](const char *name) {
@@ -1447,13 +1491,13 @@ TEST(RuleSource, AKeyPressFiresARule)
 
     // Through the scene, which is where a key arrives while a run is going.
     QKeyEvent down(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier);
-    QCoreApplication::sendEvent(&scene, &down);
+    QCoreApplication::sendEvent(&live, &down);
     step();
     EXPECT_EQ(count("hits"), 1) << "the key press raised nothing";
     EXPECT_EQ(count("lets"), 0) << "a press counted as a release";
 
     // Held down: the keyboard repeats, the press does not.
-    QCoreApplication::sendEvent(&scene, &down);
+    QCoreApplication::sendEvent(&live, &down);
     step();
     EXPECT_EQ(count("hits"), 1) << "holding the key fired the press again";
 
@@ -1467,7 +1511,7 @@ TEST(RuleSource, AKeyPressFiresARule)
     EXPECT_EQ(count("while"), whileHeld + 2) << "holding it did not fire on every step";
 
     QKeyEvent up(QEvent::KeyRelease, Qt::Key_A, Qt::NoModifier);
-    QCoreApplication::sendEvent(&scene, &up);
+    QCoreApplication::sendEvent(&live, &up);
     step();
     EXPECT_EQ(count("lets"), 1) << "the key release raised nothing";
     const int afterLettingGo = count("while");
@@ -1477,14 +1521,14 @@ TEST(RuleSource, AKeyPressFiresARule)
 
     // A different key is a different event.
     QKeyEvent other(QEvent::KeyPress, Qt::Key_B, Qt::NoModifier);
-    QCoreApplication::sendEvent(&scene, &other);
+    QCoreApplication::sendEvent(&live, &other);
     step();
     EXPECT_EQ(count("hits"), 1) << "a rule watching A fired on B";
 
     // And so is the same key held with a modifier: a rule asking for A is not
     // what Ctrl+A means.
     QKeyEvent withCtrl(QEvent::KeyPress, Qt::Key_A, Qt::ControlModifier);
-    QCoreApplication::sendEvent(&scene, &withCtrl);
+    QCoreApplication::sendEvent(&live, &withCtrl);
     step();
     EXPECT_EQ(count("hits"), 1) << "a rule watching A fired on Ctrl+A";
 
@@ -1555,19 +1599,20 @@ TEST(RuleSource, AKeyChordFiresOnlyItsOwnCombination)
     SimulationController sim(&scene, nullptr);
     sim.setEngineName(QStringLiteral("Box2D"));
     sim.start();
+    CanvasScene &live = *sim.runScene();
     const auto hits = [&] {
         return sim.readValue(Rule::variables(), QStringLiteral("hits")).toInt();
     };
 
     QKeyEvent bare(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier);
-    QCoreApplication::sendEvent(&scene, &bare);
+    QCoreApplication::sendEvent(&live, &bare);
     sim.advance(1.0 / 60.0);
     EXPECT_EQ(hits(), 0) << "a rule asking for Ctrl+A fired on a bare A";
 
     QKeyEvent release(QEvent::KeyRelease, Qt::Key_A, Qt::NoModifier);
-    QCoreApplication::sendEvent(&scene, &release);
+    QCoreApplication::sendEvent(&live, &release);
     QKeyEvent chord(QEvent::KeyPress, Qt::Key_A, Qt::ControlModifier);
-    QCoreApplication::sendEvent(&scene, &chord);
+    QCoreApplication::sendEvent(&live, &chord);
     sim.advance(1.0 / 60.0);
     EXPECT_EQ(hits(), 1) << "Ctrl+A did not fire the rule that asked for it";
     sim.stop();
@@ -1617,28 +1662,29 @@ TEST(RuleSource, ARuleShowsAndHidesACaption)
     SimulationController sim(&scene, nullptr);
     sim.setEngineName(QStringLiteral("Box2D"));
     sim.start();
+    CanvasScene &live = *sim.runScene();
     sim.advance(1.0 / 60.0);
-    EXPECT_TRUE(scene.caption().isEmpty()) << "a run started with a caption up";
+    EXPECT_TRUE(live.caption().isEmpty()) << "a run started with a caption up";
 
     QKeyEvent show(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier);
-    QCoreApplication::sendEvent(&scene, &show);
+    QCoreApplication::sendEvent(&live, &show);
     sim.advance(1.0 / 60.0);
-    EXPECT_EQ(scene.caption(), QStringLiteral("<b>Go</b>")) << "the caption was not put up";
-    EXPECT_TRUE(scene.captionShown());
+    EXPECT_EQ(live.caption(), QStringLiteral("<b>Go</b>")) << "the caption was not put up";
+    EXPECT_TRUE(live.captionShown());
 
     QKeyEvent hide(QEvent::KeyPress, Qt::Key_B, Qt::NoModifier);
-    QCoreApplication::sendEvent(&scene, &hide);
+    QCoreApplication::sendEvent(&live, &hide);
     sim.advance(1.0 / 60.0);
-    EXPECT_FALSE(scene.captionShown()) << "turning Shown off left the caption up";
+    EXPECT_FALSE(live.captionShown()) << "turning Shown off left the caption up";
 
     // It belongs to the run. A has to come up before it can go down again --
     // a key held is not a key pressed twice.
     QKeyEvent lift(QEvent::KeyRelease, Qt::Key_A, Qt::NoModifier);
-    QCoreApplication::sendEvent(&scene, &lift);
+    QCoreApplication::sendEvent(&live, &lift);
     QKeyEvent again(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier);
-    QCoreApplication::sendEvent(&scene, &again);
+    QCoreApplication::sendEvent(&live, &again);
     sim.advance(1.0 / 60.0);
-    ASSERT_TRUE(scene.captionShown());
+    ASSERT_TRUE(live.captionShown());
     sim.stop();
     EXPECT_TRUE(scene.caption().isEmpty()) << "the caption outlived the run";
     EXPECT_FALSE(scene.captionShown());
@@ -1720,6 +1766,7 @@ TEST(RuleSource, RulesReadWriteAndHearControls)
     SimulationController sim(&scene, nullptr);
     sim.setEngineName(QStringLiteral("Box2D"));
     sim.start();
+    CanvasScene &live = *sim.runScene();
     const auto step = [&] { sim.advance(1.0 / 60.0); };
     const auto shots = [&] {
         return sim.readValue(Rule::variables(), QStringLiteral("shots")).toInt();
@@ -1729,20 +1776,20 @@ TEST(RuleSource, RulesReadWriteAndHearControls)
     EXPECT_EQ(shots(), 0) << "a rule fired before the button was touched";
 
     // A hand on the button: down, then up.
-    scene.setControlValue(QStringLiteral("fire"), true);
+    live.setControlValue(QStringLiteral("fire"), true);
     step();
     EXPECT_EQ(shots(), 1) << "pressing the button raised nothing";
-    scene.setControlValue(QStringLiteral("fire"), false);
+    live.setControlValue(QStringLiteral("fire"), false);
     step();
     EXPECT_EQ(shots(), 1) << "letting the button go counted as another press";
 
     // Ticking the box lets the copying rule through, and greys the slider.
-    scene.setControlValue(QStringLiteral("speed"), 42.0);
-    scene.setControlValue(QStringLiteral("go"), true);
+    live.setControlValue(QStringLiteral("speed"), 42.0);
+    live.setControlValue(QStringLiteral("go"), true);
     step();
     EXPECT_DOUBLE_EQ(sim.readValue(Rule::variables(), QStringLiteral("seen")).toDouble(), 42.0)
         << "the rule did not read the slider";
-    EXPECT_FALSE(scene.controlEnabled(QStringLiteral("speed")))
+    EXPECT_FALSE(live.controlEnabled(QStringLiteral("speed")))
         << "the rule did not grey the slider out";
 
     // A rule writing a slider is held to the bounds it was declared with.
@@ -1752,14 +1799,136 @@ TEST(RuleSource, RulesReadWriteAndHearControls)
     push.op = Rule::Op::Set;
     push.value = 999.0;
     sim.applyActionForTest(push);
-    EXPECT_DOUBLE_EQ(scene.controlValue(QStringLiteral("speed")).toDouble(), 50.0)
+    EXPECT_DOUBLE_EQ(live.controlValue(QStringLiteral("speed")).toDouble(), 50.0)
         << "a rule pushed the slider past its maximum";
 
-    sim.stop();
     EXPECT_DOUBLE_EQ(scene.controlValue(QStringLiteral("speed")).toDouble(), 10.0)
-        << "the slider did not go back to what the scene declares";
-    EXPECT_FALSE(scene.controlValue(QStringLiteral("go")).toBool());
-    EXPECT_TRUE(scene.controlEnabled(QStringLiteral("speed")));
+        << "the run moved the scene's slider";
+    EXPECT_TRUE(scene.controlEnabled(QStringLiteral("speed")))
+        << "the run greyed out the scene's slider";
+    sim.stop();
+}
+
+// A scene can open held and be started by the person watching it. Held, the
+// world does not step -- but its controls and keys still reach the rules, and
+// "Simulation Running" is what a rule writes to let it go or hold it again.
+TEST(RuleSource, AHeldRunHearsItsControlsAndARuleLetsItGo)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setPixelsPerMeter(physics::kReferencePixelsPerMeter);
+    scene.world().params[QStringLiteral("gravityY")] = 9.81;
+    scene.setEditorMode(EditorMode::Physics);
+    auto *box = new RectangleItem;
+    box->setRect(QRectF(0, 0, 40, 40));
+    box->setName(QStringLiteral("box"));
+    scene.addItem(box);
+    scene.notifyShapesChanged();
+    scene.selectForPhysics(box, true);
+    scene.createBodyFromSelection()->props().type = physics::BodyType::Dynamic;
+    scene.clearPhysicsSelection();
+
+    SceneControl start;
+    start.id = QStringLiteral("start");
+    start.kind = SceneControl::Kind::Button;
+    SceneControl speed;
+    speed.id = QStringLiteral("speed");
+    speed.kind = SceneControl::Kind::Slider;
+    speed.maximum = 50.0;
+    scene.setControls({ start, speed });
+    scene.setVariables({ SceneVariable { QStringLiteral("seen"), SceneVariable::Type::Double, 0.0 } });
+
+    Rule copying;
+    copying.conditions[0].subjectName = Rule::controls();
+    copying.conditions[0].eventId = Rule::controlChangedEvent();
+    copying.conditions[0].conditionValue = QStringLiteral("speed");
+    copying.actions[0].targetName = Rule::variables();
+    copying.actions[0].propertyKey = QStringLiteral("seen");
+    copying.actions[0].sourceObject = Rule::controls();
+    copying.actions[0].sourceProperty = QStringLiteral("speed:value");
+
+    Rule going;
+    going.conditions[0].subjectName = Rule::controls();
+    going.conditions[0].eventId = Rule::controlPressedEvent();
+    going.conditions[0].conditionValue = QStringLiteral("start");
+    going.actions[0].targetName = Rule::world();
+    going.actions[0].propertyKey = Rule::runningKey();
+    going.actions[0].value = true;
+
+    Rule toggling;
+    toggling.conditions[0].subjectName = Rule::keyboard();
+    toggling.conditions[0].eventId = Rule::keyPressedEvent();
+    toggling.conditions[0].conditionValue = QStringLiteral("P");
+    toggling.actions[0].targetName = Rule::world();
+    toggling.actions[0].propertyKey = Rule::runningKey();
+    toggling.actions[0].op = Rule::Op::Toggle;
+    scene.setRules({ copying, going, toggling });
+
+    scene.setStartsPaused(true);
+    CanvasScene back;
+    QString error;
+    ASSERT_TRUE(SceneSerializer::load(&back, SceneSerializer::save(&scene), &error));
+    EXPECT_TRUE(back.startsPaused()) << "Starts Paused did not survive the file";
+
+    SimulationController sim(&scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    EXPECT_FALSE(sim.initialValue(Rule::world(), Rule::runningKey()).toBool());
+    sim.start();
+    CanvasScene &live = *sim.runScene();
+    using State = SimulationController::State;
+    EXPECT_EQ(sim.state(), State::Stepping) << "the run did not open held";
+    ShapeItem *falling = inRun(sim, box);
+    ASSERT_TRUE(falling);
+    const qreal y = falling->pos().y();
+    sim.advance(0.5);
+    EXPECT_EQ(falling->pos().y(), y) << "a held run moved";
+
+    live.setControlValue(QStringLiteral("speed"), 30.0);
+    EXPECT_DOUBLE_EQ(sim.readValue(Rule::variables(), QStringLiteral("seen")).toDouble(), 30.0)
+        << "the slider did not reach its rule while the run was held";
+
+    live.setControlValue(QStringLiteral("start"), true);
+    EXPECT_EQ(sim.state(), State::Running) << "Start did not let the run go";
+    EXPECT_TRUE(sim.readValue(Rule::world(), Rule::runningKey()).toBool());
+    for (int i = 0; i < 30; ++i)
+        sim.advance(1.0 / 60.0);
+    EXPECT_GT(falling->pos().y(), y) << "the run was let go and nothing fell";
+
+    QKeyEvent press(QEvent::KeyPress, Qt::Key_P, Qt::NoModifier);
+    QCoreApplication::sendEvent(&live, &press);
+    sim.advance(1.0 / 60.0);
+    EXPECT_EQ(sim.state(), State::Stepping) << "toggling a running run did not hold it";
+    QKeyEvent lift(QEvent::KeyRelease, Qt::Key_P, Qt::NoModifier);
+    QCoreApplication::sendEvent(&live, &lift);
+    QCoreApplication::sendEvent(&live, &press);
+    EXPECT_EQ(sim.state(), State::Running) << "toggling a held run did not let it go";
+
+    // A restart is a fresh run from the scene, held again because the scene
+    // starts paused, with the slider where the hand left it.
+    live.setControlValue(QStringLiteral("speed"), 25.0);
+    RuleAction again;
+    again.targetName = Rule::world();
+    again.actionId = Rule::restartRunAction();
+    sim.applyActionForTest(again);
+    sim.advance(1.0 / 60.0);
+    ASSERT_TRUE(sim.runScene());
+    EXPECT_NE(sim.runScene(), &live) << "the restart kept the old run";
+    EXPECT_EQ(sim.state(), State::Stepping) << "a scene that starts paused did not restart held";
+    EXPECT_EQ(inRun(sim, box)->pos(), box->pos()) << "the restart did not put the box back";
+    EXPECT_DOUBLE_EQ(sim.runScene()->controlValue(QStringLiteral("speed")).toDouble(), 25.0)
+        << "the restart moved the slider";
+    EXPECT_DOUBLE_EQ(sim.readValue(Rule::variables(), QStringLiteral("seen")).toDouble(), 25.0)
+        << "the slider kept 25 and the rule following it did not hear so";
+    sim.stop();
+
+    // Every run starts the slider at its start value, which is what it shows.
+    QVector<SceneControl> edited = scene.controls();
+    edited[1].initial = 40.0;
+    scene.setControls(edited);
+    sim.start();
+    EXPECT_DOUBLE_EQ(sim.runScene()->controlValue(QStringLiteral("speed")).toDouble(), 40.0)
+        << "the run did not start the slider at its start value";
+    sim.stop();
 }
 
 // An event is already an edge: it is true on the step it is raised and false
@@ -1806,13 +1975,14 @@ TEST(RuleSource, AnEventOnEveryStepFiresOnEveryStep)
     SimulationController sim(&scene, nullptr);
     sim.setEngineName(QStringLiteral("Box2D"));
     sim.start();
+    CanvasScene &live = *sim.runScene();
     const auto seen = [&] {
         return sim.readValue(Rule::variables(), QStringLiteral("seen")).toDouble();
     };
 
     // Changed on every step, with no quiet step in between to re-arm it.
     for (int at = 10; at <= 50; at += 10) {
-        scene.setControlValue(QStringLiteral("speed"), double(at));
+        live.setControlValue(QStringLiteral("speed"), double(at));
         sim.advance(1.0 / 60.0);
         EXPECT_DOUBLE_EQ(seen(), double(at))
             << "the change on this step was swallowed: the two disagree at " << at;
@@ -1835,8 +2005,9 @@ TEST(RuleSource, AnEventOnEveryStepFiresOnEveryStep)
     scene.setRules({ counting });
     sim.stop();
     sim.start();
+    CanvasScene &relive = *sim.runScene();
 
-    scene.setControlValue(QStringLiteral("speed"), 50.0);
+    relive.setControlValue(QStringLiteral("speed"), 50.0);
     for (int step = 0; step < 5; ++step)
         sim.advance(1.0 / 60.0);
     EXPECT_EQ(sim.readValue(Rule::variables(), QStringLiteral("count")).toInt(), 1)
@@ -1880,7 +2051,7 @@ TEST(RuleSource, AKeyInTheFullScreenViewReachesTheRules)
     sim.start();
     sim.advance(1.0 / 60.0);
 
-    FullScreenView view(&scene, nullptr);
+    FullScreenView view(sim.runScene(), nullptr);
     view.resize(640, 480);
     const auto hits = [&] {
         return sim.readValue(Rule::variables(), QStringLiteral("hits")).toInt();
@@ -1952,11 +2123,11 @@ TEST(RuleSource, OnlyEscapeIsTheViewsInAFullScreenRun)
     sim.start();
     sim.advance(1.0 / 60.0);
 
-    FullScreenView view(&scene, nullptr);
+    FullScreenView view(sim.runScene(), nullptr);
     view.resize(640, 480);
     QSignalSpy leaving(&view, &FullScreenView::closeRequested);
 
-    const QPointF stood = box->pos();
+    const QPointF stood = inRun(sim, box)->pos();
     int expected = 0;
     for (const int key : { int(Qt::Key_Space), int(Qt::Key_Left), int(Qt::Key_Right),
                            int(Qt::Key_Up), int(Qt::Key_Down) }) {
@@ -1972,7 +2143,7 @@ TEST(RuleSource, OnlyEscapeIsTheViewsInAFullScreenRun)
         EXPECT_TRUE(sim.isRunning()) << "key " << key << " stopped or held the run";
         EXPECT_EQ(leaving.count(), 0) << "key " << key << " asked to leave the run";
     }
-    EXPECT_EQ(box->pos(), stood) << "an arrow nudged a shape during the run";
+    EXPECT_EQ(inRun(sim, box)->pos(), stood) << "an arrow nudged a shape during the run";
 
     // And Escape is still the way out.
     QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
@@ -2015,21 +2186,37 @@ TEST(RuleSource, ARuleChangesWhatAControlSays)
     rename.actions[0].propertyKey = QStringLiteral("fire:caption");
     rename.actions[0].op = Rule::Op::Set;
     rename.actions[0].value = QStringLiteral("Reload");
-    scene.setRules({ rename });
+    // And one that watches what the button says.
+    scene.setVariables({ SceneVariable { QStringLiteral("reloads"), SceneVariable::Type::Integer, 0 } });
+    Rule reading;
+    reading.conditions[0].subjectName = Rule::controls();
+    reading.conditions[0].conditionKey = press.captionKey();
+    reading.conditions[0].compare = Rule::Compare::Equal;
+    reading.conditions[0].conditionValue = QStringLiteral("Reload");
+    reading.actions[0].targetName = Rule::variables();
+    reading.actions[0].propertyKey = QStringLiteral("reloads");
+    reading.actions[0].op = Rule::Op::Add;
+    reading.actions[0].value = 1;
+    scene.setRules({ rename, reading });
 
     SimulationController sim(&scene, nullptr);
     sim.setEngineName(QStringLiteral("Box2D"));
     sim.start();
+    CanvasScene &live = *sim.runScene();
     sim.advance(1.0 / 60.0);
+    EXPECT_EQ(sim.readValue(Rule::variables(), QStringLiteral("reloads")).toInt(), 0)
+        << "\"fire\" was taken to equal \"Reload\"";
 
     QKeyEvent down(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier);
-    QCoreApplication::sendEvent(&scene, &down);
+    QCoreApplication::sendEvent(&live, &down);
     sim.advance(1.0 / 60.0);
-    EXPECT_EQ(scene.controlCaption(QStringLiteral("fire")), QStringLiteral("Reload"))
+    EXPECT_EQ(live.controlCaption(QStringLiteral("fire")), QStringLiteral("Reload"))
         << "the rule did not change what the button says";
     EXPECT_EQ(sim.readValue(Rule::controls(), QStringLiteral("fire:caption")).toString(),
               QStringLiteral("Reload"))
         << "a rule cannot read back what it wrote";
+    EXPECT_EQ(sim.readValue(Rule::variables(), QStringLiteral("reloads")).toInt(), 1)
+        << "a rule watching the caption did not see it change";
     // The name is untouched: every other rule still calls it "fire".
     ASSERT_EQ(scene.controls().size(), 1);
     EXPECT_EQ(scene.controls().first().id, QStringLiteral("fire"));

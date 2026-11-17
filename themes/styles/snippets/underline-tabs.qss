@@ -1,0 +1,6 @@
+/* Tabs as a line under the one chosen, rather than a filled pill. */
+QTabBar::tab { border-radius: 0; margin: 0 2px; padding: 6px 12px;
+ border-bottom: 2px solid transparent; }
+QTabBar::tab:hover { background: transparent; color: palette(window-text); }
+QTabBar::tab:selected { background: transparent; color: palette(window-text);
+ border-bottom: 2px solid palette(highlight); }

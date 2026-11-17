@@ -14,15 +14,16 @@ namespace physics {
 
 namespace {
 
-// The editor's spring-force range runs to a finite end; Box2D's own default is
-// the whole float range, so the ends are handed over as that.
-constexpr qreal kSpringForceBound = 1e6;
+// The editor's force ranges -- a spring's, a threshold's -- run to a finite
+// end; Box2D's own default is the whole float range, so the ends are handed
+// over as that.
+constexpr qreal kForceBound = 1e6;
 
-float springForce(qreal value)
+float boundedForce(qreal value)
 {
-    if (value <= -kSpringForceBound)
+    if (value <= -kForceBound)
         return -FLT_MAX;
-    if (value >= kSpringForceBound)
+    if (value >= kForceBound)
         return FLT_MAX;
     return static_cast<float>(value);
 }
@@ -211,9 +212,9 @@ JointHandle Box2DEngine::addJoint(const JointDesc &desc)
         // b2DistanceJoint_SetSpringForceRange. At the ends of the editor's range
         // these mean what Box2D's own default means: no limit at all.
         def.lowerSpringForce =
-            springForce(realValue(desc.params, "lowerSpringForce", -kSpringForceBound));
+            boundedForce(realValue(desc.params, "lowerSpringForce", -kForceBound));
         def.upperSpringForce =
-            springForce(realValue(desc.params, "upperSpringForce", kSpringForceBound));
+            boundedForce(realValue(desc.params, "upperSpringForce", kForceBound));
         def.enableLimit = boolValue(desc.params, "enableLimit");
         def.minLength = metres(realValue(desc.params, "minLength"));
         // Zero maxLength means unbounded. Box2D's own default is its internal
@@ -313,6 +314,12 @@ JointHandle Box2DEngine::addJoint(const JointDesc &desc)
             joint, static_cast<float>(realValue(desc.params, "constraintHertz", 60.0)),
             static_cast<float>(realValue(desc.params, "constraintDampingRatio", 2.0)));
     }
+    b2Joint_SetForceThreshold(
+        joint, boundedForce(realValue(desc.params, "forceThreshold", kForceBound)));
+    b2Joint_SetTorqueThreshold(
+        joint, boundedForce(realValue(desc.params, "torqueThreshold", kForceBound)));
+    // A joint event names the joint by id; this is how it finds its handle.
+    b2Joint_SetUserData(joint, reinterpret_cast<void *>(static_cast<intptr_t>(m_joints.size())));
 
     m_joints.append(joint);
     m_travelOrigins.append(travelOrigin);
@@ -358,6 +365,14 @@ void Box2DEngine::setJointParam(JointHandle handle, const QString &key, const QV
     }
     if (key == QLatin1String("collideConnected")) {
         b2Joint_SetCollideConnected(joint, flag);
+        return;
+    }
+    if (key == QLatin1String("forceThreshold")) {
+        b2Joint_SetForceThreshold(joint, boundedForce(value.toDouble()));
+        return;
+    }
+    if (key == QLatin1String("torqueThreshold")) {
+        b2Joint_SetTorqueThreshold(joint, boundedForce(value.toDouble()));
         return;
     }
 
@@ -489,7 +504,7 @@ void Box2DEngine::setJointParam(JointHandle handle, const QString &key, const QV
             float upper = 0.0f;
             b2DistanceJoint_GetSpringForceRange(joint, &lower, &upper);
             (key == QLatin1String("lowerSpringForce") ? lower : upper) =
-                springForce(value.toDouble());
+                boundedForce(value.toDouble());
             b2DistanceJoint_SetSpringForceRange(joint, lower, upper);
         }
         else if (key == QLatin1String("minLength") || key == QLatin1String("maxLength")) {
@@ -852,6 +867,26 @@ void Box2DEngine::detectLimitEvents()
     }
 }
 
+
+void Box2DEngine::collectJointEvents()
+{
+    const b2JointEvents events = b2World_GetJointEvents(m_worldId);
+    for (int i = 0; i < events.count; ++i) {
+        const b2JointEvent &raised = events.jointEvents[i];
+        if (!b2Joint_IsValid(raised.jointId))
+            continue;
+        const auto handle =
+            static_cast<JointHandle>(reinterpret_cast<intptr_t>(raised.userData));
+        if (handle < 0 || handle >= m_joints.size()
+            || !B2_ID_EQUALS(m_joints[handle], raised.jointId)) {
+            continue;
+        }
+        EngineEvent event;
+        event.joint = handle;
+        event.eventId = QStringLiteral("thresholdExceeded");
+        m_pendingEvents.append(event);
+    }
+}
 
 BodyHandle Box2DEngine::handleOf(b2BodyId body) const
 {

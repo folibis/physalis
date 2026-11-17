@@ -5,6 +5,7 @@
 #include "CanvasScene.h"
 #include "ExplosionItem.h"
 #include "RayItem.h"
+#include "SceneControl.h"
 #include "ShapeItem.h"
 
 #include <QSet>
@@ -24,8 +25,15 @@
 
 using namespace physics;
 
+namespace {
+// Letting a held run go on, which only a rule writing "Simulation Running"
+// asks for: no card offers it as an action of its own.
+const QString kResumeRun = QStringLiteral("@resumeRun");
+}
+
 SimulationController::SimulationController(CanvasScene *scene, QObject *parent)
     : QObject(parent)
+    , m_document(scene)
     , m_scene(scene)
     , m_timer(new QTimer(this))
 {
@@ -35,16 +43,6 @@ SimulationController::SimulationController(CanvasScene *scene, QObject *parent)
     m_timer->setTimerType(Qt::PreciseTimer);
     m_timer->setInterval(qMax(1, int(timeStep() * 1000.0) / 2));
     connect(m_timer, &QTimer::timeout, this, &SimulationController::stepOnce);
-
-    // Keys arrive at whatever has the focus, which during a run is the canvas.
-    // Taken here rather than wired up by the window, so a run driven from a
-    // test or from the full-screen view answers to them the same way.
-    if (m_scene) {
-        connect(m_scene, &CanvasScene::keyPressedDuringRun, this,
-                &SimulationController::keyPressed);
-        connect(m_scene, &CanvasScene::keyReleasedDuringRun, this,
-                &SimulationController::keyReleased);
-    }
 }
 
 SimulationController::~SimulationController()
@@ -66,87 +64,6 @@ void SimulationController::captureSnapshot()
     for (const BoundBody &bound : m_bound) {
         for (const BoundShape &boundShape : bound.shapes)
             m_snapshot.push_back({boundShape.shape, boundShape.shape->pos(), boundShape.shape->rotation()});
-    }
-}
-
-void SimulationController::captureJointParams()
-{
-    m_jointParamSnapshot.clear();
-    for (Joint *joint : m_scene->joints())
-        m_jointParamSnapshot.insert(joint, joint->params());
-}
-
-void SimulationController::restoreJointParams()
-{
-    for (auto it = m_jointParamSnapshot.cbegin(); it != m_jointParamSnapshot.cend(); ++it) {
-        if (!it.key())
-            continue;
-        if (it.key()->params() == it.value())
-            continue;
-        it.key()->params() = it.value();
-        it.key()->notifyPropertyChanged();
-    }
-    m_jointParamSnapshot.clear();
-}
-
-void SimulationController::restoreSnapshot()
-{
-    for (const Snapshot &entry : m_snapshot) {
-        entry.shape->setPos(entry.pos);
-        entry.shape->setRotation(entry.rotation);
-    }
-    m_snapshot.clear();
-}
-
-void SimulationController::withSceneAsStarted(const std::function<void()> &use)
-{
-    if (!isActive()) {
-        use();
-        return;
-    }
-
-    // Everything restoreSnapshot, restoreJointParams and stop() put back, set
-    // aside rather than thrown away, so the run carries on as it was.
-    QVector<Snapshot> running;
-    running.reserve(m_snapshot.size());
-    for (const Snapshot &entry : m_snapshot) {
-        running.push_back({ entry.shape, entry.shape->pos(), entry.shape->rotation() });
-        entry.shape->setPos(entry.pos);
-        entry.shape->setRotation(entry.rotation);
-    }
-    QHash<Joint *, QVariantMap> runningParams;
-    for (auto it = m_jointParamSnapshot.cbegin(); it != m_jointParamSnapshot.cend(); ++it) {
-        if (!it.key() || it.key()->params() == it.value())
-            continue;
-        runningParams.insert(it.key(), it.key()->params());
-        it.key()->params() = it.value();
-    }
-    QVector<PhysicsBody *> removed;
-    for (const BoundBody &bound : m_bound) {
-        if (bound.body->isRemoved()) {
-            removed.append(bound.body);
-            bound.body->setRemoved(false);
-        }
-    }
-    QVector<Joint *> broken;
-    for (Joint *joint : m_scene->joints()) {
-        if (joint->isBroken()) {
-            broken.append(joint);
-            joint->setBroken(false);
-        }
-    }
-
-    use();
-
-    for (Joint *joint : broken)
-        joint->setBroken(true);
-    for (PhysicsBody *body : removed)
-        body->setRemoved(true);
-    for (auto it = runningParams.cbegin(); it != runningParams.cend(); ++it)
-        it.key()->params() = it.value();
-    for (const Snapshot &entry : running) {
-        entry.shape->setPos(entry.pos);
-        entry.shape->setRotation(entry.rotation);
     }
 }
 
@@ -242,6 +159,30 @@ void SimulationController::start()
     if (!m_engine)
         return;
 
+    m_run = new CanvasScene;
+    QString unreadable;
+    if (!SceneSerializer::load(m_run, SceneSerializer::save(m_document), &unreadable)) {
+        delete m_run;
+        m_run = nullptr;
+        m_engine.reset();
+        return;
+    }
+    m_run->setEditorMode(m_document->editorMode());
+    for (auto it = m_carriedControls.cbegin(); it != m_carriedControls.cend(); ++it)
+        m_run->setControlValue(it.key(), it.value());
+    m_scene = m_run;
+    if (m_runSceneSetup)
+        m_runSceneSetup(m_run);
+    // Keys, controls and the slingshot reach whatever the canvas shows, which
+    // during a run is the copy.
+    connect(m_run, &CanvasScene::keyPressedDuringRun, this, &SimulationController::keyPressed);
+    connect(m_run, &CanvasScene::keyReleasedDuringRun, this, &SimulationController::keyReleased);
+    connect(m_run, &CanvasScene::shotReleased, this, &SimulationController::shoot);
+    connect(m_run, &CanvasScene::controlValuesChanged, this, [this] {
+        if (m_scene->hasControlEvents())
+            answerInputWhileHeld();
+    });
+
     m_bound.clear();
     m_skippedBodies.clear();
     m_skippedJoints.clear();
@@ -267,10 +208,6 @@ void SimulationController::start()
     m_pendingRunAction.clear();
     m_elapsedSeconds = 0.0;
     m_frameCount = 0;
-    // Which body the scene itself keeps in view. A rule may hand the view to
-    // another one, and that lasts as long as the run does.
-    m_focusedAtStart = m_scene->focusedBody() ? m_scene->focusedBody()->name() : QString();
-
     // Which objects the rules are watching. An event is the obvious case; a
     // reading is watching too -- a rule asking how many things are inside a
     // sensor needs that sensor reporting what overlaps it exactly as much as
@@ -302,6 +239,9 @@ void SimulationController::start()
     if (!anything) {
         m_engine.reset();
         m_skippedBodies.clear();
+        m_scene = m_document;
+        delete m_run;
+        m_run = nullptr;
         return;
     }
     m_bound = built.bound;
@@ -321,10 +261,12 @@ void SimulationController::start()
     }
 
     captureSnapshot();
-    captureJointParams();
+    m_trailLocal.clear();
 
     m_state = State::Running;
     m_scene->setSimulationRunning(true);
+    // Only so the panels stop editing it; nothing in it changes.
+    m_document->setSimulationRunning(true);
     m_owedTime = 0.0;
     m_clock.start();
     m_timer->start();
@@ -336,6 +278,11 @@ void SimulationController::start()
         m_startPoses.insert(bound.body, qMakePair(desc.position, desc.rotationDegrees));
     }
     applyStartRules();
+    if (m_scene->startsPaused())
+        pause();
+    // A control a restart carried away from its start value has changed, and
+    // whatever follows it has to hear so now, not on the first step.
+    answerInputWhileHeld();
     emit stateChanged();
 }
 
@@ -450,9 +397,12 @@ QVariant SimulationController::initialValue(const QString &name, const QString &
     if (name == Rule::controls())
         return readControl(m_scene, key);
     if (name == Rule::world()) {
-        if (key == QLatin1String("time") || key == QLatin1String("frame")
-            || key == QLatin1String("chance"))
-            return 0.0;
+        if (key == Rule::runningKey())
+            return !m_scene->startsPaused();
+        for (const physics::JointParam &own : Rule::runProperties()) {
+            if (own.key == key)
+                return own.defaultValue;
+        }
     }
     if (m_scene->rayNamed(name))
         return {};
@@ -543,6 +493,7 @@ void SimulationController::cloneBody(PhysicsBody *parent, const QPointF &at)
     body->props() = parent->props();
     body->props().name = name;
     body->shot() = parent->shot();
+    body->setDrawsTrail(parent->drawsTrail());
 
     for (ShapeItem *original : parent->shapes()) {
         ShapeItem *copy = SceneSerializer::shapeFromJson(SceneSerializer::shapeToJson(original));
@@ -614,21 +565,6 @@ void SimulationController::cloneBody(PhysicsBody *parent, const QPointF &at)
     m_startPoses.insert(body, qMakePair(desc.position, desc.rotationDegrees));
     m_clones.append(body);
     m_scene->update();
-}
-
-void SimulationController::deleteClones()
-{
-    for (PhysicsBody *body : std::as_const(m_clones)) {
-        m_startPoses.remove(body);
-        m_bodyByName.remove(body->name());
-        const QVector<ShapeItem *> shapes = body->shapes();
-        for (ShapeItem *shape : shapes) {
-            body->removeShape(shape);
-            delete shape;
-        }
-        m_scene->destroyBody(body, false);
-    }
-    m_clones.clear();
 }
 
 void SimulationController::applyStartRules()
@@ -750,55 +686,56 @@ void SimulationController::stepFrame()
 
 void SimulationController::stop()
 {
-    // Controls go back to what the scene declares, like every variable and
-    // every position on the canvas.
-    m_scene->resetControls();
+    if (!endRun())
+        return;
+    m_document->setSimulationRunning(false);
+    emit stateChanged();
+}
 
-    m_scene->setCaption(QString(), false);
-
-    // And the view goes back to the body the scene names, whatever a rule did
-    // with it while the run was going.
-    PhysicsBody *wanted = nullptr;
-    for (PhysicsBody *body : m_scene->bodies()) {
-        if (!m_focusedAtStart.isEmpty() && body->name() == m_focusedAtStart)
-            wanted = body;
+void SimulationController::restart()
+{
+    if (!m_run)
+        return;
+    QHash<QString, QVariant> kept;
+    for (const SceneControl &control : m_run->controls()) {
+        if (control.kind != SceneControl::Kind::Button)
+            kept.insert(control.id, m_run->controlValue(control.id));
     }
-    m_scene->setFocusedBody(wanted);
+    endRun();
+    m_carriedControls = kept;
+    start();
+    m_carriedControls.clear();
+    if (!isActive()) {
+        m_document->setSimulationRunning(false);
+        emit stateChanged();
+    }
+}
 
+bool SimulationController::endRun()
+{
     // A key still held when the run ends is not held when the next one starts.
     m_keysDown.clear();
     m_keysPressed.clear();
     m_keysReleased.clear();
 
     if (!isActive())
-        return;
+        return false;
 
     m_timer->stop();
-    restoreSnapshot();
-    restoreJointParams();
-
-    // A reading only means something while a world exists.
-    for (RayItem *ray : m_scene->rays())
-        ray->clearReading();
-
     if (m_engine)
         m_engine->destroyWorld();
     m_engine.reset();
-
-    for (const BoundBody &bound : m_bound) {
-        bound.body->setAsleep(false);
-        // A body a rule removed was only removed from the world; the scene
-        // still has it, and the run is over.
-        bound.body->setRemoved(false);
-    }
-    for (Joint *joint : m_scene->joints())
-        joint->setBroken(false);
-
     m_bound.clear();
-    deleteClones();
+    m_trailLocal.clear();
+    m_snapshot.clear();
     m_state = State::Stopped;
-    m_scene->setSimulationRunning(false);
-    emit stateChanged();
+
+    // Later rather than now: a rule ending the run may have got here from
+    // inside one of the copy's own events.
+    m_run->deleteLater();
+    m_run = nullptr;
+    m_scene = m_document;
+    return true;
 }
 
 void SimulationController::stepOnce()
@@ -817,6 +754,7 @@ void SimulationController::keyPressed(int key, Qt::KeyboardModifiers held)
         return;
     m_keysDown.insert(key, chord);
     m_keysPressed.append(chord);
+    answerInputWhileHeld();
 }
 
 void SimulationController::keyReleased(int key, Qt::KeyboardModifiers held)
@@ -828,6 +766,7 @@ void SimulationController::keyReleased(int key, Qt::KeyboardModifiers held)
         return;
     Q_UNUSED(held);
     m_keysReleased.append(chord);
+    answerInputWhileHeld();
 }
 
 void SimulationController::advance(qreal wallSeconds)
@@ -875,6 +814,23 @@ void SimulationController::applyPendingRunAction()
         stop();
     else if (action == Rule::holdRunAction())
         pause();
+    else if (action == kResumeRun)
+        resume();
+    else if (action == Rule::restartRunAction())
+        restart();
+}
+
+void SimulationController::answerInputWhileHeld()
+{
+    if (m_state != State::Stepping || !m_engine || m_answeringInput)
+        return;
+    // Guarded because a rule here may work a control, which lands back here.
+    m_answeringInput = true;
+    applyRules();
+    m_answeringInput = false;
+    syncTransforms();
+    emit stepped();
+    applyPendingRunAction();
 }
 
 void SimulationController::shoot(PhysicsBody *body, const QPointF &impulse)
@@ -922,6 +878,38 @@ void SimulationController::stepWorld(qreal dt)
     advanceTimers(dt);
     applyRules();
     samplePlots();
+    sampleTrails();
+}
+
+void SimulationController::sampleTrails()
+{
+    if (!m_scene)
+        return;
+    for (const BoundBody &bound : std::as_const(m_bound)) {
+        if (!bound.body->drawsTrail())
+            continue;
+        const BodyState state = m_engine->bodyState(bound.handle);
+        if (!state.exists || !std::isfinite(state.position.x())
+            || !std::isfinite(state.position.y()) || !std::isfinite(state.rotationDegrees))
+            continue;
+
+        auto local = m_trailLocal.constFind(bound.body);
+        if (local == m_trailLocal.constEnd()) {
+            // Read off the canvas, all three at once: the shapes may be a
+            // frame behind the solver, but they are behind it together.
+            QTransform bodyToScene;
+            const QPointF origin = bound.body->originScenePos();
+            bodyToScene.translate(origin.x(), origin.y());
+            bodyToScene.rotate(bound.body->rotationDegrees());
+            local = m_trailLocal.insert(
+                bound.body, bodyToScene.inverted().map(bound.body->centerOfMassScenePos()));
+        }
+
+        QTransform bodyToScene;
+        bodyToScene.translate(state.position.x(), state.position.y());
+        bodyToScene.rotate(state.rotationDegrees);
+        m_scene->extendTrail(bound.body, bodyToScene.map(*local));
+    }
 }
 
 // The most points one series keeps. Beyond it the stride doubles and what is
@@ -1149,6 +1137,8 @@ bool SimulationController::sameValue(const QVariant &a, const QVariant &b)
 {
     if (a.userType() == QMetaType::Bool || b.userType() == QMetaType::Bool)
         return a.toBool() == b.toBool();
+    if (a.userType() == QMetaType::QString)
+        return a.toString() == b.toString();
     return qFuzzyCompare(a.toDouble() + 1.0, b.toDouble() + 1.0);
 }
 
@@ -1264,6 +1254,16 @@ bool SimulationController::evaluateOne(
         }
     }
 
+    // Text is the same words or not; as a number every word is 0.
+    if (current.userType() == QMetaType::QString) {
+        const QString b = condition.conditionValue.toString();
+        switch (condition.compare) {
+        case Rule::Compare::Equal:    return current.toString() == b;
+        case Rule::Compare::NotEqual: return current.toString() != b;
+        default:                      return false;
+        }
+    }
+
     const double a = current.toDouble();
     const double b = condition.conditionValue.toDouble();
     switch (condition.compare) {
@@ -1325,6 +1325,8 @@ QVariant SimulationController::readValue(const QString &name, const QString &key
         // "Chance < 20" on an event is that event one time in five.
         if (key == QLatin1String("chance"))
             return randomUnit() * 100.0;
+        if (key == Rule::runningKey())
+            return m_state == State::Running;
         // Everything else the world can be asked is the engine's to answer.
     }
     return readFrom(m_engine.get(), m_bodyByName, m_jointByName, name, key);
@@ -1657,6 +1659,12 @@ void SimulationController::applyAction(const RuleAction &action,
     // looked up by name. Nothing of it is stored in the document: the change
     // lasts as long as the run does.
     if (target == Rule::world()) {
+        // Held or let go once the step is over, like Hold and Stop.
+        if (action.propertyKey == Rule::runningKey()) {
+            const bool going = compute(m_state == State::Running).toBool();
+            m_pendingRunAction = going ? kResumeRun : Rule::holdRunAction();
+            return;
+        }
         m_engine->setWorldParam(action.propertyKey,
                                 compute(m_engine->worldValue(action.propertyKey)));
         return;

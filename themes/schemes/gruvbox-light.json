@@ -1,0 +1,15 @@
+{
+    "label": "Gruvbox Light",
+    "order": 80,
+    "dark": false,
+    "window": "#F2E5BC",
+    "surface": "#FBF1C7",
+    "base": "#FBF1C7",
+    "alternate": "#EBDBB2",
+    "text": "#3C3836",
+    "muted": "#7C6F64",
+    "border": "#D5C4A1",
+    "soft": "#E4D5AC",
+    "accent": "#AF3A03",
+    "accentText": "#FBF1C7"
+}

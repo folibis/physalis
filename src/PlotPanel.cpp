@@ -6,6 +6,7 @@
 #include "SimulationController.h"
 
 #include <QPainter>
+#include <QEvent>
 #include <QPaintEvent>
 #include <QContextMenuEvent>
 #include <QMenu>
@@ -71,11 +72,30 @@ QString shortNumber(qreal value)
     return QString::number(value, 'g', 4);
 }
 
+// The sample nearest a moment. The points are in time order, so this asks
+// where the moment would go and then takes whichever neighbour is closer --
+// stepping the whole trace would be per band, per frame, per move.
+int nearestSample(const QVector<QPointF> &points, qreal when)
+{
+    if (points.isEmpty())
+        return -1;
+    const auto at = std::lower_bound(points.cbegin(), points.cend(), when,
+                                     [](const QPointF &point, qreal t) { return point.x() < t; });
+    if (at == points.cbegin())
+        return 0;
+    if (at == points.cend())
+        return int(points.size()) - 1;
+    const int after = int(at - points.cbegin());
+    return (when - points.at(after - 1).x()) <= (points.at(after).x() - when) ? after - 1 : after;
+}
+
 } // namespace
 
 PlotPanel::PlotPanel(QWidget *parent) : QWidget(parent)
 {
     setMinimumHeight(120);
+    // No button is held while reading a value off a trace.
+    setMouseTracking(true);
 }
 
 void PlotPanel::attach(CanvasScene *scene, SimulationController *simulation)
@@ -185,6 +205,30 @@ void PlotPanel::paintEvent(QPaintEvent *event)
         low -= margin;
         high += margin;
 
+        // The caption keeps saying where the trace is now. The value under the
+        // pointer is written at the pointer instead -- a number to be read off
+        // a curve belongs beside the curve, not in a corner the eye has to
+        // leave the plot for.
+        int marked = -1;
+        qreal markedX = 0.0;
+        qreal markedY = 0.0;
+        if (m_cursorIn) {
+            const qreal atX = qBound(frame.left(), qreal(m_cursorAt.x()), frame.right());
+            const qreal when = firstSecond + shown * ((atX - frame.left()) / frame.width());
+            marked = nearestSample(one.points, when);
+            if (marked >= 0) {
+                const QPointF &point = one.points.at(marked);
+                if (point.x() < firstSecond || point.x() > lastSecond) {
+                    marked = -1;
+                } else {
+                    markedX = frame.left()
+                              + frame.width() * ((point.x() - firstSecond) / shown);
+                    markedY = frame.bottom()
+                              - frame.height() * ((point.y() - low) / (high - low));
+                }
+            }
+        }
+
         painter.setPen(colour);
         painter.drawText(caption, Qt::AlignLeft | Qt::AlignVCenter,
                          tr("%1 · %2   %3")
@@ -227,6 +271,34 @@ void PlotPanel::paintEvent(QPaintEvent *event)
         painter.setBrush(Qt::NoBrush);
         painter.drawPath(path);
 
+        // The crosshair: one line through every band, because the clock is the
+        // one axis they share, and a dot where this trace actually was.
+        if (marked >= 0) {
+            QColor line = ink;
+            line.setAlpha(120);
+            painter.setPen(QPen(line, 1.0, Qt::DashLine));
+            painter.drawLine(QPointF(markedX, frame.top()), QPointF(markedX, frame.bottom()));
+            painter.setPen(QPen(colour, 1.0));
+            painter.setBrush(colour);
+            painter.drawEllipse(QPointF(markedX, markedY), 3.0, 3.0);
+
+            // The reading, beside the dot it belongs to. It goes left of the
+            // line where there is no room right of it, and is held inside the
+            // band so the last trace in a stack does not write over the clock.
+            const QString reading = shortNumber(one.points.at(marked).y());
+            QRectF box(0, 0, metrics.horizontalAdvance(reading) + 10, metrics.height() + 2);
+            const bool toTheRight = markedX + 8 + box.width() <= frame.right();
+            box.moveLeft(toTheRight ? markedX + 8 : markedX - 8 - box.width());
+            box.moveTop(qBound(frame.top() + 1.0, markedY - box.height() - 6,
+                               frame.bottom() - box.height() - 1.0));
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(palette().base());
+            painter.drawRect(box);
+            painter.setPen(colour);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawText(box, Qt::AlignCenter, reading);
+        }
+
         // The clock, under the last band only: they all share it.
         if (i == series.size() - 1) {
             painter.setPen(ink);
@@ -236,6 +308,19 @@ void PlotPanel::paintEvent(QPaintEvent *event)
                 painter.drawText(QRectF(x - 40, frame.bottom() + 2, 80, clock),
                                  Qt::AlignHCenter | Qt::AlignTop,
                                  tr("%1s").arg(shortNumber(t)));
+            }
+            // And the moment the crosshair is on, over the clock it belongs
+            // to: the values above it are all read at this one time.
+            if (marked >= 0) {
+                const QString when = tr("%1s").arg(shortNumber(one.points.at(marked).x()));
+                QRectF box(0, frame.bottom() + 2, metrics.horizontalAdvance(when) + 10, clock);
+                box.moveLeft(qBound(0.0, markedX - box.width() / 2.0, width() - box.width()));
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(palette().base());
+                painter.drawRect(box);
+                painter.setPen(ink);
+                painter.setBrush(Qt::NoBrush);
+                painter.drawText(box, Qt::AlignCenter, when);
             }
         }
 
@@ -259,7 +344,10 @@ void PlotPanel::mousePressEvent(QMouseEvent *event)
 
 void PlotPanel::mouseMoveEvent(QMouseEvent *event)
 {
+    m_cursorAt = event->pos();
+    m_cursorIn = true;
     if (!m_dragging) {
+        update();
         QWidget::mouseMoveEvent(event);
         return;
     }
@@ -279,6 +367,13 @@ void PlotPanel::mouseReleaseEvent(QMouseEvent *event)
         return;
     }
     QWidget::mouseReleaseEvent(event);
+}
+
+void PlotPanel::leaveEvent(QEvent *event)
+{
+    m_cursorIn = false;
+    update();
+    QWidget::leaveEvent(event);
 }
 
 void PlotPanel::wheelEvent(QWheelEvent *event)
@@ -414,7 +509,12 @@ void PlotPanel::saveImage()
     QPixmap shot(size() * 2);
     shot.setDevicePixelRatio(2.0);
     shot.fill(palette().base().color());
+    // The pointer is over the menu, not over a trace: a crosshair frozen into
+    // a saved picture is a stray mark nobody asked for.
+    const bool had = m_cursorIn;
+    m_cursorIn = false;
     render(&shot);
+    m_cursorIn = had;
     if (!shot.save(path)) {
         QMessageBox::warning(this, tr("Save Plot"),
                              tr("Could not write %1.").arg(QDir::toNativeSeparators(path)));

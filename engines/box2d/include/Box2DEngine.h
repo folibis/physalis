@@ -97,6 +97,8 @@ public:
     // Compares each limited joint against its bounds and queues an event on
     // arrival. Called from step(), after the solver has run.
     void detectLimitEvents();
+    // b2World_GetJointEvents: the joints over their force or torque threshold.
+    void collectJointEvents();
     // Turns Box2D's begin/end touch events into ours, once per body involved
     // so that either side of a contact can be the one a rule triggers on.
     void collectContactEvents();

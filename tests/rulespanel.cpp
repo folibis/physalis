@@ -2,7 +2,9 @@
 // Copyright (c) 2026 Ruslan Muhlinin. See LICENSE.
 #include "CanvasScene.h"
 #include "EditorMode.h"
+#include "ControlsPanel.h"
 #include "RulesPanel.h"
+#include "VariablesPanel.h"
 #include "Rule.h"
 #include "ShapeItem.h"
 #include "RayItem.h"
@@ -10,6 +12,9 @@
 #include "SceneVariable.h"
 
 #include <QComboBox>
+#include <QDoubleSpinBox>
+#include <QLineEdit>
+#include "SceneControl.h"
 #include <QToolButton>
 #include <QCoreApplication>
 #include <gtest/gtest.h>
@@ -299,6 +304,38 @@ TEST(RulesPanel, TheWorldOffersItsFrameCountAndElapsedTime)
         << "the rule watches the frame count, but the box is showing something else";
 }
 
+// A control's caption is words: the card asks for words and offers only the
+// tests words can answer.
+TEST(RulesPanel, ACaptionIsComparedAsText)
+{
+    CanvasScene scene;
+    scene.setEditorMode(EditorMode::Physics);
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    SceneControl button;
+    button.id = QStringLiteral("start_button");
+    button.kind = SceneControl::Kind::Button;
+    scene.setControls({ button });
+
+    Rule rule;
+    rule.conditions[0].subjectName = Rule::controls();
+    rule.conditions[0].conditionKey = button.captionKey();
+    rule.conditions[0].compare = Rule::Compare::Equal;
+    rule.conditions[0].conditionValue = QStringLiteral("Go");
+    rule.actions[0].targetName = Rule::world();
+    rule.actions[0].actionId = Rule::stopRunAction();
+    scene.setRules({ rule });
+
+    RulesPanel panel(&scene, nullptr);
+    QLineEdit *words = nullptr;
+    for (QLineEdit *edit : panel.findChildren<QLineEdit *>())
+        if (edit->text() == QStringLiteral("Go"))
+            words = edit;
+    ASSERT_TRUE(words) << "the caption is not asked for as text";
+    for (QComboBox *combo : panel.findChildren<QComboBox *>())
+        EXPECT_LT(combo->findData(Rule::compareName(Rule::Compare::Greater)), 0)
+            << "words were offered \"is greater than\"";
+}
+
 // Adding shapes used to rewrite rules that named other shapes. The cards are
 // rebuilt when the scene's objects change, and a combo whose stored name was
 // not in the refilled list fell back to the first entry -- so the card showed
@@ -425,4 +462,82 @@ TEST(RulesPanel, OneAddPerListAndEveryRowCanBeTakenAway)
     ASSERT_EQ(actions.size(), 3);
     EXPECT_EQ(actions.at(0).propertyKey, QStringLiteral("b")) << "the wrong action was removed";
     EXPECT_EQ(actions.at(1).propertyKey, QStringLiteral("c"));
+}
+
+// A run may be read; it may not be edited. The panel used to be disabled
+// whole, which greyed every card out at the one moment they are worth reading
+// -- and took with them the only thing on a card that is not an edit:
+// double-clicking an object box to go and look at what the rule names. That is
+// how the panels are pointed at another object mid-run, since a press on the
+// canvas pans the field instead of selecting.
+TEST(RulesPanel, ARunLeavesTheCardsReadableAndTheObjectBoxesReachable)
+{
+    CanvasScene scene;
+    scene.setEditorMode(EditorMode::Physics);
+
+    Rule rule;
+    rule.name = QStringLiteral("stopper");
+    rule.conditions[0].subjectName = Rule::world();
+    rule.conditions[0].eventId = Rule::runStartedEvent();
+    rule.actions[0].targetName = Rule::world();
+    rule.actions[0].actionId = Rule::stopRunAction();
+    scene.setRules({rule});
+
+    RulesPanel panel(&scene, nullptr);
+    VariablesPanel variables;
+    variables.setScene(&scene);
+    ControlsPanel controls;
+    controls.setScene(&scene);
+    // Each tab's own Add, which sits above the cards and is not rebuilt with them.
+    const auto addButtons = [&] {
+        QVector<QToolButton *> found;
+        for (QWidget *tab : QVector<QWidget *>{ &panel, &variables, &controls }) {
+            for (QToolButton *button : tab->findChildren<QToolButton *>()) {
+                if (button->text() == QStringLiteral("Add")
+                    || button->toolTip() == QStringLiteral("Add a rule"))
+                    found.append(button);
+            }
+        }
+        return found;
+    };
+    ASSERT_EQ(addButtons().size(), 3);
+
+    // The boxes that must stay live say so in their own tooltip.
+    const auto revealBoxes = [&panel] {
+        QVector<QComboBox *> found;
+        for (QComboBox *combo : panel.findChildren<QComboBox *>()) {
+            if (combo->toolTip().startsWith(QStringLiteral("Double-click to show")))
+                found.append(combo);
+        }
+        return found;
+    };
+    QToolButton *collapseAll = nullptr;
+    for (QToolButton *button : panel.findChildren<QToolButton *>()) {
+        if (button->toolTip() == QStringLiteral("Collapse all rules"))
+            collapseAll = button;
+    }
+    ASSERT_NE(collapseAll, nullptr);
+    ASSERT_FALSE(revealBoxes().isEmpty()) << "no card names an object at all";
+    ASSERT_NE(opBox(&panel), nullptr);
+    ASSERT_TRUE(opBox(&panel)->isEnabled()) << "the card was not editable before the run";
+
+    scene.setSimulationRunning(true);
+
+    EXPECT_TRUE(panel.isEnabled()) << "the whole panel was taken away for the run";
+    EXPECT_FALSE(opBox(&panel)->isEnabled()) << "a rule could still be edited mid-run";
+    EXPECT_TRUE(collapseAll->isEnabled()) << "folding a card is not an edit";
+    for (QToolButton *add : addButtons())
+        EXPECT_FALSE(add->isEnabled()) << "something could be added mid-run";
+    for (QComboBox *box : revealBoxes()) {
+        EXPECT_TRUE(box->isEnabled())
+            << "an object box went dead, so there is no way back to what the rule names";
+    }
+
+    scene.setSimulationRunning(false);
+
+    EXPECT_TRUE(panel.isEnabled());
+    ASSERT_NE(opBox(&panel), nullptr) << "the cards did not come back";
+    EXPECT_TRUE(opBox(&panel)->isEnabled()) << "the card stayed read-only after Stop";
+    for (QToolButton *add : addButtons())
+        EXPECT_TRUE(add->isEnabled()) << "Add stayed off after Stop, until the scene was reopened";
 }

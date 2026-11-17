@@ -65,6 +65,11 @@ struct Converter {
 // converters and are passed over in silence -- a README sitting beside them
 // is not an error.
 QVector<Converter> discover(const QString &root);
+// Every converter there is: the folders in assetFolders("exporters"), with one
+// found later standing in for one of the same name found earlier. There is no
+// setting for this -- a path that can be pointed away from what ships is a
+// setting whose only power is to hide it.
+QVector<Converter> discover();
 
 // Runs one, writing whatever it produces into `outputFolder`. `settings` is
 // the application's own preferences, grouped as they are stored -- a converter

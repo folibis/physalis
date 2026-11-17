@@ -98,6 +98,9 @@
     <addaction name="separator"/>
     <addaction name="actionCopy"/>
     <addaction name="actionPaste"/>
+    <addaction name="actionDuplicate"/>
+    <addaction name="separator"/>
+    <addaction name="actionSelectAll"/>
     <addaction name="separator"/>
     <addaction name="menuAlign"/>
     <addaction name="separator"/>
@@ -121,6 +124,11 @@
     <addaction name="actionAddPolygon"/>
    </widget>
    <addaction name="menuAddShape"/>
+    <addaction name="separator"/>
+    <addaction name="actionBringToFront"/>
+    <addaction name="actionBringForward"/>
+    <addaction name="actionSendBackward"/>
+    <addaction name="actionSendToBack"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
@@ -333,6 +341,97 @@
     <string>Ctrl+V</string>
    </property>
   </action>
+  <action name="actionDuplicate">
+   <property name="text">
+    <string>&amp;Duplicate</string>
+   </property>
+   <property name="toolTip">
+    <string>Copy the selection beside itself, with its bodies and the joints between them</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+D</string>
+   </property>
+  </action>
+  <action name="actionSelectAll">
+   <property name="text">
+    <string>Select &amp;All</string>
+   </property>
+   <property name="toolTip">
+    <string>Pick every shape on the field</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+A</string>
+   </property>
+  </action>
+  <action name="actionFitToField">
+   <property name="text">
+    <string>&amp;Fit to Field</string>
+   </property>
+   <property name="toolTip">
+    <string>Zoom so the whole field is in view</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+0</string>
+   </property>
+  </action>
+  <action name="actionBringToFront">
+   <property name="text">
+    <string>Bring to &amp;Front</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw the selection over everything else</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+]</string>
+   </property>
+  </action>
+  <action name="actionBringForward">
+   <property name="text">
+    <string>Bring F&amp;orward</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw the selection one place higher</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+]</string>
+   </property>
+  </action>
+  <action name="actionSendBackward">
+   <property name="text">
+    <string>Send &amp;Backward</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw the selection one place lower</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+[</string>
+   </property>
+  </action>
+  <action name="actionSendToBack">
+   <property name="text">
+    <string>Send to &amp;Back</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw the selection under everything else</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+[</string>
+   </property>
+  </action>
+  <action name="actionShowObjectNames">
+   <property name="text">
+    <string>Show &amp;Names</string>
+   </property>
+   <property name="toolTip">
+    <string>Write each object's name beside it on the canvas</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+N</string>
+   </property>
+  </action>
   <action name="actionAlign">
    <property name="text">
     <string>Align</string>
@@ -442,6 +541,9 @@
    <property name="toolTip">
     <string>Group the selected shapes into one rigid body</string>
    </property>
+   <property name="shortcut">
+    <string>Ctrl+G</string>
+   </property>
   </action>
   <action name="actionDissolveBody">
    <property name="text">
@@ -449,6 +551,9 @@
    </property>
    <property name="toolTip">
     <string>Dissolve the selected body back into its shapes, or delete the selected explosion</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+G</string>
    </property>
   </action>
   <action name="actionAddJoint">
@@ -471,6 +576,9 @@
    <property name="text">
     <string>Simulate</string>
    </property>
+   <property name="shortcut">
+    <string>F5</string>
+   </property>
   </action>
   <action name="actionStep">
    <property name="text">
@@ -479,6 +587,9 @@
    <property name="toolTip">
     <string>Advance one frame and hold</string>
    </property>
+   <property name="shortcut">
+    <string>F6</string>
+   </property>
   </action>
   <action name="actionStop">
    <property name="text">
@@ -486,6 +597,9 @@
    </property>
    <property name="toolTip">
     <string>Stop and put every shape back where it started</string>
+   </property>
+   <property name="shortcut">
+    <string>F8</string>
    </property>
   </action>
  </widget>

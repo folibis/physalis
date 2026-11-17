@@ -19,12 +19,12 @@ std::vector<PropertyRow> SensorPropertyPane::rows(EditorMode mode) const
     if (!m_scene || m_scene->physicsSelection().isEmpty())
         return result;
 
-    ShapeItem *shape = m_scene->physicsSelection().first();
+    const QVector<ShapeItem *> selection = m_scene->physicsSelection();
+    ShapeItem *shape = selection.first();
     PhysicsBody *body = shape->body();
     if (!body)
         return result;
 
-    physics::ShapePart *part = &shape->part();
     physics::BodyDesc *props = &body->props();
     CanvasScene *scene = m_scene;
     const auto changed = [body] { body->notifyPropertyChanged(); };
@@ -102,7 +102,13 @@ std::vector<PropertyRow> SensorPropertyPane::rows(EditorMode mode) const
     // the first row, so it is not repeated here.
     if (auto engine = physics::EngineRegistry::create(scene->simulationEngineName())) {
         const QString sensorKey = scene->sensorPropertyKey();
-        for (PropertyRow &row : rowsFromCatalogue(engine->shapeProperties(), &shape->part().params,
+        // Every sensor picked, not only the lead one -- the same bargain the
+        // physics pane keeps.
+        std::vector<QVariantMap *> params;
+        params.reserve(selection.size());
+        for (ShapeItem *one : selection)
+            params.push_back(&one->part().params);
+        for (PropertyRow &row : rowsFromCatalogue(engine->shapeProperties(), params,
                                                   changed, section)) {
             if (row.key == sensorKey)
                 continue;

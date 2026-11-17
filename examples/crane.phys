@@ -3,7 +3,8 @@
         {
             "isEnabled": true,
             "name": "leg_left",
-            "physics": {},
+            "physics": {
+            },
             "shapes": [
                 1
             ],
@@ -12,7 +13,8 @@
         {
             "isEnabled": true,
             "name": "bridge",
-            "physics": {},
+            "physics": {
+            },
             "shapes": [
                 2
             ],
@@ -21,7 +23,8 @@
         {
             "isEnabled": true,
             "name": "trolley",
-            "physics": {},
+            "physics": {
+            },
             "shapes": [
                 3
             ],
@@ -30,7 +33,8 @@
         {
             "isEnabled": true,
             "name": "hoist_block",
-            "physics": {},
+            "physics": {
+            },
             "shapes": [
                 4
             ],
@@ -39,7 +43,8 @@
         {
             "isEnabled": true,
             "name": "jaw_left",
-            "physics": {},
+            "physics": {
+            },
             "shapes": [
                 7,
                 5
@@ -49,7 +54,8 @@
         {
             "isEnabled": true,
             "name": "jaw_right",
-            "physics": {},
+            "physics": {
+            },
             "shapes": [
                 8,
                 6
@@ -59,7 +65,8 @@
         {
             "isEnabled": true,
             "name": "ground",
-            "physics": {},
+            "physics": {
+            },
             "shapes": [
                 10
             ],
@@ -68,7 +75,8 @@
         {
             "isEnabled": true,
             "name": "leg_right",
-            "physics": {},
+            "physics": {
+            },
             "shapes": [
                 9
             ],
@@ -77,7 +85,8 @@
         {
             "isEnabled": true,
             "name": "item_1",
-            "physics": {},
+            "physics": {
+            },
             "shapes": [
                 11
             ],
@@ -86,7 +95,8 @@
         {
             "isEnabled": true,
             "name": "item_2",
-            "physics": {},
+            "physics": {
+            },
             "shapes": [
                 13
             ],
@@ -95,7 +105,8 @@
         {
             "isEnabled": true,
             "name": "item_3",
-            "physics": {},
+            "physics": {
+            },
             "shapes": [
                 12
             ],
@@ -634,11 +645,13 @@
         },
         {
             "action": "removeBody",
-            "actionParams": {},
+            "actionParams": {
+            },
             "actions": [
                 {
                     "action": "removeBody",
-                    "actionParams": {},
+                    "actionParams": {
+                    },
                     "op": "set",
                     "property": "",
                     "target": "@otherBody",
@@ -674,7 +687,8 @@
                 "y": 0
             },
             "outline": false,
-            "physics": {},
+            "physics": {
+            },
             "pos": {
                 "x": -300,
                 "y": 250
@@ -701,7 +715,8 @@
                 "y": -20
             },
             "outline": false,
-            "physics": {},
+            "physics": {
+            },
             "pos": {
                 "x": -300,
                 "y": -210
@@ -728,7 +743,8 @@
                 "y": -30
             },
             "outline": false,
-            "physics": {},
+            "physics": {
+            },
             "pos": {
                 "x": -200,
                 "y": -130
@@ -755,7 +771,8 @@
                 "y": -30
             },
             "outline": false,
-            "physics": {},
+            "physics": {
+            },
             "pos": {
                 "x": -200,
                 "y": -90
@@ -783,7 +800,8 @@
                 "y": 30
             },
             "outline": false,
-            "physics": {},
+            "physics": {
+            },
             "points": [
                 {
                     "x": 80,
@@ -829,7 +847,8 @@
                 "y": 30
             },
             "outline": false,
-            "physics": {},
+            "physics": {
+            },
             "points": [
                 {
                     "x": 0,
@@ -875,7 +894,8 @@
                 "y": 38.5
             },
             "outline": false,
-            "physics": {},
+            "physics": {
+            },
             "points": [
                 {
                     "x": -1,
@@ -925,7 +945,8 @@
                 "y": 38.5
             },
             "outline": false,
-            "physics": {},
+            "physics": {
+            },
             "points": [
                 {
                     "x": 60,
@@ -974,7 +995,8 @@
                 "y": -60
             },
             "outline": false,
-            "physics": {},
+            "physics": {
+            },
             "pos": {
                 "x": 440,
                 "y": 170
@@ -1001,7 +1023,8 @@
                 "y": -20
             },
             "outline": false,
-            "physics": {},
+            "physics": {
+            },
             "pos": {
                 "x": -300,
                 "y": 350
@@ -1124,7 +1147,8 @@
     ],
     "version": 1,
     "world": {
-        "physics": {},
+        "physics": {
+        },
         "pixelsPerMeter": 100,
         "randomSeed": 0,
         "solidBounds": false

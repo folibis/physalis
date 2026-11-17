@@ -50,6 +50,8 @@ private:
 
     void restore(int index);
     void trim();
+    // An edit happened that no state was recorded for. See m_touched.
+    void touch();
 
     CanvasScene *m_scene = nullptr;
     QVector<State> m_states;

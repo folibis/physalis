@@ -32,8 +32,8 @@ Physalis has three kinds of shapes:
   - Any other outline, such as an open line or a closed shape with a notch, is
     treated as a set of edges. Edges are fine for fixed scenery such as ramps,
     walls and terrain, but they have no inside and therefore no mass, so they
-    cannot belong to a body that moves. To make such a shape move, split it
-    into several convex pieces and group them into one body.
+    cannot belong to a body that moves. To make such a shape move, right-click
+    it and choose **Split into Convex Pieces...**.
 
 ## Adding shapes
 
@@ -60,6 +60,8 @@ and Physalis adjusts a name that is already taken.
 - **Shift+click** adds shapes to the selection, or removes them from it.
   Shapes selected together move, resize and rotate together.
 - **Click an empty part of the canvas** to clear the selection.
+- **Ctrl+A** selects every shape on the field. In Physics mode it picks whole
+  bodies, the same as clicking them one by one would.
 - **Ctrl+click** reaches a shape lying under another one: each Ctrl+click on
   the same spot selects the next shape down.
 - **Click a shape in the Objects tab** to select it from the tree.
@@ -112,7 +114,13 @@ More ways to move a shape:
 
 Right-clicking a shape offers these commands:
 
-- **Duplicate** makes a copy next to the original.
+- **Duplicate** (**Ctrl+D**) makes a copy next to the original. It copies the mechanism,
+  not just the shapes: the bodies the shapes belong to come with them, and so
+  does any joint whose *both* ends are in what you picked — so a wheel on an
+  axle duplicates as a wheel on an axle, joined to its own copy rather than to
+  the original. A joint with only one end in the selection has nothing on this
+  side to hold, so it is left out and the status bar says how many were.
+  Copy and Paste carry the same thing, and work between two windows.
 - **Flip Horizontally** and **Flip Vertically** mirror the shape.
 - **Convert to Polygon** (rectangles only) replaces the rectangle with a polygon
   of the same outline.
@@ -123,12 +131,23 @@ Right-clicking a shape offers these commands:
   grid when moved, and whether its top-left corner or its origin is the point
   that snaps.
 - **Reset Rotation** turns the shape back to 0°.
+- **Bring to Front**, **Bring Forward**, **Send Backward** and **Send to Back**
+  decide which shape is drawn over which where they overlap. Without them a
+  shape is drawn in the order it was added and nothing can change it. The order
+  is saved with the scene. Shapes picked together keep their own order among
+  themselves as they move through the pile.
 - **Convert to Chain...** (circles only) replaces the circle with one closed
   outline of straight segments: a wheel, a ring, a hoop for other shapes to sit
   in. Choose how many segments it has and which angle it starts at.
 - **Convert to Segments...** (circles and rectangles) replaces the shape with
   that many separate line shapes, each of which can be given a body and joined
   to its neighbours.
+- **Split into Convex Pieces...** (closed polygons that are concave or have
+  more points than a solid shape may) cuts the outline into convex pieces that
+  together cover exactly the same area, so it can be solid and belong to a body
+  that moves. Choose the most **corners per piece**; fewer gives more, smaller
+  pieces. The pieces stay in the polygon's body, and the first one keeps its
+  name, so rules that named it still find it.
 - **Delete** removes the shape. The **Delete** key does the same.
 
 ## Lining shapes up
@@ -153,7 +172,8 @@ the canvas shows the result as the settings change. **Apply** keeps it,
 **Cancel** -- or clicking anywhere outside the panel -- puts the scene back.
 
 - **Clone...** fills a grid with copies of the selection: how many **rows** and
-  **columns**, and the **gap** across and down between them.
+  **columns**, and the **gap** across and down between them. Unlike Duplicate
+  it copies the shapes alone — the copies are in no body and carry no joints.
 - **Mirror...** puts a mirrored copy beside the original, on the **side** you
   choose -- right, left, top or bottom -- at the **margin** you give.
 
@@ -196,11 +216,51 @@ simulation:
 The default colours and outline for new shapes are set in
 [Options → Shapes](options.md).
 
+A box swept over empty field picks everything it touches -- shapes, **rays**
+and **explosions** together, as many of each as the box covers. Two blasts, two
+rangefinders and a body come back from one sweep as one selection, and
+**Delete**, the arrow keys, dragging any of them, and **Copy** then act on all
+of it. Hold **Shift** to add another boxful to what is already picked.
+
+A fresh box says what the whole selection is: a sweep that catches no blasts
+leaves none picked. Clicking one thing picks that thing alone, even out of a
+group -- so a set picked by mistake is undone with one click.
+
+A **joint** is the exception: it is a linkage rather than something with a
+place of its own, so picking one lets everything else go, and picking anything
+else lets it go. The property panel shows one object at a time; where several
+are picked it shows the first, and the rest are still picked.
+
+## Names on the canvas
+
+**Show Names** -- on the canvas's right-click menu, on **View**, or
+**Ctrl+Shift+N** -- writes each object's name beside it. It is **off** by
+default, since a field of labels is in the way of the drawing most of the time,
+and the choice is remembered.
+
+A body speaks for the shapes in it: a body of five plates gets one label, not
+six. Shapes in no body, joints, rays and explosions each get their own. The
+labels stay the same size whatever the zoom, so they are still readable zoomed
+right in, and they are drawn during a run too.
+
+## The canvas right-click menu
+
+Right-clicking the canvas offers what belongs to the canvas rather than to one
+shape: **Paste**, **Select All**, **Fit to Field**, **Reset Zoom** and
+**Show Names**. These are there whether or not a shape is under the pointer,
+and the view commands stay available **during a run** -- framing the field or
+reading the names is exactly what a run is watched with.
+
 ## Zoom, grid and snapping
 
 - The zoom box on the toolbar sets the scale of the view: pick a preset or
-  type a value. **Shift + mouse wheel** over the canvas zooms as well, and the
-  magnifier button returns to 100%.
+  type a value. **Ctrl + mouse wheel** over the canvas zooms as well (**Shift**
+  does the same), and the magnifier button -- or **Ctrl+0** -- returns to 100%.
+  A notch of the wheel changes the zoom by a share of where it already is, so
+  coming back out from 500% takes as many notches as going in did; the share is
+  set in [Options → Common](options.md).
+- **Fit to Field** on the **View** menu, or **Ctrl+Shift+0**, zooms so the
+  whole field is in view.
 - Drag an empty part of the canvas to move the view.
 - The field's size and colour, the grid, and how snapping works are set in
   [Options → Common](options.md). The field's size and colour can also be

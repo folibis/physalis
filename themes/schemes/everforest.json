@@ -1,0 +1,15 @@
+{
+    "label": "Everforest Dark",
+    "order": 70,
+    "dark": true,
+    "window": "#2D353B",
+    "surface": "#232A2E",
+    "base": "#232A2E",
+    "alternate": "#343F44",
+    "text": "#D3C6AA",
+    "muted": "#9DA9A0",
+    "border": "#4F585E",
+    "soft": "#3D484D",
+    "accent": "#A7C080",
+    "accentText": "#232A2E"
+}

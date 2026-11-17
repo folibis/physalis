@@ -14,4 +14,6 @@
     jointDef.angularDampingRatio = {{ANGULAR_DAMPING_RATIO}};
     {{ID}} = b2.b2CreateWeldJoint(world, jointDef);
     b2.b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
+    b2.b2Joint_SetForceThreshold({{ID}}, {{FORCE_THRESHOLD}});
+    b2.b2Joint_SetTorqueThreshold({{ID}}, {{TORQUE_THRESHOLD}});
 }

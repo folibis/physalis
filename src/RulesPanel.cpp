@@ -24,6 +24,9 @@
 #include <QSpinBox>
 #include <QCheckBox>
 #include <QMouseEvent>
+#include <QWheelEvent>
+#include <QAbstractButton>
+#include <QAbstractSpinBox>
 #include <algorithm>
 
 #include <QComboBox>
@@ -148,13 +151,52 @@ public:
 
     void showPopup() override
     {
+        if (m_readOnly)
+            return;
         fillAndKeep(currentData().toString());
         QComboBox::showPopup();
+    }
+
+    // Shown but not changeable, rather than disabled. A run may be read and
+    // not edited, and this box is the one thing on a card worth reaching for
+    // while one is going: double-clicking it follows the rule to the object it
+    // names, and a disabled widget is given no mouse at all.
+    void setReadOnly(bool readOnly)
+    {
+        if (m_readOnly == readOnly)
+            return;
+        if (readOnly)
+            m_focusWas = focusPolicy();
+        m_readOnly = readOnly;
+        // Tabbing to a box that cannot be changed is a stop on the way to
+        // nothing. The mouse still reaches it, which is the point.
+        setFocusPolicy(readOnly ? Qt::NoFocus : m_focusWas);
+    }
+
+protected:
+    void wheelEvent(QWheelEvent *event) override
+    {
+        if (m_readOnly) {
+            event->ignore();
+            return;
+        }
+        QComboBox::wheelEvent(event);
+    }
+
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        if (m_readOnly) {
+            event->ignore();
+            return;
+        }
+        QComboBox::keyPressEvent(event);
     }
 
 private:
     Source m_source;
     Fill m_fill = Fill::AtOnce;
+    bool m_readOnly = false;
+    Qt::FocusPolicy m_focusWas = Qt::WheelFocus;
     QString m_emptyText = QObject::tr("(nothing to choose)");
 };
 
@@ -303,12 +345,12 @@ void RulesPanel::buildUi()
     title->setStyleSheet(QStringLiteral("font-weight: bold; padding: 2px; color: %1;")
                              .arg(accent.name()));
 
-    auto *add = new QToolButton(headerBar);
+    m_add = new QToolButton(headerBar);
     // Drawn in the title's colour, so the two read as one heading.
-    add->setIcon(tintedIcon(Icons::add(), accent, 16));
-    add->setToolTip(tr("Add a rule"));
-    add->setAutoRaise(true);
-    connect(add, &QToolButton::clicked, this, &RulesPanel::addRule);
+    m_add->setIcon(tintedIcon(Icons::add(), accent, 16));
+    m_add->setToolTip(tr("Add a rule"));
+    m_add->setAutoRaise(true);
+    connect(m_add, &QToolButton::clicked, this, &RulesPanel::addRule);
 
     // Beside the title rather than out by the add button: they act on the cards
     // below, which is what the title names.
@@ -328,7 +370,7 @@ void RulesPanel::buildUi()
     header->addWidget(m_collapseAll);
     header->addWidget(m_expandAll);
     header->addStretch();
-    header->addWidget(add);
+    header->addWidget(m_add);
     layout->addWidget(headerBar);
 
     auto *scroll = new QScrollArea(this);
@@ -413,10 +455,54 @@ void RulesPanel::connectScene()
                                                 &CanvasScene::explosionsChanged,
                                                 &CanvasScene::controlsChanged })
             connect(m_scene, changed, this, &RulesPanel::refreshChoices);
-        // Editing rules mid-run would change the thing being watched.
+        // Editing rules mid-run would change the thing being watched, so the
+        // cards go read-only -- not away. Reading them is most of what anyone
+        // wants of this panel while a run is going wrong.
         connect(m_scene, &CanvasScene::simulationRunningChanged, this,
-                [this](bool running) { setEnabled(!running); });
-        setEnabled(m_scene->selectionAllowed());
+                [this](bool running) { setReadOnly(running); });
+        // Set rather than switched: setScene rebuilds right after this, and
+        // rebuild() is what puts it on the cards.
+        m_readOnly = !m_scene->selectionAllowed();
+    }
+}
+
+void RulesPanel::setReadOnly(bool readOnly)
+{
+    if (m_readOnly == readOnly)
+        return;
+    m_readOnly = readOnly;
+
+    if (readOnly) {
+        applyReadOnly();
+        return;
+    }
+    // Rebuilt rather than re-enabled one widget at a time: what each editor's
+    // enabled state should be is decided while the card is built, and putting
+    // the lot back on would hand the first card a Move Up it never had.
+    rebuild();
+}
+
+void RulesPanel::applyReadOnly()
+{
+    // The header is not rebuilt with the cards, so it is set both ways here.
+    // Its fold buttons stay live: folding is not an edit.
+    if (m_add)
+        m_add->setEnabled(!m_readOnly);
+    if (!m_readOnly || !m_cards)
+        return;
+
+    for (QWidget *widget : m_cards->parentWidget()->findChildren<QWidget *>()) {
+        if (auto *box = dynamic_cast<ObjectComboBox *>(widget)) {
+            box->setReadOnly(true);
+            continue;
+        }
+        // A long card is exactly what one wants folded while reading.
+        if (widget->objectName() == QLatin1String("collapseButton"))
+            continue;
+        if (qobject_cast<QAbstractButton *>(widget) || qobject_cast<QComboBox *>(widget)
+            || qobject_cast<QAbstractSpinBox *>(widget) || qobject_cast<QLineEdit *>(widget)) {
+            widget->setEnabled(false);
+        }
     }
 }
 
@@ -451,6 +537,9 @@ void RulesPanel::rebuild()
         refreshCardLook(i);
     }
     syncFoldButtons();
+    // The cards are new; a run that was going while they were made still has
+    // its say over them.
+    applyReadOnly();
 
     emit incompleteCountChanged(incompleteCount());
 }
@@ -1422,9 +1511,7 @@ QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
     // the engine says its world can still be asked about.
     if (name == Rule::world()) {
         addEvents(eventsFor(name));
-        choices.append({QStringLiteral("time"), tr("Elapsed Time (s)")});
-        choices.append({QStringLiteral("frame"), tr("Frame")});
-        choices.append({QStringLiteral("chance"), tr("Chance (0-100)")});
+        addReadable(Rule::runProperties());
         addReadable(engine->worldProperties());
         return choices;
     }
@@ -1474,9 +1561,11 @@ void RulesPanel::refreshConditionEditor(int index, int slot)
     // the ordering tests is how a rule ends up written that way.
     const bool watchingFlag =
         !condition.isEvent() && propertyIsFlag(condition.subjectName, condition.conditionKey);
+    const bool watchingText =
+        !condition.isEvent() && propertyIsText(condition.subjectName, condition.conditionKey);
     if (row.compare) {
         row.compare->clear();
-        if (!watchingFlag) {
+        if (!watchingFlag && !watchingText) {
             row.compare->addItem(tr("is greater than"),
                                  Rule::compareName(Rule::Compare::Greater));
             row.compare->addItem(tr("is less than"), Rule::compareName(Rule::Compare::Less));
@@ -1654,6 +1743,21 @@ void RulesPanel::refreshConditionEditor(int index, int slot)
             commit(index, updated);
         });
         row.condition = combo;
+    } else if (watchingText) {
+        auto *edit = new QLineEdit(condition.conditionValue.toString(), row.conditionHolder);
+        edit->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+        if (const physics::JointParam *param = describe(condition.subjectName, condition.conditionKey))
+            edit->setToolTip(param->tooltip);
+        connect(edit, &QLineEdit::editingFinished, this, [this, index, slot, edit] {
+            if (m_building)
+                return;
+            Rule updated = m_scene->rules().at(index);
+            if (updated.conditions[slot].conditionValue.toString() == edit->text())
+                return;
+            updated.conditions[slot].conditionValue = edit->text();
+            commit(index, updated);
+        });
+        row.condition = edit;
     } else {
         auto *spin = new QDoubleSpinBox(row.conditionHolder);
         spin->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
@@ -1719,10 +1823,12 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
     }
 
     if (name == Rule::world()) {
+        addSettable(Rule::runProperties(), false);
         addSettable(engine->worldProperties(), false);
         // The run itself, which is the application's to end or hold.
         result.append({actionKey(Rule::stopRunAction()), tr("Stop the simulation")});
         result.append({actionKey(Rule::holdRunAction()), tr("Hold the simulation")});
+        result.append({actionKey(Rule::restartRunAction()), tr("Restart the simulation")});
         result.append({actionKey(Rule::showCaptionAction()), tr("Show a caption")});
         return result;
     }
@@ -2294,6 +2400,11 @@ void RulesPanel::applyWatchChoice(int index, int slot, const QString &chosen)
             condition.compare = Rule::Compare::Greater;
             condition.conditionValue = 0.0;
         }
+        if (propertyIsText(condition.subjectName, chosen)
+            && condition.conditionValue.userType() != QMetaType::QString) {
+            condition.compare = Rule::Compare::Equal;
+            condition.conditionValue = describe(condition.subjectName, chosen)->defaultValue.toString();
+        }
     }
     commit(index, updated);
 }
@@ -2310,6 +2421,10 @@ QString RulesPanel::captionFor(int index) const
 
 void RulesPanel::beginRename(int index)
 {
+    // The caption is a label, not an editor, so read-only leaves it alone --
+    // and the double-click that opens the box has to be turned away here.
+    if (m_readOnly)
+        return;
     if (index < 0 || index >= m_rows.size())
         return;
     Row &row = m_rows[index];
@@ -2772,34 +2887,14 @@ const physics::JointParam *RulesPanel::describe(const QString &objectName,
     physics::PropertyList candidates;
     bool matched = false;
     if (objectName == Rule::world()) {
-        // Two readings of the run itself, which no engine named -- the same two
-        // the condition's property list offers. Left out, every rule counting
+        // The run's own, which no engine named. Left out, every rule counting
         // frames or seconds looked as though it named a property the engine had
         // dropped, and the panel marked a finished card red.
-        if (key == QLatin1String("time") || key == QLatin1String("frame")
-            || key == QLatin1String("chance")) {
-            found = physics::JointParam {};
-            found.key = key;
-            const bool seconds = key == QLatin1String("time");
-            const bool luck = key == QLatin1String("chance");
-            found.label = luck ? tr("Chance (0-100)")
-                               : seconds ? tr("Elapsed Time (s)") : tr("Frame");
-            found.type = seconds || luck ? physics::ParamType::Real
-                                         : physics::ParamType::Integer;
-            found.defaultValue = seconds || luck ? QVariant(0.0) : QVariant(0);
-            found.minValue = 0.0;
-            found.maxValue = luck ? 100.0 : 1e9;
-            found.decimals = luck ? 1 : (seconds ? 3 : 0);
-            found.step = seconds ? 0.1 : (luck ? 5.0 : 1.0);
-            found.liveReadable = true;
-            found.rulesOnly = true;
-            found.tooltip = luck
-                ? tr("A fresh number from 0 to 100 every time it is read, so "
-                     "\"less than 25\" happens about one time in four. Use it beside an "
-                     "event to let that event count only sometimes.")
-                : seconds ? tr("How long this run has been going.")
-                          : tr("How many steps this run has taken.");
-            return &found;
+        for (const physics::JointParam &own : Rule::runProperties()) {
+            if (own.key == key) {
+                found = own;
+                return &found;
+            }
         }
         candidates = engine->worldProperties();
         matched = true;

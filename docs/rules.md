@@ -83,9 +83,8 @@ thing watched or the thing acted on, and the variable itself is the property.
 So *when Variables.score is greater than 100, stop the simulation* is written
 the same way as any other rule.
 
-A variable is run state. It starts each run at the value in the tab and goes
-back there when the run stops, the way every shape goes back to where it
-started.
+A variable starts each run at the value in the tab. A run works on a copy of
+the scene, so nothing a rule does to it outlasts the run.
 
 ### Timers
 
@@ -178,9 +177,8 @@ of the side panel, one card each:
   declares nothing -- what it has is a press.
 
 The controls appear over the canvas while the simulation runs, under the
-caption, and they are gone when it stops. What a control is set to is run
-state: it starts each run where the scene declares and goes back there when the
-run ends.
+caption, and they are gone when it stops. Every run starts each control at
+the start value set in the Controls tab, and that is what it shows.
 
 Rules reach them through **Controls**:
 
@@ -252,6 +250,11 @@ depends on the object and on the [physics engine](engines.md):
 - **detects**: a [ray](physics.md#rays) sees a particular shape.
 - **Lower limit reached** and **Upper limit reached**: a joint gets to the end
   of its range.
+- **Threshold exceeded** (Box2D): a joint is holding with at least the
+  **Force Threshold** or **Torque Threshold** set in its **Joint Events**
+  properties. It happens on every step the joint stays over, while its bodies
+  are awake. Paired with **Break**, it makes a joint that snaps under load: a
+  rope that gives way, a bridge that fails when something heavy crosses it.
 - **to be removed**: a rule is about to remove this body. See
   [Answering a removal](#answering-a-removal-to-be-removed).
 - **starting simulation** (on **World**): happens once, at the start. See
@@ -337,9 +340,16 @@ engine are:
   [Keeping one body in view](running.md#keeping-one-body-in-view).
 - **Explode** sets off an [explosion](physics.md#explosions).
 - **Break** destroys a joint.
-- **Stop the simulation** (on **World**) ends the run and puts the scene
-  back, just like the Stop button.
+- **Stop the simulation** (on **World**) ends the run, just like the Stop
+  button.
 - **Hold the simulation** (on **World**) pauses the run where it is.
+- **Restart the simulation** (on **World**) starts the run again from the
+  scene: every body where it began, every joint whole, every variable at its
+  start value. A scene that starts paused comes back paused. Sliders and
+  checkboxes keep where you left them.
+- **Simulation Running** (on **World**) is true while the run goes on and
+  false while it is held. Set it to false to hold the run, to true to let it go
+  on, or **toggle** it to do whichever it is not doing.
 - **Show a caption** (on **World**) puts words on the canvas, under the log.
   Press the **...** button to write them: the editor there sets bold, italic
   and underline, a typeface, a size and a colour. Untick **shown** to take the
@@ -434,8 +444,8 @@ pockets.
 A rule on **World** with the event **starting simulation** runs once, when
 you press Simulate and before anything moves. Use it to prepare the scene,
 for example to give a body a starting speed, place an object, or open a gate.
-**Stop** puts back everything these rules changed, as it does for every other
-rule.
+They act on the run's copy of the scene, like every other rule, so the scene
+itself is left as it was.
 
 ## Tips
 
@@ -448,3 +458,37 @@ rule.
 - Untick a rule to switch it off for a moment instead of deleting it.
 - A red card means the rule is unfinished, not that it is wrong: hover the
   warning mark to see which field is still empty.
+
+## Starting, holding and toggling a run
+
+A held run does not move, but its [controls](#keys-and-controls) and keys
+still reach the rules -- so a slider can be set and a button pressed before
+anything happens. To make a scene that waits for its own Start button:
+
+1. Click an empty part of the canvas in Physics mode and tick **Starts
+   Paused**.
+2. Add a button control, `start`.
+3. Add a rule: **When** *Controls · pressed · start*, **do** *World ·
+   Simulation Running · set to · true*.
+
+For one key that pauses and resumes, use *Keyboard · key pressed · P* and
+*World · Simulation Running · toggle*.
+
+For one button that starts the run and then puts it back to the beginning,
+keep whether it has started in a variable, `started`, and write two rules in
+this order:
+
+1. **When** *Controls · pressed · start* **and** *Variables · started · is ·
+   true*, **do** *World · Restart the simulation*.
+2. **When** *Controls · pressed · start* **and** *Variables · started · is ·
+   false*, **do** *World · Simulation Running · set to · true*, *Variables ·
+   started · set to · true* and *Controls · start:caption · set to · Stop*.
+
+The order matters. Rules are carried out top to bottom, and if rule 1 were
+below rule 2 it would see `started` already true and put the run back on the
+same press that started it. The restart puts the variable and the caption back
+by itself.
+
+The exporters do not write rules that set **Simulation Running** yet; they
+name each one they leave out.
+

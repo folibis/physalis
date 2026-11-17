@@ -24,4 +24,6 @@
     jointDef.maxSpringTorque = {{MAX_SPRING_TORQUE}};
     {{ID}} = b2CreateMotorJoint(world, &jointDef);
     b2Joint_SetConstraintTuning({{ID}}, {{CONSTRAINT_HERTZ}}, {{CONSTRAINT_DAMPING}});
+    b2Joint_SetForceThreshold({{ID}}, {{FORCE_THRESHOLD}});
+    b2Joint_SetTorqueThreshold({{ID}}, {{TORQUE_THRESHOLD}});
 }

@@ -20,6 +20,7 @@
 #include "PhysicsTypes.h"
 #include "SceneControl.h"
 #include "SimulationController.h"
+#include "RunCopy.h"
 #include "Rule.h"
 #include "SceneVariable.h"
 #include <QtTest/QTest>
@@ -159,7 +160,6 @@ OptionsDialog::Settings distinctive()
     s.jointWaistWidth = 4.8;
     s.jointOutlineWidth = 2.3;
 
-    s.converterPath = QStringLiteral("C:/converters");
     s.converterSettings.insert(QStringLiteral("box2d3wasm"),
                                QVariantMap { { QStringLiteral("scale"), 3 } });
 
@@ -240,7 +240,7 @@ void everyFieldComesBack(const OptionsDialog::Settings &in, const OptionsDialog:
     SAME(jointOutlineColor); SAME(jointAnchorRadius); SAME(jointAxisLength);
     SAME(jointWaistWidth); SAME(jointOutlineWidth);
 
-    SAME(converterPath); SAME(converterSettings);
+    SAME(converterSettings);
     SAME(pixelsPerMeter); SAME(fieldBoundsSolid);
 }
 
@@ -490,9 +490,11 @@ TEST(Options, ACaptionStaysClearOfTheLog)
     ASSERT_TRUE(scene->createBodyFromSelection());
     window.startRunForTest();
     QCoreApplication::processEvents();
+    SimulationController *sim = window.findChild<SimulationController *>();
+    ASSERT_TRUE(sim && sim->runScene());
 
-    scene->setCaption(QStringLiteral("Press <b>Space</b> to start, and read this to the end."),
-                      true);
+    sim->runScene()->setCaption(
+        QStringLiteral("Press <b>Space</b> to start, and read this to the end."), true);
     QCoreApplication::processEvents();
     ASSERT_TRUE(caption->isVisible());
 
@@ -543,57 +545,6 @@ TEST(Options, ControlsAppearOnTheCanvasAndWork)
     press.kind = SceneControl::Kind::Button;
     scene->setControls({ tick, pull, press });
 
-    // They are only up while a run is: see ControlsAreOnlyThereWhileARunIs.
-    RectangleItem *ground = scene->addRectangle(QPointF(0, 0));
-    scene->setEditorMode(EditorMode::Physics);
-    scene->selectForPhysics(ground, true);
-    ASSERT_TRUE(scene->createBodyFromSelection());
-    window.startRunForTest();
-    QCoreApplication::processEvents();
-
-    QWidget *panel = window.findChild<QWidget *>(QStringLiteral("SceneControls"));
-    ASSERT_TRUE(panel) << "the canvas has no controls panel";
-    EXPECT_TRUE(panel->isVisible()) << "the controls did not appear";
-
-    QCheckBox *box = nullptr;
-    QPushButton *button = nullptr;
-    QSlider *slider = nullptr;
-    for (QCheckBox *one : panel->findChildren<QCheckBox *>())
-        box = one;
-    for (QPushButton *one : panel->findChildren<QPushButton *>())
-        button = one;
-    for (QSlider *one : panel->findChildren<QSlider *>())
-        slider = one;
-    ASSERT_TRUE(box) << "no checkbox on the canvas";
-    ASSERT_TRUE(button) << "no button on the canvas";
-    ASSERT_TRUE(slider) << "no slider on the canvas";
-    EXPECT_EQ(box->text(), QStringLiteral("go")) << "the name is not what it shows";
-
-    // A hand on the widgets is what the scene hears.
-    box->setChecked(true);
-    EXPECT_TRUE(scene->controlValue(QStringLiteral("go")).toBool())
-        << "ticking the box on screen did not reach the scene";
-    slider->setValue(7);
-    EXPECT_DOUBLE_EQ(scene->controlValue(QStringLiteral("speed")).toDouble(), 7.0)
-        << "pulling the slider did not reach the scene";
-
-    button->pressed();
-    EXPECT_TRUE(scene->controlValue(QStringLiteral("fire")).toBool());
-    button->released();
-    EXPECT_FALSE(scene->controlValue(QStringLiteral("fire")).toBool());
-
-    // And a rule writing one moves the widget, without the widget answering
-    // back and writing it again.
-    scene->setControlValue(QStringLiteral("speed"), 3.0);
-    QCoreApplication::processEvents();
-    EXPECT_EQ(slider->value(), 3) << "the slider did not follow the scene";
-    EXPECT_DOUBLE_EQ(scene->controlValue(QStringLiteral("speed")).toDouble(), 3.0)
-        << "the widget answered back and overwrote the value";
-
-    scene->setControlEnabled(QStringLiteral("speed"), false);
-    QCoreApplication::processEvents();
-    EXPECT_FALSE(slider->isEnabled()) << "greying the control out did not reach the widget";
-
     // A rule that changes what the button says must not cost it its press. The
     // caption used to count as a different set of controls, which rebuilt the
     // widgets while the button was still down: the release never arrived, the
@@ -620,23 +571,76 @@ TEST(Options, ControlsAppearOnTheCanvasAndWork)
     counting.actions[1].value = QStringLiteral("Again");
     scene->setRules({ counting });
 
+    // They are only up while a run is: see ControlsAreOnlyThereWhileARunIs.
+    RectangleItem *ground = scene->addRectangle(QPointF(0, 0));
+    scene->setEditorMode(EditorMode::Physics);
+    scene->selectForPhysics(ground, true);
+    ASSERT_TRUE(scene->createBodyFromSelection());
+    window.startRunForTest();
+    QCoreApplication::processEvents();
     SimulationController *sim = window.findChild<SimulationController *>();
-    ASSERT_TRUE(sim);
+    ASSERT_TRUE(sim && sim->runScene());
+    CanvasScene *run = sim->runScene();
+
+    QWidget *panel = window.findChild<QWidget *>(QStringLiteral("SceneControls"));
+    ASSERT_TRUE(panel) << "the canvas has no controls panel";
+    EXPECT_TRUE(panel->isVisible()) << "the controls did not appear";
+
+    QCheckBox *box = nullptr;
+    QPushButton *button = nullptr;
+    QSlider *slider = nullptr;
+    for (QCheckBox *one : panel->findChildren<QCheckBox *>())
+        box = one;
+    for (QPushButton *one : panel->findChildren<QPushButton *>())
+        button = one;
+    for (QSlider *one : panel->findChildren<QSlider *>())
+        slider = one;
+    ASSERT_TRUE(box) << "no checkbox on the canvas";
+    ASSERT_TRUE(button) << "no button on the canvas";
+    ASSERT_TRUE(slider) << "no slider on the canvas";
+    EXPECT_EQ(box->text(), QStringLiteral("go")) << "the name is not what it shows";
+
+    // A hand on the widgets is what the scene hears.
+    box->setChecked(true);
+    EXPECT_TRUE(run->controlValue(QStringLiteral("go")).toBool())
+        << "ticking the box on screen did not reach the scene";
+    slider->setValue(7);
+    EXPECT_DOUBLE_EQ(run->controlValue(QStringLiteral("speed")).toDouble(), 7.0)
+        << "pulling the slider did not reach the scene";
+
+    button->pressed();
+    EXPECT_TRUE(run->controlValue(QStringLiteral("fire")).toBool());
+    button->released();
+    EXPECT_FALSE(run->controlValue(QStringLiteral("fire")).toBool());
+
+    // And a rule writing one moves the widget, without the widget answering
+    // back and writing it again.
+    run->setControlValue(QStringLiteral("speed"), 3.0);
+    QCoreApplication::processEvents();
+    EXPECT_EQ(slider->value(), 3) << "the slider did not follow the scene";
+    EXPECT_DOUBLE_EQ(run->controlValue(QStringLiteral("speed")).toDouble(), 3.0)
+        << "the widget answered back and overwrote the value";
+
+    run->setControlEnabled(QStringLiteral("speed"), false);
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(slider->isEnabled()) << "greying the control out did not reach the widget";
+
+    const int before = sim->readValue(Rule::variables(), count.name).toInt();
     for (int click = 1; click <= 2; ++click) {
         QTest::mouseClick(button, Qt::LeftButton);
         QCoreApplication::processEvents();
         sim->stepFrame();
         QCoreApplication::processEvents();
-        EXPECT_FALSE(scene->controlValue(press.id).toBool())
+        EXPECT_FALSE(run->controlValue(press.id).toBool())
             << "click " << click << " left the button held down";
-        EXPECT_EQ(sim->readValue(Rule::variables(), count.name).toInt(), click)
+        EXPECT_EQ(sim->readValue(Rule::variables(), count.name).toInt(), before + click)
             << "click " << click << " did not reach the rule";
     }
     EXPECT_EQ(button->text(), QStringLiteral("Again"))
         << "the button does not say what the rule set";
 
     // They sit below the caption, not over it.
-    scene->setCaption(QStringLiteral("Hello"), true);
+    run->setCaption(QStringLiteral("Hello"), true);
     QCoreApplication::processEvents();
     QLabel *caption = window.findChild<QLabel *>(QStringLiteral("SceneCaption"));
     ASSERT_TRUE(caption);
@@ -706,7 +710,7 @@ TEST(Options, TheViewFollowsTheBodyKeptInView)
     QCoreApplication::processEvents();
 
     const QPointF middle = view->mapToScene(view->viewport()->rect().center());
-    const QPointF where = faller->originScenePos();
+    const QPointF where = inRun(*sim, faller)->originScenePos();
     EXPECT_LT(QLineF(middle, where).length(), 40.0)
         << "the view is at " << middle.x() << "," << middle.y() << " and the body at "
         << where.x() << "," << where.y();
@@ -732,14 +736,15 @@ TEST(Options, TheViewFollowsTheBodyKeptInView)
     for (int i = 0; i < 10; ++i)
         sim->stepFrame();
     QCoreApplication::processEvents();
-    EXPECT_EQ(scene->focusedBody(), other) << "the rule did not hand the view over";
+    ASSERT_TRUE(sim->runScene()->focusedBody());
+    EXPECT_EQ(sim->runScene()->focusedBody()->name(), other->name())
+        << "the rule did not hand the view over";
+    EXPECT_EQ(scene->focusedBody(), faller) << "the rule changed the scene's own choice";
     EXPECT_LT(QLineF(view->mapToScene(view->viewport()->rect().center()),
-                     other->originScenePos()).length(), 40.0)
+                     inRun(*sim, other)->originScenePos()).length(), 40.0)
         << "the view did not follow the body the rule named";
 
     sim->stop();
-    EXPECT_EQ(scene->focusedBody(), faller)
-        << "stopping did not put back the body the scene itself keeps in view";
 }
 
 // The field is the scene's: its size, its background and its grid travel in

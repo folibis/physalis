@@ -19,6 +19,20 @@ std::vector<PropertyRow> RayPropertyPane::rows(EditorMode mode) const
 
     CanvasScene *scene = m_scene;
     const QString section = QObject::tr("Ray");
+    // Several can be picked at once, and then the rows below set all of them
+    // -- the same bargain the shape pane makes. The lead answers the getters,
+    // since a table has one column of values.
+    const QVector<RayItem *> picked = m_scene->raySelection();
+
+    if (picked.size() > 1) {
+        PropertyRow count {QObject::tr("Rays Picked"), PropertyFieldType::String,
+            [n = int(picked.size())] { return QString::number(n); },
+            [](const QVariant &) {}, -100000.0, 100000.0, {}, -1, 0.0, section};
+        count.readOnly = true;
+        count.tooltip = QObject::tr("How many this section is speaking for. Setting any of the"
+                                    " properties below sets it on every one of them.");
+        result.push_back(std::move(count));
+    }
 
     PropertyRow name;
     name.label = QObject::tr("Name");
@@ -37,13 +51,15 @@ std::vector<PropertyRow> RayPropertyPane::rows(EditorMode mode) const
         row.getter = [ray, horizontal] {
             return horizontal ? ray->pos().x() : ray->pos().y();
         };
-        row.setter = [ray, horizontal](const QVariant &v) {
-            QPointF p = ray->pos();
-            if (horizontal)
-                p.setX(v.toDouble());
-            else
-                p.setY(v.toDouble());
-            ray->setPos(p);
+        row.setter = [picked, horizontal](const QVariant &v) {
+            for (RayItem *one : picked) {
+                QPointF p = one->pos();
+                if (horizontal)
+                    p.setX(v.toDouble());
+                else
+                    p.setY(v.toDouble());
+                one->setPos(p);
+            }
         };
         row.minValue = -1e6;
         row.maxValue = 1e6;
@@ -59,7 +75,10 @@ std::vector<PropertyRow> RayPropertyPane::rows(EditorMode mode) const
     angle.label = QObject::tr("Angle (deg)");
     angle.type = PropertyFieldType::Numeric;
     angle.getter = [ray] { return ray->angleDegrees(); };
-    angle.setter = [ray](const QVariant &v) { ray->setAngleDegrees(v.toDouble()); };
+    angle.setter = [picked](const QVariant &v) {
+        for (RayItem *one : picked)
+            one->setAngleDegrees(v.toDouble());
+    };
     angle.minValue = -3600.0;
     angle.maxValue = 3600.0;
     angle.decimals = 1;
@@ -74,7 +93,10 @@ std::vector<PropertyRow> RayPropertyPane::rows(EditorMode mode) const
     length.label = QObject::tr("Length");
     length.type = PropertyFieldType::Numeric;
     length.getter = [ray] { return ray->length(); };
-    length.setter = [ray](const QVariant &v) { ray->setLength(v.toDouble()); };
+    length.setter = [picked](const QVariant &v) {
+        for (RayItem *one : picked)
+            one->setLength(v.toDouble());
+    };
     length.minValue = 1.0;
     length.maxValue = 1e6;
     length.decimals = 0;
@@ -91,11 +113,13 @@ std::vector<PropertyRow> RayPropertyPane::rows(EditorMode mode) const
     mask.getter = [ray] {
         return QStringLiteral("0x%1").arg(ray->maskBits(), 16, 16, QLatin1Char('0'));
     };
-    mask.setter = [ray](const QVariant &v) {
+    mask.setter = [picked](const QVariant &v) {
         bool ok = false;
         const quint64 bits = v.toString().trimmed().toULongLong(&ok, 0);
-        if (ok)
-            ray->setMaskBits(bits);
+        if (!ok)
+            return;
+        for (RayItem *one : picked)
+            one->setMaskBits(bits);
     };
     mask.section = section;
     mask.tooltip = QObject::tr("Which groups it can see, by the same bits a shape filters with.");

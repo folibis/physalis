@@ -2,6 +2,9 @@
 // Copyright (c) 2026 Ruslan Muhlinin. See LICENSE.
 #pragma once
 
+#include "JointTypes.h"
+
+#include <QCoreApplication>
 #include <QString>
 #include <Qt>
 #include <QSet>
@@ -167,6 +170,57 @@ struct Rule {
     // going and how many steps it has taken.
     static QString world() { return QStringLiteral("@world"); }
 
+    // What the run itself answers to on the world, which no engine named: the
+    // clock, the frame count, a random number, and whether it is going. Only
+    // the last can be written -- false holds the run, true lets it go on.
+    static QString runningKey() { return QStringLiteral("running"); }
+    static physics::PropertyList runProperties()
+    {
+        const auto tr = [](const char *text) {
+            return QCoreApplication::translate("Rule", text);
+        };
+        const auto reading = [](const QString &key, const QString &label,
+                                physics::ParamType type, qreal maximum, int decimals,
+                                qreal step, const QString &tooltip) {
+            physics::JointParam p;
+            p.key = key;
+            p.label = label;
+            p.type = type;
+            p.defaultValue = type == physics::ParamType::Integer ? QVariant(0) : QVariant(0.0);
+            p.minValue = 0.0;
+            p.maxValue = maximum;
+            p.decimals = decimals;
+            p.step = step;
+            p.tooltip = tooltip;
+            p.liveReadable = true;
+            p.rulesOnly = true;
+            return p;
+        };
+        physics::PropertyList list {
+            reading(QStringLiteral("time"), tr("Elapsed Time (s)"), physics::ParamType::Real,
+                    1e9, 3, 0.1, tr("How long this run has been going.")),
+            reading(QStringLiteral("frame"), tr("Frame"), physics::ParamType::Integer,
+                    1e9, 0, 1.0, tr("How many steps this run has taken.")),
+            reading(QStringLiteral("chance"), tr("Chance (0-100)"), physics::ParamType::Real,
+                    100.0, 1, 5.0,
+                    tr("A fresh number from 0 to 100 every time it is read, so \"less than"
+                       " 25\" happens about one time in four. Use it beside an event to let"
+                       " that event count only sometimes.")),
+        };
+        physics::JointParam running;
+        running.key = runningKey();
+        running.label = tr("Simulation Running");
+        running.type = physics::ParamType::Bool;
+        running.defaultValue = true;
+        running.tooltip = tr("True while the run goes on by itself, false while it is held."
+                             " Set it false to hold the run and true to let it go on.");
+        running.liveReadable = true;
+        running.liveSettable = true;
+        running.rulesOnly = true;
+        list.append(running);
+        return list;
+    }
+
     // The scene's own variables, addressed as properties of one object the way
     // time and the frame count are properties of the world -- so a scene with
     // twenty of them still puts one entry in the object lists.
@@ -319,6 +373,9 @@ struct Rule {
     static QString keepInViewAction() { return QStringLiteral("@keepInView"); }
     static QString keepInViewParam() { return QStringLiteral("follow"); }
     static QString holdRunAction() { return QStringLiteral("@holdRun"); }
+    // Throws the run away and starts a fresh one from the scene, held if the
+    // scene starts paused. Sliders and boxes keep where a hand left them.
+    static QString restartRunAction() { return QStringLiteral("@restartRun"); }
 
     // An action on a body, the application's own: a new body just like it --
     // every body and shape property -- placed at the X and Y in actionParams.
@@ -330,7 +387,8 @@ struct Rule {
 
     static bool isRunAction(const RuleAction &action)
     {
-        return action.actionId == stopRunAction() || action.actionId == holdRunAction();
+        return action.actionId == stopRunAction() || action.actionId == holdRunAction()
+               || action.actionId == restartRunAction();
     }
 
     // True when any of the conditions is an event rather than a reading. An

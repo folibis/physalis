@@ -23,10 +23,12 @@ Bodies are made and set up in **Physics** mode. Switch to it with the
 - **Ctrl+double-click** it instead to make a **static** body, one that never
   moves. Use this for floors, walls and other scenery.
 - To make one body out of several shapes, click the first shape,
-  **Shift+click** the others, and press **Create Body** on the toolbar.
+  **Shift+click** the others, and press **Create Body** on the toolbar or
+  **Ctrl+G**.
 
 To break a body back into separate shapes, select it and press **Remove** on
-the toolbar. The shapes stay where they are and can be grouped again.
+the toolbar, or **Ctrl+Shift+G**. The shapes stay where they are and can be
+grouped again.
 
 A shape that has no inside, such as an open polygon, a chain or a set of
 segments (see [Drawing shapes](editing.md#shape-properties)), also has no mass.
@@ -87,6 +89,8 @@ This page describes the body as a whole.
   until something touches it. This saves time and changes nothing you can see.
 - **Can Be Shot**, **Max Power** and **Max Pull** set up the slingshot for this
   body. See [Running a simulation](running.md#the-slingshot).
+- **Draws a Trail** makes the body leave a line where its centre of mass has
+  been while a run goes. See [Trails](running.md#trails).
 
 The body's greyed-out rows are **readings**, which you can look at but not
 change:
@@ -107,6 +111,11 @@ Log** to watch it change while the simulation runs.
 
 This page describes what each shape is made of. A body made of several shapes
 can mix materials: a cart can have a heavy base and a light handle.
+
+With several shapes selected — which is what picking a body gives you — the
+page speaks for all of them: it says how many under **Shapes Picked**, and
+setting any property below sets it on every one. Only the **Name** is one
+shape's, since a rule finds its subject by exactly one name.
 
 - **Density** sets how heavy the shape is for its size. Together with the
   area, it gives the mass.
@@ -208,6 +217,10 @@ Click an empty part of the canvas to show the scene's own properties.
   Gravity is not adjusted to match. 9.81 means 9.81 at every scale.
 - **Solid Field Bounds** puts invisible walls around the edge of the field,
   so nothing can fall out of it.
+- **Starts Paused** opens every run held, with everything in place, so the
+  person watching starts it: with **Resume** on the toolbar, or with a button
+  of the scene's own and a rule that sets **Simulation Running** to true. See
+  [Starting, holding and toggling a run](rules.md#starting-holding-and-toggling-a-run).
 - **Gravity X** and **Gravity Y** set the direction and strength of gravity.
   The default is 9.81 downwards, as on Earth. For a scene seen from above,
   such as a pool table, set both to 0.

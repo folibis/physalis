@@ -4,6 +4,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QStandardPaths>
 #include <QString>
 #include <QStringList>
 
@@ -33,4 +34,26 @@ inline QString assetFolder(const QString &name)
             return folder.absolutePath();
     }
     return QString();
+}
+
+// Every folder one kind of those files may come from, least important first:
+// what was installed with the program, then a folder of the user's own beside
+// their settings, then whatever PHYSALIS_<NAME> says. Something found in a
+// later folder replaces whatever of the same name an earlier one had, so a
+// user adds to what ships -- or redraws one of its entries -- without writing
+// to an installed folder they may not even be allowed to touch.
+inline QStringList assetFolders(const QString &name)
+{
+    QStringList found;
+    const QString installed = assetFolder(name);
+    if (!installed.isEmpty())
+        found << installed;
+    const QString mine = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    if (!mine.isEmpty())
+        found << mine + QLatin1Char('/') + name;
+    const QString named =
+        qEnvironmentVariable(QByteArray("PHYSALIS_" + name.toUpper().toLatin1()).constData());
+    if (!named.isEmpty())
+        found << named;
+    return found;
 }

@@ -1,0 +1,15 @@
+{
+    "label": "Rosé Pine",
+    "order": 150,
+    "dark": true,
+    "window": "#1F1D2E",
+    "surface": "#191724",
+    "base": "#191724",
+    "alternate": "#26233A",
+    "text": "#E0DEF4",
+    "muted": "#908CAA",
+    "border": "#403D52",
+    "soft": "#26233A",
+    "accent": "#C4A7E7",
+    "accentText": "#191724"
+}

@@ -38,19 +38,34 @@ including the properties you can set, the joint types, and the events and
 actions available to rules, comes from the engine the scene uses. See
 [Physics engines](engines.md).
 
+## Opening a scene
+
+Open a `*.phys` file from **File → Open**, from **File → Open Recent**, or by
+**dragging it onto the window**. One file at a time: a drop of several is
+ignored rather than opening the last of them.
+
 ## The window
 
 **The canvas** fills most of the window. It is the field on which the scene is
 built. Rulers along the top and left edges show the coordinates: **X** grows to
-the right and **Y** grows downwards, as is usual for screen graphics. A grid
+the right and **Y** grows downwards, as is usual for screen graphics. They are
+numbered in scene units to begin with; right-click either one -- or use
+[Options -> Common](options.md) -- to read them in millimetres, centimetres,
+metres or kilometres instead, which is worked out from the scene's **pixels
+per metre**. The unit itself is written on the zero mark. A grid
 helps with lining shapes up. Drag an empty part of the canvas to move around
-the field, and use the zoom box on the toolbar (or **Shift + mouse wheel**) to
-zoom in and out.
+the field, and use the zoom box on the toolbar (or **Ctrl + mouse wheel**) to
+zoom in and out. **Ctrl+0** goes back to 100% and **Ctrl+Shift+0** zooms so the
+whole field is in view.
 
 **The toolbar** holds the file commands, the tools for the current mode, the
 simulation controls and the zoom. On its right is the **Edit / Physics**
 switch, which chooses the mode you are working in. The toolbar only shows the
 tools that make sense in that mode.
+
+The **Objects** tab has a **Find by name** box above its tree: type part of a
+name and the tree narrows to what matches. Rules address objects by name, so
+this is how a name in a rule is tracked down on a crowded field.
 
 **The side panel** on the right has six tabs. Each shows an icon; hover one
 to see its name, and the tab you are on shows its name beside the icon. Use

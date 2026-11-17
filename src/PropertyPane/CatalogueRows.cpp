@@ -26,12 +26,12 @@ std::vector<PropertyRow> liveRowsFromCatalogue(const physics::PropertyList &prop
 }
 
 std::vector<PropertyRow> rowsFromCatalogue(const physics::PropertyList &properties,
-                                           QVariantMap *values,
+                                           const std::vector<QVariantMap *> &values,
                                            const std::function<void()> &changed,
                                            const QString &fallbackSection)
 {
     std::vector<PropertyRow> rows;
-    if (!values)
+    if (values.empty() || !values.front())
         return rows;
 
     for (const physics::JointParam &property : properties) {
@@ -66,9 +66,13 @@ std::vector<PropertyRow> rowsFromCatalogue(const physics::PropertyList &properti
         // property an engine drops leaves nothing behind.
         const QString key = property.key;
         const QVariant fallback = property.defaultValue;
-        row.getter = [values, key, fallback] { return values->value(key, fallback); };
+        QVariantMap *lead = values.front();
+        row.getter = [lead, key, fallback] { return lead->value(key, fallback); };
         row.setter = [values, key, changed](const QVariant &v) {
-            values->insert(key, v);
+            for (QVariantMap *one : values) {
+                if (one)
+                    one->insert(key, v);
+            }
             if (changed)
                 changed();
         };

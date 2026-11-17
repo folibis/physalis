@@ -36,12 +36,14 @@ namespace {
 QString jointSection()  { return QObject::tr("Joint"); }
 QString springSection() { return QObject::tr("Spring"); }
 
-// Where a spring force stops being a number and becomes "no limit". Box2D's
-// own default for the range is the whole float range, which no spin box holds.
-constexpr qreal kSpringForceBound = 1e6;
+// Where a force stops being a number and becomes "no limit". Box2D's own
+// default for a spring's range and for a threshold is the whole float range,
+// which no spin box holds.
+constexpr qreal kForceBound = 1e6;
 QString limitSection()  { return QObject::tr("Limit"); }
 QString motorSection()  { return QObject::tr("Motor"); }
 QString solverSection() { return QObject::tr("Solver"); }
+QString eventsSection() { return QObject::tr("Joint Events"); }
 
 // Which parameters Box2D can change on a joint that already exists. Kept as
 // one list rather than a flag threaded through every call below: it is a fact
@@ -71,6 +73,7 @@ bool isLiveSettable(const QString &key)
         // exists, so they are as live as anything else here even though no
         // b2*JointDef carries them.
         QStringLiteral("constraintHertz"), QStringLiteral("constraintDampingRatio"),
+        QStringLiteral("forceThreshold"), QStringLiteral("torqueThreshold"),
     };
     return settable.contains(key);
 }
@@ -189,6 +192,33 @@ void append(QVector<JointParam> *into, const QVector<JointParam> &block)
         into->append(param);
 }
 
+// What b2JointDef carries for every type: the constraint softness, and the
+// thresholds past which b2World_GetJointEvents reports the joint.
+void appendBase(JointType *type)
+{
+    append(&type->params, solverBlock());
+
+    const QString section = eventsSection();
+    const QString never = QObject::tr(" At %1 or more it is never reported.").arg(kForceBound, 0, 'f', 0);
+    type->params.append(realParam(
+        QStringLiteral("forceThreshold"), QObject::tr("Force Threshold (N)"), section,
+        kForceBound, 0.0, kForceBound, 2, 1.0,
+        QObject::tr("The joint is reported on every step it holds with at least this much"
+                    " force.") + never));
+    type->params.append(realParam(
+        QStringLiteral("torqueThreshold"), QObject::tr("Torque Threshold (N·m)"), section,
+        kForceBound, 0.0, kForceBound, 2, 1.0,
+        QObject::tr("The joint is reported on every step it holds with at least this much"
+                    " torque.") + never));
+
+    // Raised every step the joint is over, the way Box2D reports it: a rule
+    // that breaks the joint fires once because there is no joint afterwards.
+    type->events.append({QStringLiteral("thresholdExceeded"), QObject::tr("Threshold exceeded"),
+                         QObject::tr("Raised on every step the joint is awake and holds with at least"
+                                     " its force or torque threshold. A body at rest sleeps and stops it."),
+                         false});
+}
+
 } // namespace
 
 QVector<JointType> Box2DEngine::jointTypes() const
@@ -253,8 +283,8 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                   motorSection(), 0.0, -100000.0, 100000.0, 2, 10.0,
                                   QObject::tr("Target rotation speed.")));
 
-        append(&t.params, solverBlock());
         t.events = limitEvents();
+        appendBase(&t);
         types.append(t);
     }
 
@@ -289,14 +319,14 @@ QVector<JointType> Box2DEngine::jointTypes() const
         // the line from anchor A to anchor B, so pulling in reads negative.
         t.params.append(realParam(QStringLiteral("lowerSpringForce"),
                                   QObject::tr("Lower Spring Force (N)"), springSection(),
-                                  -kSpringForceBound, -kSpringForceBound, kSpringForceBound,
+                                  -kForceBound, -kForceBound, kForceBound,
                                   2, 10.0,
                                   QObject::tr("The most the spring may pull in with. Tension is"
                                               " negative, so this is the floor; at the bottom of"
                                               " its range there is no limit at all.")));
         t.params.append(realParam(QStringLiteral("upperSpringForce"),
                                   QObject::tr("Upper Spring Force (N)"), springSection(),
-                                  kSpringForceBound, -kSpringForceBound, kSpringForceBound,
+                                  kForceBound, -kForceBound, kForceBound,
                                   2, 10.0,
                                   QObject::tr("The most it may push out with, compression being"
                                               " positive. At the top of its range there is no"
@@ -325,8 +355,8 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                     QObject::tr("Target rate of change of length, in scene units"
                                                 " per second.")));
 
-        append(&t.params, solverBlock());
         t.events = limitEvents();
+        appendBase(&t);
         types.append(t);
     }
 
@@ -360,7 +390,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                    QObject::tr("Angular Damping Ratio"), springSection(), 0.0,
                                    QObject::tr("Use 1 for critical damping.")));
 
-        append(&t.params, solverBlock());
+        appendBase(&t);
         types.append(t);
     }
 
@@ -421,8 +451,8 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                     QObject::tr("Target speed along the axis, in scene units per"
                                                 " second.")));
 
-        append(&t.params, solverBlock());
         t.events = limitEvents();
+        appendBase(&t);
         types.append(t);
     }
 
@@ -481,8 +511,8 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                   motorSection(), 0.0, -100000.0, 100000.0, 2, 10.0,
                                   QObject::tr("Target spin speed.")));
 
-        append(&t.params, solverBlock());
         // No limit events: Box2D cannot report a wheel joint's travel.
+        appendBase(&t);
         types.append(t);
     }
 
@@ -543,7 +573,7 @@ QVector<JointType> Box2DEngine::jointTypes() const
                                    QObject::tr("Max Spring Torque (N·m)"), springSection(), 1.0,
                                    QObject::tr("The most torque the spring may apply.")));
 
-        append(&t.params, solverBlock());
+        appendBase(&t);
         types.append(t);
     }
 

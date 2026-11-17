@@ -83,10 +83,23 @@ An exporter (also called a converter) is a folder containing two files:
   JavaScript and defines one function, `exportScene(scene, io)`.
 
 The folder may also hold anything else the exporter needs, such as templates
-of the files it writes. Place the folder inside the **Converters folder** set in
-**Options → Common**. It appears in **File → Export to** the next time the menu
-is opened, without restarting Physalis. The folder's name identifies the
-exporter, and its settings are stored under that name.
+of the files it writes.
+
+Physalis looks for exporters in three places, in this order, and one found
+later stands in for one of the same name found earlier:
+
+1. the `exporters` folder installed with Physalis -- beside the program on
+   Windows and macOS, `/usr/share/physalis/exporters` from a Linux package;
+2. `exporters` beside your own settings file:
+   `%LOCALAPPDATA%\Physalis\exporters` on Windows,
+   `~/.config/Physalis/exporters` on Linux;
+3. whatever the `PHYSALIS_EXPORTERS` environment variable names.
+
+**Put your own in (2).** The installed folder is overwritten when Physalis is
+updated, and on Windows it is usually somewhere you cannot write to. A new
+exporter appears in **File → Export to** the next time the menu is opened,
+without restarting Physalis. The folder's name identifies the exporter, and its
+settings are stored under that name.
 
 Physalis reads the manifest to build the menu and the options page, but it
 never runs a script until you actually choose that exporter.
@@ -237,9 +250,10 @@ function exportScene(scene, io) {
 }
 ```
 
-To try it, create a folder named `bodies-csv` in the Converters folder, save
-the manifest and the script in it as `manifest.json` and `export.js`, and
-choose **File → Export to → Bodies as CSV**.
+To try it, create a folder named `bodies-csv` in your own exporters folder
+(`%LOCALAPPDATA%\Physalis\exporters` on Windows), save the manifest and the
+script in it as `manifest.json` and `export.js`, and choose **File → Export to
+→ Bodies as CSV**.
 
 For larger examples, look at the two exporters that come with Physalis, in the
 `box2d-qt-project` and `box2d3wasm` folders. They read templates with

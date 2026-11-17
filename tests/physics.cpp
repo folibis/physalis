@@ -6,6 +6,7 @@
 #include "RectangleItem.h"
 #include "ShapeItem.h"
 #include "SimulationController.h"
+#include "RunCopy.h"
 
 #include <QString>
 #include <cmath>
@@ -70,6 +71,13 @@ struct Scene {
         return body;
     }
 
+    // Where a shape is: the run's copy of it while a run is going.
+    ShapeItem *at(ShapeItem *shape) const
+    {
+        ShapeItem *copy = inRun(sim, shape);
+        return copy ? copy : shape;
+    }
+
     void run(qreal seconds)
     {
         if (sim.state() == SimulationController::State::Stopped)
@@ -115,9 +123,9 @@ TEST(Physics, AThingFallsAtTheRateGravitySays)
         ShapeItem *shape = s.box(QStringLiteral("faller"), QRectF(0, 0, 40, 40), QPointF(0, 0));
         s.bodyOf(shape, physics::BodyType::Dynamic);
 
-        const qreal startY = shape->pos().y();
+        const qreal startY = s.at(shape)->pos().y();
         s.run(1.0);
-        const qreal fell = shape->pos().y() - startY;
+        const qreal fell = s.at(shape)->pos().y() - startY;
         fellOn.append(fell);
 
         // Within half a step of the textbook answer, which is the most either
@@ -131,7 +139,7 @@ TEST(Physics, AThingFallsAtTheRateGravitySays)
         // And four seconds in, where the step convention is lost in the noise,
         // it is the textbook answer to within a percent.
         s.run(3.0);
-        const qreal after4s = shape->pos().y() - startY;
+        const qreal after4s = s.at(shape)->pos().y() - startY;
         EXPECT_NEAR(after4s, textbookFall(4.0), textbookFall(4.0) * 0.01)
             << engineName << ": after four seconds it should be at " << textbookFall(4.0);
         s.sim.stop();
@@ -157,12 +165,12 @@ TEST(Physics, GravityScaleMultipliesTheFall)
         s.bodyOf(floaty, physics::BodyType::Dynamic)->props().params["gravityScale"] = 0.0;
 
         s.run(1.0);
-        const qreal one = normal->pos().y();
-        const qreal two = heavy->pos().y();
+        const qreal one = s.at(normal)->pos().y();
+        const qreal two = s.at(heavy)->pos().y();
 
         EXPECT_NEAR(two, one * 2.0, qAbs(one) * 0.03)
             << engineName << ": twice the gravity scale is twice the fall";
-        EXPECT_NEAR(floaty->pos().y(), 0.0, 1.0)
+        EXPECT_NEAR(s.at(floaty)->pos().y(), 0.0, 1.0)
             << engineName << ": no gravity scale means it stays where it was put";
         s.sim.stop();
     }
@@ -182,7 +190,7 @@ TEST(Physics, MassDoesNotChangeHowFastSomethingFalls)
         s.bodyOf(heavy, physics::BodyType::Dynamic);
 
         s.run(1.0);
-        EXPECT_NEAR(light->pos().y(), heavy->pos().y(), 1.0)
+        EXPECT_NEAR(s.at(light)->pos().y(), s.at(heavy)->pos().y(), 1.0)
             << engineName << ": a hundredfold difference in density fell differently";
         s.sim.stop();
     }
@@ -203,11 +211,11 @@ TEST(Physics, AThingDroppedOnTheGroundRestsOnIt)
         // Its underside should be within a few tenths of a scene unit of the
         // ground's top: solvers leave a little overlap on purpose, but a body
         // that keeps sinking has no contact at all.
-        const qreal underside = crate->pos().y() + 40.0;
+        const qreal underside = s.at(crate)->pos().y() + 40.0;
         EXPECT_NEAR(underside, 300.0, 2.0)
             << engineName << ": the crate came to rest with its underside at " << underside
             << ", and the ground is at 300";
-        EXPECT_NEAR(crate->pos().x(), -20.0, 1.0)
+        EXPECT_NEAR(s.at(crate)->pos().x(), -20.0, 1.0)
             << engineName << ": nothing pushed it sideways, so it should not have moved sideways";
         s.sim.stop();
     }
@@ -227,7 +235,7 @@ TEST(Physics, BouncinessReturnsTheRightFractionOfTheDrop)
         s.bodyOf(ground, physics::BodyType::Static);
         s.bodyOf(ball, physics::BodyType::Dynamic);
 
-        const qreal startCentre = ball->pos().y() + 20.0;
+        const qreal startCentre = s.at(ball)->pos().y() + 20.0;
         const qreal dropHeight = 300.0 - 20.0 - startCentre;   // centre to resting centre
 
         // Long enough to land and come back up to the top of the first bounce.
@@ -236,7 +244,7 @@ TEST(Physics, BouncinessReturnsTheRightFractionOfTheDrop)
         bool landed = false;
         for (int i = 0; i < 240; ++i) {
             s.sim.stepFrame();
-            const qreal centre = ball->pos().y() + 20.0;
+            const qreal centre = s.at(ball)->pos().y() + 20.0;
             if (centre > 300.0 - 20.0 - 2.0)
                 landed = true;
             if (landed)
@@ -278,11 +286,11 @@ TEST(Physics, FrictionSlowsASlidingBox)
         slippyBody->props().params["velocityX"] = 4.0;
         grippyBody->props().params["velocityX"] = 4.0;
 
-        const qreal slippyFrom = slippy->pos().x();
-        const qreal grippyFrom = grippy->pos().x();
+        const qreal slippyFrom = s.at(slippy)->pos().x();
+        const qreal grippyFrom = s.at(grippy)->pos().x();
         s.run(2.0);
-        const qreal slippyWent = slippy->pos().x() - slippyFrom;
-        const qreal grippyWent = grippy->pos().x() - grippyFrom;
+        const qreal slippyWent = s.at(slippy)->pos().x() - slippyFrom;
+        const qreal grippyWent = s.at(grippy)->pos().x() - grippyFrom;
 
         EXPECT_GT(slippyWent, 0.0) << engineName << ": the frictionless box slid somewhere";
         EXPECT_GT(slippyWent, grippyWent * 1.2)
@@ -308,8 +316,8 @@ TEST(Physics, DampingBleedsSpeedAway)
         dampedBody->props().params["linearDamping"] = 2.0;
 
         s.run(1.0);
-        const qreal undamped = free_->pos().x();
-        const qreal slowed = damped->pos().x();
+        const qreal undamped = s.at(free_)->pos().x();
+        const qreal slowed = s.at(damped)->pos().x();
 
         EXPECT_GT(undamped, 0.0) << engineName << ": the undamped body kept going";
         EXPECT_LT(slowed, undamped * 0.8)
@@ -333,7 +341,7 @@ TEST(Physics, TheSameSceneTwiceGivesTheSameAnswer)
             s.bodyOf(ground, physics::BodyType::Static);
             s.bodyOf(ball, physics::BodyType::Dynamic);
             s.run(2.0);
-            ends.append(ball->pos());
+            ends.append(s.at(ball)->pos());
             s.sim.stop();
         }
         EXPECT_NEAR(ends[0].x(), ends[1].x(), 1e-6) << engineName << " is not repeatable";
@@ -355,7 +363,7 @@ TEST(Physics, BothEnginesAgreeOnTheSameScene)
         s.bodyOf(ground, physics::BodyType::Static);
         s.bodyOf(crate, physics::BodyType::Dynamic);
         s.run(3.0);
-        restingY.append(crate->pos().y());
+        restingY.append(s.at(crate)->pos().y());
         s.sim.stop();
     }
     ASSERT_EQ(restingY.size(), 2);

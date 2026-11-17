@@ -244,3 +244,78 @@ TEST(PropertyCatalogue, ChipmunkShowsItsReadingsReadOnly)
 {
     everyReadingIsShownReadOnly(QStringLiteral("Chipmunk2D"));
 }
+
+// A shape row speaks for every shape picked, not for the first of them. The
+// table used to show the lead shape's properties while several were selected
+// and write only to that one, so setting the friction on a body's ten plates
+// set it on one and left nine as they were, with nothing on screen saying so.
+void everyPickedShapeTakesWhatTheTableSets(const QString &engineName)
+{
+    auto engine = physics::EngineRegistry::create(engineName);
+    ASSERT_TRUE(engine) << engineName.toStdString() << " is not installed";
+
+    CanvasScene scene;
+    scene.setSimulationEngineName(engineName);
+    scene.setEditorMode(EditorMode::Physics);
+
+    QVector<ShapeItem *> plates;
+    for (int i = 0; i < 3; ++i) {
+        ShapeItem *shape = scene.addRectangle(QPointF(i * 80, 0));
+        shape->setRect(QRectF(0, 0, 60, 40));
+        plates.append(shape);
+        scene.selectForPhysics(shape, true);
+    }
+    ASSERT_TRUE(scene.createBodyFromSelection());
+    ASSERT_EQ(scene.physicsSelection().size(), 3) << "the whole body is not picked";
+
+    PhysicsPropertyPane pane;
+    pane.attach(&scene);
+
+    int checked = 0;
+    for (const physics::JointParam &property : storedOnes(engine->shapeProperties())) {
+        const QVariant wanted = somethingElse(property);
+        if (!wanted.isValid())
+            continue;
+
+        const PropertyRow *row = nullptr;
+        static std::vector<PropertyRow> kept;
+        kept = pane.rows(EditorMode::Physics);
+        for (const PropertyRow &one : kept) {
+            if (one.key == property.key && !one.readOnly && one.setter)
+                row = &one;
+        }
+        if (!row)
+            continue;
+
+        row->setter(wanted);
+        for (ShapeItem *plate : plates) {
+            const QVariant got = plate->part().params.value(property.key,
+                                                            property.defaultValue);
+            EXPECT_TRUE(sameValue(got, wanted, property))
+                << (engineName + QLatin1String(": ") + property.key).toStdString()
+                << " was set on the lead shape only -- " << plate->name().toStdString()
+                << " kept what it had";
+        }
+        ++checked;
+    }
+    EXPECT_GT(checked, 0) << "no shape property was editable at all";
+
+    // And the table says how many it is speaking for, so a row that writes
+    // three shapes does not look like a row that writes one.
+    bool saysHowMany = false;
+    for (const PropertyRow &row : pane.rows(EditorMode::Physics)) {
+        if (row.readOnly && row.getter && row.getter().toString() == QStringLiteral("3"))
+            saysHowMany = true;
+    }
+    EXPECT_TRUE(saysHowMany) << "nothing in the table says it is speaking for three shapes";
+}
+
+TEST(PropertyCatalogue, Box2DSetsEveryPickedShape)
+{
+    everyPickedShapeTakesWhatTheTableSets(QStringLiteral("Box2D"));
+}
+
+TEST(PropertyCatalogue, ChipmunkSetsEveryPickedShape)
+{
+    everyPickedShapeTakesWhatTheTableSets(QStringLiteral("Chipmunk2D"));
+}

@@ -1,5 +1,6 @@
 #include "SceneExporter.h"
 
+#include "AssetFolder.h"
 #include "CanvasScene.h"
 #include "EngineRegistry.h"
 #include "Joint.h"
@@ -18,6 +19,8 @@
 #include <QQmlEngine>
 #include <QTextStream>
 #include <QTransform>
+
+#include <algorithm>
 
 namespace SceneExporter {
 
@@ -395,6 +398,26 @@ QVector<Converter> discover(const QString &root)
         found.append(converter);
     }
     return found;
+}
+
+QVector<Converter> discover()
+{
+    QVector<Converter> all;
+    for (const QString &root : assetFolders(QStringLiteral("exporters"))) {
+        for (const Converter &one : discover(root)) {
+            auto same = std::find_if(all.begin(), all.end(), [&one](const Converter &have) {
+                return have.id == one.id;
+            });
+            if (same != all.end())
+                *same = one;
+            else
+                all.append(one);
+        }
+    }
+    std::sort(all.begin(), all.end(), [](const Converter &a, const Converter &b) {
+        return a.name.localeAwareCompare(b.name) < 0;
+    });
+    return all;
 }
 
 bool run(const Converter &converter, const CanvasScene *scene,

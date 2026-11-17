@@ -1,0 +1,15 @@
+{
+    "label": "Catppuccin Mocha",
+    "order": 40,
+    "dark": true,
+    "window": "#1E1E2E",
+    "surface": "#181825",
+    "base": "#181825",
+    "alternate": "#313244",
+    "text": "#CDD6F4",
+    "muted": "#A6ADC8",
+    "border": "#45475A",
+    "soft": "#313244",
+    "accent": "#CBA6F7",
+    "accentText": "#1E1E2E"
+}

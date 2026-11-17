@@ -9,6 +9,7 @@
 #include <QHash>
 
 #include "ShapeStyle.h"
+#include "Units.h"
 #include <QHash>
 #include <QVariantMap>
 #include "CanvasScene.h"
@@ -99,6 +100,7 @@ public:
         bool runShowRays = true;
         bool runShowSensors = true;
         bool runShowExplosions = true;
+        bool runShowTrails = true;
         bool showBodyAxes = true;
         qreal bodyAxisLength = 40.0;
         qreal bodyAxisWidth = 2.0;
@@ -119,6 +121,11 @@ public:
         QColor shotFullColor { 220, 30, 30 };
         qreal shotLineWidth = 3.0;
         Qt::PenStyle shotLineStyle = Qt::DotLine;
+
+        // How a body's trail is drawn, for every body that leaves one.
+        QColor trailColor { 0xD6, 0x33, 0x6C };
+        qreal trailLineWidth = 2.0;
+        Qt::PenStyle trailLineStyle = Qt::SolidLine;
 
         QColor jointColor { 0xE8, 0xC4, 0x6A };
         // Per joint kind -- physics::JointVisual cast to int -- rather than
@@ -148,9 +155,6 @@ public:
         qreal springWidth = 9.0;
         qreal jointOutlineWidth = 1.6;
 
-        // Where the export converters live: one folder per converter, each
-        // with a manifest.json naming it and an export.js doing the work.
-        QString converterPath;
         // What each converter asked to be asked, by converter id. The
         // application stores and renders these without knowing what any of
         // them mean -- the same bargain it has with the engine plugins.
@@ -158,6 +162,11 @@ public:
 
         qreal pixelsPerMeter = 100.0;
         bool fieldBoundsSolid = false;
+
+        // What the rulers along the canvas are numbered in. Scene units is
+        // what they have always shown; the rest go through pixelsPerMeter,
+        // so the same drawing reads differently at a different scale.
+        Units::Unit rulerUnit = Units::Unit::Scene;
     };
 
     explicit OptionsDialog(const Settings &current, QWidget *parent = nullptr);
@@ -191,18 +200,24 @@ private:
     QComboBox *m_shotLineStyle = nullptr;
     QColor m_shotLightColor;
     QColor m_shotFullColor;
+    // The Trail group, built the same way.
+    QDoubleSpinBox *m_trailLineWidth = nullptr;
+    QComboBox *m_trailLineStyle = nullptr;
+    QColor m_trailColor;
     // Joint anchors' opacity, a row added to the form's joint drawing group.
     QSlider *m_jointAnchorOpacity = nullptr;
-    // Builds the Export tab from whatever converters are under `path`, and
-    // removes it again when there are none. Called when the dialog opens and
-    // whenever the folder is changed while it is open.
-    void rebuildExportTab(const QString &path);
+    // Builds the Export tab from whatever converters were found, and removes
+    // it again when there are none.
+    void rebuildExportTab();
 
     // One editor on that tab, remembered so its value can be read back.
     struct ConverterField {
         QString converter;
         QString key;
         QString type;
+        // What the manifest declares, so a value equal to it is not written
+        // down -- the bargain the physics params keep as well.
+        QVariant declared;
         QWidget *editor = nullptr;
     };
     // The widget a declared setting is edited with, and the value back out of

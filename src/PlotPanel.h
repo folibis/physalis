@@ -35,6 +35,9 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    // The crosshair follows the pointer with no button held, so it has to be
+    // told about moves it is not dragging, and told when the pointer goes.
+    void leaveEvent(QEvent *event) override;
 
 private:
     void saveCsv();
@@ -52,4 +55,9 @@ private:
     qreal m_dragOffsetFrom = 0.0;
     bool m_dragging = false;
     qreal m_secondsPerPixel = 0.0;
+    // Where the pointer is, for the crosshair and the values beside it. A
+    // trace says what a value did; without this it could not say what the
+    // value was at any moment but the last.
+    QPoint m_cursorAt;
+    bool m_cursorIn = false;
 };

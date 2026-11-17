@@ -15,8 +15,13 @@
 // properties exist, what they are called, what they mean, what they start at
 // and what they may be set to is the engine's alone -- this is the one place
 // that turns its answer into a table, and it names none of them.
+//
+// One row may speak for several objects: it reads the first of the maps and
+// writes all of them. That is what a table showing a selection does -- picking
+// five shapes and setting the friction used to set it on one of them and leave
+// the other four as they were, with nothing on screen saying so.
 std::vector<PropertyRow> rowsFromCatalogue(const physics::PropertyList &properties,
-                                           QVariantMap *values,
+                                           const std::vector<QVariantMap *> &values,
                                            const std::function<void()> &changed,
                                            const QString &fallbackSection);
 

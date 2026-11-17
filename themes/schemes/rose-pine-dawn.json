@@ -1,0 +1,15 @@
+{
+    "label": "Rosé Pine Dawn",
+    "order": 140,
+    "dark": false,
+    "window": "#F2E9E1",
+    "surface": "#FFFAF3",
+    "base": "#FFFAF3",
+    "alternate": "#FAF4ED",
+    "text": "#575279",
+    "muted": "#797593",
+    "border": "#DFDAD9",
+    "soft": "#EDE5DF",
+    "accent": "#907AA9",
+    "accentText": "#FFFAF3"
+}

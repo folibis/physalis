@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-project(Physalis VERSION 0.1.10 LANGUAGES C CXX)
+project(Physalis VERSION 0.1.12 LANGUAGES C CXX)
 
 # windres is beside the compiler but rarely on PATH; the bare name fails at build time.
 if(WIN32 AND MINGW)
@@ -160,8 +160,12 @@ add_library(PhysalisCore OBJECT
     src/CircleItem.cpp
     src/PolygonItem.h
     src/PolygonItem.cpp
+    src/ConvexPieces.h
+    src/ConvexPieces.cpp
     src/RulerWidget.h
     src/RulerWidget.cpp
+    src/Units.h
+    src/Units.cpp
     src/FullScreenView.h
     src/FullScreenView.cpp
     src/ViewLayersCombo.h
@@ -315,6 +319,11 @@ if(WITH_EXAMPLES)
     install(DIRECTORY examples/ DESTINATION ${PHYSALIS_ASSET_DIR}/examples
             FILES_MATCHING PATTERN "*.phys")
 endif()
+
+# The colour schemes and control styles, read at startup. Not an option: with
+# none of them the program can only wear the platform's own look.
+install(DIRECTORY themes/ DESTINATION ${PHYSALIS_ASSET_DIR}/themes
+        FILES_MATCHING PATTERN "*.json" PATTERN "*.qss" PATTERN "*.md")
 
 if(WIN32)
     get_target_property(PHYSALIS_QMAKE Qt${QT_VERSION_MAJOR}::qmake IMPORTED_LOCATION)

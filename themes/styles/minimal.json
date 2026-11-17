@@ -1,0 +1,51 @@
+{
+    "label": "Minimal",
+    "order": 50,
+    "radius": {
+        "field": 8,
+        "small": 8,
+        "check": 5,
+        "handle": 7,
+        "card": 10,
+        "scroll": 3,
+        "spin": 0
+    },
+    "padding": {
+        "field": "6px 10px",
+        "button": "7px 18px"
+    },
+    "sheet": [
+        "QLineEdit, QAbstractSpinBox, QComboBox, QTextEdit, QPlainTextEdit {",
+        " background: palette(midlight); border: 1px solid transparent; }",
+        "QLineEdit:hover, QAbstractSpinBox:hover, QComboBox:hover {",
+        " background: @hover; border-color: transparent; }",
+        "QLineEdit:focus, QAbstractSpinBox:focus, QComboBox:focus, QTextEdit:focus,",
+        " QPlainTextEdit:focus { background: palette(base); border-color: palette(highlight); }",
+        "QLineEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled {",
+        " background: palette(window); border-color: transparent; }",
+        "QPushButton { background: transparent; border: 1px solid transparent; color: @accent;",
+        " font-weight: 600; }",
+        "QPushButton:hover { background: @accentSoft; border-color: transparent; }",
+        "QPushButton:default { background: palette(highlight); color: palette(highlighted-text); }",
+        "QPushButton:disabled { background: transparent; color: @faint; border-color: transparent; }",
+        "QTabBar::tab, QTabBar::tab:hover, QTabBar::tab:selected { background: transparent; }",
+        "QTabBar::tab:selected { color: @accent; }",
+        "QCheckBox::indicator, QGroupBox::indicator { width: 16px; height: 16px;",
+        " border: none; background: palette(midlight); }",
+        "QCheckBox::indicator:hover, QGroupBox::indicator:hover { background: @accentSoft; }",
+        "QRadioButton::indicator { width: 16px; height: 16px; border: none;",
+        " border-radius: 8px; background: palette(midlight); }",
+        "QRadioButton::indicator:hover { background: @accentSoft; }",
+        "QRadioButton::indicator:checked { width: 6px; height: 6px; border-radius: 8px;",
+        " border: 5px solid palette(highlight); }",
+        "QSlider::groove:horizontal { height: 2px; background: palette(mid); }",
+        "QSlider::handle:horizontal { width: 10px; height: 10px; margin: -5px 0;",
+        " border: none; border-radius: 5px; background: palette(highlight); }",
+        "QScrollBar:vertical { width: 7px; }",
+        "QScrollBar:horizontal { height: 7px; }",
+        "QScrollBar::handle { margin: 1px; background: palette(midlight); }",
+        "QScrollBar::handle:hover { background: palette(mid); }",
+        "QGroupBox { border: none; border-radius: 0; margin-top: 20px;",
+        " padding: 12px 2px 6px 2px; }"
+    ]
+}

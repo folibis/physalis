@@ -1,0 +1,15 @@
+{
+    "label": "Solarized Dark",
+    "order": 170,
+    "dark": true,
+    "window": "#002B36",
+    "surface": "#00212B",
+    "base": "#00212B",
+    "alternate": "#073642",
+    "text": "#93A1A1",
+    "muted": "#768C8C",
+    "border": "#46606A",
+    "soft": "#073642",
+    "accent": "#268BD2",
+    "accentText": "#002B36"
+}

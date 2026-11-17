@@ -1,0 +1,790 @@
+{
+    "bodies": [
+        {
+            "isEnabled": true,
+            "name": "body_1",
+            "physics": {
+            },
+            "shapes": [
+                1
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_2",
+            "physics": {
+            },
+            "shapes": [
+                2
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_3",
+            "physics": {
+            },
+            "shapes": [
+                3
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_4",
+            "physics": {
+            },
+            "shapes": [
+                4
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_5",
+            "physics": {
+            },
+            "shapes": [
+                5
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_6",
+            "physics": {
+            },
+            "shapes": [
+                6
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_7",
+            "physics": {
+            },
+            "shapes": [
+                7
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_8",
+            "physics": {
+            },
+            "shapes": [
+                8
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_9",
+            "physics": {
+            },
+            "shapes": [
+                9
+            ],
+            "type": "static"
+        }
+    ],
+    "controls": [
+        {
+            "caption": "Start",
+            "id": "start_button",
+            "kind": "button",
+            "value": false
+        },
+        {
+            "caption": "Threashold",
+            "decimals": 1,
+            "id": "control",
+            "kind": "slider",
+            "max": 200,
+            "min": 0,
+            "step": 1,
+            "value": 10
+        }
+    ],
+    "engine": "Box2D",
+    "field": {
+        "backgroundColor": "#fffffeed",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 800,
+        "showGrid": true,
+        "width": 1200
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+        {
+            "anchorA": {
+                "x": -160,
+                "y": 180
+            },
+            "anchorB": {
+                "x": -160,
+                "y": 180
+            },
+            "axis": {
+                "x": 1,
+                "y": 0
+            },
+            "bodyA": "body_4",
+            "bodyB": "body_5",
+            "collideConnected": false,
+            "name": "weld_1",
+            "params": {
+                "angularDampingRatio": 1,
+                "angularHertz": 10,
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "forceThreshold": 40,
+                "linearDampingRatio": 1,
+                "linearHertz": 10,
+                "referenceAngle": 0,
+                "torqueThreshold": 1000000
+            },
+            "type": "weld"
+        },
+        {
+            "anchorA": {
+                "x": 40,
+                "y": 180
+            },
+            "anchorB": {
+                "x": 40,
+                "y": 180
+            },
+            "axis": {
+                "x": 1,
+                "y": 0
+            },
+            "bodyA": "body_5",
+            "bodyB": "body_6",
+            "collideConnected": false,
+            "name": "weld_2",
+            "params": {
+                "angularDampingRatio": 1,
+                "angularHertz": 10,
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "forceThreshold": 40,
+                "linearDampingRatio": 1,
+                "linearHertz": 10,
+                "referenceAngle": 0,
+                "torqueThreshold": 1000000
+            },
+            "type": "weld"
+        },
+        {
+            "anchorA": {
+                "x": 240,
+                "y": 180
+            },
+            "anchorB": {
+                "x": 240,
+                "y": 180
+            },
+            "axis": {
+                "x": 1,
+                "y": 0
+            },
+            "bodyA": "body_6",
+            "bodyB": "body_7",
+            "collideConnected": false,
+            "name": "weld_3",
+            "params": {
+                "angularDampingRatio": 1,
+                "angularHertz": 10,
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "forceThreshold": 40,
+                "linearDampingRatio": 1,
+                "linearHertz": 10,
+                "referenceAngle": 0,
+                "torqueThreshold": 1000000
+            },
+            "type": "weld"
+        }
+    ],
+    "log": [
+        {
+            "label": "threshold",
+            "object": "@variables",
+            "plotted": false,
+            "property": "threshold"
+        }
+    ],
+    "rays": [
+        {
+            "angle": 90,
+            "length": 300,
+            "maskBits": "ffffffffffffffff",
+            "name": "ray_1",
+            "x": 500,
+            "y": -100
+        }
+    ],
+    "rules": [
+        {
+            "action": "breakJoint",
+            "actionParams": {
+            },
+            "event": "thresholdExceeded",
+            "name": "weld_1 breaks",
+            "op": "set",
+            "property": "",
+            "subject": "weld_1",
+            "target": "weld_1",
+            "value": null
+        },
+        {
+            "action": "breakJoint",
+            "actionParams": {
+            },
+            "event": "thresholdExceeded",
+            "name": "weld_2 breaks",
+            "op": "set",
+            "property": "",
+            "subject": "weld_2",
+            "target": "weld_2",
+            "value": null
+        },
+        {
+            "action": "breakJoint",
+            "actionParams": {
+            },
+            "event": "thresholdExceeded",
+            "name": "weld_3 breaks",
+            "op": "set",
+            "property": "",
+            "subject": "weld_3",
+            "target": "weld_3",
+            "value": null
+        },
+        {
+            "action": "@restartRun",
+            "actionParams": {
+            },
+            "conditions": [
+                {
+                    "event": "@controlPressed",
+                    "subject": "@controls",
+                    "when": "start_button"
+                },
+                {
+                    "compare": "=",
+                    "subject": "@variables",
+                    "watch": "running",
+                    "when": true
+                }
+            ],
+            "event": "@controlPressed",
+            "join": "all",
+            "name": "Stop button",
+            "op": "set",
+            "property": "",
+            "subject": "@controls",
+            "target": "@world",
+            "value": null,
+            "when": "start_button"
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "forceThreshold",
+                    "sourceObject": "@controls",
+                    "sourceOffset": 0,
+                    "sourceProperty": {
+                        "control": "control",
+                        "property": "value"
+                    },
+                    "target": "weld_1",
+                    "value": null
+                },
+                {
+                    "op": "set",
+                    "property": "forceThreshold",
+                    "sourceObject": "@controls",
+                    "sourceOffset": 0,
+                    "sourceProperty": {
+                        "control": "control",
+                        "property": "value"
+                    },
+                    "target": "weld_2",
+                    "value": null
+                },
+                {
+                    "op": "set",
+                    "property": "forceThreshold",
+                    "sourceObject": "@controls",
+                    "sourceOffset": 0,
+                    "sourceProperty": {
+                        "control": "control",
+                        "property": "value"
+                    },
+                    "target": "weld_3",
+                    "value": null
+                },
+                {
+                    "op": "set",
+                    "property": "running",
+                    "target": "@world",
+                    "value": true
+                },
+                {
+                    "op": "set",
+                    "property": {
+                        "control": "start_button",
+                        "property": "caption"
+                    },
+                    "target": "@controls",
+                    "value": "Stop"
+                },
+                {
+                    "op": "set",
+                    "property": "running",
+                    "target": "@variables",
+                    "value": true
+                }
+            ],
+            "conditions": [
+                {
+                    "event": "@controlPressed",
+                    "subject": "@controls",
+                    "when": "start_button"
+                },
+                {
+                    "compare": "=",
+                    "subject": "@variables",
+                    "watch": "running",
+                    "when": false
+                }
+            ],
+            "event": "@controlPressed",
+            "join": "all",
+            "name": "Start button",
+            "op": "set",
+            "property": "forceThreshold",
+            "sourceObject": "@controls",
+            "sourceOffset": 0,
+            "sourceProperty": {
+                "control": "control",
+                "property": "value"
+            },
+            "subject": "@controls",
+            "target": "weld_1",
+            "value": null,
+            "when": "start_button"
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "threshold",
+                    "sourceObject": "@controls",
+                    "sourceOffset": 0,
+                    "sourceProperty": {
+                        "control": "control",
+                        "property": "value"
+                    },
+                    "target": "@variables",
+                    "value": null
+                },
+                {
+                    "op": "set",
+                    "property": "forceThreshold",
+                    "sourceObject": "@controls",
+                    "sourceOffset": 0,
+                    "sourceProperty": {
+                        "control": "control",
+                        "property": "value"
+                    },
+                    "target": "weld_1",
+                    "value": null
+                },
+                {
+                    "op": "set",
+                    "property": "forceThreshold",
+                    "sourceObject": "@controls",
+                    "sourceOffset": 0,
+                    "sourceProperty": {
+                        "control": "control",
+                        "property": "value"
+                    },
+                    "target": "weld_2",
+                    "value": null
+                },
+                {
+                    "op": "set",
+                    "property": "forceThreshold",
+                    "sourceObject": "@controls",
+                    "sourceOffset": 0,
+                    "sourceProperty": {
+                        "control": "control",
+                        "property": "value"
+                    },
+                    "target": "weld_3",
+                    "value": null
+                }
+            ],
+            "event": "@controlChanged",
+            "name": "Slider:onChange",
+            "op": "set",
+            "property": "threshold",
+            "sourceObject": "@controls",
+            "sourceOffset": 0,
+            "sourceProperty": {
+                "control": "control",
+                "property": "value"
+            },
+            "subject": "@controls",
+            "target": "@variables",
+            "value": null,
+            "when": "control"
+        },
+        {
+            "action": "@stopRun",
+            "actionParams": {
+            },
+            "event": "rayDetects",
+            "name": "Stop",
+            "op": "set",
+            "property": "",
+            "subject": "ray_1",
+            "target": "@world",
+            "value": 0,
+            "when": ""
+        }
+    ],
+    "shapes": [
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": 250,
+                "y": 10
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -200,
+                "y": 310
+            },
+            "rect": {
+                "height": 40,
+                "width": 900,
+                "x": -200,
+                "y": -10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "polygon_1",
+            "origin": {
+                "x": 40.5,
+                "y": 45
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 0,
+                    "y": 99
+                },
+                {
+                    "x": 40,
+                    "y": -1
+                },
+                {
+                    "x": 80,
+                    "y": 99
+                }
+            ],
+            "pos": {
+                "x": -300,
+                "y": 201
+            },
+            "rect": {
+                "height": 100,
+                "width": 80,
+                "x": 0,
+                "y": -1
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "polygon_2",
+            "origin": {
+                "x": 40.5,
+                "y": 45
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": 0,
+                    "y": 99
+                },
+                {
+                    "x": 40,
+                    "y": -1
+                },
+                {
+                    "x": 80,
+                    "y": 99
+                }
+            ],
+            "pos": {
+                "x": 320,
+                "y": 201
+            },
+            "rect": {
+                "height": 100,
+                "width": 80,
+                "x": 0,
+                "y": -1
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 4,
+            "joinStyle": "round",
+            "name": "rectangle_2",
+            "origin": {
+                "x": 0,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.35
+            },
+            "pos": {
+                "x": -260,
+                "y": 150
+            },
+            "rect": {
+                "height": 40,
+                "width": 200,
+                "x": -100,
+                "y": 10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 5,
+            "joinStyle": "round",
+            "name": "rectangle_3",
+            "origin": {
+                "x": 0,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": -60,
+                "y": 150
+            },
+            "rect": {
+                "height": 40,
+                "width": 200,
+                "x": -100,
+                "y": 10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 6,
+            "joinStyle": "round",
+            "name": "rectangle_4",
+            "origin": {
+                "x": 0,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": 140,
+                "y": 150
+            },
+            "rect": {
+                "height": 40,
+                "width": 200,
+                "x": -100,
+                "y": 10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 7,
+            "joinStyle": "round",
+            "name": "rectangle_5",
+            "origin": {
+                "x": 0,
+                "y": 30
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.55
+            },
+            "pos": {
+                "x": 340,
+                "y": 150
+            },
+            "rect": {
+                "height": 40,
+                "width": 200,
+                "x": -100,
+                "y": 10
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 8,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.5
+            },
+            "pos": {
+                "x": -420,
+                "y": -140
+            },
+            "rect": {
+                "height": 160,
+                "width": 160,
+                "x": -80,
+                "y": -80
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 9,
+            "joinStyle": "round",
+            "name": "polygon_3",
+            "origin": {
+                "x": 118,
+                "y": 93
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": -14,
+                    "y": -13
+                },
+                {
+                    "x": 226,
+                    "y": 187
+                },
+                {
+                    "x": -14,
+                    "y": 187
+                }
+            ],
+            "pos": {
+                "x": -486,
+                "y": -47
+            },
+            "rect": {
+                "height": 200,
+                "width": 240,
+                "x": -14,
+                "y": -13
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        }
+    ],
+    "variables": [
+        {
+            "name": "threshold",
+            "type": "double",
+            "value": 10
+        },
+        {
+            "name": "running",
+            "type": "bool",
+            "value": false
+        }
+    ],
+    "version": 1,
+    "world": {
+        "physics": {
+        },
+        "pixelsPerMeter": 100,
+        "randomSeed": 0,
+        "solidBounds": false,
+        "startsPaused": true
+    }
+}

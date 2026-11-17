@@ -242,6 +242,18 @@ private:
     void forgetChoices();
     mutable QHash<int, QVector<RuleChoice>> m_choices;
 
+    // A run may be read but not edited. The panel used to be disabled whole,
+    // which greyed the cards out exactly when they were worth reading and took
+    // away the one thing on them that is not an edit: double-clicking an
+    // object box to go and look at what the rule names.
+    void setReadOnly(bool readOnly);
+    // Takes every editor on every card out of reach, and leaves the object
+    // boxes and the fold buttons alone. Only ever disables, so coming back out
+    // of read-only rebuilds instead -- buildCard() is what knows that the
+    // first card has no Move Up and a lone When row cannot be dropped.
+    void applyReadOnly();
+    bool m_readOnly = false;
+
     QVector<RuleChoice> sourceChoices() const;
     QVector<RuleChoice> watchChoices(const QString &name) const;
     // What the engine says this object can raise, and whether the one it is
@@ -261,6 +273,7 @@ private:
 
     QPointer<CanvasScene> m_scene;
     QVBoxLayout *m_cards = nullptr;
+    QToolButton *m_add = nullptr;
     QToolButton *m_collapseAll = nullptr;
     QToolButton *m_expandAll = nullptr;
     QVector<Row> m_rows;

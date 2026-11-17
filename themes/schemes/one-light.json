@@ -1,0 +1,15 @@
+{
+    "label": "One Light",
+    "order": 120,
+    "dark": false,
+    "window": "#F0F0F0",
+    "surface": "#FAFAFA",
+    "base": "#FFFFFF",
+    "alternate": "#F5F5F5",
+    "text": "#383A42",
+    "muted": "#8B8C92",
+    "border": "#D3D3D6",
+    "soft": "#E5E5E6",
+    "accent": "#4078F2",
+    "accentText": "#FFFFFF"
+}

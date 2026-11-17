@@ -25,6 +25,15 @@ std::vector<PropertyRow> FieldPropertyPane::rows(EditorMode mode) const
             QObject::tr("Walls the edges of the field, so nothing can leave it. Off,"
                         " whatever falls out keeps falling.");
 
+        world.push_back({QObject::tr("Starts Paused"), PropertyFieldType::Boolean,
+            [scene] { return scene->startsPaused(); },
+            [scene](const QVariant &v) { scene->setStartsPaused(v.toBool()); },
+            -100000.0, 100000.0, {}, -1, 0.0, QObject::tr("World")});
+        world.back().tooltip =
+            QObject::tr("The run opens held, with everything in place. Controls and keys"
+                        " still reach the rules, so a Start button can set Simulation"
+                        " Running to true.");
+
         world.push_back({QObject::tr("Random Seed"), PropertyFieldType::Numeric,
             [scene] { return double(scene->randomSeed()); },
             [scene](const QVariant &v) { scene->setRandomSeed(quint32(qMax(0.0, v.toDouble()))); },
@@ -138,7 +147,7 @@ std::vector<PropertyRow> FieldPropertyPane::worldRows(physics::WorldDesc *world,
         const physics::PropertyList properties = engine->worldProperties();
         for (PropertyRow &row : liveRowsFromCatalogue(properties, section))
             result.push_back(std::move(row));
-        for (PropertyRow &row : rowsFromCatalogue(properties, &world->params, changed, section))
+        for (PropertyRow &row : rowsFromCatalogue(properties, {&world->params}, changed, section))
             result.push_back(std::move(row));
     }
 

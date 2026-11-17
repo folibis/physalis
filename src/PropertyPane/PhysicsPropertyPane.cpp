@@ -66,35 +66,74 @@ std::vector<PropertyRow> PhysicsPropertyPane::rows(EditorMode mode) const
         append(bodyIdentityRows(body));
         result.push_back(enabledRow(&body->props(), notify));
         result.push_back(focusRow(body));
+        // Scenery has nowhere to have been.
+        if (body->props().type != physics::BodyType::Static)
+            result.push_back(trailRow(body, notify));
         if (body->props().type == physics::BodyType::Dynamic)
             append(shotRows(&body->shot(), notify));
         if (engine) {
             const physics::PropertyList properties = engine->bodyProperties();
             append(liveRowsFromCatalogue(properties, bodySection()));
-            append(rowsFromCatalogue(properties, &body->props().params, notify, bodySection()));
+            append(rowsFromCatalogue(properties, {&body->props().params}, notify,
+                                     bodySection()));
         }
     }
 
     ShapeItem *shape = selection.first();
-    append(shapeIdentityRows(shape));
+    append(shapeCountRow(selection));
+    append(shapeIdentityRows(shape, selection.size()));
     if (engine) {
         // A shape things pass through has a pane of its own, so a change to
         // whichever property the engine tagged for that has to be noticed.
         // Queued: the rebuild deletes the very control whose signal is running.
         const bool wasSensor = m_scene->isSensorShape(shape);
         auto *pane = const_cast<PhysicsPropertyPane *>(this);
-        const auto notify = [this, pane, shape, wasSensor] {
-            shape->notifyPropertyChanged();
-            if (m_scene->isSensorShape(shape) != wasSensor) {
+        const auto notify = [this, pane, selection, wasSensor] {
+            // Every shape the row wrote to, not just the lead: each one draws
+            // itself from its own properties.
+            for (ShapeItem *one : selection)
+                one->notifyPropertyChanged();
+            if (m_scene->isSensorShape(selection.first()) != wasSensor) {
                 QMetaObject::invokeMethod(pane, [pane] { emit pane->paneKindChanged(); },
                                           Qt::QueuedConnection);
             }
         };
         const physics::PropertyList properties = engine->shapeProperties();
         append(liveRowsFromCatalogue(properties, shapeSection()));
-        append(rowsFromCatalogue(properties, &shape->part().params, notify, shapeSection()));
+        append(rowsFromCatalogue(properties, partsOf(selection), notify, shapeSection()));
     }
     return result;
+}
+
+// With several shapes picked the rows under this one speak for every one of
+// them, so the section says how many before it says anything else. One shape
+// needs no such row: the Shape section is already about that shape alone.
+std::vector<PropertyRow> PhysicsPropertyPane::shapeCountRow(
+    const QVector<ShapeItem *> &selection)
+{
+    std::vector<PropertyRow> result;
+    if (selection.size() < 2)
+        return result;
+
+    const int count = selection.size();
+    PropertyRow row {QObject::tr("Shapes Picked"), PropertyFieldType::String,
+        [count] { return QString::number(count); },
+        [](const QVariant &) {},
+        -100000.0, 100000.0, {}, -1, 0.0, shapeSection()};
+    row.readOnly = true;
+    row.tooltip = QObject::tr("How many shapes this section is speaking for. Setting any of the"
+                              " properties below sets it on every one of them.");
+    result.push_back(std::move(row));
+    return result;
+}
+
+std::vector<QVariantMap *> PhysicsPropertyPane::partsOf(const QVector<ShapeItem *> &selection)
+{
+    std::vector<QVariantMap *> params;
+    params.reserve(selection.size());
+    for (ShapeItem *shape : selection)
+        params.push_back(&shape->part().params);
+    return params;
 }
 
 std::vector<PropertyRow> PhysicsPropertyPane::defaultRows(EditorMode mode) const
@@ -122,14 +161,21 @@ std::vector<PropertyRow> PhysicsPropertyPane::defaultRows(EditorMode mode) const
         row.defaultValue = false;
         result.push_back(std::move(row));
     }
+    {
+        PropertyRow row {QObject::tr("Draws a Trail"), PropertyFieldType::Boolean,
+            [] { return false; }, [](const QVariant &) {},
+            -100000.0, 100000.0, {}, -1, 0.0, bodySection()};
+        row.defaultValue = false;
+        result.push_back(std::move(row));
+    }
     for (PropertyRow &row : shotRows(&pristineShot, [] {}))
         result.push_back(std::move(row));
     if (auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName())) {
         for (PropertyRow &row : rowsFromCatalogue(engine->bodyProperties(),
-                                                  &pristineBody.params, [] {}, bodySection()))
+                                                  {&pristineBody.params}, [] {}, bodySection()))
             result.push_back(std::move(row));
         for (PropertyRow &row : rowsFromCatalogue(engine->shapeProperties(),
-                                                  &pristinePart.params, [] {}, shapeSection()))
+                                                  {&pristinePart.params}, [] {}, shapeSection()))
             result.push_back(std::move(row));
     }
     return result;
@@ -190,6 +236,27 @@ PropertyRow PhysicsPropertyPane::focusRow(PhysicsBody *body) const
     row.tooltip = QObject::tr("While a run is going, the view follows this body: it stays in the"
                               " middle of the screen and the scene moves around it. One body at a"
                               " time -- giving it to another takes it off this one.");
+    return row;
+}
+
+PropertyRow PhysicsPropertyPane::trailRow(PhysicsBody *body, const std::function<void()> &changed) const
+{
+    CanvasScene *scene = m_scene;
+    PropertyRow row {QObject::tr("Draws a Trail"), PropertyFieldType::Boolean,
+        [body] { return body->drawsTrail(); },
+        [body, scene, changed](const QVariant &v) {
+            body->setDrawsTrail(v.toBool());
+            changed();
+            // The ring round its centre of mass comes or goes with it.
+            if (scene)
+                scene->update();
+        },
+        -100000.0, 100000.0, {}, -1, 0.0, bodySection()};
+    row.defaultValue = false;
+    row.tooltip = QObject::tr("While a run is going, the body leaves a line where its centre of"
+                              " mass has been. The line stays for the whole run and goes when it"
+                              " stops; its colour, width and style are in Options -> Physics. A"
+                              " body that draws wears a ring round its centre of mass.");
     return row;
 }
 
@@ -255,7 +322,7 @@ std::vector<PropertyRow> PhysicsPropertyPane::bodyIdentityRows(PhysicsBody *body
     return result;
 }
 
-std::vector<PropertyRow> PhysicsPropertyPane::shapeIdentityRows(ShapeItem *shape)
+std::vector<PropertyRow> PhysicsPropertyPane::shapeIdentityRows(ShapeItem *shape, int picked)
 {
     std::vector<PropertyRow> result;
     const QString &section = shapeSection();
@@ -264,7 +331,13 @@ std::vector<PropertyRow> PhysicsPropertyPane::shapeIdentityRows(ShapeItem *shape
         [shape] { return shape->name(); },
         [shape](const QVariant &v) { shape->setName(v.toString()); },
         -100000.0, 100000.0, {}, -1, 0.0, section};
-    name.tooltip = QObject::tr("What rules call this shape.");
+    // The one row that cannot speak for several shapes: a name is how a rule
+    // finds exactly one of them, so there is nothing to spread across a
+    // selection. It says which shape's it is instead.
+    name.tooltip = picked > 1
+        ? QObject::tr("What rules call this shape. One name each, so this is the lead shape's"
+                      " -- the properties below are set on all %1.").arg(picked)
+        : QObject::tr("What rules call this shape.");
     result.push_back(std::move(name));
 
     PropertyRow body {QObject::tr("Body"), PropertyFieldType::String,

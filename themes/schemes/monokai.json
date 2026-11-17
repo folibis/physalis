@@ -1,0 +1,15 @@
+{
+    "label": "Monokai",
+    "order": 100,
+    "dark": true,
+    "window": "#272822",
+    "surface": "#1E1F1C",
+    "base": "#1E1F1C",
+    "alternate": "#3E3D32",
+    "text": "#F8F8F2",
+    "muted": "#A59F85",
+    "border": "#4F4E43",
+    "soft": "#3E3D32",
+    "accent": "#F92672",
+    "accentText": "#1E1F1C"
+}

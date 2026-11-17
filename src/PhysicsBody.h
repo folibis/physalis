@@ -59,6 +59,13 @@ public:
     bool isFocused() const { return m_focused; }
     void setFocused(bool focused) { m_focused = focused; }
 
+    // Whether the body leaves a line behind it while a run goes: where its
+    // centre of mass has been. The application's own flag, like the one
+    // above -- no engine draws -- and how the line looks is an Option, the
+    // same for every body.
+    bool drawsTrail() const { return m_drawsTrail; }
+    void setDrawsTrail(bool draws) { m_drawsTrail = draws; }
+
     QPointF originScenePos() const;
 
     // The body's orientation in degrees, taken from the same reference shape
@@ -95,6 +102,7 @@ private:
     QVector<ShapeItem *> m_shapes;
     ShotSettings m_shot;
     bool m_focused = false;
+    bool m_drawsTrail = false;
     bool m_asleep = false;
     bool m_removed = false;
     bool m_runOnly = false;

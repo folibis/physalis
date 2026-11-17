@@ -17,7 +17,10 @@
 #include <QPixmap>
 #include <QMenu>
 #include <functional>
+#include <QLineEdit>
 #include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
+#include <algorithm>
 #include <QVBoxLayout>
 #include <QtMath>
 
@@ -68,6 +71,15 @@ void SceneTree::buildUi()
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
 
+    // Rules address objects by name, so a scene is navigated by name: the box
+    // narrows the tree as you type rather than jumping to one match, since a
+    // name is often a stem shared by a dozen of them.
+    m_filter = new QLineEdit(this);
+    m_filter->setClearButtonEnabled(true);
+    m_filter->setPlaceholderText(tr("Find by name"));
+    m_filter->setToolTip(tr("Show only the objects whose name contains this"));
+    layout->addWidget(m_filter);
+
     m_tree = new QTreeWidget(this);
     m_tree->setHeaderHidden(true);
     m_tree->setColumnCount(1);
@@ -110,6 +122,76 @@ void SceneTree::buildUi()
                     emit propertiesRequested();
             });
 
+    connect(m_filter, &QLineEdit::textChanged, this, [this](const QString &) {
+        applyFilter();
+    });
+    // Enter on a filter that has found one thing picks it, which is what a
+    // find box is for; on several it leaves the list as it is.
+    connect(m_filter, &QLineEdit::returnPressed, this, [this] {
+        QTreeWidgetItem *only = nullptr;
+        int found = 0;
+        QTreeWidgetItemIterator it(m_tree, QTreeWidgetItemIterator::NotHidden);
+        for (; *it; ++it) {
+            if (kindOf(*it) == NodeKind::Group)
+                continue;
+            ++found;
+            only = *it;
+        }
+        if (found == 1 && only) {
+            m_tree->setCurrentItem(only);
+            onItemActivated(only);
+            emit propertiesRequested();
+        }
+    });
+}
+
+void SceneTree::applyFilter()
+{
+    if (!m_tree || !m_filter)
+        return;
+
+    const QString wanted = m_filter->text().trimmed();
+    QTreeWidgetItemIterator all(m_tree);
+    if (wanted.isEmpty()) {
+        for (; *all; ++all)
+            (*all)->setHidden(false);
+        applyExpansion();
+        return;
+    }
+
+    // Leaves first, then the groups: a group is kept only for what survived
+    // under it, so it has to be judged after its children.
+    QVector<QTreeWidgetItem *> groups;
+    for (; *all; ++all) {
+        QTreeWidgetItem *row = *all;
+        if (kindOf(row) == NodeKind::Group) {
+            groups.append(row);
+            continue;
+        }
+        row->setHidden(!row->text(0).contains(wanted, Qt::CaseInsensitive));
+    }
+    // Deepest first, so a group of groups sees its own children settled.
+    std::sort(groups.begin(), groups.end(), [](QTreeWidgetItem *a, QTreeWidgetItem *b) {
+        const auto depth = [](QTreeWidgetItem *row) {
+            int d = 0;
+            for (QTreeWidgetItem *up = row->parent(); up; up = up->parent())
+                ++d;
+            return d;
+        };
+        return depth(a) > depth(b);
+    });
+    for (QTreeWidgetItem *group : groups) {
+        bool keep = false;
+        for (int i = 0; i < group->childCount(); ++i) {
+            if (!group->child(i)->isHidden()) {
+                keep = true;
+                break;
+            }
+        }
+        group->setHidden(!keep);
+        if (keep)
+            group->setExpanded(true); // a match two levels down is no use folded
+    }
 }
 
 void SceneTree::connectScene()
@@ -121,10 +203,12 @@ void SceneTree::connectScene()
         connect(m_scene, &CanvasScene::bodiesChanged, this, &SceneTree::scheduleRebuild);
         connect(m_scene, &CanvasScene::jointsChanged, this, &SceneTree::scheduleRebuild);
 
-        connect(m_scene, &CanvasScene::simulationRunningChanged, this,
-                [this](bool running) { m_tree->setEnabled(!running); });
-        m_tree->setEnabled(m_scene->selectionAllowed());
-
+        // Deliberately live through a run. The tree changes nothing -- its rows
+        // point the panels at an object and its menu folds them -- and picking
+        // one mid-run is how you read an object's live values, which is exactly
+        // when they are worth reading. The canvas cannot do it: a press there
+        // pans the field while a run is going. See onItemActivated(), which
+        // holds back the mode switch rather than the selection.
         connect(m_scene, &CanvasScene::activeItemChanged, this, &SceneTree::syncSelection);
         connect(m_scene, &CanvasScene::physicsSelectionChanged, this, &SceneTree::syncSelection);
         connect(m_scene, &CanvasScene::selectedJointChanged, this, &SceneTree::syncSelection);
@@ -249,6 +333,8 @@ void SceneTree::rebuild()
     }
 
     applyExpansion();
+    // The rows are new, and know nothing of what is typed in the box.
+    applyFilter();
 
     if (current) {
         if (QTreeWidgetItem *item = itemFor(current))
@@ -421,21 +507,31 @@ void SceneTree::onItemActivated(QTreeWidgetItem *item)
     // the panels at an object so its live values can be read while the scene
     // moves. What a run does hold back is the mode switch: the mode buttons
     // are disabled for the length of one, and the tree has no business going
-    // round them. Selecting a shape then means selecting it where the run can
-    // show it, which is as part of its body.
+    // round them.
     const bool running = !m_scene->selectionAllowed();
     const auto enterMode = [this, running](EditorMode mode) {
         if (!running)
             m_scene->setEditorMode(mode);
+    };
+    // So a run shows a shape wherever the mode it was started in can show it:
+    // on its own in Edit, as part of its body in Physics. Pointed at the
+    // physics selection in Edit mode it would have landed in a table the panel
+    // was not showing, and the click would have read as doing nothing.
+    const auto showWhileRunning = [this](ShapeItem *shape, bool wholeBody) {
+        if (m_scene->editorMode() == EditorMode::Edit) {
+            m_scene->selectShape(shape);
+            return;
+        }
+        m_scene->selectJoint(nullptr);
+        m_scene->clearPhysicsSelection();
+        m_scene->selectForPhysics(shape, wholeBody);
     };
 
     switch (kindOf(item)) {
     case NodeKind::Shape: {
         auto *shape = static_cast<ShapeItem *>(object);
         if (running) {
-            m_scene->selectJoint(nullptr);
-            m_scene->clearPhysicsSelection();
-            m_scene->selectForPhysics(shape);
+            showWhileRunning(shape, false);
             break;
         }
         enterMode(EditorMode::Edit);
@@ -445,6 +541,11 @@ void SceneTree::onItemActivated(QTreeWidgetItem *item)
     case NodeKind::BodyRef:
     case NodeKind::Body: {
         auto *body = static_cast<PhysicsBody *>(object);
+        if (running) {
+            if (!body->shapes().isEmpty())
+                showWhileRunning(body->shapes().first(), true);
+            break;
+        }
         enterMode(EditorMode::Physics);
         m_scene->selectJoint(nullptr);
         m_scene->clearPhysicsSelection();

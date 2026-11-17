@@ -65,6 +65,14 @@ public:
     // shape and in no body, ready to be jointed together.
     QVector<ShapeItem *> convertToSegments(ShapeItem *shape, int segments, qreal startAngle);
     QVector<QPointF> outlineCorners(ShapeItem *shape, int segments, qreal startAngle) const;
+    // A closed polygon cut into convex pieces of at most `maxCorners` corners,
+    // so an outline that is concave or has too many points can still be solid.
+    // The first piece takes the polygon's place -- its name, its body, its
+    // selection -- and the rest join the same body. Empty when the outline
+    // crosses itself.
+    QVector<ShapeItem *> splitIntoConvexPieces(ShapeItem *shape, int maxCorners);
+    // Whether that would change anything: closed, and not already solid.
+    bool canSplitIntoConvexPieces(const ShapeItem *shape) const;
 
     // Moves whatever is picked by `delta` scene units, whichever mode we are
     // in. Returns false if there was nothing to move, so the key that asked
@@ -94,6 +102,13 @@ public:
     // about. False where nothing does.
     bool revealObjectNamed(const QString &name);
     void selectExplosion(ExplosionItem *explosion);
+    // A selection spans kinds. Shapes, rays and explosions are picked
+    // together -- a box swept over two blasts, two rangefinders and a body
+    // takes all five -- so each kind keeps a list, and the first of that list
+    // leads: it is what the property pane shows and what names the undo step,
+    // the way the active shape does for shapes.
+    void selectExplosions(const QVector<ExplosionItem *> &wanted, bool additive);
+    const QVector<ExplosionItem *> &explosionSelection() const { return m_explosionSelection; }
 
     // Rangefinders. Like explosions they never enter the physics world; the
     // engine is only asked to measure along them.
@@ -102,9 +117,17 @@ public:
     void removeRay(RayItem *ray);
     RayItem *rayNamed(const QString &name) const;
     void selectRay(RayItem *ray);
-    RayItem *selectedRay() const { return m_selectedRay; }
+    void selectRays(const QVector<RayItem *> &wanted, bool additive);
+    const QVector<RayItem *> &raySelection() const { return m_raySelection; }
 
-    ExplosionItem *selectedExplosion() const { return m_selectedExplosion; }
+    // The lead of each kind: the one a pane that can only show one shows.
+    RayItem *selectedRay() const { return m_raySelection.value(0); }
+    ExplosionItem *selectedExplosion() const { return m_explosionSelection.value(0); }
+
+    // Let go of everything picked on the canvas, of every kind. The press
+    // that starts a sweep on empty field and a jump to a named object both
+    // want this, and both used to spell it out a kind at a time.
+    void clearCanvasSelection();
 
     // Every name in use, across shapes, bodies, joints, rays and explosions
     // alike -- they share one namespace because a rule can name any of them in
@@ -120,6 +143,23 @@ public:
     const QVector<ShapeItem *> &editSelection() const { return m_editSelection; }
     void addToEditSelection(ShapeItem *shape);
     void clearEditSelection();
+
+    // Every shape on the field, into whichever selection the mode keeps --
+    // the editor's one active shape plus the rest, or the physics pick. One
+    // call rather than one per mode, since what "all of it" means is the
+    // scene's business and not the menu's.
+    void selectAllShapes();
+    void selectShapes(const QVector<ShapeItem *> &wanted, bool additive);
+
+    // Which shape is drawn over which. Shapes used to stack by the order they
+    // were added, with no way to change it; `zValue` is now theirs and the
+    // `*.phys` carries it.
+    enum class Restack { ToFront, ToBack, Forward, Backward };
+    // Bottom of the pile first, which is the order a painter works in.
+    QVector<ShapeItem *> shapesInStackOrder() const;
+    // False where the move changes nothing -- already at the front, or
+    // nothing picked -- so a caller records no undo state for it.
+    bool restackShapes(const QVector<ShapeItem *> &shapes, Restack where);
 
     // The pivot a multi-shape selection turns about. It starts at the centre
     // of everything picked and can be dragged anywhere; changing the selection
@@ -257,8 +297,6 @@ public:
     // declared, else its id.
     QString controlCaption(const QString &id) const;
     void setControlCaption(const QString &id, const QString &caption);
-    // Back to what the scene declares, and the pressed/changed events dropped.
-    void resetControls();
     // What has happened to them since this was last called. The run reads it
     // once a step and turns it into rule events.
     struct ControlEvent {
@@ -266,6 +304,7 @@ public:
         QString eventId;
     };
     QVector<ControlEvent> takeControlEvents();
+    bool hasControlEvents() const { return !m_controlEvents.isEmpty(); }
 
     const QVector<Rule> &rules() const { return m_rules; }
     QVector<Rule> &rules() { return m_rules; }
@@ -405,11 +444,21 @@ public:
     };
     JointLimits jointLimits(const Joint *joint) const;
 
-    // Where a sliding joint's travel reads zero, in scene units: anchor B as
-    // the scene stands at rest. Kept in body A's frame, because that is the
-    // body the rail belongs to -- the axis is read in A's frame and the travel
-    // is B measured against it.
-    QPointF railOrigin(const Joint *joint) const;
+    // A sliding joint's rail: where its travel reads zero, in scene units,
+    // and which way the limits run from there.
+    //
+    // The rail belongs to whichever of the two bodies holds still, because
+    // the engine measures the travel *between* the anchors and either end may
+    // be the fixed one. Pinned to body A regardless, a joint built the other
+    // way round -- domino's lifts are, body A the car and body B the guide --
+    // carried its own limit line up the screen as the car rose, which is the
+    // one thing a limit line must never do.
+    struct Rail
+    {
+        QPointF zero;    // the point the lower limit is measured from
+        QPointF along;   // unit direction the limits run in from there
+    };
+    Rail railOf(const Joint *joint) const;
 
     // How solidly a joint's anchors and shaft are filled. An anchor sits on
     // top of the very place it is holding, and drawn solid it hides it -- most
@@ -444,6 +493,11 @@ public:
     // itself.
     quint32 randomSeed() const { return m_randomSeed; }
     void setRandomSeed(quint32 seed);
+
+    // A run that opens held, so the person watching starts it -- with a
+    // control and a rule, or with the transport.
+    bool startsPaused() const { return m_startsPaused; }
+    void setStartsPaused(bool paused);
 
     void setPixelsPerMeter(qreal pixelsPerMeter);
     qreal pixelsPerMeter() const { return m_world.pixelsPerMeter; }
@@ -573,10 +627,16 @@ public:
     // adds nothing to the picture, it tints the bodies by whether the solver
     // still has them awake, and there is nothing to tint outside a run.
     enum class RunLayer { Grid, Joints, BodyAxes, Rays, Explosions, SleepShading, Sensors,
-                          Count };
+                          Trails, Count };
 
     bool runLayer(RunLayer layer) const { return m_runLayers[static_cast<int>(layer)]; }
     void setRunLayer(RunLayer layer, bool on);
+
+    // Each object's name written beside it. Not a RunLayer: those are all on
+    // while editing, and this one is off until asked for -- a field of labels
+    // is in the way of the drawing most of the time.
+    bool objectNamesShown() const { return m_objectNamesShown; }
+    void setObjectNamesShown(bool on);
 
     // Whether a layer is drawn right now: everything while editing, and once a
     // run is going, whatever its switches allow.
@@ -634,6 +694,26 @@ public:
     qreal shotLineWidth() const { return m_shotLineWidth; }
     void setShotLineStyle(Qt::PenStyle style);
     Qt::PenStyle shotLineStyle() const { return m_shotLineStyle; }
+
+    // Where each body marked to draw has been this run -- its centre of mass,
+    // a point per step. Run state: the run writes it, the scene draws it on
+    // the field under the shapes, and it is gone when the run stops, like
+    // every position on the canvas.
+    void extendTrail(PhysicsBody *body, const QPointF &point);
+    void clearTrails();
+    QVector<QPointF> trail(const PhysicsBody *body) const;
+    // Everything the trails cover, for a picture that has to hold them.
+    QRectF trailBounds() const;
+
+    // How a trail is drawn, the same for every body: whether one draws at
+    // all stays on the body. The width is screen pixels, so a trail reads the
+    // same at 50% as at 500%.
+    void setTrailColor(const QColor &color);
+    QColor trailColor() const { return m_trailColor; }
+    void setTrailLineWidth(qreal width);
+    qreal trailLineWidth() const { return m_trailLineWidth; }
+    void setTrailLineStyle(Qt::PenStyle style);
+    Qt::PenStyle trailLineStyle() const { return m_trailLineStyle; }
 
     // What the running engine says a property is worth. The rows for these --
     // where a body got to, how fast it is going -- have no answer in the
@@ -764,6 +844,7 @@ signals:
     void editCommitted(const QString &label, const QString &mergeKey);
 
     void shapesChanged();
+    void objectNamesShownChanged(bool on);
     void explosionsChanged();
     void raysChanged();
     void selectedRayChanged(RayItem *ray);
@@ -779,6 +860,7 @@ signals:
 protected:
     void drawBackground(QPainter *painter, const QRectF &rect) override;
     void drawForeground(QPainter *painter, const QRectF &rect) override;
+    void drawObjectNames(QPainter *painter, const QRectF &visible) const;
 
     void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
@@ -829,6 +911,7 @@ private:
     void handleEditModeEnter();
 
     EditorMode m_editorMode = EditorMode::Edit;
+    bool m_objectNamesShown = false;
 
     QVector<ShapeItem *> m_physicsSelection;
 
@@ -920,7 +1003,7 @@ private:
     // and held through the run, so the turns spread and pack rather than being
     // counted afresh every frame.
     mutable QHash<QString, int> m_springTurns;
-    // See railOrigin(): worked out while the scene stands still and held
+    // See railOf(): worked out while the scene stands still and held
     // through the run, the same way the spring turns above are.
     mutable QHash<QString, QPointF> m_railOrigins;
 
@@ -953,6 +1036,7 @@ private:
     bool m_shiftPickWasSelected = false;
     bool m_editNodeMoved = false;
     quint32 m_randomSeed = 0;
+    bool m_startsPaused = false;
     ShapeItem *m_active = nullptr;
 
     DragMode m_dragMode = DragMode::None;
@@ -986,6 +1070,21 @@ private:
     Qt::PenStyle m_shotLineStyle = Qt::DotLine;
     void drawShot(QPainter *painter) const;
 
+    // A series fills, and then it is halved and takes every other point from
+    // there on -- the bargain the plots make, so a run of any length keeps
+    // the whole of its shape rather than losing its beginning.
+    struct Trail {
+        QVector<QPointF> points;
+        int stride = 1;
+        int passed = 0;
+    };
+    QHash<PhysicsBody *, Trail> m_trails;
+    QColor m_trailColor { 0xD6, 0x33, 0x6C };
+    qreal m_trailLineWidth = 2.0;
+    Qt::PenStyle m_trailLineStyle = Qt::SolidLine;
+    void drawGrid(QPainter *painter, const QRectF &rect);
+    void drawTrails(QPainter *painter) const;
+
     QSet<int> m_selectedNodes;
     // The same nodes in the order they were picked. Which way round a closed
     // outline a run goes cannot be worked out from the indices -- between any
@@ -998,8 +1097,21 @@ private:
     QPointF m_moveDragVirtualPos;
 
     // What a Physics-mode drag is carrying, and where each piece started.
+    // Rays and blasts travel with the shapes rather than instead of them,
+    // since all three can be picked at once; m_bodyDragLeadStart is the one
+    // every piece's move is measured from, whichever kind was grabbed.
     QVector<ShapeItem *> m_bodyDragShapes;
     QVector<QPointF> m_bodyDragStartPositions;
+    QVector<RayItem *> m_bodyDragRays;
+    QVector<QPointF> m_bodyDragRayStarts;
+    QVector<ExplosionItem *> m_bodyDragExplosions;
+    QVector<QPointF> m_bodyDragExplosionStarts;
+    // Pressed on, kept in case the press turns out to be a click: a click
+    // narrows a group of several down to the one thing under the pointer.
+    RayItem *m_pointClickRay = nullptr;
+    ExplosionItem *m_pointClickExplosion = nullptr;
+    QPointF m_bodyDragLeadStart;
+    bool m_bodyDragLeadIsPoint = false;
     QString m_bodyDragLabel;
 
     QPointF m_dragOriginScene;
@@ -1024,18 +1136,18 @@ private:
     bool m_sensorFillsBody = false;
     QVector<ExplosionItem *> m_explosions;
     QVector<RayItem *> m_rays;
-    RayItem *m_selectedRay = nullptr;
-    RayItem *m_draggedRay = nullptr;
-    ExplosionItem *m_selectedExplosion = nullptr;
+    QVector<RayItem *> m_raySelection;
+    QVector<ExplosionItem *> m_explosionSelection;
 
-    // One thing is picked on the canvas at a time: a body, a joint, a ray or
-    // an explosion. Picking any of them lets the others go, and this is the
-    // only place that says what "the others" are -- each of the four used to
-    // carry its own idea of it, and a joint carried none at all, so the body
-    // under it stayed picked behind the joint's own property pane.
+    // A joint is the one pick that stands alone. Shapes, rays and explosions
+    // are a set together -- they have positions, so they move and go as one --
+    // but a joint is a linkage between two of them, with no position of its
+    // own and a pane that answers for nothing else, so picking one lets the
+    // rest go and picking any of the rest lets it go.
     enum class Picked { Shapes, Joint, Ray, Explosion };
     void letOthersGo(Picked keep);
-    ExplosionItem *m_draggedExplosion = nullptr;
+    void carryPickedPoints();
+    void carryPickedForDrag(const QPointF &leadPos, bool leadIsPoint, const QString &label);
     physics::WorldDesc m_world;
     bool m_fieldBoundsSolid = false;
 
@@ -1049,7 +1161,8 @@ private:
     qreal m_physicsSelectionLineWidth = 2.0;
     QColor m_physicsSelectionColor { 230, 140, 40 };
     QVector<Watch> m_watches;
-    bool m_runLayers[static_cast<int>(RunLayer::Count)] = {true, true, true, true, true, true};
+    bool m_runLayers[static_cast<int>(RunLayer::Count)] = {true, true, true, true,
+                                                           true, true, true, true};
     bool m_showBodyAxes = true;
     qreal m_bodyAxisLength = 40.0;
     qreal m_bodyAxisWidth = 2.0;

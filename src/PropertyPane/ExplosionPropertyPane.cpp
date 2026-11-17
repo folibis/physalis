@@ -20,6 +20,18 @@ std::vector<PropertyRow> ExplosionPropertyPane::rows(EditorMode mode) const
 
     const QString section = QObject::tr("Explosion");
     CanvasScene *scene = m_scene;
+    // Several can be picked at once, and then the rows below set all of them.
+    const QVector<ExplosionItem *> picked = m_scene->explosionSelection();
+
+    if (picked.size() > 1) {
+        PropertyRow count {QObject::tr("Explosions Picked"), PropertyFieldType::String,
+            [n = int(picked.size())] { return QString::number(n); },
+            [](const QVariant &) {}, -100000.0, 100000.0, {}, -1, 0.0, section};
+        count.readOnly = true;
+        count.tooltip = QObject::tr("How many this section is speaking for. Setting any of the"
+                                    " properties below sets it on every one of them.");
+        result.push_back(std::move(count));
+    }
 
     PropertyRow name;
     name.label = QObject::tr("Name");
@@ -38,13 +50,15 @@ std::vector<PropertyRow> ExplosionPropertyPane::rows(EditorMode mode) const
         row.getter = [explosion, horizontal] {
             return horizontal ? explosion->pos().x() : explosion->pos().y();
         };
-        row.setter = [explosion, horizontal](const QVariant &v) {
-            QPointF p = explosion->pos();
-            if (horizontal)
-                p.setX(v.toDouble());
-            else
-                p.setY(v.toDouble());
-            explosion->setPos(p);
+        row.setter = [picked, horizontal](const QVariant &v) {
+            for (ExplosionItem *one : picked) {
+                QPointF p = one->pos();
+                if (horizontal)
+                    p.setX(v.toDouble());
+                else
+                    p.setY(v.toDouble());
+                one->setPos(p);
+            }
         };
         row.minValue = -1e6;
         row.maxValue = 1e6;
@@ -72,8 +86,9 @@ std::vector<PropertyRow> ExplosionPropertyPane::rows(EditorMode mode) const
                 row.getter = [explosion, key, fallback] {
                     return explosion->params().value(key, fallback);
                 };
-                row.setter = [explosion, key](const QVariant &v) {
-                    explosion->setParam(key, v.toDouble());
+                row.setter = [picked, key](const QVariant &v) {
+                    for (ExplosionItem *one : picked)
+                        one->setParam(key, v.toDouble());
                 };
                 row.minValue = param.minValue;
                 row.maxValue = param.maxValue;

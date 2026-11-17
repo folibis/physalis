@@ -53,6 +53,15 @@ private:
     // Tags a cell widget with its row and points its clicks and menu here.
     void adopt(QWidget *widget, int row);
 
+    // A run may be read but not edited. The panel used to be disabled whole,
+    // which greyed out the names and start values when they were worth
+    // reading, and took the context menu with them -- and that menu is where a
+    // variable is put in the log, which is a mid-run thing to want.
+    void setReadOnly(bool readOnly);
+    // Only ever disables, so coming back out of read-only rebuilds instead.
+    void applyReadOnly();
+    bool m_readOnly = false;
+
     struct RowWidgets {
         QLabel *name = nullptr;
         QLineEdit *rename = nullptr;
@@ -60,6 +69,7 @@ private:
 
     QPointer<CanvasScene> m_scene;
     QTableWidget *m_table = nullptr;
+    QToolButton *m_add = nullptr;
     QVector<RowWidgets> m_rows;
     // Rebuilding recreates every editor, so a handler must not write back
     // while it is happening.

@@ -10,6 +10,7 @@
 #include "SceneSerializer.h"
 #include "ShapeItem.h"
 #include "SimulationController.h"
+#include "RunCopy.h"
 
 #include <QHash>
 #include <QJsonObject>
@@ -527,4 +528,219 @@ TEST(JointCatalogue, PickingOneThingLetsTheOthersGo)
     bench.scene.selectForPhysics(bench.hanging->shapes().first(), true);
     EXPECT_EQ(bench.scene.selectedJoint(), nullptr)
         << "the joint stayed picked behind the body";
+}
+
+// Where a sliding joint's rail is drawn has now been got wrong in both
+// directions, so what this pins is the one thing that settles it: the rail has
+// to end where the body can actually get to.
+//
+// A sliding joint's limits are offsets from where the joint starts -- the gap
+// between its two anchors along the axis. The engine adds that gap to both of
+// them when it builds the joint (`travelOrigin` in Box2DJoints.cpp), so the
+// travel runs from anchor B's resting place, not from anchor A. Drawn from
+// anchor A the rail falls short by the whole gap: crane.phys has 120 scene
+// units of it on the trolley and 40 on the hoist, which ran its rails off the
+// end of the crane.
+//
+// The rail does move with body B while the scene is being edited, and that is
+// correct rather than a bug: the engine works the gap out afresh when the run
+// starts, so where B stands now is what the next run will allow. What must not
+// happen is the rail sliding after B *during* a run -- then the stops chase the
+// very thing they are limiting and never show where in its travel it has got
+// to -- which is why the origin is held in body A's frame for the length of one.
+TEST(JointCatalogue, ASlidingJointsRailIsDrawnWhereTheTravelIs)
+{
+    auto engine = physics::EngineRegistry::create(QStringLiteral("Box2D"));
+    ASSERT_TRUE(engine);
+
+    QString lowerKey;
+    QString upperKey;
+    QString limitSwitch;
+    const QVector<physics::JointType> types = engine->jointTypes();
+    const physics::JointType *sliding = nullptr;
+    for (const physics::JointType &type : types) {
+        // Two anchors, or there is no gap and the two readings of a limit
+        // coincide -- which is the case that cannot tell them apart.
+        if (type.visual != physics::JointVisual::Axis || type.anchorCount < 2)
+            continue;
+        QString lower;
+        QString upper;
+        QString enabled;
+        for (const physics::JointParam &param : type.params) {
+            if (param.role == physics::PropertyRole::LowerLimit)
+                lower = param.key;
+            else if (param.role == physics::PropertyRole::UpperLimit)
+                upper = param.key;
+            else if (param.role == physics::PropertyRole::LimitEnabled)
+                enabled = param.key;
+        }
+        if (lower.isEmpty() || upper.isEmpty())
+            continue;
+        sliding = &type;
+        lowerKey = lower;
+        upperKey = upper;
+        limitSwitch = enabled;
+        break;
+    }
+    ASSERT_NE(sliding, nullptr) << "the engine publishes no limited two-anchor sliding joint";
+
+    constexpr qreal kTravel = 60.0;
+    QVariantMap params;
+    if (!limitSwitch.isEmpty())
+        params.insert(limitSwitch, true);
+    params.insert(lowerKey, 0.0);
+    params.insert(upperKey, kTravel);
+    // Nothing holding it anywhere but gravity, so the far stop is the only
+    // place it can end up.
+    for (const physics::JointParam &param : sliding->params) {
+        if (param.role == physics::PropertyRole::SpringEnabled)
+            params.insert(param.key, false);
+    }
+
+    TwoBodies bench(QStringLiteral("Box2D"));
+    bench.scene.world().params[QStringLiteral("gravityY")] = 9.81;
+    Joint *joint = bench.join(*sliding, params);
+    ASSERT_TRUE(joint);
+
+    // createJoint puts the anchors on the two centres and points the axis down
+    // the span between them, so the gap lies along the axis.
+    const QPointF along = joint->axisScene();
+    const QPointF anchorA = joint->anchorScenePos(Joint::End::A);
+    const QPointF restingB = joint->anchorScenePos(Joint::End::B);
+    const QPointF gap = restingB - anchorA;
+    const qreal travelOrigin = gap.x() * along.x() + gap.y() * along.y();
+    ASSERT_GT(std::abs(travelOrigin), 1.0) << "the anchors coincide, so this proves nothing";
+
+    EXPECT_EQ(bench.scene.railOf(joint).zero, restingB)
+        << "zero is where the joint stands at rest, not anchor A -- the engine adds the "
+           "anchor gap to both limits";
+
+    // While editing, the rail goes where body B goes: that gap is worked out
+    // again when the run starts, so this is what the next run will allow.
+    bench.hanging->shapes().first()->moveBy(0, 17);
+    EXPECT_EQ(bench.scene.railOf(joint).zero, joint->anchorScenePos(Joint::End::B))
+        << "the rail did not follow body B while editing, so it is showing travel the next "
+           "run will not have";
+    bench.hanging->shapes().first()->moveBy(0, -17);
+
+    const QPointF zero = bench.scene.railOf(joint).zero;
+    const QPointF railEnd = zero + along * kTravel;
+
+    SimulationController sim(&bench.scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+    ASSERT_TRUE(sim.skippedJoints().isEmpty()) << "the joint was skipped by the engine";
+
+    CanvasScene *run = sim.runScene();
+    Joint *running = inRun(sim, joint);
+    ASSERT_TRUE(run && running);
+    for (int i = 0; i < 30; ++i)
+        sim.stepFrame();
+    // Held for the length of the run, so the stops do not chase the body.
+    EXPECT_EQ(run->railOf(running).zero, zero)
+        << "the rail slid after body B during the run";
+    EXPECT_NE(running->anchorScenePos(Joint::End::B), zero)
+        << "body B never moved, so the line above proved nothing";
+
+    for (int i = 0; i < 400; ++i)
+        sim.stepFrame();
+
+    const QPointF ended = running->anchorScenePos(Joint::End::B);
+    // Generous on purpose: what is being checked is which end of the rail it
+    // is at, and the two candidate answers are a whole anchor gap apart.
+    EXPECT_NEAR(ended.y(), railEnd.y(), 4.0)
+        << "it came to rest " << (ended.y() - railEnd.y())
+        << " scene units from where the rail is drawn to end; the anchor gap is "
+        << travelOrigin << ", so being out by about that much means the rail is drawn from "
+        << "the wrong anchor";
+    EXPECT_NEAR(ended.x(), railEnd.x(), 4.0);
+    sim.stop();
+}
+
+// The same joint built the other way round: body A the one that moves, body B
+// the one bolted down. domino.phys's lifts are built that way, and the rail
+// used to be pinned to body A's frame whichever body that was -- so as the
+// lift rose its own limit line rose with it, 425 scene units up and off the
+// top of the scene, which is the one thing a limit line must never do.
+//
+// The rail belongs to whichever end holds still. Nothing here looks at which
+// that is: it runs the joint and requires the rail to be where it started.
+TEST(JointCatalogue, ASlidingJointsRailHoldsStillWhicheverEndMoves)
+{
+    auto engine = physics::EngineRegistry::create(QStringLiteral("Box2D"));
+    ASSERT_TRUE(engine);
+
+    const QVector<physics::JointType> types = engine->jointTypes();
+    QString lowerKey;
+    QString upperKey;
+    QString limitSwitch;
+    const physics::JointType *sliding = nullptr;
+    for (const physics::JointType &type : types) {
+        if (type.visual != physics::JointVisual::Axis || type.anchorCount < 2)
+            continue;
+        QString lower;
+        QString upper;
+        QString enabled;
+        for (const physics::JointParam &param : type.params) {
+            if (param.role == physics::PropertyRole::LowerLimit)
+                lower = param.key;
+            else if (param.role == physics::PropertyRole::UpperLimit)
+                upper = param.key;
+            else if (param.role == physics::PropertyRole::LimitEnabled)
+                enabled = param.key;
+        }
+        if (lower.isEmpty() || upper.isEmpty())
+            continue;
+        sliding = &type;
+        lowerKey = lower;
+        upperKey = upper;
+        limitSwitch = enabled;
+        break;
+    }
+    ASSERT_NE(sliding, nullptr);
+
+    QVariantMap params;
+    if (!limitSwitch.isEmpty())
+        params.insert(limitSwitch, true);
+    params.insert(lowerKey, 0.0);
+    params.insert(upperKey, 60.0);
+    for (const physics::JointParam &param : sliding->params) {
+        if (param.role == physics::PropertyRole::SpringEnabled)
+            params.insert(param.key, false);
+    }
+
+    TwoBodies bench(QStringLiteral("Box2D"));
+    bench.scene.world().params[QStringLiteral("gravityY")] = 9.81;
+    // hanging is the dynamic one, so this is a joint whose body A moves and
+    // whose body B is bolted down -- the way round the bench's join() cannot
+    // make.
+    Joint *joint = bench.scene.createJoint(sliding->id, bench.hanging, bench.anchor,
+                                           sliding->anchorCount, params);
+    ASSERT_TRUE(joint);
+    ASSERT_EQ(bench.hanging->props().type, physics::BodyType::Dynamic);
+    ASSERT_EQ(bench.anchor->props().type, physics::BodyType::Static);
+
+    const QPointF zero = bench.scene.railOf(joint).zero;
+    const QPointF movingAnchorWas = joint->anchorScenePos(Joint::End::A);
+
+    SimulationController sim(&bench.scene, nullptr);
+    sim.setEngineName(QStringLiteral("Box2D"));
+    sim.start();
+    ASSERT_TRUE(sim.skippedJoints().isEmpty()) << "the joint was skipped by the engine";
+    for (int i = 0; i < 400; ++i)
+        sim.stepFrame();
+
+    Joint *running = inRun(sim, joint);
+    ASSERT_TRUE(running);
+    const QPointF moved = running->anchorScenePos(Joint::End::A);
+    ASSERT_GT(QLineF(movingAnchorWas, moved).length(), 5.0)
+        << "body A never travelled, so there was nothing for the rail to follow";
+
+    const QPointF now = sim.runScene()->railOf(running).zero;
+    EXPECT_NEAR(now.x(), zero.x(), 0.01)
+        << "the rail travelled with body A instead of staying where the travel is";
+    EXPECT_NEAR(now.y(), zero.y(), 0.01)
+        << "the rail moved " << (now.y() - zero.y()) << " scene units while body A moved "
+        << (moved.y() - movingAnchorWas.y());
+    sim.stop();
 }

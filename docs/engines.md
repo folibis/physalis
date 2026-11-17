@@ -189,8 +189,8 @@ When the user presses Simulate, Physalis drives the engine as follows:
      at a point, such as an explosion).
    - **`takeProblems()`** returns anything that went wrong during the step, as
      sentences for the user.
-5. **`destroyWorld()`** is called when the user presses Stop. Physalis then
-   puts the scene back as it was, so the engine keeps nothing between runs.
+5. **`destroyWorld()`** is called when the user presses Stop. The run worked
+   on a copy of the scene, which goes with it, so nothing is kept between runs.
 
 Physalis also builds a world that it never steps, to show an object's starting
 values, such as its mass, before a simulation begins.

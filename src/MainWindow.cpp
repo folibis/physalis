@@ -65,6 +65,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QMimeData>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QAction>
@@ -99,6 +100,7 @@ const QString kLayerRays = QStringLiteral("rays");
 const QString kLayerExplosions = QStringLiteral("explosions");
 const QString kLayerSleep = QStringLiteral("sleepShading");
 const QString kLayerSensors = QStringLiteral("sensors");
+const QString kLayerTrails = QStringLiteral("trails");
 
 constexpr int kIconSize = 22;
 constexpr int kButtonSize = 30;
@@ -146,6 +148,8 @@ MainWindow::MainWindow(QWidget *parent)
     // setupUi() ends in connectSlotsByName(), which binds the on_<object>_
     // <signal>() slots to their actions.
     m_ui->setupUi(this);
+
+    setAcceptDrops(true);
 
     // Here rather than in the form: uic would build plain icons, and these
     // have to follow the theme.
@@ -195,6 +199,17 @@ MainWindow::MainWindow(QWidget *parent)
     m_ui->topRuler->setView(m_ui->canvasView);
     m_ui->leftRuler->setOrientation(RulerWidget::Orientation::Vertical);
     m_ui->leftRuler->setView(m_ui->canvasView);
+    // Picked on either ruler, kept for both and written down: the two show
+    // one scene and a window with its edges disagreeing would be unreadable.
+    for (RulerWidget *ruler : { m_ui->topRuler, m_ui->leftRuler }) {
+        connect(ruler, &RulerWidget::unitPicked, this, [this](Units::Unit unit) {
+            if (m_ui->topRuler->unit() == unit)
+                return;
+            applyRulerUnit(unit);
+            OptionsDialog::Settings s = currentSettingsSnapshot();
+            saveSettingsToFile(s);
+        });
+    }
 
     buildSidePanelTabs();
     m_ui->propertyPanel->setScene(m_scene);
@@ -293,7 +308,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_lockedWhileRunning = m_alwaysOnWhenStopped;
     m_lockedWhileRunning << m_ui->actionSaveScene << m_ui->actionSaveSceneAs
                          << m_ui->actionUndo << m_ui->actionRedo
-                         << m_ui->actionCopy << m_ui->actionPaste << m_ui->actionDelete
+                         << m_ui->actionCopy << m_ui->actionPaste << m_ui->actionDuplicate
+                         << m_ui->actionBringToFront << m_ui->actionBringForward
+                         << m_ui->actionSendBackward << m_ui->actionSendToBack
+                         << m_ui->actionDelete
                          << m_ui->actionMoveScale << m_ui->actionEditNodes << m_ui->actionRotate
                          << m_ui->actionAlign << m_ui->menuAlign->menuAction()
                          << m_ui->actionCreateBody << m_ui->actionDissolveBody
@@ -375,6 +393,8 @@ MainWindow::MainWindow(QWidget *parent)
     m_layers->addLayer(kLayerSensors, tr("Sensors"), m_scene->runLayer(RunLayer::Sensors),
                        tr("The pass-through shapes rules watch, once a run starts. They are"
                           " always drawn while editing -- that is when they are placed."));
+    m_layers->addLayer(kLayerTrails, tr("Trails"), m_scene->runLayer(RunLayer::Trails),
+                       tr("The line each body marked Draws a Trail leaves behind it."));
     m_layers->addLayer(kLayerSleep, tr("Sleep shading"),
                        m_scene->runLayer(RunLayer::SleepShading),
                        tr("Tint each body by whether the solver still has it awake. There"
@@ -411,7 +431,8 @@ MainWindow::MainWindow(QWidget *parent)
     m_scaleCombo = new QComboBox(this);
     m_scaleCombo->setEditable(true);
     m_scaleCombo->setInsertPolicy(QComboBox::NoInsert);
-    m_scaleCombo->setToolTip(tr("Canvas zoom level -- pick a preset, type a value, or Shift+wheel over the canvas"));
+    m_scaleCombo->setToolTip(tr("Canvas zoom level -- pick a preset, type a value,"
+                                " or Ctrl+wheel over the canvas"));
     m_scaleCombo->setMinimumWidth(72);
     for (int preset : {25, 50, 75, 100, 150, 200, 300, 400, 500})
         m_scaleCombo->addItem(tr("%1%").arg(preset));
@@ -434,7 +455,9 @@ MainWindow::MainWindow(QWidget *parent)
     toolBar->addWidget(m_scaleCombo);
 
     m_resetScaleAction = toolBar->addAction(Icons::resetScale(), tr("Reset Zoom"));
-    m_resetScaleAction->setToolTip(tr("Reset zoom to 100%"));
+    m_resetScaleAction->setToolTip(tr("Reset zoom to 100% (Ctrl+0)"));
+    m_resetScaleAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+0")));
+    addAction(m_resetScaleAction); // a toolbar action is not reached by its key on its own
     connect(m_resetScaleAction, &QAction::triggered, this, [this] { m_scene->setCurrentScale(100.0); });
     squareButton(toolBar, m_resetScaleAction);
 
@@ -493,10 +516,22 @@ MainWindow::MainWindow(QWidget *parent)
             return {};
         return m_simulation->initialValue(object, key);
     });
-    // A body flung with the mouse. The canvas knows the gesture; only the run
-    // can push anything.
-    connect(m_scene, &CanvasScene::shotReleased, m_simulation, &SimulationController::shoot);
-
+    connect(m_scene, &CanvasScene::shapesChanged, this, &MainWindow::updateCopyAction);
+    // Off by default: a field of labels is in the way of the drawing most of
+    // the time. Remembered between runs of the program, since somebody who
+    // wants them wants them every time.
+    m_ui->actionShowObjectNames->setChecked(
+        QSettings(settingsFilePath(), QSettings::IniFormat)
+            .value(QStringLiteral("Panels/showObjectNames"), false)
+            .toBool());
+    m_scene->setObjectNamesShown(m_ui->actionShowObjectNames->isChecked());
+    connect(m_ui->actionShowObjectNames, &QAction::toggled, this, [this](bool on) {
+        m_scene->setObjectNamesShown(on);
+        if (CanvasScene *run = m_simulation->runScene())
+            run->setObjectNamesShown(on);
+        QSettings(settingsFilePath(), QSettings::IniFormat)
+            .setValue(QStringLiteral("Panels/showObjectNames"), on);
+    });
     connect(m_scene, &CanvasScene::editorModeChanged, this, &MainWindow::onEditorModeChanged);
     connect(Theme::instance(), &Theme::changed, this,
             [this] { styleModeButtons(m_scene->editorMode()); });
@@ -554,6 +589,8 @@ MainWindow::MainWindow(QWidget *parent)
             [showProperties](ShapeItem *item) { if (item) showProperties(); });
 
     connect(m_scene, &CanvasScene::scaleChanged, this, [this](qreal scale) {
+        if (CanvasScene *run = m_simulation->runScene())
+            run->setCurrentScale(scale);
         const qreal factor = scale / 100.0;
         m_ui->canvasView->setTransform(QTransform::fromScale(factor, factor));
         m_scaleCombo->setCurrentText(tr("%1%").arg(qRound(scale)));
@@ -614,6 +651,14 @@ MainWindow::MainWindow(QWidget *parent)
     // Centred as soon as it is chosen, rather than at the next step: a run
     // that is paused would otherwise leave it where it was.
     connect(m_scene, &CanvasScene::focusedBodyChanged, this, &MainWindow::followFocusedBody);
+    m_simulation->setRunSceneSetup([this](CanvasScene *run) {
+        applySceneLook(run, currentSettingsSnapshot());
+        run->setObjectNamesShown(m_scene->objectNamesShown());
+        connect(run, &CanvasScene::captionChanged, this, &MainWindow::updateCaption);
+        connect(run, &CanvasScene::controlValuesChanged, this, &MainWindow::refreshControls);
+        connect(run, &CanvasScene::focusedBodyChanged, this, &MainWindow::followFocusedBody);
+        connect(run, &CanvasScene::scaleChanged, m_scene, &CanvasScene::setCurrentScale);
+    });
     // The measured rows in the property table read the same values the log
     // does, so they are refreshed on the same beat.
     connect(m_simulation, &SimulationController::stepped,
@@ -647,6 +692,68 @@ MainWindow::MainWindow(QWidget *parent)
 }
 
 MainWindow::~MainWindow() = default;
+
+// One scene file at a time: opening a second would close the first, and a
+// drop of twenty would ask twenty times whether to save. Empty for anything
+// else dragged over, which is then left for whatever else wants it.
+QString MainWindow::sceneFileAmong(const QList<QUrl> &urls)
+{
+    if (urls.size() != 1 || !urls.first().isLocalFile())
+        return {};
+    const QString path = urls.first().toLocalFile();
+    return QFileInfo(path).suffix().compare(QLatin1String("phys"), Qt::CaseInsensitive) == 0
+               ? path
+               : QString();
+}
+
+// The three events ask the same question of the same list, so they share it.
+static QList<QUrl> urlsOf(const QDropEvent *event)
+{
+    const QMimeData *data = event->mimeData();
+    return data && data->hasUrls() ? data->urls() : QList<QUrl>();
+}
+
+// What the drop does once it is ours. Separate from dropEvent because Qt
+// delivers a drop through its own drag manager and not through sendEvent, so
+// this is the furthest in a test can reach.
+bool MainWindow::openDroppedUrls(const QList<QUrl> &urls)
+{
+    const QString path = sceneFileAmong(urls);
+    if (path.isEmpty())
+        return false;
+
+    // Refused mid-run: stopping somebody's simulation to load a file they
+    // dropped on the way past is not what a drop asks for.
+    if (m_simulation && m_simulation->isActive()) {
+        statusBar()->showMessage(tr("Stop the simulation before opening a scene"), 4000);
+        return false;
+    }
+    return openScene(path);
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (sceneFileAmong(urlsOf(event)).isEmpty())
+        return;
+    event->acceptProposedAction();
+}
+
+// Accepted again on every move, or the drop is refused however the enter went.
+void MainWindow::dragMoveEvent(QDragMoveEvent *event)
+{
+    if (sceneFileAmong(urlsOf(event)).isEmpty())
+        return;
+    event->acceptProposedAction();
+}
+
+void MainWindow::dropEvent(QDropEvent *event)
+{
+    const QList<QUrl> urls = urlsOf(event);
+    if (sceneFileAmong(urls).isEmpty())
+        return;
+    event->acceptProposedAction();
+    openDroppedUrls(urls);
+}
 
 void MainWindow::showEvent(QShowEvent *event)
 {
@@ -907,6 +1014,19 @@ void MainWindow::onCreateBody(bool asStatic)
 void MainWindow::createBodyOfType(physics::BodyType type)
 {
     const QStringList problems = m_scene->solidBodyProblems(m_scene->physicsSelection());
+    // Alongside a filled shape such an outline goes unnoticed: the body moves,
+    // and the outline is only edges with no share of its mass.
+    QStringList splittable;
+    for (ShapeItem *shape : m_scene->physicsSelection()) {
+        if (m_scene->canSplitIntoConvexPieces(shape))
+            splittable << shape->name();
+    }
+    const QString splitHint =
+        splittable.isEmpty()
+            ? QString()
+            : tr(" %1 can only be an outline: right-click it and choose Split into Convex"
+                 " Pieces to make it solid.")
+                  .arg(splittable.join(QStringLiteral(", ")));
 
     PhysicsBody *body = m_scene->createBodyFromSelection();
     if (!body)
@@ -934,11 +1054,14 @@ void MainWindow::createBodyOfType(physics::BodyType type)
                      " The Body panel will make it Dynamic.")
                       .arg(body->name())
                 : tr("Created %1 as Kinematic — %2. The Body panel will make it Dynamic.")
-                      .arg(body->name(), problems.join(QStringLiteral("; "))),
+                      .arg(body->name(), problems.join(QStringLiteral("; ")))
+                      + splitHint,
             8000);
     } else {
-        statusBar()->showMessage(tr("Created %1 from %2 shape(s)")
-                                     .arg(body->name()).arg(body->shapes().size()), 4000);
+        statusBar()->showMessage(tr("Created %1 from %2 shape(s).")
+                                         .arg(body->name()).arg(body->shapes().size())
+                                     + splitHint,
+                                 splitHint.isEmpty() ? 4000 : 8000);
     }
 
     m_ui->propertyPanel->showSection(tr("Body"));
@@ -948,20 +1071,19 @@ void MainWindow::on_actionDissolveBody_triggered()
 {
     // One button for whatever is selected: an explosion is deleted outright,
     // a body (sensor or not) is dissolved back into its shapes.
-    if (RayItem *ray = m_scene->selectedRay()) {
-        const QString name = ray->name();
-        m_scene->removeRay(ray);
-        m_scene->notifyEdit(tr("Remove %1").arg(name));
-        statusBar()->showMessage(tr("Removed %1").arg(name), 4000);
-        return;
-    }
-
-    if (ExplosionItem *explosion = m_scene->selectedExplosion()) {
-        const QString name = explosion->name();
-        m_scene->selectExplosion(nullptr);
-        m_scene->removeExplosion(explosion);
-        m_scene->notifyEdit(tr("Remove %1").arg(name));
-        statusBar()->showMessage(tr("Removed %1").arg(name), 4000);
+    const QVector<RayItem *> rays = m_scene->raySelection();
+    const QVector<ExplosionItem *> blasts = m_scene->explosionSelection();
+    if (!rays.isEmpty() || !blasts.isEmpty()) {
+        const int count = int(rays.size() + blasts.size());
+        const QString what = count == 1
+                                 ? (rays.isEmpty() ? blasts.first()->name() : rays.first()->name())
+                                 : tr("%n object(s)", nullptr, count);
+        for (RayItem *ray : rays)
+            m_scene->removeRay(ray);
+        for (ExplosionItem *explosion : blasts)
+            m_scene->removeExplosion(explosion);
+        m_scene->notifyEdit(tr("Remove %1").arg(what));
+        statusBar()->showMessage(tr("Removed %1").arg(what), 4000);
         return;
     }
 
@@ -986,6 +1108,7 @@ void MainWindow::onPhysicsSelectionChanged()
         && (m_scene->commonSelectedBody() != nullptr
             || m_scene->selectedExplosion() != nullptr
             || m_scene->selectedRay() != nullptr));
+    updateCopyAction();
     updateTransportActions();
 
     if (!physicsMode)
@@ -1097,7 +1220,6 @@ void MainWindow::updateDeleteAction()
     const bool want = !running
                       && (m_scene->activeItem() || m_scene->selectedRay()
                           || m_scene->selectedExplosion());
-    fputc(10, stderr);
     m_ui->actionDelete->setEnabled(want);
 }
 
@@ -1106,9 +1228,28 @@ void MainWindow::updateCopyAction()
     if (!m_ui->actionCopy)
         return;
     const bool running = m_simulation && m_simulation->isActive();
+    // The same question Copy itself asks. Reading activeItem() here asked
+    // Edit mode's selection whatever the mode was, so picking a mechanism in
+    // Physics mode left Copy greyed out and Ctrl+C did nothing.
     m_ui->actionCopy->setEnabled(!running
-                                 && (m_scene->activeItem() || m_scene->selectedRay()
+                                 && (!selectedShapes().isEmpty() || m_scene->selectedRay()
                                      || m_scene->selectedExplosion()));
+    // Duplicate carries shapes and the mechanism around them, and nothing
+    // else, so it asks a narrower question than Copy's.
+    if (m_ui->actionDuplicate)
+        m_ui->actionDuplicate->setEnabled(!running && !selectedShapes().isEmpty());
+    if (m_ui->actionSelectAll)
+        m_ui->actionSelectAll->setEnabled(!m_scene->shapes().isEmpty());
+    // Stacking needs something picked and more than one shape to order it
+    // against; asking the scene whether the move would change anything would
+    // mean working it out twice per selection change.
+    const bool canRestack = !running && !selectedShapes().isEmpty()
+                            && m_scene->shapes().size() > 1;
+    for (QAction *action : { m_ui->actionBringToFront, m_ui->actionBringForward,
+                             m_ui->actionSendBackward, m_ui->actionSendToBack }) {
+        if (action)
+            action->setEnabled(canRestack);
+    }
 }
 
 void MainWindow::updatePasteAction()
@@ -1232,39 +1373,53 @@ void MainWindow::on_actionCopy_triggered()
     // or the blast that is selected outside it. They go into the same object
     // the file uses, so one clipboard carries any of them.
     const QVector<ShapeItem *> picked = selectedShapes();
-    RayItem *ray = m_scene->selectedRay();
-    ExplosionItem *explosion = m_scene->selectedExplosion();
-    if (picked.isEmpty() && !ray && !explosion)
+    const QVector<RayItem *> rays = m_scene->raySelection();
+    const QVector<ExplosionItem *> blasts = m_scene->explosionSelection();
+    if (picked.isEmpty() && rays.isEmpty() && blasts.isEmpty())
         return;
 
+    int jointsLeftOut = 0;
     QJsonObject root;
     if (!picked.isEmpty()) {
-        QJsonArray array;
-        for (ShapeItem *item : picked)
-            array.append(SceneSerializer::shapeToJson(item));
-        root.insert(QStringLiteral("shapes"), array);
+        // The whole mechanism, not the shapes on their own: the bodies they
+        // belong to and the joints between those bodies travel with them.
+        root = SceneSerializer::fragmentToJson(m_scene, picked, &jointsLeftOut);
     }
-    if (ray)
-        root.insert(QStringLiteral("rays"), QJsonArray { SceneSerializer::rayToJson(ray) });
-    if (explosion) {
-        root.insert(QStringLiteral("explosions"),
-                    QJsonArray { SceneSerializer::explosionToJson(explosion) });
+    if (!rays.isEmpty()) {
+        QJsonArray written;
+        for (RayItem *ray : rays)
+            written.append(SceneSerializer::rayToJson(ray));
+        root.insert(QStringLiteral("rays"), written);
+    }
+    if (!blasts.isEmpty()) {
+        QJsonArray written;
+        for (ExplosionItem *explosion : blasts)
+            written.append(SceneSerializer::explosionToJson(explosion));
+        root.insert(QStringLiteral("explosions"), written);
     }
     const QJsonDocument document(root);
     QGuiApplication::clipboard()->setText(QString::fromUtf8(document.toJson(QJsonDocument::Compact)));
 
+    const int count = int(picked.size() + rays.size() + blasts.size());
     QString what;
-    if (!picked.isEmpty()) {
-        what = picked.size() == 1 ? picked.first()->name()
-                                  : tr("%n shapes", nullptr, int(picked.size()));
-    } else if (ray) {
-        what = ray->name();
+    if (count > 1) {
+        what = picked.isEmpty() ? tr("%n object(s)", nullptr, count)
+                                : tr("%n shapes", nullptr, int(picked.size()));
+    } else if (!picked.isEmpty()) {
+        what = picked.first()->name();
+    } else if (!rays.isEmpty()) {
+        what = rays.first()->name();
     } else {
-        what = explosion->name();
+        what = blasts.first()->name();
     }
     m_pasteCount = 0;
     updatePasteAction();
-    statusBar()->showMessage(tr("Copied %1").arg(what), 4000);
+    statusBar()->showMessage(
+        jointsLeftOut == 0
+            ? tr("Copied %1").arg(what)
+            : tr("Copied %1 — %n joint(s) left out, held to a body that was not picked",
+                 nullptr, jointsLeftOut).arg(what),
+        jointsLeftOut == 0 ? 4000 : 6000);
 }
 
 void MainWindow::on_actionSaveScreenshot_triggered()
@@ -1309,10 +1464,10 @@ void MainWindow::on_actionPaste_triggered()
         return; // clipboard holds something else entirely; not an error
 
     const QJsonObject root = document.object();
-    const QVector<ShapeItem *> shapes = clipboardShapes();
+    const bool haveShapes = !root.value(QStringLiteral("shapes")).toArray().isEmpty();
     const QJsonArray rays = root.value(QStringLiteral("rays")).toArray();
     const QJsonArray explosions = root.value(QStringLiteral("explosions")).toArray();
-    if (shapes.isEmpty() && rays.isEmpty() && explosions.isEmpty())
+    if (!haveShapes && rays.isEmpty() && explosions.isEmpty())
         return;
 
     // The same offset for every one of them, so a group pasted keeps the
@@ -1320,17 +1475,18 @@ void MainWindow::on_actionPaste_triggered()
     constexpr qreal kPasteOffset = 20.0;
     const qreal offset = kPasteOffset * ++m_pasteCount;
 
-    QString last;
-    int made = 0;
+    // Everything pasted ends up picked, of whichever kinds were on the
+    // clipboard -- it used to keep only the last of each, so pasting four
+    // blasts left one selected and the other three to be found by hand.
+    QVector<RayItem *> madeRays;
+    QVector<ExplosionItem *> madeBlasts;
     for (const QJsonValue &value : rays) {
         QJsonObject one = value.toObject();
         one.insert(QStringLiteral("x"), one.value(QStringLiteral("x")).toDouble() + offset);
         one.insert(QStringLiteral("y"), one.value(QStringLiteral("y")).toDouble() + offset);
         if (RayItem *ray = SceneSerializer::rayFromJson(m_scene, one)) {
             ray->setName(Naming::nextName(QStringLiteral("ray"), m_scene->takenNames()));
-            m_scene->selectRay(ray);
-            last = ray->name();
-            ++made;
+            madeRays.append(ray);
         }
     }
     for (const QJsonValue &value : explosions) {
@@ -1339,36 +1495,108 @@ void MainWindow::on_actionPaste_triggered()
         one.insert(QStringLiteral("y"), one.value(QStringLiteral("y")).toDouble() + offset);
         if (ExplosionItem *blast = SceneSerializer::explosionFromJson(m_scene, one)) {
             blast->setName(Naming::nextName(QStringLiteral("explosion"), m_scene->takenNames()));
-            m_scene->selectExplosion(blast);
-            last = blast->name();
-            ++made;
+            madeBlasts.append(blast);
         }
     }
-    if (shapes.isEmpty()) {
+    m_scene->clearCanvasSelection();
+    m_scene->selectRays(madeRays, false);
+    m_scene->selectExplosions(madeBlasts, false);
+    const int made = int(madeRays.size() + madeBlasts.size());
+    if (!haveShapes) {
+        const QString last = made == 1 ? (madeRays.isEmpty() ? madeBlasts.first()->name()
+                                                             : madeRays.first()->name())
+                                       : tr("%n objects", nullptr, made);
         m_scene->notifyEdit(tr("Paste %1").arg(last));
-        statusBar()->showMessage(tr("Pasted %1").arg(made == 1 ? last
-                                                               : tr("%n objects", nullptr, made)),
-                                 4000);
+        statusBar()->showMessage(tr("Pasted %1").arg(last), 4000);
         return;
     }
 
-    for (ShapeItem *shape : shapes) {
-        shape->setPos(shape->pos() + QPointF(offset, offset));
-        // Named after it joins the scene, and against what the scene already
-        // holds: a name chosen beforehand cannot be checked for collisions,
-        // which is how two shapes end up sharing one.
-        m_scene->addItem(shape);
-        shape->setName(Naming::nextName(shape->typeName(), m_scene->takenNames(shape)));
-    }
-    m_scene->notifyShapesChanged();
-    m_scene->selectShape(shapes.first());
-    for (ShapeItem *shape : shapes.mid(1))
-        m_scene->addToEditSelection(shape);
+    // Through the fragment reader, so a paste rebuilds the bodies and the
+    // joints between them rather than laying down loose shapes.
+    const QVector<ShapeItem *> pasted =
+        SceneSerializer::fragmentFromJson(m_scene, root, QPointF(offset, offset));
+    if (pasted.isEmpty())
+        return;
 
-    const QString what = shapes.size() == 1 ? shapes.first()->name()
-                                            : tr("%n shapes", nullptr, int(shapes.size()));
+    selectPasted(pasted);
+
+    const QString what = pasted.size() == 1 ? pasted.first()->name()
+                                            : tr("%n shapes", nullptr, int(pasted.size()));
     m_scene->notifyEdit(tr("Paste %1").arg(what));
     statusBar()->showMessage(tr("Pasted %1").arg(what), 4000);
+}
+
+void MainWindow::on_actionDuplicate_triggered()
+{
+    duplicateShapes(selectedShapes());
+}
+
+void MainWindow::on_actionSelectAll_triggered()
+{
+    m_scene->selectAllShapes();
+}
+
+void MainWindow::restack(CanvasScene::Restack where)
+{
+    const QVector<ShapeItem *> picked = selectedShapes();
+    if (picked.isEmpty() || !m_scene->restackShapes(picked, where))
+        return;
+
+    const QString what = picked.size() == 1 ? picked.first()->name()
+                                            : tr("%n shapes", nullptr, int(picked.size()));
+    m_scene->notifyEdit(tr("Restack %1").arg(what));
+}
+
+void MainWindow::on_actionBringToFront_triggered() { restack(CanvasScene::Restack::ToFront); }
+void MainWindow::on_actionBringForward_triggered() { restack(CanvasScene::Restack::Forward); }
+void MainWindow::on_actionSendBackward_triggered() { restack(CanvasScene::Restack::Backward); }
+void MainWindow::on_actionSendToBack_triggered() { restack(CanvasScene::Restack::ToBack); }
+
+// Paste, Select All and the view commands belong to the canvas, not to
+// whatever happens to be under the pointer, so both modes' menus end with the
+// same block. The empty-canvas menu used to offer Add and nothing else.
+void MainWindow::addCanvasActions(QMenu *menu)
+{
+    if (!menu->isEmpty())
+        menu->addSeparator();
+    menu->addAction(m_ui->actionPaste);
+    menu->addAction(m_ui->actionSelectAll);
+    menu->addSeparator();
+    menu->addAction(m_ui->actionFitToField);
+    if (m_resetScaleAction)
+        menu->addAction(m_resetScaleAction);
+    menu->addAction(m_ui->actionShowObjectNames);
+}
+
+// The field, not the view's own scene rect: a run widens that to hold a
+// focused body that has left the field, and fitting to it would zoom out to
+// frame empty space.
+void MainWindow::on_actionFitToField_triggered()
+{
+    QGraphicsView *view = m_ui->canvasView;
+    const QRectF field(-m_scene->fieldWidth() / 2.0, -m_scene->fieldHeight() / 2.0,
+                       m_scene->fieldWidth(), m_scene->fieldHeight());
+    const QSize port = view->viewport()->size();
+    if (field.isEmpty() || port.isEmpty())
+        return;
+
+    // A little short of flush, so the field's own edge is visible rather than
+    // sitting exactly on the frame.
+    constexpr qreal kRoom = 0.97;
+    const qreal factor = qMin(port.width() / field.width(), port.height() / field.height());
+    m_scene->setCurrentScale(factor * kRoom * 100.0);
+    view->centerOn(field.center());
+}
+
+// What a paste or a duplicate leaves picked. In Physics mode that is the whole
+// of each body, so the copy can be dragged or jointed straight away; in Edit
+// mode it is the shapes themselves.
+void MainWindow::selectPasted(const QVector<ShapeItem *> &made)
+{
+    if (made.isEmpty())
+        return;
+
+    m_scene->selectShapes(made, false);
 }
 
 bool MainWindow::confirmDiscardChanges(const QString &title)
@@ -1521,6 +1749,12 @@ bool MainWindow::saveSceneAs(QString path)
 // carrying the handles first.
 QVector<ShapeItem *> MainWindow::selectedShapes() const
 {
+    // Whichever selection the mode actually keeps. Reading the edit selection
+    // in Physics mode gave back whatever had last been picked in Edit mode --
+    // so Copy there copied something that had not been on screen for a while.
+    if (m_scene->editorMode() != EditorMode::Edit)
+        return m_scene->physicsSelection();
+
     QVector<ShapeItem *> picked;
     if (ShapeItem *active = m_scene->activeItem())
         picked.append(active);
@@ -1541,38 +1775,39 @@ void MainWindow::duplicateShape(ShapeItem *item)
     QVector<ShapeItem *> source = selectedShapes();
     if (!source.contains(item))
         source = {item};
+    duplicateShapes(source);
+}
+
+void MainWindow::duplicateShapes(const QVector<ShapeItem *> &source)
+{
+    if (source.isEmpty())
+        return;
 
     constexpr qreal kOffset = 20.0;
-    QVector<ShapeItem *> copies;
-    for (ShapeItem *one : std::as_const(source)) {
-        // Through the same JSON the clipboard uses, so a duplicate and a paste
-        // cannot drift apart in what they carry.
-        ShapeItem *copy = SceneSerializer::shapeFromJson(SceneSerializer::shapeToJson(one));
-        if (!copy)
-            continue;
-        copy->setPos(one->pos() + QPointF(kOffset, kOffset));
-        m_scene->addItem(copy);
-        // A copy is a new object: its own name, and in no body until grouped.
-        copy->setName(Naming::nextName(one->typeName(), m_scene->takenNames(copy)));
-        copies.append(copy);
-    }
+    // Through the same fragment the clipboard uses, so a duplicate and a
+    // paste cannot drift apart in what they carry -- which now includes the
+    // bodies the shapes belong to and the joints between those bodies.
+    int jointsLeftOut = 0;
+    const QJsonObject fragment = SceneSerializer::fragmentToJson(m_scene, source, &jointsLeftOut);
+    const QVector<ShapeItem *> copies =
+        SceneSerializer::fragmentFromJson(m_scene, fragment, QPointF(kOffset, kOffset));
     if (copies.isEmpty())
         return;
 
-    m_scene->notifyShapesChanged();
-    m_scene->selectShape(copies.first());
-    for (ShapeItem *copy : copies.mid(1))
-        m_scene->addToEditSelection(copy);
+    selectPasted(copies);
 
-    if (copies.size() == 1) {
-        m_scene->notifyEdit(tr("Duplicate %1").arg(source.first()->name()));
-        statusBar()->showMessage(
-            tr("Duplicated %1 as %2").arg(source.first()->name(), copies.first()->name()), 4000);
-        return;
-    }
-    const QString what = tr("%n shapes", nullptr, int(copies.size()));
+    const QString what = copies.size() == 1
+                             ? source.first()->name()
+                             : tr("%n shapes", nullptr, int(copies.size()));
     m_scene->notifyEdit(tr("Duplicate %1").arg(what));
-    statusBar()->showMessage(tr("Duplicated %1").arg(what), 4000);
+    statusBar()->showMessage(
+        jointsLeftOut == 0
+            ? (copies.size() == 1
+                   ? tr("Duplicated %1 as %2").arg(what, copies.first()->name())
+                   : tr("Duplicated %1").arg(what))
+            : tr("Duplicated %1 — %n joint(s) left out, held to a body that was not picked",
+                 nullptr, jointsLeftOut).arg(what),
+        jointsLeftOut == 0 ? 4000 : 6000);
 }
 
 void MainWindow::convertToPolygon(ShapeItem *item)
@@ -1711,6 +1946,11 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 // are the scene talking to whoever is working it, so they go where the reading
 // happens -- and they are widgets rather than something drawn into the scene,
 // so they keep their size whatever the zoom and can actually be clicked.
+CanvasScene *MainWindow::shownScene() const
+{
+    return m_simulation && m_simulation->runScene() ? m_simulation->runScene() : m_scene;
+}
+
 void MainWindow::rebuildControls()
 {
     if (!m_controls)
@@ -1722,16 +1962,16 @@ void MainWindow::rebuildControls()
     if (!column)
         return;
 
-    for (const SceneControl &control : m_scene->controls()) {
+    for (const SceneControl &control : shownScene()->controls()) {
         const QString name = control.id;
-        const QString shown = m_scene->controlCaption(name);
+        const QString shown = shownScene()->controlCaption(name);
         QWidget *widget = nullptr;
 
         switch (control.kind) {
         case SceneControl::Kind::Checkbox: {
             auto *box = new QCheckBox(shown, m_controls);
             connect(box, &QCheckBox::toggled, this, [this, name](bool on) {
-                m_scene->setControlValue(name, on);
+                shownScene()->setControlValue(name, on);
             });
             widget = box;
             break;
@@ -1741,10 +1981,10 @@ void MainWindow::rebuildControls()
             // Down and up, not "clicked": a rule may want to drive something
             // for exactly as long as the button is held.
             connect(button, &QPushButton::pressed, this, [this, name] {
-                m_scene->setControlValue(name, true);
+                shownScene()->setControlValue(name, true);
             });
             connect(button, &QPushButton::released, this, [this, name] {
-                m_scene->setControlValue(name, false);
+                shownScene()->setControlValue(name, false);
             });
             widget = button;
             break;
@@ -1774,10 +2014,10 @@ void MainWindow::rebuildControls()
             row->addWidget(spin);
 
             connect(slider, &QSlider::valueChanged, this, [this, name, control](int at) {
-                m_scene->setControlValue(name, control.minimum + at * control.step);
+                shownScene()->setControlValue(name, control.minimum + at * control.step);
             });
             connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, name](double v) {
-                m_scene->setControlValue(name, v);
+                shownScene()->setControlValue(name, v);
             });
             widget = holder;
             break;
@@ -1805,17 +2045,17 @@ void MainWindow::refreshControls()
     // outside one there is nothing for a press to reach, and a slider left
     // standing over a scene being edited is just something in the way.
     const bool running = m_simulation && m_simulation->isActive();
-    m_controls->setVisible(running && !m_scene->controls().isEmpty());
+    m_controls->setVisible(running && !shownScene()->controls().isEmpty());
     if (!m_controls->isVisible())
         return;
 
-    for (const SceneControl &control : m_scene->controls()) {
+    for (const SceneControl &control : shownScene()->controls()) {
         QWidget *widget = m_controlWidgets.value(control.id);
         if (!widget)
             continue;
-        widget->setEnabled(m_scene->controlEnabled(control.id));
-        const QVariant value = m_scene->controlValue(control.id);
-        const QString says = m_scene->controlCaption(control.id);
+        widget->setEnabled(shownScene()->controlEnabled(control.id));
+        const QVariant value = shownScene()->controlValue(control.id);
+        const QString says = shownScene()->controlCaption(control.id);
 
         if (auto *box = qobject_cast<QCheckBox *>(widget)) {
             const QSignalBlocker quiet(box);
@@ -1857,10 +2097,11 @@ void MainWindow::followFocusedBody()
 {
     if (!m_simulation || !m_simulation->isActive())
         return;
-    PhysicsBody *body = m_scene->focusedBody();
+    CanvasScene *run = shownScene();
+    PhysicsBody *body = run->focusedBody();
     if (!body)
         return;
-    centreViewOn(m_ui->canvasView, body->originScenePos(), m_scene->sceneRect());
+    centreViewOn(m_ui->canvasView, body->originScenePos(), run->sceneRect());
 }
 
 // centerOn will not scroll past the scene's rectangle, so a body that has left
@@ -1893,12 +2134,12 @@ void MainWindow::updateCaption()
     if (!m_caption)
         return;
 
-    const bool show = m_scene->captionShown() && !m_scene->caption().isEmpty();
+    const bool show = shownScene()->captionShown() && !shownScene()->caption().isEmpty();
     m_caption->setVisible(show);
     if (!show)
         return;
 
-    m_caption->setText(m_scene->caption());
+    m_caption->setText(shownScene()->caption());
 
     // A wrapped label cannot size itself: its hint is the width the text would
     // want on one line, so adjustSize() gave a box too narrow for what it then
@@ -1921,7 +2162,7 @@ void MainWindow::updateCaption()
 
     QTextDocument wrapped;
     wrapped.setDefaultFont(m_caption->font());
-    wrapped.setHtml(m_scene->caption());
+    wrapped.setHtml(shownScene()->caption());
     // What it would take on the lines it chooses for itself, which for text
     // with no break in it is one line and for text with breaks is the longest
     // of them.
@@ -2076,6 +2317,10 @@ void MainWindow::buildSidePanelTabs()
                 applyVisibleTabs();
             });
         }
+        m_ui->menuView->addSeparator();
+        m_ui->menuView->addAction(m_ui->actionFitToField);
+        if (m_resetScaleAction)
+            m_ui->menuView->addAction(m_resetScaleAction);
     });
 
     m_hiddenTabs = QSettings(settingsFilePath(), QSettings::IniFormat)
@@ -2239,6 +2484,7 @@ void MainWindow::syncTransportWidgets(const OptionsDialog::Settings &s)
         m_layers->setOn(kLayerAxes, s.runShowBodyAxes);
         m_layers->setOn(kLayerRays, s.runShowRays);
         m_layers->setOn(kLayerSensors, s.runShowSensors);
+        m_layers->setOn(kLayerTrails, s.runShowTrails);
         m_layers->setOn(kLayerExplosions, s.runShowExplosions);
         m_layers->setOn(kLayerSleep, s.sleepShading);
     }
@@ -2264,20 +2510,18 @@ void MainWindow::syncTransportWidgets(const OptionsDialog::Settings &s)
 void MainWindow::applyLayer(const QString &key, bool on)
 {
     using RunLayer = CanvasScene::RunLayer;
-    if (key == kLayerGrid)
-        m_scene->setRunLayer(RunLayer::Grid, on);
-    else if (key == kLayerJoints)
-        m_scene->setRunLayer(RunLayer::Joints, on);
-    else if (key == kLayerAxes)
-        m_scene->setRunLayer(RunLayer::BodyAxes, on);
-    else if (key == kLayerRays)
-        m_scene->setRunLayer(RunLayer::Rays, on);
-    else if (key == kLayerExplosions)
-        m_scene->setRunLayer(RunLayer::Explosions, on);
-    else if (key == kLayerSleep)
-        m_scene->setRunLayer(RunLayer::SleepShading, on);
-    else if (key == kLayerSensors)
-        m_scene->setRunLayer(RunLayer::Sensors, on);
+    static const QHash<QString, RunLayer> layers {
+        { kLayerGrid, RunLayer::Grid }, { kLayerJoints, RunLayer::Joints },
+        { kLayerAxes, RunLayer::BodyAxes }, { kLayerRays, RunLayer::Rays },
+        { kLayerExplosions, RunLayer::Explosions }, { kLayerSleep, RunLayer::SleepShading },
+        { kLayerSensors, RunLayer::Sensors }, { kLayerTrails, RunLayer::Trails },
+    };
+    const auto layer = layers.constFind(key);
+    if (layer == layers.constEnd())
+        return;
+    m_scene->setRunLayer(*layer, on);
+    if (CanvasScene *run = m_simulation ? m_simulation->runScene() : nullptr)
+        run->setRunLayer(*layer, on);
 }
 
 void MainWindow::updateFullScreenView()
@@ -2298,7 +2542,7 @@ void MainWindow::updateFullScreenView()
     if (m_fullScreen)
         return;
 
-    m_fullScreen = new FullScreenView(m_scene, this);
+    m_fullScreen = new FullScreenView(shownScene(), this);
     // The keys stand in for the transport buttons, which are not on this
     // screen: the same three things they do there.
     connect(m_fullScreen, &FullScreenView::closeRequested,
@@ -2321,6 +2565,16 @@ void MainWindow::updateFullScreenView()
 
 void MainWindow::onSimulationStateChanged()
 {
+    CanvasScene *shown = shownScene();
+    if (m_ui->canvasView->scene() != shown) {
+        m_ui->canvasView->setScene(shown);
+        m_ui->canvasView->setSceneRect(QRectF());
+        if (m_fullScreen && shown != m_scene)
+            m_fullScreen->setScene(shown);
+        // Not rebuilt: the copy has the same controls, and a widget torn down
+        // under a press loses its release.
+        updateCaption();
+    }
     refreshControls();
 
     const bool active = m_simulation->isActive();
@@ -2722,6 +2976,47 @@ void MainWindow::circleToChain(ShapeItem *item)
               });
 }
 
+// Every re-run starts from the polygon as it was, so a smaller corner limit
+// cuts the original rather than the pieces the last run left.
+void MainWindow::splitIntoConvexPieces(ShapeItem *item)
+{
+    if (!m_scene->canSplitIntoConvexPieces(item))
+        return;
+
+    m_toolOriginal = SceneSerializer::shapeToJson(item);
+    m_toolShape = item;
+
+    const int cap = m_scene->maxPolygonVertices();
+    const QVector<ToolOption> options {
+        { QStringLiteral("corners"), tr("Corners per piece"), qreal(cap), 3.0, qreal(cap), 1.0, 0,
+          {}, {} },
+    };
+    beginTool(tr("Split into Convex Pieces"), tr("Split %1 into convex pieces").arg(item->name()),
+              options, [this] {
+                  if (!m_toolShape)
+                      return;
+                  ShapeItem *was = m_toolShape.data();
+                  ShapeItem *now = m_scene->replaceShape(was, m_toolOriginal);
+                  m_toolShape = now ? now : was;
+                  if (!m_toolShape)
+                      return;
+                  const QVector<ShapeItem *> pieces = m_scene->splitIntoConvexPieces(
+                      m_toolShape.data(), int(m_toolOptions->value(QStringLiteral("corners"))));
+                  if (pieces.isEmpty()) {
+                      statusBar()->showMessage(
+                          tr("%1 crosses itself, so it has no inside to cut up.")
+                              .arg(m_toolShape->name()), 6000);
+                      return;
+                  }
+                  m_toolShape = pieces.first();
+                  for (int i = 1; i < pieces.size(); ++i)
+                      m_toolCreated.append(pieces.at(i));
+                  selectPasted(pieces);
+                  statusBar()->showMessage(tr("%n convex piece(s)", nullptr, int(pieces.size())),
+                                           4000);
+              });
+}
+
 QVector<ShapeItem *> MainWindow::mirrorSelection(const QVector<ShapeItem *> &source, int side,
                                                  qreal margin)
 {
@@ -3116,11 +3411,17 @@ bool MainWindow::addCreateBodyActions(QMenu *menu, const QPointF &scenePos)
 
 void MainWindow::on_canvasView_customContextMenuRequested(const QPoint &pos)
 {
-    // Every entry changes the scene, and nothing does that during a run.
-    if (m_simulation && m_simulation->isActive())
-        return;
-
     QMenu menu(this);
+
+    // Most entries change the scene and nothing does that during a run -- but
+    // the view commands do not, and framing the field or reading the names is
+    // exactly what a run is watched with, so they are still offered.
+    if (m_simulation && m_simulation->isActive()) {
+        addCanvasActions(&menu);
+        menu.exec(m_ui->canvasView->mapToGlobal(pos));
+        return;
+    }
+
     ShapeItem *item = m_scene->activeItem();
 
     if (m_scene->editorMode() != EditorMode::Edit) {
@@ -3151,12 +3452,16 @@ void MainWindow::on_canvasView_customContextMenuRequested(const QPoint &pos)
                                  && !(m_simulation && m_simulation->isActive()));
         centreAction->setToolTip(tr("Moves every origin in each selected body onto that body's"
                                       " centre of mass."));
+        addCanvasActions(&menu);
         menu.exec(m_ui->canvasView->mapToGlobal(pos));
         return;
     }
 
     if (!item) {
         menu.addMenu(m_ui->menuAddShape);
+        addCanvasActions(&menu);
+        menu.exec(m_ui->canvasView->mapToGlobal(pos));
+        return;
     } else {
         menu.addAction(tr("Duplicate"), this, [this, item] { duplicateShape(item); });
 
@@ -3188,6 +3493,15 @@ void MainWindow::on_canvasView_customContextMenuRequested(const QPoint &pos)
                                      " its name, its place in its body and its physics. The"
                                      " corner radius goes: only a rectangle has one."));
             toPolygon->setEnabled(!(m_simulation && m_simulation->isActive()));
+        }
+
+        if (m_scene->canSplitIntoConvexPieces(item)) {
+            QAction *split = menu.addAction(tr("Split into Convex Pieces…"), this,
+                                            [this, item] { splitIntoConvexPieces(item); });
+            split->setToolTip(tr("Cuts the outline into convex pieces within the point limit,"
+                                 " so it can be solid and belong to a body that moves. The"
+                                 " pieces stay in its body and the first keeps its name."));
+            split->setEnabled(!(m_simulation && m_simulation->isActive()));
         }
 
         menu.addSeparator();
@@ -3263,8 +3577,15 @@ void MainWindow::on_canvasView_customContextMenuRequested(const QPoint &pos)
             item->setRotation(0);
             item->setOrigin(item->rect().center());
         });
+
+        menu.addSeparator();
+        menu.addAction(m_ui->actionBringToFront);
+        menu.addAction(m_ui->actionBringForward);
+        menu.addAction(m_ui->actionSendBackward);
+        menu.addAction(m_ui->actionSendToBack);
     }
 
+    addCanvasActions(&menu);
     menu.exec(m_ui->canvasView->mapToGlobal(pos));
 }
 
@@ -3310,12 +3631,9 @@ void MainWindow::refreshExportMenu()
     QMenu *menu = m_ui->menuExport;
     menu->clear();
 
-    const QVector<SceneExporter::Converter> converters =
-        SceneExporter::discover(m_converterPath);
+    const QVector<SceneExporter::Converter> converters = SceneExporter::discover();
     if (converters.isEmpty()) {
-        QAction *none = menu->addAction(m_converterPath.isEmpty()
-                                            ? tr("No converters folder set...")
-                                            : tr("No converters in %1").arg(m_converterPath));
+        QAction *none = menu->addAction(tr("No converters installed..."));
         none->setEnabled(false);
         return;
     }
@@ -3334,12 +3652,8 @@ void MainWindow::refreshExportMenu()
             QStringList written;
             QStringList log;
             bool converted = false;
-            // Exported mid-run, it is still the scene that is exported, as it
-            // stood when the run started -- not wherever the run has got to.
-            m_simulation->withSceneAsStarted([&] {
-                converted = SceneExporter::run(converter, m_scene, folder,
-                                               settingsAsJson(settingsFilePath()), &error, &written, &log);
-            });
+            converted = SceneExporter::run(converter, m_scene, folder,
+                                           settingsAsJson(settingsFilePath()), &error, &written, &log);
 
             // Whatever the converter had to say for itself, under whichever
             // message it gets. It is the only thing that knows what it did.
@@ -3412,7 +3726,6 @@ void MainWindow::onFieldSettingsChanged()
 OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
 {
     OptionsDialog::Settings current;
-    current.converterPath = m_converterPath;
     current.defaultEngineName = engineForNewScenes();
     current.theme = Theme::current();
     current.controls = Theme::currentControls();
@@ -3458,6 +3771,7 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.runShowBodyAxes = m_scene->runLayer(CanvasScene::RunLayer::BodyAxes);
     current.runShowRays = m_scene->runLayer(CanvasScene::RunLayer::Rays);
     current.runShowSensors = m_scene->runLayer(CanvasScene::RunLayer::Sensors);
+    current.runShowTrails = m_scene->runLayer(CanvasScene::RunLayer::Trails);
     current.runShowExplosions = m_scene->runLayer(CanvasScene::RunLayer::Explosions);
     if (m_fullScreenCheck)
         current.simulationFullScreen = m_fullScreenCheck->isChecked();
@@ -3481,6 +3795,9 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.shotFullColor = m_scene->shotFullColor();
     current.shotLineWidth = m_scene->shotLineWidth();
     current.shotLineStyle = m_scene->shotLineStyle();
+    current.trailColor = m_scene->trailColor();
+    current.trailLineWidth = m_scene->trailLineWidth();
+    current.trailLineStyle = m_scene->trailLineStyle();
     current.jointAnchorRadius = m_scene->jointAnchorRadius();
     current.jointAxisLength = m_scene->jointAxisLength();
     current.jointWaistWidth = m_scene->jointWaistWidth();
@@ -3493,6 +3810,7 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
         current.simulationSpeed = m_simulation->speed();
     }
     current.pixelsPerMeter = m_scene->pixelsPerMeter();
+    current.rulerUnit = m_ui->topRuler->unit();
     current.fieldBoundsSolid = m_scene->fieldBoundsSolid();
     current.selectionLineStyle = m_scene->selectionLineStyle();
     current.selectionLineWidth = m_scene->selectionLineWidth();
@@ -3514,9 +3832,86 @@ void MainWindow::applyFieldDefaults()
     m_scene->setGridColor(m_fieldDefaults.gridColor);
 }
 
+void MainWindow::applyRulerUnit(Units::Unit unit)
+{
+    m_ui->topRuler->setUnit(unit);
+    m_ui->leftRuler->setUnit(unit);
+}
+
+void MainWindow::applySceneLook(CanvasScene *scene, const OptionsDialog::Settings &s)
+{
+    scene->setSnapToGrid(s.snapToGrid);
+    scene->setSnapPoint(s.snapPoint);
+    scene->setSnapStep(s.snapStep);
+    scene->setSnapSensitivity(s.snapSensitivity);
+    // Bounds/step before the current value, so it clamps against the
+    // settings actually being applied rather than whatever was set before.
+    scene->setScaleMin(s.scaleMin);
+    scene->setScaleMax(s.scaleMax);
+    scene->setScaleStep(s.scaleStep);
+    scene->setCurrentScale(s.currentScale);
+    scene->setDefaultShapeStyles(s.shapeStyles);
+    scene->setBodyColor(physics::BodyType::Dynamic, s.bodyDynamicColor);
+    scene->setBodyColor(physics::BodyType::Static, s.bodyStaticColor);
+    scene->setBodyColor(physics::BodyType::Kinematic, s.bodyKinematicColor);
+    scene->setUnassignedShapeColor(s.unassignedShapeColor);
+    scene->setSensorColor(s.sensorColor);
+    scene->setSensorPattern(s.sensorPattern);
+    scene->setSensorFillsBody(s.sensorFillsBody);
+    scene->setPhysicsBorderWidth(s.physicsBorderWidth);
+    scene->setPhysicsFillAlpha(s.physicsFillAlpha);
+    scene->setJointFillAlpha(s.jointFillAlpha);
+    scene->setJointAnchorOpacity(s.jointAnchorOpacity);
+    scene->setPhysicsSelectionLineStyle(s.physicsSelectionLineStyle);
+    scene->setPhysicsSelectionLineWidth(s.physicsSelectionLineWidth);
+    scene->setPhysicsSelectionColor(s.physicsSelectionColor);
+    scene->setRunLayer(CanvasScene::RunLayer::SleepShading, s.sleepShading);
+    scene->setRunLayer(CanvasScene::RunLayer::Grid, s.runShowGrid);
+    scene->setRunLayer(CanvasScene::RunLayer::Joints, s.runShowJoints);
+    scene->setRunLayer(CanvasScene::RunLayer::BodyAxes, s.runShowBodyAxes);
+    scene->setRunLayer(CanvasScene::RunLayer::Rays, s.runShowRays);
+    scene->setRunLayer(CanvasScene::RunLayer::Sensors, s.runShowSensors);
+    scene->setRunLayer(CanvasScene::RunLayer::Trails, s.runShowTrails);
+    scene->setRunLayer(CanvasScene::RunLayer::Explosions, s.runShowExplosions);
+    scene->setShowBodyAxes(s.showBodyAxes);
+    scene->setBodyAxisLength(s.bodyAxisLength);
+    scene->setBodyAxisWidth(s.bodyAxisWidth);
+    scene->setBodyAxisXColor(s.bodyAxisXColor);
+    scene->setBodyAxisYColor(s.bodyAxisYColor);
+    scene->setSleepShiftPercent(s.sleepShiftPercent);
+    scene->setMaxPolygonVertices(s.maxPolygonVertices);
+    scene->setJointColor(s.jointColor);
+    scene->setJointKindColors(s.jointKindColors);
+    scene->setJointKindStyles(s.jointKindStyles);
+    scene->setJointSelectionColor(s.jointSelectionColor);
+    scene->setJointSelectionLineWidth(s.jointSelectionLineWidth);
+    scene->setJointSelectionLineStyle(s.jointSelectionLineStyle);
+    scene->setJointOutlineColor(s.jointOutlineColor);
+    scene->setShotLineColors(s.shotLightColor, s.shotFullColor);
+    scene->setShotLineWidth(s.shotLineWidth);
+    scene->setShotLineStyle(s.shotLineStyle);
+    scene->setTrailColor(s.trailColor);
+    scene->setTrailLineWidth(s.trailLineWidth);
+    scene->setTrailLineStyle(s.trailLineStyle);
+    scene->setJointAnchorRadius(s.jointAnchorRadius);
+    scene->setJointAxisLength(s.jointAxisLength);
+    scene->setJointWaistWidth(s.jointWaistWidth);
+    scene->setSpringsAsCoils(s.springsAsCoils);
+    scene->setSpringPitch(s.springPitch);
+    scene->setSpringWidth(s.springWidth);
+    scene->setJointOutlineWidth(s.jointOutlineWidth);
+    scene->setSelectionLineStyle(s.selectionLineStyle);
+    scene->setSelectionLineWidth(s.selectionLineWidth);
+    scene->setSelectionColor(s.selectionColor);
+    scene->setHandleShape(s.handleShape);
+    scene->setHandleSize(s.handleSize);
+    scene->setHandleColor(s.handleColor);
+    scene->setHandleBorderWidth(s.handleBorderWidth);
+    scene->setHandleBorderColor(s.handleBorderColor);
+}
+
 void MainWindow::applySettings(const OptionsDialog::Settings &s)
 {
-    m_converterPath = s.converterPath;
     // Only new scenes: what is open was built for the engine it names.
     m_defaultEngineName = s.defaultEngineName;
     Theme::apply(s.theme, s.controls);
@@ -3530,83 +3925,21 @@ void MainWindow::applySettings(const OptionsDialog::Settings &s)
     m_fieldDefaults.showGrid = s.showGrid;
     m_fieldDefaults.gridCellSize = s.gridCellSize;
     m_fieldDefaults.gridColor = s.gridColor;
-    m_scene->setSnapToGrid(s.snapToGrid);
-    m_scene->setSnapPoint(s.snapPoint);
-    m_scene->setSnapStep(s.snapStep);
-    m_scene->setSnapSensitivity(s.snapSensitivity);
-    // Bounds/step before the current value, so it clamps against the
-    // settings actually being applied rather than whatever was set before.
-    m_scene->setScaleMin(s.scaleMin);
-    m_scene->setScaleMax(s.scaleMax);
-    m_scene->setScaleStep(s.scaleStep);
-    m_scene->setCurrentScale(s.currentScale);
-    m_scene->setDefaultShapeStyles(s.shapeStyles);
+    applySceneLook(m_scene, s);
     m_logFontFamily = s.logFontFamily;
     m_logFontSize = s.logFontSize;
     m_logColor = s.logColor;
     m_logCorner = s.logCorner;
     applyLogStyle();
-    m_scene->setBodyColor(physics::BodyType::Dynamic, s.bodyDynamicColor);
-    m_scene->setBodyColor(physics::BodyType::Static, s.bodyStaticColor);
-    m_scene->setBodyColor(physics::BodyType::Kinematic, s.bodyKinematicColor);
-    m_scene->setUnassignedShapeColor(s.unassignedShapeColor);
-    m_scene->setSensorColor(s.sensorColor);
-    m_scene->setSensorPattern(s.sensorPattern);
-    m_scene->setSensorFillsBody(s.sensorFillsBody);
-    m_scene->setPhysicsBorderWidth(s.physicsBorderWidth);
-    m_scene->setPhysicsFillAlpha(s.physicsFillAlpha);
-    m_scene->setJointFillAlpha(s.jointFillAlpha);
-    m_scene->setJointAnchorOpacity(s.jointAnchorOpacity);
-    m_scene->setPhysicsSelectionLineStyle(s.physicsSelectionLineStyle);
-    m_scene->setPhysicsSelectionLineWidth(s.physicsSelectionLineWidth);
-    m_scene->setPhysicsSelectionColor(s.physicsSelectionColor);
-    m_scene->setRunLayer(CanvasScene::RunLayer::SleepShading, s.sleepShading);
-    m_scene->setRunLayer(CanvasScene::RunLayer::Grid, s.runShowGrid);
-    m_scene->setRunLayer(CanvasScene::RunLayer::Joints, s.runShowJoints);
-    m_scene->setRunLayer(CanvasScene::RunLayer::BodyAxes, s.runShowBodyAxes);
-    m_scene->setRunLayer(CanvasScene::RunLayer::Rays, s.runShowRays);
-    m_scene->setRunLayer(CanvasScene::RunLayer::Sensors, s.runShowSensors);
-    m_scene->setRunLayer(CanvasScene::RunLayer::Explosions, s.runShowExplosions);
     syncTransportWidgets(s);
-    m_scene->setShowBodyAxes(s.showBodyAxes);
-    m_scene->setBodyAxisLength(s.bodyAxisLength);
-    m_scene->setBodyAxisWidth(s.bodyAxisWidth);
-    m_scene->setBodyAxisXColor(s.bodyAxisXColor);
-    m_scene->setBodyAxisYColor(s.bodyAxisYColor);
-    m_scene->setSleepShiftPercent(s.sleepShiftPercent);
-    m_scene->setMaxPolygonVertices(s.maxPolygonVertices);
-    m_scene->setJointColor(s.jointColor);
     m_undo->setCapacity(s.undoDepth);
-    m_scene->setJointKindColors(s.jointKindColors);
-    m_scene->setJointKindStyles(s.jointKindStyles);
-    m_scene->setJointSelectionColor(s.jointSelectionColor);
-    m_scene->setJointSelectionLineWidth(s.jointSelectionLineWidth);
-    m_scene->setJointSelectionLineStyle(s.jointSelectionLineStyle);
-    m_scene->setJointOutlineColor(s.jointOutlineColor);
-    m_scene->setShotLineColors(s.shotLightColor, s.shotFullColor);
-    m_scene->setShotLineWidth(s.shotLineWidth);
-    m_scene->setShotLineStyle(s.shotLineStyle);
-    m_scene->setJointAnchorRadius(s.jointAnchorRadius);
-    m_scene->setJointAxisLength(s.jointAxisLength);
-    m_scene->setJointWaistWidth(s.jointWaistWidth);
-    m_scene->setSpringsAsCoils(s.springsAsCoils);
-    m_scene->setSpringPitch(s.springPitch);
-    m_scene->setSpringWidth(s.springWidth);
-    m_scene->setJointOutlineWidth(s.jointOutlineWidth);
     if (m_simulation) {
         m_simulation->setStepsPerSecond(s.simulationStepsPerSecond);
         m_simulation->setSpeed(s.simulationSpeed);
     }
     m_scene->setPixelsPerMeter(s.pixelsPerMeter);
+    applyRulerUnit(s.rulerUnit);
     m_scene->setFieldBoundsSolid(s.fieldBoundsSolid);
-    m_scene->setSelectionLineStyle(s.selectionLineStyle);
-    m_scene->setSelectionLineWidth(s.selectionLineWidth);
-    m_scene->setSelectionColor(s.selectionColor);
-    m_scene->setHandleShape(s.handleShape);
-    m_scene->setHandleSize(s.handleSize);
-    m_scene->setHandleColor(s.handleColor);
-    m_scene->setHandleBorderWidth(s.handleBorderWidth);
-    m_scene->setHandleBorderColor(s.handleBorderColor);
 
     // Rebuilt so a changed Scale min/max/step shows immediately.
     if (m_ui->propertyPanel)
@@ -3684,6 +4017,8 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile(const QString &path) co
 
     settings.beginGroup("Physics");
     s.pixelsPerMeter = settings.value("pixelsPerMeter", s.pixelsPerMeter).toDouble();
+    s.rulerUnit = Units::fromKey(settings.value("rulerUnit", Units::key(s.rulerUnit)).toString(),
+                                 s.rulerUnit);
     s.fieldBoundsSolid = settings.value("solidBounds", s.fieldBoundsSolid).toBool();
     s.bodyDynamicColor = QColor(settings.value("bodyDynamicColor",
                                                s.bodyDynamicColor.name(QColor::HexArgb)).toString());
@@ -3719,6 +4054,7 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile(const QString &path) co
     s.runShowBodyAxes = settings.value("runShowBodyAxes", s.runShowBodyAxes).toBool();
     s.runShowRays = settings.value("runShowRays", s.runShowRays).toBool();
     s.runShowSensors = settings.value("runShowSensors", s.runShowSensors).toBool();
+    s.runShowTrails = settings.value("runShowTrails", s.runShowTrails).toBool();
     s.runShowExplosions =
         settings.value("runShowExplosions", s.runShowExplosions).toBool();
     s.showBodyAxes = settings.value("showBodyAxes", s.showBodyAxes).toBool();
@@ -3742,13 +4078,6 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile(const QString &path) co
     s.jointOutlineWidth = settings.value("jointOutlineWidth", s.jointOutlineWidth).toDouble();
 
     s.undoDepth = settings.value("undoDepth", s.undoDepth).toInt();
-    // An installed copy ships the converters beside the program, so that is
-    // where a settings file with nothing to say about them points.
-    const QString shipped = assetFolder(QStringLiteral("exporters"));
-    if (!shipped.isEmpty())
-        s.converterPath = shipped;
-    s.converterPath = settings.value("converterPath", s.converterPath).toString();
-
     // One group per converter, keyed by its folder name. Read back whole
     // rather than by declared key: a converter that is not installed right now
     // still keeps whatever was set for it.
@@ -3797,6 +4126,12 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile(const QString &path) co
     s.shotLineWidth = settings.value("shotLineWidth", s.shotLineWidth).toDouble();
     s.shotLineStyle = static_cast<Qt::PenStyle>(
         settings.value("shotLineStyle", static_cast<int>(s.shotLineStyle)).toInt());
+    const QColor trail(settings.value("trailColor").toString());
+    if (trail.isValid())
+        s.trailColor = trail;
+    s.trailLineWidth = settings.value("trailLineWidth", s.trailLineWidth).toDouble();
+    s.trailLineStyle = static_cast<Qt::PenStyle>(
+        settings.value("trailLineStyle", static_cast<int>(s.trailLineStyle)).toInt());
     settings.endGroup();
 
     settings.beginGroup("Shapes");
@@ -3866,6 +4201,7 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
 
     settings.beginGroup("Physics");
     settings.setValue("pixelsPerMeter", s.pixelsPerMeter);
+    settings.setValue("rulerUnit", Units::key(s.rulerUnit));
     settings.setValue("solidBounds", s.fieldBoundsSolid);
     settings.setValue("bodyDynamicColor", s.bodyDynamicColor.name(QColor::HexArgb));
     settings.setValue("bodyStaticColor", s.bodyStaticColor.name(QColor::HexArgb));
@@ -3891,6 +4227,7 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("runShowBodyAxes", s.runShowBodyAxes);
     settings.setValue("runShowRays", s.runShowRays);
     settings.setValue("runShowSensors", s.runShowSensors);
+    settings.setValue("runShowTrails", s.runShowTrails);
     settings.setValue("runShowExplosions", s.runShowExplosions);
     settings.setValue("showBodyAxes", s.showBodyAxes);
     settings.setValue("bodyAxisLength", s.bodyAxisLength);
@@ -3910,7 +4247,6 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("jointOutlineWidth", s.jointOutlineWidth);
 
     settings.setValue("undoDepth", s.undoDepth);
-    settings.setValue("converterPath", s.converterPath);
 
     settings.beginGroup("Export");
     settings.remove(QString());   // converters that have gone leave nothing behind
@@ -3944,6 +4280,9 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("shotFullColor", s.shotFullColor.name(QColor::HexArgb));
     settings.setValue("shotLineWidth", s.shotLineWidth);
     settings.setValue("shotLineStyle", static_cast<int>(s.shotLineStyle));
+    settings.setValue("trailColor", s.trailColor.name(QColor::HexArgb));
+    settings.setValue("trailLineWidth", s.trailLineWidth);
+    settings.setValue("trailLineStyle", static_cast<int>(s.trailLineStyle));
     settings.endGroup();
 
     settings.beginGroup("Shapes");

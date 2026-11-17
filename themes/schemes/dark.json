@@ -1,0 +1,15 @@
+{
+    "label": "Dark",
+    "order": 20,
+    "dark": true,
+    "window": "#2B2D30",
+    "surface": "#1F2023",
+    "base": "#1E1F22",
+    "alternate": "#313338",
+    "text": "#DFE1E5",
+    "muted": "#8C9099",
+    "border": "#4A4D52",
+    "soft": "#3A3C40",
+    "accent": "#3574F0",
+    "accentText": "#FFFFFF"
+}

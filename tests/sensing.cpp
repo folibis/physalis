@@ -12,6 +12,7 @@
 #include "SceneSerializer.h"
 #include "ShapeItem.h"
 #include "SimulationController.h"
+#include "RunCopy.h"
 
 #include <QImage>
 #include <QPainter>
@@ -61,6 +62,14 @@ struct World {
         return body;
     }
 
+    // The run's copy of a shape or a ray while a run is going.
+    template <class T>
+    T *at(T *item) const
+    {
+        T *copy = inRun(sim, item);
+        return copy ? copy : item;
+    }
+
     void run(int steps)
     {
         if (sim.state() == SimulationController::State::Stopped)
@@ -89,11 +98,11 @@ TEST(Sensing, ARayMeasuresWhatItHits)
         ray->setLength(600);
 
         w.run(2);
-        EXPECT_TRUE(ray->hasHit()) << engineName << ": the ray should have found the wall";
-        EXPECT_EQ(ray->hitName(), QStringLiteral("wall"))
+        EXPECT_TRUE(w.at(ray)->hasHit()) << engineName << ": the ray should have found the wall";
+        EXPECT_EQ(w.at(ray)->hitName(), QStringLiteral("wall"))
             << engineName << ": it should say which shape it hit";
-        EXPECT_NEAR(ray->distance(), 200.0, 2.0)
-            << engineName << ": the wall is 200 units away and the ray read " << ray->distance();
+        EXPECT_NEAR(w.at(ray)->distance(), 200.0, 2.0)
+            << engineName << ": the wall is 200 units away and the ray read " << w.at(ray)->distance();
         w.sim.stop();
 
         // And with the wall out of the way it reaches its full length.
@@ -104,8 +113,8 @@ TEST(Sensing, ARayMeasuresWhatItHits)
         clear->setAngleDegrees(0);
         clear->setLength(600);
         empty.run(2);
-        EXPECT_FALSE(clear->hasHit()) << engineName << ": there is nothing within reach";
-        EXPECT_NEAR(clear->distance(), 600.0, 0.001)
+        EXPECT_FALSE(empty.at(clear)->hasHit()) << engineName << ": there is nothing within reach";
+        EXPECT_NEAR(empty.at(clear)->distance(), 600.0, 0.001)
             << engineName << ": with nothing hit it reads its own length";
         empty.sim.stop();
     }
@@ -127,7 +136,7 @@ TEST(Sensing, ARayIgnoresWhatItsMaskExcludes)
         ray->setMaskBits(1);
 
         w.run(2);
-        EXPECT_FALSE(ray->hasHit())
+        EXPECT_FALSE(w.at(ray)->hasHit())
             << engineName << ": the wall is not in the ray's mask, and it saw it anyway";
         w.sim.stop();
     }
@@ -155,7 +164,7 @@ TEST(Sensing, ARuleCanActOnWhatARaySees)
         w.scene.setRules({ rule });
 
         w.run(120);
-        EXPECT_FALSE(faller->isVisible())
+        EXPECT_FALSE(w.at(faller)->isVisible())
             << engineName << ": the ray saw the box crossing it and the rule should have"
             << " taken it away";
         w.sim.stop();
@@ -192,9 +201,9 @@ TEST(Sensing, ASensorNoticesWhatEntersAndLetsItThrough)
 
         // It falls, enters the sensor, and the rule sends it back to the top.
         w.run(240);
-        EXPECT_LT(ball->pos().y(), 200.0)
+        EXPECT_LT(w.at(ball)->pos().y(), 200.0)
             << engineName << ": entering the sensor should have fired the rule; the ball is at "
-            << ball->pos().y();
+            << w.at(ball)->pos().y();
         w.sim.stop();
     }
 }
@@ -211,7 +220,7 @@ TEST(Sensing, TheSameShapeAsAWallStopsIt)
         w.bodyOf(ball, physics::BodyType::Dynamic, QStringLiteral("ballBody"));
 
         w.run(240);
-        EXPECT_NEAR(ball->pos().y() + 40.0, 200.0, 2.0)
+        EXPECT_NEAR(w.at(ball)->pos().y() + 40.0, 200.0, 2.0)
             << engineName << ": a solid shape should have stopped the ball on top of it";
         w.sim.stop();
     }
@@ -238,11 +247,11 @@ TEST(Sensing, AnExplosionPushesWhatIsNearestHardest)
         rule.actions[0].actionId = QStringLiteral("explode");
         w.scene.setRules({ rule });
 
-        const qreal nearFrom = near_->pos().x();
-        const qreal farFrom = far->pos().x();
+        const qreal nearFrom = w.at(near_)->pos().x();
+        const qreal farFrom = w.at(far)->pos().x();
         w.run(60);
-        const qreal nearWent = near_->pos().x() - nearFrom;
-        const qreal farWent = far->pos().x() - farFrom;
+        const qreal nearWent = w.at(near_)->pos().x() - nearFrom;
+        const qreal farWent = w.at(far)->pos().x() - farFrom;
         w.sim.stop();
 
         EXPECT_GT(nearWent, 0.0)
@@ -317,32 +326,34 @@ TEST(Sensing, TheViewListHidesSensorsDuringARun)
     // The whole scene is rendered, background and all, so what matters is
     // whether the picture changes when the layer does -- not how many pixels
     // are lit.
-    const auto picture = [&] {
+    const auto picture = [&](CanvasScene &drawn) {
         QImage image(200, 140, QImage::Format_ARGB32);
         image.fill(Qt::transparent);
         QPainter painter(&image);
-        scene.render(&painter, QRectF(0, 0, 200, 140), QRectF(-20, -20, 200, 140));
+        drawn.render(&painter, QRectF(0, 0, 200, 140), QRectF(-20, -20, 200, 140));
         painter.end();
         return image;
     };
 
     scene.setRunLayer(CanvasScene::RunLayer::Sensors, true);
-    const QImage shown = picture();
+    const QImage shown = picture(scene);
     scene.setRunLayer(CanvasScene::RunLayer::Sensors, false);
-    EXPECT_EQ(picture(), shown)
+    EXPECT_EQ(picture(scene), shown)
         << "the layer hid the sensor while editing, where it has to be placed";
 
     SimulationController sim(&scene, nullptr);
     sim.setEngineName(QStringLiteral("Box2D"));
     sim.start();
+    ASSERT_TRUE(sim.runScene());
+    CanvasScene &run = *sim.runScene();
 
-    scene.setRunLayer(CanvasScene::RunLayer::Sensors, true);
-    const QImage running = picture();
-    scene.setRunLayer(CanvasScene::RunLayer::Sensors, false);
-    EXPECT_NE(picture(), running) << "the sensor was still drawn with its layer off";
+    run.setRunLayer(CanvasScene::RunLayer::Sensors, true);
+    const QImage running = picture(run);
+    run.setRunLayer(CanvasScene::RunLayer::Sensors, false);
+    EXPECT_NE(picture(run), running) << "the sensor was still drawn with its layer off";
 
-    scene.setRunLayer(CanvasScene::RunLayer::Sensors, true);
-    EXPECT_EQ(picture(), running) << "the sensor stayed hidden with its layer back on";
+    run.setRunLayer(CanvasScene::RunLayer::Sensors, true);
+    EXPECT_EQ(picture(run), running) << "the sensor stayed hidden with its layer back on";
     sim.stop();
 }
 

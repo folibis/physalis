@@ -1,0 +1,46 @@
+{
+    "label": "Sharp",
+    "order": 20,
+    "radius": {
+        "field": 0,
+        "small": 0,
+        "check": 0,
+        "handle": 0,
+        "card": 0,
+        "scroll": 0,
+        "spin": 0
+    },
+    "padding": {
+        "field": "1px 5px",
+        "button": "3px 10px"
+    },
+    "sheet": [
+        "QPushButton { background: palette(base); border: 1px solid @borderStrong;",
+        " min-height: 14px; }",
+        "QPushButton:hover { background: @accentSoft; border-color: palette(highlight); }",
+        "QLineEdit, QAbstractSpinBox, QComboBox, QTextEdit, QPlainTextEdit {",
+        " border: 1px solid @borderStrong; }",
+        "QCheckBox::indicator, QGroupBox::indicator { width: 12px; height: 12px;",
+        " border: 1px solid @borderStrong; border-radius: 0; }",
+        "QRadioButton::indicator { width: 12px; height: 12px; border-radius: 0;",
+        " border: 1px solid @borderStrong; }",
+        "QRadioButton::indicator:checked { width: 6px; height: 6px;",
+        " border: 4px solid palette(highlight); border-radius: 0; }",
+        "QSlider::groove:horizontal { height: 2px; border-radius: 0; }",
+        "QSlider::sub-page:horizontal { border-radius: 0; }",
+        "QSlider::handle:horizontal { width: 7px; height: 16px; margin: -8px 0;",
+        " border-radius: 0; border: 1px solid @borderStrong; background: palette(base); }",
+        "QScrollBar:vertical { width: 11px; background: palette(window);",
+        " border-left: 1px solid palette(midlight); }",
+        "QScrollBar:horizontal { height: 11px; background: palette(window);",
+        " border-top: 1px solid palette(midlight); }",
+        "QScrollBar::handle { background: palette(mid); border-radius: 0; margin: 0; }",
+        "QGroupBox { border: 1px solid @borderStrong; margin-top: 11px;",
+        " padding: 7px 6px 6px 6px; }",
+        "QTabBar::tab { border-radius: 0; margin: 0 1px; padding: 5px 12px;",
+        " border-top: 2px solid transparent; }",
+        "QTabBar::tab:hover { background: @hover; color: palette(window-text); }",
+        "QTabBar::tab:selected { background: palette(base); color: palette(window-text);",
+        " border-top: 2px solid palette(highlight); }"
+    ]
+}

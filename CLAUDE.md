@@ -62,12 +62,114 @@ words on a button. Rules reach every control through one pseudo-object,
 **A key is named, never numbered.** `Rule::chordName` writes what the editor
 writes on a menu -- "Enter", "Up", "Ctrl+Shift+A" -- and a rule stores and
 compares that text. A raw key code would not survive a different Qt, and would
-mean a scene asking for Ctrl+A could be fired by a bare A. Nothing is reserved:
-the pause, step and reset keys the canvas used to keep are gone, because a
-scene that wants the space bar should have it, and a scene can bind its own
-through the rules. `FullScreenView` keeps only Escape and forwards everything
-else to the scene -- it is not interactive, so it hands the events over itself
-rather than letting the view do it.
+mean a scene asking for Ctrl+A could be fired by a bare A. The canvas reserves
+nothing of its own -- the pause, step and reset keys it used to keep are gone,
+because a scene that wants the space bar should have it.
+
+What a scene has to share is a chord the menu bar holds. Most are no clash:
+`m_lockedWhileRunning` disables the editing actions while a run is going, which
+is the only time a rule is watching. **The transport is the exception** -- F5,
+F6 and F8 stay live during a run by design, so a scene binding one of those
+meets Qt's shortcut map, which consumes a matched chord before the focused
+widget's `keyPressEvent` and therefore before `keyPressedDuringRun`. That is
+read off Qt's documented order and is *not* under test: `QTest::keyClick` posts
+to the widget and skips the window's shortcut map, so a test of it measures the
+instrument rather than the behaviour. If a scene ever needs those keys, move
+the transport rather than trusting this paragraph.
+
+`FullScreenView` keeps only Escape and forwards everything else to the scene --
+it is not interactive, so it hands the events over itself rather than letting
+the view do it.
+
+**A selection spans kinds.** Shapes, rays and explosions are picked together
+-- `m_physicsSelection`, `m_raySelection`, `m_explosionSelection`, each a list,
+the first of each leading: it is what a property pane that can only show one
+shows and what names the undo step, the way the active shape does for shapes.
+`selectedRay()` and `selectedExplosion()` are those leads, which is why the
+forty-odd places that ask for one still read as they did.
+
+Picking one kind used to let the others go -- `letOthersGo` dropped all three
+but the one being picked -- so a box over two blasts, two rangefinders and a
+body could keep only the topmost of one kind, and the box only ever looked for
+`ShapeItem` in the first place. The exclusivity is gone from all but the
+**joint**, which is a linkage between two things, has no position of its own
+and a pane that answers for nothing else; picking one drops the rest and
+picking any of the rest drops it.
+
+What replaces it is that **replacing a selection is the caller's business**,
+since only the caller knows whether Shift was held: a press without it calls
+`clearCanvasSelection` (or clears the kinds it is about to set), and a sweep in
+Physics mode states all three outright -- `applyRubberBand` sets the rays, the
+blasts and the shapes it caught, clearing a kind it caught none of. Leaning on
+the press to have cleared the shapes instead left a body picked behind a box
+drawn round two rangefinders. Edit mode is the exception and still adds
+unconditionally, because rays and blasts are not on the canvas there and the
+press has already cleared what it had to.
+
+Everything that acts on a selection acts on all of it: Delete, the arrow keys,
+a drag (`carryPickedForDrag` carries every picked piece, measuring each one's
+move from the grabbed point, whichever kind that was), Copy and what a paste
+leaves picked. A click that does not move narrows a group to the one thing
+under the pointer, for a ray and a blast as it already did for a shape.
+
+**Picking a group of shapes has one owner**, `CanvasScene::selectShapes` --
+Select All, a swept box and what a paste leaves picked all go through it.
+Each of the three used to loop over `selectForPhysics` or
+`addToEditSelection`, both of which repaint the scene and make every panel
+watching the selection rebuild: once per shape, so 400 of them measured 6.9 s
+and 399 signals for a box, and 400 signals for a paste. The work is done first
+and the signal goes out once. Membership while the list is built is asked of a
+`QSet`, not of the vector being appended to, which is what keeps it linear.
+A box in Edit mode always adds, because the press that started it has already
+cleared the selection unless Shift was held.
+
+**Select All is the scene's, not the menu's** (`CanvasScene::selectAllShapes`).
+Edit mode keeps one active shape with the rest co-selected beside it and
+Physics mode keeps its own pick, in which naming a shape names the whole of its
+body -- so "all of it" means two different things and the scene is what knows
+which. The active shape is deliberately not in `m_editSelection`, which is why
+asking that list for a count gives one less than there are.
+
+**Which shape is drawn over which is the scene's, and the file carries it.**
+`CanvasScene::restackShapes` renumbers every shape's `zValue` to its index in
+the new order rather than nudging the picked ones, so the values stay small and
+the order stays exact however often it is done; `shapesInStackOrder` asks
+`items(Qt::AscendingOrder)` rather than sorting, since that already settles
+shapes sharing a z by the order they were added -- which is how they are
+painted. `z` is written to the `*.phys` only when it is not zero, so a scene
+that has never been restacked reads exactly as it did before stacking existed.
+A move that changes nothing returns false, which is what keeps an undo state
+off the stack for it.
+
+**Names on the canvas are drawn in device pixels, not scene units**
+(`CanvasScene::drawObjectNames`, off by default, `Panels/showObjectNames`).
+The painter's transform is reset and each anchor mapped by hand, so a label is
+the same size at 50% and at 500% -- the same bargain the log and the controls
+make by being widgets over the canvas. A body speaks for its shapes: labelling
+both would put two labels on one drawing, and the body is what a rule usually
+names. It is deliberately **not** a `RunLayer`: those are all on while editing,
+and this one has to default off, since a field of labels is in the way of the
+drawing most of the time.
+
+**The canvas's right-click menu carries the canvas's own commands**
+(`MainWindow::addCanvasActions`), appended to every branch so the three menus
+cannot drift. The empty-canvas menu used to be Add and nothing else. The menu
+opens during a run as well, showing only that block: it changes nothing, and
+framing the field or reading the names is what a run is watched with.
+
+**The canvas zoom is proportional.** `m_scaleStep` is read as a share of the
+level, not a number of percent added to it: a flat ten took one notch from 100%
+to 110% and the same notch from 500% to 510%, so coming back out from far in
+took thirty of them. `PlotPanel`'s wheel always worked this way. Ctrl zooms
+because every other editor zooms with it, and Shift still does because this one
+always has; a bare wheel scrolls.
+
+**A dropped file is handled by a method, not only by the event.** Qt delivers a
+drop through its own drag manager, so a `QDropEvent` sent at the window with
+`sendEvent` never reaches `dropEvent` -- a test cannot post one.
+`MainWindow::openDroppedUrls` is where the decision and the open live, and
+`dropEvent` is a two-line wrapper over it; what stays untested is Qt's own
+delivery.
 
 **A caption is the application's own action on the world**
 (`Rule::showCaptionAction()`, text and shown in `actionParams`): rich text over
@@ -125,6 +227,14 @@ run and go when it stops. A series fills at 20000 points, and then every series
 is halved and the stride doubled, so a run of any length keeps its whole shape
 rather than stopping at an arbitrary minute.
 
+**The pointer over a trace reads it.** A dashed line down every band -- they
+share the clock, so one line serves all of them -- a dot where each trace was
+at that moment, each caption reading that value instead of its latest, and the
+moment itself over the clock. The line lands on the nearest *sample*, not on
+the pixel under the mouse, so the number quoted is one that was actually
+recorded. `saveImage` turns it off around the render: the pointer is over the
+menu by then, and a crosshair frozen into a saved picture is a stray mark.
+
 `PlotPanel` keeps nothing and only draws. One band per trace, each with its own
 vertical axis: a force in newtons and a position in scene units share no axis
 worth sharing. **That axis spans the whole trace, not the part on screen** --
@@ -160,16 +270,49 @@ is built without knowing the scene's scale, so a scene at a very different one
 wants different numbers. Making them follow `pixelsPerMeter` needs the scale to
 reach the engine before the catalogue is asked.
 
+**A distance written for a person has one owner**, `Units` -- the unit a
+ruler is numbered in, what a scene coordinate is worth in it, and how many
+decimals that is worth writing. Scene units are what a drawing is drawn in and
+`pixelsPerMeter` is the only thing that makes them a real distance, so the
+conversion sits beside the rest of what that scale does rather than in the
+widget that happens to need it first.
+
+The rulers step in the unit being *shown*, not in scene units: the step is the
+next 1, 2 or 5 times a power of ten that keeps the labels about 64 device
+pixels apart, with minor ticks at fifths of it where they would not crowd. A
+fixed stride could not work -- one scene unit is a different distance in every
+unit and at every zoom, and the old flat 20 put a tick every two pixels at
+10%. The unit rides on the zero mark rather than after every number, and the
+origin is found by value: at a fine step it is written "0.0" or "0.000", so
+matching the text left the unit off exactly where it belonged. Both rulers
+carry the choice because they are two edges of one canvas -- each offers it on
+its own context menu but neither keeps it; `MainWindow::applyRulerUnit` sets
+both and the INI holds it under `Physics/rulerUnit`.
+
 **The chrome is themed; the canvas is not.** `Theme::apply` puts Fusion, a
 palette and one application stylesheet on everything (Options -> Common ->
 Colour scheme, `Appearance/theme`; System follows the desktop where Qt can
 tell -- the dialog says colour scheme and style, the code says theme and
-controls, which is what the INI keeps). A
-theme is one line of ten colours in `kSpecs` in `Theme.cpp`; the palette, the
-derived colours and the sheet are all worked out from it. The shape of the
+controls, which is what the INI keeps).
+
+**Neither of the two is written in C++.** The same bargain as the plugins, one
+step further in: `Theme` knows how to read a definition and nothing about what
+any of them say. They are files under `themes/`, read at startup -- one JSON per
+colour scheme and per style, over one shared `base.qss` -- so adding either is
+adding a file, and the format is documented for the user in `docs/themes.md`.
+A folder of the user's own (`themes` beside their settings, or whatever
+`PHYSALIS_THEMES` names) is read
+after the installed one, so a file named for a scheme that ships redraws it
+rather than appearing beside it. A file's *name* is its key, the way a
+converter's folder is its id: nothing inside it can disagree about which scheme
+it is.
+
+A colour scheme is ten colours in `themes/schemes/<key>.json`; the palette, the
+derived colours and the sheet are all worked out from them. The shape of the
 controls is a second, independent choice (Style, `Appearance/controls`):
-one `kShapes` entry of radii and paddings that fill the sheet's `@r...`
-placeholders, plus a few rules of its own appended after the shared ones. A
+`themes/styles/<key>.json`, radii and paddings that fill the shared sheet's
+`@r...` and `@pad...` placeholders, plus a few rules of its own laid over it,
+and `include` for a run of rules two styles share rather than a copy in each. A
 style that is only a different radius is a name in a list and nothing else, so
 corners are the least of what separates them. Each sets its own **density** --
 the paddings run from Sharp, at a third of Material's, up to Material itself --
@@ -187,9 +330,8 @@ thumb on a thin rail; Sharp's is a square grip on a hairline, with its ticks
 and scroll bars sized down to match; Minimal's is a dot on a line and a scroll
 bar barely there.
 
-**System is the one that is not a shape**, and so has no `kShapes` row, the way
-System has no `kSpecs` row: the platform's own style with no sheet of ours over
-it. It wears the platform's palette too, and the panels' cards follow the
+**System is the one that is not a shape**, and so has no file, the way System
+has no scheme file: the platform's own style with no sheet of ours over it. It wears the platform's palette too, and the panels' cards follow the
 desktop's light or dark rather than the chosen theme -- a native style reads
 little of a palette, so a theme laid over it would be half applied, light text
 on a button still drawn light. An unknown key in the settings file falls back
@@ -233,7 +375,7 @@ field would otherwise slide away with nothing following it. The field stays
 what the scene says it is.
 
 **A tool is a preview with Apply and Cancel, not a dialog.** The Tools list on
-the toolbar -- Clone, Mirror -- and the two conversions on a shape's context
+the toolbar -- Clone, Mirror -- and the conversions on a shape's context
 menu open `ToolOptionsBar` in the bottom-left of the canvas, declare their
 settings as a list of `ToolOption`, and re-run on every change:
 `MainWindow::beginTool` holds the scene as it was, `runTool` undoes the last
@@ -280,6 +422,9 @@ src/              the application (Qt widgets, canvas, panels, serialization)
     MainWindow, UndoStack, OptionsDialog, AboutDialog, SceneTree
 ui/               .ui forms (AUTOUIC searches here, not beside the sources)
 resources/        icons (physalis.svg), the .rc that gives the exe its icon
+themes/           how the chrome looks, read at startup and not compiled in:
+                  schemes/*.json and styles/*.json over one base.qss; the
+                  format is docs/themes.md, which is the user's page for it
 engines/box2d/    one plugin: its own CMakeLists, include/ and src/
 engines/chipmunk/ another, on Chipmunk2D -- Box2D's keys and units wherever
                   Chipmunk can honour them, its own constraints as joint types
@@ -348,6 +493,17 @@ Ask the user to close it — do not kill it, they may have unsaved work.
   that variable being set: the unsaved-changes prompt on close stands aside
   (a modal dialog would hang the run).
 - No `printf` for narration. Assertions carry their own messages.
+- **The two copy and paste tests wait for the clipboard rather than trusting
+  it** (`tests/ClipboardProbe.h`). On Windows one process holds the clipboard
+  open at a time, and while something else has it -- a clipboard manager,
+  another Qt program -- every `setText` is dropped and read back empty while
+  still reporting success. `theClipboardAnswers()` keeps asking for two
+  seconds, which is longer than any real contention, and
+  `SKIP_IF_THE_CLIPBOARD_STOPPED_ANSWERING()` sits at the copy itself because
+  the clipboard can go away between the probe and the copy -- so red still
+  means Copy is broken and only a clipboard that never comes back skips. A
+  macro because `GTEST_SKIP` leaves the function it is written in. Both were
+  skipping on a momentary blip, which is a hole where a passing test belongs.
 
 Since it is one process now, a crash takes the whole run with it — a test that
 dies shows as `[ RUN ]` with no result line.
@@ -372,6 +528,31 @@ it, closes it, and starts an empty one on the new engine -- keeping the scene
 keeps its engine. The body and shape property tables show only the rows the
 scene's engine publishes -- see `dropRowsTheEngineIgnores` in
 `PhysicsPropertyPane.cpp`.
+
+**Copy and Duplicate carry the mechanism, not the shapes.**
+`SceneSerializer::fragmentToJson` writes a piece of a scene the way the file
+writes the whole of one -- the shapes picked, the bodies they belong to, and
+the joints *between those bodies* -- and `fragmentFromJson` reads it back with
+fresh names, re-pointing each joint at the copies rather than at what they were
+copied from. Both go through the same `readBody`/`readJoint` the file does, so
+a body pasted cannot drift from a body loaded. A joint with only one end in the
+selection is dropped and counted for the status bar: attaching the copy to the
+original's partner would be inventing a linkage nobody asked for. The Clone
+tool still copies shapes alone -- its preview re-runs on every keystroke and
+`undoTool` only tracks shapes, so bodies and joints it made would pile up.
+
+**A sliding joint's rail belongs to whichever of its two bodies holds still.**
+`CanvasScene::railOf` answers where the travel reads zero and which way the
+limits run from there. Zero is the *far* anchor at rest, because the engine
+measures travel as the gap between the anchors and adds that gap to both
+limits (`travelOrigin` in `Box2DJoints.cpp`) -- hung off anchor A the rail came
+out short of the real travel by the whole gap, which ran crane.phys's rails off
+the end of the crane. And it is held, for the length of a run, in the frame of
+the body that holds still rather than always body A: domino.phys's lifts are
+built with body A the car and body B the guide, and pinned to A the limit line
+rode up the screen with the car. Where neither body is static the rail is body
+A's, which is the engine's own reference. The direction turns round with the
+end, since the anchor running along the rail then travels the opposite way.
 
 **Joints are coloured and drawn by kind, not by type.** A type id belongs to one
 engine (`revolute` is Box2D's, `pin` is Chipmunk's); the five `JointVisual`
@@ -407,6 +588,25 @@ impulse properties `PropertyRole::ImpulseX`/`ImpulseY`, and
 `CanvasScene` (`beginShot`/`aimShot`/`releaseShot`/`cancelShot`) because the
 full-screen view is not interactive and never lets the scene see its mouse --
 it calls the same four itself.
+
+**A trail is where a body has been**, and the same split as the slingshot:
+whether a body draws is the body's (`PhysicsBody::drawsTrail()`, the "Draws a
+Trail" row, `"trail": true` in the `*.phys` only when set) and how the line
+looks -- colour, width, style -- is an application setting (Options -> Physics
+-> Trail). The point drawn from is the centre of mass, worked out once in the
+body's own frame and carried through its transform, and
+`SimulationController::sampleTrails` takes one point per *step*, for the reason
+the plots do: at x4 a frame is four steps, and a line through every fourth
+point cuts the corners off a pendulum. The points are the scene's
+(`extendTrail`, drawn in `drawBackground` after the grid, so a body rides over
+its own line) and are run state: there for the whole run, cleared by `stop()`
+before the clones that drew some of them are deleted. A trail that fills is
+halved and takes every other point from then on, the plots' bargain, and a body
+at rest adds nothing. `SceneScreenshot::contentArea` takes in
+`trailBounds()`, because a picture cut to the bodies alone loses most of the
+trace. A body that draws wears a ring round its centre of mass in the trail's
+colour -- painted apart from the body axes, which can be switched off and would
+have taken the only sign of it with them. The exporters do not carry trails.
 
 **Shapes lying over one another** are reached with Ctrl+click, in Edit and
 Physics mode alike: it steps down through `CanvasScene::shapesAt` -- everything
@@ -460,8 +660,7 @@ removes the body really removes it: `m_handlingRemoval` stops it asking again.
 
 **The world raises one event, the application's own:** `Rule::runStartedEvent()`,
 "starting simulation", carried out once in `start()` with the world built and
-the snapshot taken, before the first step -- so a rule can set things up, and
-Stop still puts back what it changed.
+the snapshot taken, before the first step -- so a rule can set things up.
 
 **"Init state" is the application's own action on a body:** back where it stood
 when the run started (taken in `start()`, before the start rules), facing the
@@ -472,9 +671,9 @@ are found by role -- `PropertyRole::PositionX` and the rest.
 X and Y in `actionParams`): a copy of every shape, through the same JSON as
 Duplicate, posed as the run's snapshot found the parent -- so a removed body
 can still be cloned -- and moved so its origin lands on X, Y, then added to the
-world. Clones are run state: `PhysicsBody::isRunOnly()`, left out of a save,
-made and destroyed without `bodiesChanged` (every panel listing bodies would
-rebuild per clone), and deleted by `stop()`. Rules name no clone.
+world. Clones are run state: `PhysicsBody::isRunOnly()`, made without
+`bodiesChanged` (every panel listing bodies would rebuild per clone), and gone
+with the run's copy of the scene. Rules name no clone.
 
 **Read-only rows are there before a run too.** They read what the object
 starts with: `SimulationController::initialValue` builds the scene into a
@@ -484,17 +683,64 @@ scene that has since changed. A reading an engine marks `rulesOnly` -- bounds,
 centre of mass, last hit, position and angle (edited on the canvas), a circle's
 radius, a sensor's count -- stays out of the table and in the rule menus.
 
-**Two world actions are the application's own**:
-`Rule::stopRunAction()` and `holdRunAction()`, offered on the world because
-that is what a rule names when it means the simulation itself. No engine knows
-a run is being watched, let alone how to end one. They cannot be carried out
-where a rule fires -- that is inside the step, with the solver on the stack --
-so `SimulationController` remembers one and acts on it once the step is over.
+**A run is read, not edited, and the panels go read-only rather than away.**
+Rules, Variables and Controls each answer `simulationRunningChanged` with a
+`setReadOnly`, which disables the editors on their cards and leaves everything
+else alone; coming back out of it rebuilds, because what each editor's enabled
+state should be is decided while the card is built and putting the lot back on
+would hand the first rule card a Move Up it never had. Two things deliberately
+stay live: a rule card's object boxes, since double-clicking one is how a rule
+is followed to what it names, and the Objects tree, which changes nothing and
+is the only way to point the panels at another object mid-run -- a press on the
+canvas pans the field. Both were written for and then made unreachable by a
+`setEnabled(!running)` that greyed the whole panel out.
+
+**A run never touches the scene.** `SimulationController::start` saves the
+scene and loads it into a `CanvasScene` of its own (`runScene()`), and
+everything a run does -- moving shapes, a rule writing a joint, a clone, a
+trail, a caption, a control's value -- happens to that copy. The canvas and
+the full-screen view show the copy while the run goes (`MainWindow::shownScene`),
+and Stop deletes it: there is nothing to put back, so nothing can be put back
+wrong. The scene itself only gets `setSimulationRunning`, which is what makes
+the panels read-only. Whatever the window draws with -- colours, layers, zoom
+-- reaches the copy through `setRunSceneSetup` and `applySceneLook`. A run's
+copy is never drawn at rest, so `setSimulationRunning(true)` measures the
+rails and spring turns that are meant to be taken at rest there and then.
+
+**The undo stack records nothing while a run is going.** `UndoStack::push`
+marks the stack touched and returns instead, which is what keeps Save offered
+over a mid-run edit -- adding a row to the log is one, and is meant to happen
+there.
+
+**A property row may speak for several objects.** `rowsFromCatalogue` takes a
+list of value maps, reads the first and writes all of them, which is how the
+physics and sensor panes set a property on every shape picked -- and picking a
+body picks all of its shapes. The pane adds a read-only count row so the table
+says how many it is speaking for. A name is the one row that cannot be spread
+across a selection, since a rule finds its subject by exactly one.
+
+**Three world actions are the application's own**:
+`Rule::stopRunAction()`, `holdRunAction()` and `restartRunAction()`, offered on
+the world because that is what a rule names when it means the simulation
+itself. No engine knows a run is being watched, let alone how to end one. They
+cannot be carried out where a rule fires -- that is inside the step, with the
+solver on the stack -- so `SimulationController` remembers one and acts on it
+once the step is over. A restart throws the run's copy away and makes a new one
+without ending the run in between (`endRun` then `start`), so the full-screen
+view stays up. Sliders and checkboxes carry over, and a value carried away
+from its start value is a change: the rules following that control run at once,
+even in a run that opens held, or a variable copied from a slider would read
+the start value while the slider showed another. The window does not
+rebuild the control widgets for the new copy: they write to whichever copy is
+shown, and one torn down under a press never gets its release.
 
 ## Exporting
 
-**File -> Export to -> ...** is built from whatever converters are found under
-the folder named in Options -> Common -> Converters folder. A converter is a
+**File -> Export to -> ...** is built from whatever converters are found in
+`assetFolders("exporters")` -- installed, then the user's own, then
+`PHYSALIS_EXPORTERS`, the same three the themes come from, later standing in for
+earlier by folder name. There is no setting for the path: one that can be
+pointed away from what ships is a setting whose only power is to hide it. A converter is a
 folder holding a `manifest.json` (name and description) and an `export.js`
 defining `exportScene(scene, io)`; anything else beside them -- templates, a
 README -- is the converter's own business.
@@ -557,8 +803,10 @@ the settings are declared in the manifest and not in `export.js`.
 ## Packaging
 
 `cpack` builds from whatever is installed by `cmake --install`, so both start
-from the same tree: the program, the engine plugins beside it, and the export
-converters under `exporters/`. Build Release first -- a Debug executable is
+from the same tree: the program, the engine plugins beside it, the export
+converters under `exporters/` and the theme definitions under `themes/`.
+Those last are not optional -- with none of them the program can only wear
+the platform's own look. Build Release first -- a Debug executable is
 some forty megabytes of symbols.
 
 ```bash

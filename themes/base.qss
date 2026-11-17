@@ -1,0 +1,137 @@
+/* The shared sheet every style starts from. A style's own rules are laid
+   over these, so where both say something the style wins.
+
+   The placeholders are filled in by Theme -- the radii and paddings from the
+   style's own maps, the colours from the colour scheme, all of them listed in
+   themes/README.md. A colour comes from palette() wherever a role fits, so a
+   widget given a palette of its own -- the overlays on the canvas -- is drawn
+   in it rather than in the application's; only what no role means is spelled
+   out. A placeholder nobody fills is reported, since Qt would otherwise drop
+   the whole rule it stands in without a word. */
+QMainWindow::separator { background: palette(window); width: 4px; height: 4px; }
+QMainWindow::separator:hover { background: palette(highlight); }
+
+QToolBar { background: @surface; border: none; border-bottom: 1px solid palette(midlight);
+           padding: 4px 8px; spacing: 4px; }
+QToolBar::separator { background: palette(mid); width: 1px; margin: 7px 6px; }
+QToolButton { background: transparent; border: 1px solid transparent; border-radius: @rsmall; padding: 3px; }
+QToolButton:hover { background: @hover; }
+QToolButton:pressed, QToolButton:checked { background: @accentSoft; border-color: transparent; }
+QToolButton:disabled { background: transparent; }
+
+QMenuBar { background: @surface; padding: 2px 4px; border-bottom: 1px solid palette(midlight); }
+QMenuBar::item { background: transparent; padding: 5px 10px; border-radius: @rsmall; }
+QMenuBar::item:selected { background: @hover; }
+QMenu { background: palette(base); border: 1px solid palette(mid); padding: 5px; }
+QMenu::item { padding: 6px 28px 6px 12px; border-radius: @rsmall; }
+QMenu::item:selected { background: palette(highlight); color: palette(highlighted-text); }
+QMenu::item:disabled { color: @faint; }
+QMenu::separator { height: 1px; background: palette(midlight); margin: 5px 8px; }
+
+QStatusBar { background: @surface; border-top: 1px solid palette(midlight); }
+QStatusBar::item { border: none; }
+QDockWidget::title { background: @surface; padding: 6px; }
+
+QTabWidget::pane { border: none; border-top: 1px solid palette(midlight); }
+QTabBar::tab { background: transparent; color: @muted; border: none; border-radius: @rsmall;
+               padding: 5px 10px; margin: 4px 2px; }
+QTabBar::tab:hover { background: @hover; color: palette(window-text); }
+QTabBar::tab:selected { background: @accentSoft; color: @accent; }
+
+/* A strip of icons with no words under them needs none of the room a word
+   would have taken: the padding here is for a label, and Qt adds its own
+   frame on top of it. */
+QTabBar[iconsOnly="true"]::tab { padding: 4px 2px; margin: 4px 1px; }
+
+QPushButton { background: palette(button); color: palette(button-text); border: 1px solid palette(mid);
+              border-radius: @rfield; padding: @padbutton; min-height: 18px; }
+QPushButton:hover { background: @hover; border-color: @borderStrong; }
+QPushButton:pressed { background: palette(midlight); }
+QPushButton:checked { background: @accentSoft; border-color: palette(highlight); }
+QPushButton:default { background: palette(highlight); color: palette(highlighted-text);
+                      border-color: palette(highlight); }
+QPushButton:default:hover { background: @accentHover; }
+QPushButton:disabled { background: palette(window); color: @faint; border-color: palette(midlight); }
+
+QLineEdit, QAbstractSpinBox, QComboBox, QTextEdit, QPlainTextEdit {
+    background: palette(base); color: palette(text); border: 1px solid palette(mid);
+    border-radius: @rfield; padding: @padfield;
+    selection-background-color: palette(highlight); selection-color: palette(highlighted-text); }
+QLineEdit:hover, QAbstractSpinBox:hover, QComboBox:hover { border-color: @borderStrong; }
+QLineEdit:focus, QAbstractSpinBox:focus, QComboBox:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    border-color: palette(highlight); }
+QLineEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled {
+    background: palette(window); color: @faint; border-color: palette(midlight); }
+QAbstractSpinBox QLineEdit, QComboBox QLineEdit {
+    background: transparent; border: none; padding: 0; border-radius: 0; }
+
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
+    subcontrol-origin: border; width: 18px; border: none; background: transparent; }
+QAbstractSpinBox::up-button { subcontrol-position: top right; border-top-right-radius: @rspin; }
+QAbstractSpinBox::down-button { subcontrol-position: bottom right; border-bottom-right-radius: @rspin; }
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover { background: @hover; }
+QAbstractSpinBox::up-arrow { image: url(:/theme/up-@ink.svg); width: 9px; height: 9px; }
+QAbstractSpinBox::down-arrow { image: url(:/theme/down-@ink.svg); width: 9px; height: 9px; }
+
+QComboBox { padding-right: 4px; }
+QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right;
+                       width: 20px; border: none; }
+QComboBox::down-arrow { image: url(:/theme/down-@ink.svg); width: 10px; height: 10px; }
+QComboBox QAbstractItemView { background: palette(base); border: 1px solid palette(mid); padding: 4px;
+                              selection-background-color: palette(highlight);
+                              selection-color: palette(highlighted-text); outline: 0; }
+
+QCheckBox, QRadioButton { spacing: 7px; }
+QCheckBox::indicator, QGroupBox::indicator { width: 15px; height: 15px; border: 1px solid @borderStrong;
+                                             border-radius: @rcheck; background: palette(base); }
+QCheckBox::indicator:hover, QGroupBox::indicator:hover { border-color: palette(highlight); }
+QCheckBox::indicator:checked, QGroupBox::indicator:checked {
+    background: palette(highlight); border-color: palette(highlight); image: url(:/theme/check-@tick.svg); }
+QCheckBox::indicator:indeterminate { background: palette(highlight); border-color: palette(highlight); }
+QCheckBox::indicator:disabled { background: palette(window); border-color: palette(midlight); }
+QRadioButton::indicator { width: 15px; height: 15px; border: 1px solid @borderStrong;
+                          border-radius: 8px; background: palette(base); }
+QRadioButton::indicator:hover { border-color: palette(highlight); }
+QRadioButton::indicator:checked { width: 9px; height: 9px; border: 4px solid palette(highlight); }
+
+QSlider::groove:horizontal { height: 4px; background: palette(midlight); border-radius: 2px; }
+QSlider::sub-page:horizontal { background: palette(highlight); border-radius: 2px; }
+QSlider::groove:vertical { width: 4px; background: palette(midlight); border-radius: 2px; }
+QSlider::add-page:vertical { background: palette(highlight); border-radius: 2px; }
+QSlider::handle { background: palette(base); border: 2px solid palette(highlight);
+                  width: 12px; height: 12px; border-radius: @rhandle; }
+QSlider::handle:horizontal { margin: -6px 0; }
+QSlider::handle:vertical { margin: 0 -6px; }
+QSlider::handle:hover { background: @accentSoft; }
+
+QAbstractItemView { background: palette(base); alternate-background-color: palette(alternate-base);
+                    selection-background-color: palette(highlight);
+                    selection-color: palette(highlighted-text); outline: 0; }
+QTreeView, QListView, QTableView { border: none; }
+QTableView { gridline-color: palette(midlight); }
+QTreeView::item, QListView::item { padding: 3px 2px; }
+QTreeView::item:hover, QListView::item:hover { background: @hover; }
+QTreeView::item:selected, QListView::item:selected { background: palette(highlight);
+                                                     color: palette(highlighted-text); }
+QHeaderView::section { background: palette(window); color: @muted; border: none;
+                       border-bottom: 1px solid palette(midlight); border-right: 1px solid palette(midlight);
+                       padding: 4px 8px; }
+
+QGroupBox { border: 1px solid palette(midlight); border-radius: @rcard; margin-top: 14px;
+            padding: 10px 8px 8px 8px; }
+QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 12px;
+                   padding: 0 4px; color: @muted; }
+
+QScrollBar:vertical { background: transparent; width: 12px; margin: 0; }
+QScrollBar:horizontal { background: transparent; height: 12px; margin: 0; }
+QScrollBar::handle { background: palette(mid); border-radius: @rscroll; margin: 2px; }
+QScrollBar::handle:vertical { min-height: 32px; }
+QScrollBar::handle:horizontal { min-width: 32px; }
+QScrollBar::handle:hover { background: @borderStrong; }
+QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: none; }
+
+QToolTip { background: @tipBase; color: @tipText; border: 1px solid @tipBase; border-radius: @rsmall;
+           padding: 5px 8px; }
+
+QLabel[muted="true"] { color: @muted; }

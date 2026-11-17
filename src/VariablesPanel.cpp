@@ -6,6 +6,8 @@
 #include "Icons.h"
 #include "Rule.h"
 
+#include <QAbstractButton>
+#include <QAbstractSpinBox>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -47,14 +49,14 @@ void VariablesPanel::buildUi()
     auto *tools = new QHBoxLayout;
     tools->setSpacing(2);
 
-    auto *add = new QToolButton(this);
-    add->setIcon(Icons::add());
-    add->setText(tr("Add"));
-    add->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    add->setAutoRaise(true);
-    add->setToolTip(tr("Add a variable to this scene."));
-    connect(add, &QToolButton::clicked, this, &VariablesPanel::addVariable);
-    tools->addWidget(add);
+    m_add = new QToolButton(this);
+    m_add->setIcon(Icons::add());
+    m_add->setText(tr("Add"));
+    m_add->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_add->setAutoRaise(true);
+    m_add->setToolTip(tr("Add a variable to this scene."));
+    connect(m_add, &QToolButton::clicked, this, &VariablesPanel::addVariable);
+    tools->addWidget(m_add);
 
     tools->addStretch();
     outer->addLayout(tools);
@@ -93,9 +95,11 @@ void VariablesPanel::setScene(CanvasScene *scene)
     m_scene = scene;
     if (m_scene) {
         connect(m_scene, &CanvasScene::variablesChanged, this, &VariablesPanel::rebuild);
-        // Editing them mid-run would change what the run is counting with.
+        // Editing them mid-run would change what the run is counting with, so
+        // the rows go read-only -- not away.
         connect(m_scene, &CanvasScene::simulationRunningChanged, this,
-                [this](bool running) { setEnabled(!running); });
+                [this](bool running) { setReadOnly(running); });
+        m_readOnly = !m_scene->selectionAllowed();
     }
     rebuild();
 }
@@ -152,6 +156,42 @@ void VariablesPanel::rebuild()
     }
     fitColumns();
     m_building = false;
+    // The rows are new; a run that was going while they were made still has
+    // its say over them.
+    applyReadOnly();
+}
+
+void VariablesPanel::setReadOnly(bool readOnly)
+{
+    if (m_readOnly == readOnly)
+        return;
+    m_readOnly = readOnly;
+
+    if (readOnly) {
+        applyReadOnly();
+        return;
+    }
+    // Rebuilt rather than re-enabled one widget at a time: the value editor a
+    // row carries belongs to its type, and fillRow is what knows that.
+    rebuild();
+}
+
+void VariablesPanel::applyReadOnly()
+{
+    // The header is not rebuilt with the rows, so it is set both ways here.
+    if (m_add)
+        m_add->setEnabled(!m_readOnly);
+    if (!m_readOnly || !m_table)
+        return;
+
+    for (QWidget *widget : m_table->findChildren<QWidget *>()) {
+        // The name label and the cell it sits in stay live: right-clicking one
+        // is how a variable is put in the log, which read-only does not stop.
+        if (qobject_cast<QAbstractButton *>(widget) || qobject_cast<QComboBox *>(widget)
+            || qobject_cast<QAbstractSpinBox *>(widget) || qobject_cast<QLineEdit *>(widget)) {
+            widget->setEnabled(false);
+        }
+    }
 }
 
 // What the boxes in a column actually need, which the table cannot work out for
@@ -311,6 +351,10 @@ void VariablesPanel::setValueEditor(int row, const SceneVariable &variable)
 
 void VariablesPanel::beginRename(int row)
 {
+    // The name is a label, so read-only leaves it alone -- and the
+    // double-click that turns it into a box has to be turned away here.
+    if (m_readOnly)
+        return;
     if (row < 0 || row >= m_rows.size() || !m_scene || row >= m_scene->variables().size())
         return;
     RowWidgets &widgets = m_rows[row];
@@ -365,7 +409,7 @@ void VariablesPanel::commit(int row, const SceneVariable &variable)
 
 void VariablesPanel::addVariable()
 {
-    if (!m_scene)
+    if (!m_scene || m_readOnly)
         return;
 
     SceneVariable variable;
@@ -383,6 +427,8 @@ void VariablesPanel::addVariable()
 
 void VariablesPanel::removeVariable(int row)
 {
+    if (m_readOnly)
+        return;
     if (!m_scene || row < 0 || row >= m_scene->variables().size())
         return;
 
@@ -415,7 +461,8 @@ void VariablesPanel::showMenu(int row, const QPoint &globalPos)
     const SceneVariable variable = m_scene->variables().at(row);
 
     QMenu menu(this);
-    menu.addAction(tr("Rename"), this, [this, row] { beginRename(row); });
+    if (!m_readOnly)
+        menu.addAction(tr("Rename"), this, [this, row] { beginRename(row); });
 
     // The same offer the property tables make, so a variable is watched during
     // a run exactly as a body's speed is. Every entry is given the row the menu
@@ -425,7 +472,9 @@ void VariablesPanel::showMenu(int row, const QPoint &globalPos)
     const bool watched = m_scene->isWatched(Rule::variables(), variable.name);
     menu.addAction(watched ? tr("Remove from Log") : tr("Add to Log"),
                    this, [this, row] { toggleLog(row); });
-    menu.addSeparator();
-    menu.addAction(tr("Remove Variable"), this, [this, row] { removeVariable(row); });
+    if (!m_readOnly) {
+        menu.addSeparator();
+        menu.addAction(tr("Remove Variable"), this, [this, row] { removeVariable(row); });
+    }
     menu.exec(globalPos);
 }

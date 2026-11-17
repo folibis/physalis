@@ -38,10 +38,30 @@ void UndoStack::markClean()
     emit changed();
 }
 
+void UndoStack::touch()
+{
+    if (m_touched)
+        return;
+    m_touched = true;
+    emit changed();
+}
+
 void UndoStack::push(const QString &label, const QString &mergeKey)
 {
     if (!m_scene || m_restoring || m_index < 0)
         return;
+
+    // Undo is for editing, not for the simulation. A run moves every body and
+    // Stop puts them all back, so a state recorded in the middle of one holds
+    // the positions of a moment that no longer exists -- undoing after Stop
+    // teleported the whole scene into that frozen frame. Mid-run edits are
+    // real, though, and meant to happen: adding a row to the log is one. So
+    // the scene is still marked dirty and only the snapshot waits. The next
+    // edit after Stop records it, against positions that have been restored.
+    if (m_scene->simulationRunning()) {
+        touch();
+        return;
+    }
 
     const QJsonObject document = SceneSerializer::save(m_scene);
 
@@ -53,10 +73,7 @@ void UndoStack::push(const QString &label, const QString &mergeKey)
     // work that is not on disk. (Unfinished rules used to be the case this was
     // written for, before they were saved like any other.)
     if (document == m_states[m_index].document) {
-        if (!m_touched) {
-            m_touched = true;
-            emit changed();
-        }
+        touch();
         return;
     }
 

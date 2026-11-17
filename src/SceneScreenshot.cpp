@@ -45,6 +45,10 @@ QRectF contentArea(const CanvasScene *scene)
             area |= QRectF(at - QPointF(ring, ring), at + QPointF(ring, ring));
         }
     }
+    // And so are the trails, which go where the bodies have been rather than
+    // where they are: cut to the bodies alone, the picture of a traced run
+    // lost most of the trace.
+    area |= scene->trailBounds();
     if (area.isEmpty())
         return scene->sceneRect();
     return area.adjusted(-kMargin, -kMargin, kMargin, kMargin);

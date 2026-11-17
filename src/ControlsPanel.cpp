@@ -6,6 +6,8 @@
 #include "Icons.h"
 #include "Theme.h"
 
+#include <QAbstractButton>
+#include <QAbstractSpinBox>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -35,16 +37,16 @@ void ControlsPanel::buildUi()
     auto *headerBar = new QWidget(this);
     auto *header = new QHBoxLayout(headerBar);
     header->setContentsMargins(6, 4, 6, 4);
-    auto *add = new QToolButton(headerBar);
-    add->setIcon(Icons::add());
-    add->setText(tr("Add"));
-    add->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    add->setAutoRaise(true);
-    add->setToolTip(tr("Add a control to this scene. It appears on the canvas, under the"
+    m_add = new QToolButton(headerBar);
+    m_add->setIcon(Icons::add());
+    m_add->setText(tr("Add"));
+    m_add->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_add->setAutoRaise(true);
+    m_add->setToolTip(tr("Add a control to this scene. It appears on the canvas, under the"
                        " caption, and rules reach it through Controls."));
-    connect(add, &QToolButton::clicked, this, &ControlsPanel::addControl);
+    connect(m_add, &QToolButton::clicked, this, &ControlsPanel::addControl);
     header->addStretch();
-    header->addWidget(add);
+    header->addWidget(m_add);
     outer->addWidget(headerBar);
 
     auto *scroll = new QScrollArea(this);
@@ -66,9 +68,42 @@ void ControlsPanel::setScene(CanvasScene *scene)
     if (m_scene)
         disconnect(m_scene, nullptr, this, nullptr);
     m_scene = scene;
-    if (m_scene)
+    if (m_scene) {
         connect(m_scene, &CanvasScene::controlsChanged, this, &ControlsPanel::rebuild);
+        connect(m_scene, &CanvasScene::simulationRunningChanged, this,
+                [this](bool running) { setReadOnly(running); });
+        m_readOnly = !m_scene->selectionAllowed();
+    }
     rebuild();
+}
+
+void ControlsPanel::setReadOnly(bool readOnly)
+{
+    if (m_readOnly == readOnly)
+        return;
+    m_readOnly = readOnly;
+
+    if (readOnly) {
+        applyReadOnly();
+        return;
+    }
+    rebuild();
+}
+
+void ControlsPanel::applyReadOnly()
+{
+    // The header is not rebuilt with the cards, so it is set both ways here.
+    if (m_add)
+        m_add->setEnabled(!m_readOnly);
+    if (!m_readOnly || !m_cards)
+        return;
+
+    for (QWidget *widget : m_cards->parentWidget()->findChildren<QWidget *>()) {
+        if (qobject_cast<QAbstractButton *>(widget) || qobject_cast<QComboBox *>(widget)
+            || qobject_cast<QAbstractSpinBox *>(widget) || qobject_cast<QLineEdit *>(widget)) {
+            widget->setEnabled(false);
+        }
+    }
 }
 
 void ControlsPanel::rebuild()
@@ -90,6 +125,9 @@ void ControlsPanel::rebuild()
     for (int row = 0; row < controls.size(); ++row)
         m_cards->insertWidget(row, buildCard(row, controls.at(row)));
     m_building = false;
+    // The cards are new; a run that was going while they were made still has
+    // its say over them.
+    applyReadOnly();
 }
 
 // One card per control, its fields on rows of their own. A table could not
@@ -252,7 +290,7 @@ void ControlsPanel::commit(int row, const SceneControl &control)
 
 void ControlsPanel::addControl()
 {
-    if (!m_scene)
+    if (!m_scene || m_readOnly)
         return;
     SceneControl control;
     control.id = m_scene->uniqueControlId(QStringLiteral("control"));
@@ -267,6 +305,8 @@ void ControlsPanel::addControl()
 
 void ControlsPanel::removeControl(int row)
 {
+    if (m_readOnly)
+        return;
     if (!m_scene || row < 0 || row >= m_scene->controls().size())
         return;
     QVector<SceneControl> controls = m_scene->controls();

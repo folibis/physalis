@@ -9,9 +9,14 @@
 #include <QVector>
 
 // How the application's own widgets look: one style, one palette and one
-// stylesheet for every platform, chosen from a short list of themes. The
-// canvas is not part of it -- the field's background is the scene's, saved in
-// its file.
+// stylesheet for every platform, from a colour scheme and a control style
+// chosen independently of each other. The canvas is not part of it -- the
+// field's background is the scene's, saved in its file.
+//
+// Neither is written here. Both are read at startup from the `themes` folder
+// beside the program -- one JSON file per scheme and per style, over one shared
+// style sheet -- so adding either is adding a file, not a line of C++. The
+// format and the folders searched are in themes/README.md.
 //
 // A colour a widget needs is a palette role where one fits and a field of
 // Colors where none does; nothing outside this file writes a hex literal for
@@ -49,11 +54,11 @@ public:
 
     static Theme *instance();
 
-    // System first, then every theme there is, in the order Options lists
-    // them.
+    // System first, then every colour scheme that was found, in the order each
+    // one's file asks for.
     static QVector<Choice> available();
     // The shapes the controls can take -- corners, borders, how a field shows
-    // focus -- which go with any of the themes. System first, which is no
+    // focus -- which go with any of the schemes. System first, which is no
     // shape at all: the platform's style, with no sheet of ours over it.
     static QVector<Choice> availableControls();
 
@@ -62,6 +67,10 @@ public:
     // where it cannot; a theme key nobody knows is taken as "system", and a
     // controls key nobody knows as the first of them.
     static void apply(const QString &theme, const QString &controls = currentControls());
+    // Reads every definition folder again and puts back on what is being worn.
+    // The files are read once, when they are first wanted; this is for when one
+    // of them has been written since.
+    static void reload();
     // The key as chosen, so "system" stays "system" whichever it resolved to.
     static QString current();
     static QString currentControls();

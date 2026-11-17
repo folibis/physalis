@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Ruslan Muhlinin. See LICENSE.
 #include "CanvasScene.h"
+#include "EngineRegistry.h"
+#include "ClipboardProbe.h"
+#include "MainWindow.h"
+#include "IPhysicsEngine.h"
+#include "Joint.h"
 #include "CircleItem.h"
 #include "PhysicsBody.h"
 #include "PropertyPane/PhysicsPropertyPane.h"
@@ -10,6 +15,9 @@
 #include "SimulationController.h"
 #include "UndoStack.h"
 
+#include <QAction>
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QJsonObject>
 #include <gtest/gtest.h>
 
@@ -186,4 +194,160 @@ TEST(BodyEditing, DeletingABodyLeavesItsShapes)
     EXPECT_EQ(scene.bodies().size(), 0);
     EXPECT_EQ(scene.shapes().size(), 1) << "the shape outlives the body it was in";
     EXPECT_TRUE(scene.shapes().first()->scene()) << "and is still on the canvas";
+}
+
+// Copying a mechanism has to carry the mechanism. Two bodies held together by
+// a joint come back as two bodies still held together -- to each other, not to
+// the pair they were copied from. Copy used to write out the shapes alone, so
+// a duplicated wheel-and-axle arrived as loose plates in no body with nothing
+// joining them, and the whole assembly had to be built again by hand.
+// Ctrl+C then Ctrl+V on a mechanism, through the actions the keys are bound to
+// rather than through the serializer. The serializer carried the joint and a
+// test of it passed, while nothing happened on the canvas: Copy asked
+// activeItem(), which is Edit mode's selection, so a mechanism picked in
+// Physics mode left the action greyed out and the keystroke did nothing.
+TEST(BodyEditing, CopyAndPasteCarryAMechanismThroughTheActions)
+{
+    MainWindow window;
+    auto *scene = window.findChild<CanvasScene *>();
+    ASSERT_NE(scene, nullptr) << "the window has no scene";
+    auto *copy = window.findChild<QAction *>(QStringLiteral("actionCopy"));
+    auto *paste = window.findChild<QAction *>(QStringLiteral("actionPaste"));
+    ASSERT_NE(copy, nullptr) << "the window has no Copy action";
+    ASSERT_NE(paste, nullptr) << "the window has no Paste action";
+
+    if (!theClipboardAnswers())
+        GTEST_SKIP() << "the system clipboard is held by something else on this machine";
+    QGuiApplication::clipboard()->clear();
+
+    scene->setSimulationEngineName(QStringLiteral("Box2D"));
+    scene->setEditorMode(EditorMode::Physics);
+
+    ShapeItem *armShape = rectangle(scene, QStringLiteral("arm"), QPointF(0, 0));
+    ShapeItem *hubShape = rectangle(scene, QStringLiteral("hub"), QPointF(100, 0));
+    scene->notifyShapesChanged();
+
+    scene->selectForPhysics(armShape, true);
+    PhysicsBody *arm = scene->createBodyFromSelection();
+    ASSERT_TRUE(arm);
+    arm->props().type = physics::BodyType::Dynamic;
+    scene->clearPhysicsSelection();
+
+    scene->selectForPhysics(hubShape, true);
+    PhysicsBody *hub = scene->createBodyFromSelection();
+    ASSERT_TRUE(hub);
+    hub->props().type = physics::BodyType::Static;
+    scene->clearPhysicsSelection();
+
+    auto engine = physics::EngineRegistry::create(QStringLiteral("Box2D"));
+    ASSERT_TRUE(engine);
+    ASSERT_FALSE(engine->jointTypes().isEmpty());
+    const physics::JointType type = engine->jointTypes().first();
+    ASSERT_TRUE(scene->createJoint(type.id, arm, hub, type.anchorCount, {}));
+
+    // Both bodies picked, the way picking a mechanism on the canvas leaves it.
+    scene->selectForPhysics(armShape, true);
+    scene->selectForPhysics(hubShape, true);
+    ASSERT_EQ(scene->physicsSelection().size(), 2);
+
+    ASSERT_TRUE(copy->isEnabled())
+        << "a mechanism is picked in Physics mode and Copy is greyed out";
+    copy->trigger();
+    SKIP_IF_THE_CLIPBOARD_STOPPED_ANSWERING();
+    ASSERT_FALSE(QGuiApplication::clipboard()->text().isEmpty())
+        << "Copy wrote nothing to the clipboard";
+    ASSERT_TRUE(paste->isEnabled()) << "the clipboard holds a mechanism and Paste is greyed out";
+
+    paste->trigger();
+    EXPECT_EQ(scene->shapes().size(), 4) << "the paste put down no shapes";
+    EXPECT_EQ(scene->bodies().size(), 4) << "the pasted shapes landed in no bodies of their own";
+    ASSERT_EQ(scene->joints().size(), 2) << "the joint between the two bodies was not pasted";
+
+    // And it holds the copies, not the originals it was copied from.
+    Joint *pasted = scene->joints().last();
+    EXPECT_NE(pasted->bodyA(), arm);
+    EXPECT_NE(pasted->bodyB(), hub);
+    EXPECT_NE(pasted->bodyA(), pasted->bodyB());
+
+    QGuiApplication::clipboard()->clear();
+}
+
+TEST(BodyEditing, CopyingTwoJointedBodiesCarriesTheJoint)
+{
+    CanvasScene scene;
+    scene.setSimulationEngineName(QStringLiteral("Box2D"));
+    scene.setEditorMode(EditorMode::Physics);
+
+    ShapeItem *armShape = rectangle(&scene, QStringLiteral("arm"), QPointF(0, 0));
+    ShapeItem *hubShape = rectangle(&scene, QStringLiteral("hub"), QPointF(100, 0));
+    scene.notifyShapesChanged();
+
+    scene.selectForPhysics(armShape, true);
+    PhysicsBody *arm = scene.createBodyFromSelection();
+    ASSERT_TRUE(arm);
+    arm->setName(QStringLiteral("arm_body"));
+    arm->props().type = physics::BodyType::Dynamic;
+    scene.clearPhysicsSelection();
+
+    scene.selectForPhysics(hubShape, true);
+    PhysicsBody *hub = scene.createBodyFromSelection();
+    ASSERT_TRUE(hub);
+    hub->setName(QStringLiteral("hub_body"));
+    hub->props().type = physics::BodyType::Static;
+    scene.clearPhysicsSelection();
+
+    auto engine = physics::EngineRegistry::create(QStringLiteral("Box2D"));
+    ASSERT_TRUE(engine);
+    ASSERT_FALSE(engine->jointTypes().isEmpty());
+    const physics::JointType type = engine->jointTypes().first();
+    Joint *joint = scene.createJoint(type.id, arm, hub, type.anchorCount, {});
+    ASSERT_TRUE(joint);
+    joint->setName(QStringLiteral("elbow"));
+
+    ASSERT_EQ(scene.bodies().size(), 2);
+    ASSERT_EQ(scene.joints().size(), 1);
+
+    // Both bodies picked, the way picking a mechanism on the canvas leaves it.
+    const QJsonObject fragment =
+        SceneSerializer::fragmentToJson(&scene, {armShape, hubShape});
+    const QVector<ShapeItem *> copies =
+        SceneSerializer::fragmentFromJson(&scene, fragment, QPointF(300, 0));
+
+    ASSERT_EQ(copies.size(), 2) << "the copy did not bring both shapes";
+    EXPECT_EQ(scene.shapes().size(), 4);
+    ASSERT_EQ(scene.bodies().size(), 4) << "the copies did not land in bodies of their own";
+    ASSERT_EQ(scene.joints().size(), 2) << "the joint between them was not copied";
+
+    // Each copy is in a body, and those are new bodies, not the originals.
+    PhysicsBody *copiedA = copies.at(0)->body();
+    PhysicsBody *copiedB = copies.at(1)->body();
+    ASSERT_TRUE(copiedA);
+    ASSERT_TRUE(copiedB);
+    EXPECT_NE(copiedA, arm);
+    EXPECT_NE(copiedB, hub);
+    EXPECT_NE(copiedA, copiedB) << "both copied shapes landed in one body";
+
+    // And the new joint holds the two copies to each other.
+    Joint *copied = nullptr;
+    for (Joint *one : scene.joints()) {
+        if (one != joint)
+            copied = one;
+    }
+    ASSERT_TRUE(copied);
+    EXPECT_EQ(copied->bodyA(), copiedA) << "the copied joint still holds the original body";
+    EXPECT_EQ(copied->bodyB(), copiedB) << "the copied joint still holds the original body";
+    EXPECT_NE(copied->name(), joint->name()) << "the copy took the original's name";
+
+    // The body type travels too -- a static hub copied as dynamic would fall.
+    EXPECT_EQ(copiedA->props().type, physics::BodyType::Dynamic);
+    EXPECT_EQ(copiedB->props().type, physics::BodyType::Static);
+
+    // And the copy stands where it was put, not on top of the original.
+    EXPECT_NEAR(copies.at(0)->pos().x(), armShape->pos().x() + 300.0, 1e-9);
+
+    // A joint with only one end in the selection has nothing to hold on this
+    // side, so it is left out and said so.
+    int leftOut = 0;
+    SceneSerializer::fragmentToJson(&scene, {armShape}, &leftOut);
+    EXPECT_EQ(leftOut, 1) << "a half-selected joint was carried or went uncounted";
 }

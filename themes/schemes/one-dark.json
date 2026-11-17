@@ -1,0 +1,15 @@
+{
+    "label": "One Dark",
+    "order": 130,
+    "dark": true,
+    "window": "#282C34",
+    "surface": "#21252B",
+    "base": "#21252B",
+    "alternate": "#2F343E",
+    "text": "#ABB2BF",
+    "muted": "#8A919E",
+    "border": "#4B5263",
+    "soft": "#3A3F4B",
+    "accent": "#61AFEF",
+    "accentText": "#21252B"
+}

@@ -1,0 +1,15 @@
+{
+    "label": "Solarized Light",
+    "order": 160,
+    "dark": false,
+    "window": "#EEE8D5",
+    "surface": "#FDF6E3",
+    "base": "#FDF6E3",
+    "alternate": "#F5EFDC",
+    "text": "#586E75",
+    "muted": "#8A9A98",
+    "border": "#C9C2AE",
+    "soft": "#E0DAC6",
+    "accent": "#268BD2",
+    "accentText": "#FDF6E3"
+}

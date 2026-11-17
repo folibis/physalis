@@ -1,0 +1,15 @@
+{
+    "label": "Tokyo Night",
+    "order": 180,
+    "dark": true,
+    "window": "#1A1B26",
+    "surface": "#16161E",
+    "base": "#16161E",
+    "alternate": "#292E42",
+    "text": "#C0CAF5",
+    "muted": "#8B95C4",
+    "border": "#3B4261",
+    "soft": "#292E42",
+    "accent": "#7AA2F7",
+    "accentText": "#16161E"
+}

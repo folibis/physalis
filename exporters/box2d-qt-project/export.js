@@ -834,6 +834,8 @@ function jointCode(scene, joint, name, index) {
         COLLIDE_CONNECTED: flag(joint.collideConnected, false),
         CONSTRAINT_HERTZ: tuned ? fnum(hertz) : null,
         CONSTRAINT_DAMPING: tuned ? fnum(damping) : null,
+        FORCE_THRESHOLD: threshold(p, "forceThreshold"),
+        TORQUE_THRESHOLD: threshold(p, "torqueThreshold"),
     };
     // The angle the two bodies already stand at, so a joint made in place
     // starts unstrained.
@@ -949,7 +951,7 @@ function jointCode(scene, joint, name, index) {
 function stepBody(scene, io) {
     var rules = scene.rules || [];
     var loops = { begin: [], end: [], hit: [], sensorBegin: [], sensorEnd: [], preSolve: [],
-                  moved: [], asleep: [] };
+                  moved: [], asleep: [], overloaded: [] };
     var checks = [];
 
     for (var i = 0; i < rules.length; ++i) {
@@ -1044,6 +1046,25 @@ function stepBody(scene, io) {
                      + sleeper.once.test + ") {");
             out = out.concat(indentLines("        ", sleeper.effect.concat(sleeper.once.set)));
             out.push("    }");
+        }
+        out.push("}");
+    }
+
+    if (loops.overloaded.length) {
+        out.push("");
+        var overFlags = {};
+        for (var o = 0; o < loops.overloaded.length; ++o) {
+            if (!overFlags[loops.overloaded[o].flag]) {
+                overFlags[loops.overloaded[o].flag] = true;
+                out.push("bool " + loops.overloaded[o].flag + " = false;");
+            }
+        }
+        out.push("b2JointEvents strained = b2World_GetJointEvents(world);");
+        out.push("for (int i = 0; i < strained.count; ++i) {");
+        out.push("    b2JointEvent strain = strained.jointEvents[i];");
+        for (var ov = 0; ov < loops.overloaded.length; ++ov) {
+            out.push("    if (B2_ID_EQUALS(strain.jointId, " + loops.overloaded[ov].joint + "))");
+            out.push("        " + loops.overloaded[ov].flag + " = true;");
         }
         out.push("}");
     }
@@ -1356,6 +1377,18 @@ function ruleCode(scene, rule, n, caption, loops) {
         var flag = body.handle.replace(/[^A-Za-z0-9_]/g, "_") + "Moved";
         loops.moved.push({ body: body.handle, flag: flag });
         return { check: eventBlock(caption, flag, acting, once) };
+    }
+
+    if (event === "thresholdExceeded") {
+        var overloaded = resolve(scene, primary.subject);
+        if (!overloaded || overloaded.kind !== "joint")
+            return { error: primary.subject + " is not a joint" };
+        var acted = guarded(allEffectLines(scene, rule, null), guard);
+        if (!acted)
+            return { error: "nothing in Box2D does " + describe(rule).split(", ")[1] };
+        var over = overloaded.handle.replace(/[^A-Za-z0-9_]/g, "_") + "Exceeded";
+        loops.overloaded.push({ joint: overloaded.handle, flag: over });
+        return { check: eventBlock(caption, over, acted, once) };
     }
 
     var condition;
@@ -2064,6 +2097,14 @@ function jointProperty(place, key) {
         return prop("bool", "b2Joint_GetCollideConnected(" + J + ")", function (v) {
             return ["b2Joint_SetCollideConnected(" + J + ", " + v + ");"];
         });
+    case "forceThreshold":
+        return prop("none", "b2Joint_GetForceThreshold(" + J + ")", function (v) {
+            return ["b2Joint_SetForceThreshold(" + J + ", " + v + ");"];
+        });
+    case "torqueThreshold":
+        return prop("none", "b2Joint_GetTorqueThreshold(" + J + ")", function (v) {
+            return ["b2Joint_SetTorqueThreshold(" + J + ", " + v + ");"];
+        });
     case "constraintHertz":
     case "constraintDampingRatio":
         return prop("none", null, function (v) {
@@ -2499,6 +2540,10 @@ function actionLines(scene, rule, target) {
         return ["pendingRun = 1;"];
     if (rule.action === "@holdRun")
         return ["pendingRun = 2;"];
+    // Starting the scene again from its file is the application's; an export
+    // has no file to start from.
+    if (rule.action === "@restartRun")
+        return null;
     if (rule.action === "@initState") {
         if (!isBody)
             return null;
@@ -2895,6 +2940,12 @@ function clampAngle(degrees) { return Math.max(-176.0, Math.min(176.0, degrees |
 
 function has(map, key) { return Object.prototype.hasOwnProperty.call(map, key); }
 function pick(map, key, fallback) { return has(map, key) ? map[key] : fallback; }
+
+// A threshold at the editor's top end is Box2D's default of never, and left out.
+function threshold(params, key) {
+    var value = Number(pick(params, key, 1e6));
+    return value < 1e6 ? fnum(value) : null;
+}
 function bool(v) { return v ? "true" : "false"; }
 function differs(a, b) { return Math.abs(Number(a) - Number(b)) > 1e-6; }
 

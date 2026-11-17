@@ -1,16 +1,61 @@
 #include "ViewLayersCombo.h"
 
 #include <QAbstractItemView>
+#include <QApplication>
+#include <QCheckBox>
 #include <QEvent>
 #include <QLineEdit>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QStandardItemModel>
+#include <QStyleOptionButton>
+#include <QStyledItemDelegate>
 
 namespace {
 
 // The key each row carries, so the caller names its layers rather than
 // counting rows.
 constexpr int kKeyRole = Qt::UserRole + 1;
+
+// A list draws its own check mark, and the application's style sheet cannot
+// reach it: Qt looks that rule up with no widget to match against, so only a
+// selector naming no class at all applies -- and such a one would put a box
+// beside every checkable menu item too.
+//
+// So the row borrows a checkbox. The mark is painted through a real QCheckBox,
+// which is what the sheet's own rules match on, and the rows then look like
+// every other checkbox in whichever style is being worn.
+class BorrowedCheckDelegate : public QStyledItemDelegate
+{
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override
+    {
+        QStyledItemDelegate::paint(painter, option, index);
+
+        QStyleOptionViewItem row = option;
+        initStyleOption(&row, index);
+        const QWidget *view = option.widget;
+        QStyleOptionButton box;
+        box.rect = (view ? view->style() : QApplication::style())
+                       ->subElementRect(QStyle::SE_ItemViewItemCheckIndicator, &row, view);
+        box.state = QStyle::State_Enabled
+            | (index.data(Qt::CheckStateRole).toInt() == Qt::Checked ? QStyle::State_On
+                                                                     : QStyle::State_Off);
+        if (option.state & QStyle::State_MouseOver)
+            box.state |= QStyle::State_MouseOver;
+        // Over whatever the list already drew there, which is why nothing has
+        // to be taken out of the row first.
+        m_borrowed.style()->drawPrimitive(QStyle::PE_IndicatorCheckBox, &box, painter,
+                                          &m_borrowed);
+    }
+
+private:
+    // Never shown; it is here to be matched against, not to be seen.
+    mutable QCheckBox m_borrowed;
+};
 
 } // namespace
 
@@ -22,6 +67,7 @@ ViewLayersCombo::ViewLayersCombo(QWidget *parent)
     setMinimumContentsLength(10);
     // Nothing is ever "current": the text is a summary, written by hand.
     setCurrentIndex(-1);
+    view()->setItemDelegate(new BorrowedCheckDelegate(this));
     view()->viewport()->installEventFilter(this);
     refreshText();
 }

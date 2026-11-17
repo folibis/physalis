@@ -13,6 +13,7 @@ class Joint;
 
 class QTreeWidget;
 class QTreeWidgetItem;
+class QLineEdit;
 
 class SceneTree : public QWidget
 {
@@ -34,6 +35,10 @@ private:
     enum class NodeKind { Group, Shape, Body, BodyRef, Joint, Explosion, Ray };
 
     void rebuild();
+    // Hides the rows that do not match the filter box, and the groups left
+    // with nothing under them. Run again after every rebuild, since a rebuild
+    // makes new rows that know nothing about the filter.
+    void applyFilter();
     // Queued, not immediate. Loading a scene fires a structural signal per
     // object, and a scene being destroyed fires them as it comes apart --
     // rebuilding then would read bodies that are already freed. A queued call
@@ -66,6 +71,7 @@ private:
 
     QPointer<CanvasScene> m_scene;
     QTreeWidget *m_tree = nullptr;
+    QLineEdit *m_filter = nullptr;
 
     bool m_selecting = false;
     bool m_rebuildPending = false;

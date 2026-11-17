@@ -1,0 +1,15 @@
+{
+    "label": "Everforest Light",
+    "order": 60,
+    "dark": false,
+    "window": "#F2EFDF",
+    "surface": "#FFFBEF",
+    "base": "#FFFBEF",
+    "alternate": "#F8F5E4",
+    "text": "#5C6A72",
+    "muted": "#939F91",
+    "border": "#DDD8C0",
+    "soft": "#EDEADA",
+    "accent": "#8DA101",
+    "accentText": "#2D353B"
+}

@@ -193,6 +193,10 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     for (const Theme::Choice &choice : Theme::availableControls())
         m_ui->controls->addItem(choice.label, choice.key);
     m_ui->controls->setCurrentIndex(qMax(0, m_ui->controls->findData(current.controls)));
+    for (const Units::Entry &entry : Units::all())
+        m_ui->rulerUnit->addItem(entry.label, Units::key(entry.unit));
+    m_ui->rulerUnit->setCurrentIndex(
+        qMax(0, m_ui->rulerUnit->findData(Units::key(current.rulerUnit))));
     // Worn as it is picked, not on OK: a theme and a shape are things you
     // choose by looking at them, and the dialog is the largest thing on the
     // screen to look at. Connected after the two are filled in, so setting
@@ -204,20 +208,8 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     connect(m_ui->theme, qOverload<int>(&QComboBox::currentIndexChanged), this, wear);
     connect(m_ui->controls, qOverload<int>(&QComboBox::currentIndexChanged), this, wear);
 
-    m_ui->converterPath->setText(current.converterPath);
     m_converterSettings = current.converterSettings;
-    connect(m_ui->converterPathBrowse, &QToolButton::clicked, this, [this] {
-        const QString chosen = QFileDialog::getExistingDirectory(
-            this, tr("Converters folder"), m_ui->converterPath->text());
-        if (!chosen.isEmpty())
-            m_ui->converterPath->setText(chosen);
-    });
-    // Point it somewhere else and the converters there are asked what they
-    // want, without closing the dialog first.
-    connect(m_ui->converterPath, &QLineEdit::editingFinished, this, [this] {
-        rebuildExportTab(m_ui->converterPath->text());
-    });
-    rebuildExportTab(current.converterPath);
+    rebuildExportTab();
 
     selectData(m_ui->selectionLineStyle, current.selectionLineStyle);
     m_ui->selectionLineWidth->setValue(current.selectionLineWidth);
@@ -389,6 +381,40 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
         form->addRow(tr("Line style:"), m_shotLineStyle);
 
         // Above the spacer that closes the tab.
+        m_ui->physicsLayout->insertWidget(m_ui->physicsLayout->count() - 1, group);
+        compactColorGroup(group);
+    }
+
+    // How a trail looks. The same for every body -- whether one draws at all
+    // is the body's own row.
+    {
+        m_trailColor = current.trailColor;
+        auto *group = new QGroupBox(tr("Trail"), m_ui->physicsTab);
+        auto *form = new QFormLayout(group);
+
+        auto *color = new QToolButton(group);
+        color->setFixedSize(kSwatchWidth, kSwatchHeight);
+        color->setStyleSheet(colorSwatchStyle(m_trailColor));
+        bindSwatch(color, m_trailColor, tr("Choose Trail Color"));
+        color->setToolTip(tr("The line a body marked Draws a Trail leaves behind it during a run."));
+        form->addRow(tr("Color:"), color);
+
+        m_trailLineWidth = new QDoubleSpinBox(group);
+        m_trailLineWidth->setRange(0.5, 12.0);
+        m_trailLineWidth->setDecimals(1);
+        m_trailLineWidth->setSingleStep(0.5);
+        m_trailLineWidth->setSuffix(tr(" px"));
+        m_trailLineWidth->setValue(current.trailLineWidth);
+        form->addRow(tr("Line width:"), m_trailLineWidth);
+
+        m_trailLineStyle = new QComboBox(group);
+        m_trailLineStyle->addItem(tr("Solid"), int(Qt::SolidLine));
+        m_trailLineStyle->addItem(tr("Dashed"), int(Qt::DashLine));
+        m_trailLineStyle->addItem(tr("Dotted"), int(Qt::DotLine));
+        m_trailLineStyle->addItem(tr("Dash-dot"), int(Qt::DashDotLine));
+        selectData(m_trailLineStyle, int(current.trailLineStyle));
+        form->addRow(tr("Line style:"), m_trailLineStyle);
+
         m_ui->physicsLayout->insertWidget(m_ui->physicsLayout->count() - 1, group);
         compactColorGroup(group);
     }
@@ -756,7 +782,7 @@ QVariant OptionsDialog::fieldValue(const ConverterField &field) const
     return {};
 }
 
-void OptionsDialog::rebuildExportTab(const QString &path)
+void OptionsDialog::rebuildExportTab()
 {
     // Whatever is on the page now goes first: it may belong to converters that
     // are no longer there, and its widgets are about to be deleted.
@@ -773,7 +799,7 @@ void OptionsDialog::rebuildExportTab(const QString &path)
         m_exportTab = nullptr;
     }
 
-    const QVector<SceneExporter::Converter> converters = SceneExporter::discover(path);
+    const QVector<SceneExporter::Converter> converters = SceneExporter::discover();
     if (converters.isEmpty())
         return;   // nothing to configure, so no tab at all
 
@@ -806,6 +832,7 @@ void OptionsDialog::rebuildExportTab(const QString &path)
             field.converter = converter.id;
             field.key = setting.key;
             field.type = setting.type;
+            field.declared = setting.defaultValue;
             field.editor = makeConverterEditor(setting, value, page);
             if (!field.editor)
                 continue;
@@ -826,8 +853,23 @@ OptionsDialog::Settings OptionsDialog::settings() const
     // reset what it never asked about.
     Settings s = m_incoming;
     s.converterSettings = m_converterSettings;
-    for (const ConverterField &field : m_converterFields)
-        s.converterSettings[field.converter].insert(field.key, fieldValue(field));
+    // Only what the user moved off the manifest's default is kept. Writing the
+    // defaults down too would mean opening this dialog and pressing OK changed
+    // the settings file, and would freeze a default a converter may later
+    // revise.
+    for (const ConverterField &field : m_converterFields) {
+        const QVariant value = fieldValue(field);
+        if (value == field.declared)
+            s.converterSettings[field.converter].remove(field.key);
+        else
+            s.converterSettings[field.converter].insert(field.key, value);
+    }
+    for (auto it = s.converterSettings.begin(); it != s.converterSettings.end();) {
+        if (it->isEmpty())
+            it = s.converterSettings.erase(it);
+        else
+            ++it;
+    }
     s.bodyDynamicColor = m_bodyDynamicColor;
     s.bodyStaticColor = m_bodyStaticColor;
     s.bodyKinematicColor = m_bodyKinematicColor;
@@ -860,16 +902,19 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.springWidth = m_ui->springWidth->value();
     s.jointOutlineWidth = m_ui->jointOutlineWidth->value();
     s.undoDepth = m_ui->undoDepth->value();
-    s.converterPath = m_ui->converterPath->text().trimmed();
     s.defaultEngineName = m_ui->defaultEngine->currentText();
     s.theme = m_ui->theme->currentData().toString();
     s.controls = m_ui->controls->currentData().toString();
+    s.rulerUnit = Units::fromKey(m_ui->rulerUnit->currentData().toString());
     s.jointKindColors = m_jointKindColors;
     s.jointKindStyles = m_jointKindStyles;
     s.shotLightColor = m_shotLightColor;
     s.shotFullColor = m_shotFullColor;
     s.shotLineWidth = m_shotLineWidth->value();
     s.shotLineStyle = static_cast<Qt::PenStyle>(m_shotLineStyle->currentData().toInt());
+    s.trailColor = m_trailColor;
+    s.trailLineWidth = m_trailLineWidth->value();
+    s.trailLineStyle = static_cast<Qt::PenStyle>(m_trailLineStyle->currentData().toInt());
     s.jointSelectionLineStyle =
         static_cast<Qt::PenStyle>(m_ui->jointSelectionLineStyle->currentData().toInt());
     s.jointSelectionLineWidth = m_ui->jointSelectionLineWidth->value();

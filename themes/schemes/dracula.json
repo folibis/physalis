@@ -1,0 +1,15 @@
+{
+    "label": "Dracula",
+    "order": 50,
+    "dark": true,
+    "window": "#282A36",
+    "surface": "#21222C",
+    "base": "#21222C",
+    "alternate": "#44475A",
+    "text": "#F8F8F2",
+    "muted": "#9AA3C7",
+    "border": "#565A72",
+    "soft": "#44475A",
+    "accent": "#BD93F9",
+    "accentText": "#282A36"
+}

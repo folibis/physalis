@@ -12,13 +12,13 @@ the toolbar in **Physics** mode.
 
 ## Starting, pausing and stopping
 
-- **Simulate** (▶) starts the simulation. While it runs, the same button
-  pauses it, and pressing it again carries on.
-- **Step** moves the simulation on by a single frame and then holds it. Step
-  through a collision frame by frame to see exactly what happens.
-- **Stop** (■) ends the simulation and puts every body back exactly where it
-  was before you started. Nothing that happened during the run is kept, so you
-  can run a scene as many times as you like.
+- **Simulate** (▶, **F5**) starts the simulation. While it runs, the same
+  button -- or the same key -- pauses it, and pressing it again carries on.
+- **Step** (**F6**) moves the simulation on by a single frame and then holds
+  it. Step through a collision frame by frame to see exactly what happens.
+- **Stop** (■, **F8**) ends the simulation. A run works on a copy of your
+  scene and never changes the scene itself, so after Stop the canvas shows the
+  scene exactly as you left it, and you can run it as many times as you like.
 
 While a simulation runs, the scene cannot be edited. You can still move the
 view by dragging the canvas, zoom, look at values in the Properties tab, and
@@ -40,6 +40,7 @@ Tick any combination:
 - **Joints**, the joints and their anchors;
 - **Body axes**, the centre-of-mass cross on each body;
 - **Rays** and **Explosions**;
+- **Trails**, the lines bodies marked [Draws a Trail](#trails) leave behind;
 - **Sleep shading**, which tints each body by whether the engine is still
   calculating it or has put it to sleep because it has come to rest.
 
@@ -83,9 +84,9 @@ A scene is not only watched. Two things reach into a run:
   read what each one is set to, fire on a press, a release or a change, and can
   grey one out or change what it says.
 
-Both are described under [Rules](rules.md#keys-and-controls). A control is run
-state, like everything else a run produces: it starts each run where the scene
-says, and goes back there when the run stops.
+Both are described under [Rules](rules.md#keys-and-controls). Every run starts
+each control at the start value set in the Controls tab, and that is what it
+shows.
 
 ## Full screen
 
@@ -117,6 +118,19 @@ to watch a score count up, or a timer count on, while the scene runs.
 The log is also the quickest way to find out why a [rule](rules.md) does or
 does not fire: watch the value the rule compares.
 
+You do not have to decide what to look at before you start. While a run is
+going, pick any row on the **Objects** tab and the Properties tab follows it,
+reading that object's values as the scene moves — the canvas cannot do it,
+because dragging there moves the view instead. Double-clicking an object's name
+on a rule card does the same, which is how to get from a rule to the thing it
+is talking about without stopping the run.
+
+The panels are read-only for the length of a run: the rules, variables and
+controls are all there to read, and nothing can be edited until Stop. Editing
+them mid-run would change the scene underneath the simulation that is already
+using it. Putting a value in the log is the exception, because it only decides
+what is shown.
+
 ## Plotting values
 
 A logged value shows one number at a time. To see what it did over the whole
@@ -128,6 +142,14 @@ newtons and a position in scene units share no scale worth sharing. The band is
 labelled with the object and property it belongs to and the value at the end of
 the trace. The vertical scale covers everything the value has reached since the
 run started, so it does not shift under you as new samples arrive.
+
+**Point at the plot to read a value off it.** A line is drawn down through
+every band at that moment -- they all share the clock -- with a dot where each
+trace was, and each band's caption shows what it read there instead of its
+latest value. The time is written under the line. The line snaps to the
+nearest recorded sample, so the number is one that was really measured rather
+than something read off between two of them. Move the pointer away and the
+bands go back to showing where each trace ends.
 
 The plot shows the last **five seconds** and scrolls along with the run, since
 a whole minute squeezed into the panel is a solid block. To look elsewhere:
@@ -144,6 +166,27 @@ than every drawn frame, so the trace is the same whatever speed the run was
 played at, and a scene too heavy to draw smoothly still records every step.
 
 Traces belong to the run: pressing **Simulate** again starts fresh ones.
+
+## Trails
+
+A plot shows what a number did; a trail shows where a body went. Tick
+**Draws a Trail** on a body's **Body** page and, while a run is going, it
+leaves a line behind it: the path of its **centre of mass**. It is how a double
+pendulum is worth watching -- mark the lower arm and the run draws what no
+amount of staring at the arm itself would show.
+
+A body that draws wears a ring round its centre of mass, in the trail's own
+colour, so you can tell which ones will before the run starts.
+
+The line stays for the **whole run** -- pause to study it -- and goes when the
+run stops, like everything else a run moves. It is drawn on the field, under
+the shapes, and takes one point for every step the engine calculates rather
+than every drawn frame, so it is the same line at any playback speed. **Save
+Screenshot** during a run keeps it, with the picture widened to hold all of it.
+
+Every trail is drawn the same way: the colour, width and line style are in
+[Options -> Physics -> Trail](options.md). **View -> Trails** hides them all
+without unmarking anything.
 
 ## The slingshot
 
@@ -177,5 +220,5 @@ pull line are set in [Options → Physics](options.md).
 A scene may ask the engine for something impossible, such as a motor thousands
 of times stronger than what it drives. Instead of crashing, Physalis takes the
 body that has run out of control out of the simulation and reports what
-happened in the status bar. Press **Stop** to put the scene back, then reduce
+happened in the status bar. Press **Stop**, then reduce
 the value that caused the problem.

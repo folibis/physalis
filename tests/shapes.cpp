@@ -11,6 +11,7 @@
 #include "SceneSerializer.h"
 #include "ShapeItem.h"
 #include "SimulationController.h"
+#include "RunCopy.h"
 #include "EngineRegistry.h"
 #include "Joint.h"
 #include "UndoStack.h"
@@ -30,12 +31,27 @@
 #include <QJsonObject>
 #include <gtest/gtest.h>
 #include "EditorMode.h"
+#include "ClipboardProbe.h"
 #include "MainWindow.h"
+#include "SceneTree.h"
 #include <QAction>
 #include <QCoreApplication>
+#include <QDir>
+#include <QDropEvent>
+#include <QLineEdit>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
+#include <QElapsedTimer>
+#include <QSignalSpy>
+#include <QMenu>
+#include <QFile>
 #include <QGraphicsSceneMouseEvent>
+#include <QGraphicsSceneWheelEvent>
 #include <QGraphicsView>
 #include <QKeyEvent>
+#include <QMimeData>
+#include <QTemporaryDir>
+#include <QUrl>
 
 // Drawing and editing shapes: what the canvas is for. Every kind the editor
 // can make, every edit it can do to one, and in each case the three things
@@ -414,6 +430,528 @@ TEST(Alignment, OneShapeIsNothingToLineUp)
 // change which one is active, so the toolbar has to be told about it separately
 // -- and it was not: the enabling ran only when the editor mode changed, so
 // selecting two shapes left Align greyed out with nothing to say why.
+// The commands the keys reach. Duplicate -- the one command the mechanism copy
+// was written for -- was on a context menu only, with no key at all.
+// Shapes used to stack by the order they were added, with no way to change it:
+// zValue was only ever read, to copy it during a conversion, and the file
+// carried nothing.
+TEST(Editing, StackingOrderCanBeChangedAndIsSaved)
+{
+    MainWindow window;
+    auto *scene = window.findChild<CanvasScene *>();
+    ASSERT_NE(scene, nullptr);
+    scene->setEditorMode(EditorMode::Edit);
+
+    const QVector<ShapeItem *> shapes = threeShapes(scene);
+    ASSERT_EQ(shapes.size(), 3);
+    // Added in order, so that is the order they are painted in.
+    EXPECT_EQ(scene->shapesInStackOrder(), shapes);
+
+    const auto order = [scene] {
+        QStringList names;
+        for (ShapeItem *shape : scene->shapesInStackOrder())
+            names << shape->name();
+        return names.join(QLatin1Char(','));
+    };
+
+    // The bottom one to the top.
+    ASSERT_TRUE(scene->restackShapes({ shapes.at(0) }, CanvasScene::Restack::ToFront));
+    EXPECT_EQ(order(), QStringLiteral("shape_2,shape_3,shape_1"));
+
+    // And one step at a time, back down.
+    ASSERT_TRUE(scene->restackShapes({ shapes.at(0) }, CanvasScene::Restack::Backward));
+    EXPECT_EQ(order(), QStringLiteral("shape_2,shape_1,shape_3"));
+    ASSERT_TRUE(scene->restackShapes({ shapes.at(0) }, CanvasScene::Restack::ToBack));
+    EXPECT_EQ(order(), QStringLiteral("shape_1,shape_2,shape_3"));
+
+    // A move that changes nothing says so, so no undo state is recorded for it.
+    EXPECT_FALSE(scene->restackShapes({ shapes.at(0) }, CanvasScene::Restack::Backward))
+        << "the bottom shape claimed to move down";
+    EXPECT_FALSE(scene->restackShapes({ shapes.at(2) }, CanvasScene::Restack::ToFront))
+        << "the top shape claimed to move up";
+    EXPECT_FALSE(scene->restackShapes({}, CanvasScene::Restack::ToFront));
+
+    // Two picked shapes keep their own order and do not swap with each other.
+    ASSERT_TRUE(scene->restackShapes({ shapes.at(0), shapes.at(1) },
+                                     CanvasScene::Restack::ToFront));
+    EXPECT_EQ(order(), QStringLiteral("shape_3,shape_1,shape_2"));
+
+    // And the file gives the order back.
+    QJsonObject document = SceneSerializer::save(scene);
+    CanvasScene reloaded;
+    QString error;
+    ASSERT_TRUE(SceneSerializer::load(&reloaded, document, &error)) << qPrintable(error);
+    QStringList back;
+    for (ShapeItem *shape : reloaded.shapesInStackOrder())
+        back << shape->name();
+    EXPECT_EQ(back.join(QLatin1Char(',')), QStringLiteral("shape_3,shape_1,shape_2"))
+        << "the saved scene came back in a different order";
+}
+
+// Rules address objects by name and there was no way to find one by name.
+TEST(Editing, TheObjectsTreeCanBeFilteredByName)
+{
+    MainWindow window;
+    auto *scene = window.findChild<CanvasScene *>();
+    auto *tree = window.findChild<SceneTree *>();
+    ASSERT_NE(scene, nullptr);
+    ASSERT_NE(tree, nullptr);
+    auto *filter = tree->findChild<QLineEdit *>();
+    auto *rows = tree->findChild<QTreeWidget *>();
+    ASSERT_NE(filter, nullptr) << "the Objects tab has no find box";
+    ASSERT_NE(rows, nullptr);
+
+    threeShapes(scene);
+    auto *odd = new RectangleItem;
+    odd->setRect(QRectF(0, 0, 20, 20));
+    odd->setName(QStringLiteral("lever_arm"));
+    scene->addItem(odd);
+    scene->notifyShapesChanged();
+    QCoreApplication::processEvents(); // the tree rebuilds queued
+
+    const auto showing = [rows] {
+        QStringList names;
+        QTreeWidgetItemIterator it(rows, QTreeWidgetItemIterator::NotHidden);
+        for (; *it; ++it)
+            names << (*it)->text(0);
+        return names;
+    };
+
+    ASSERT_TRUE(showing().contains(QStringLiteral("shape_1")));
+    ASSERT_TRUE(showing().contains(QStringLiteral("lever_arm")));
+
+    filter->setText(QStringLiteral("lever"));
+    QStringList shown = showing();
+    EXPECT_TRUE(shown.contains(QStringLiteral("lever_arm"))) << "the match was hidden";
+    EXPECT_FALSE(shown.contains(QStringLiteral("shape_1"))) << "a shape that does not match stayed";
+    // The group holding it has to survive, or the match is hidden with it.
+    EXPECT_FALSE(shown.isEmpty());
+
+    // Case does not matter, and a stem matches every shape sharing it.
+    filter->setText(QStringLiteral("SHAPE_"));
+    shown = showing();
+    EXPECT_TRUE(shown.contains(QStringLiteral("shape_1")));
+    EXPECT_TRUE(shown.contains(QStringLiteral("shape_3")));
+    EXPECT_FALSE(shown.contains(QStringLiteral("lever_arm")));
+
+    // Nothing matching leaves the tree empty of objects rather than unfiltered.
+    filter->setText(QStringLiteral("no_such_thing"));
+    for (const QString &name : showing())
+        EXPECT_FALSE(name.contains(QStringLiteral("shape_")));
+
+    // And clearing it puts everything back.
+    filter->clear();
+    shown = showing();
+    EXPECT_TRUE(shown.contains(QStringLiteral("shape_1")));
+    EXPECT_TRUE(shown.contains(QStringLiteral("lever_arm")));
+}
+
+// Names on the canvas, and the commands that were unreachable from the canvas:
+// the empty-canvas menu offered Add and nothing else.
+TEST(Editing, NamesAreOffAndTheCanvasMenuCarriesTheViewCommands)
+{
+    MainWindow window;
+    auto *scene = window.findChild<CanvasScene *>();
+    ASSERT_NE(scene, nullptr);
+    auto *names = window.findChild<QAction *>(QStringLiteral("actionShowObjectNames"));
+    ASSERT_NE(names, nullptr) << "there is no Show Names action";
+
+    EXPECT_TRUE(names->isCheckable());
+    EXPECT_FALSE(names->isChecked()) << "Show Names starts on";
+    EXPECT_FALSE(scene->objectNamesShown()) << "the scene starts with names drawn";
+
+    names->trigger();
+    EXPECT_TRUE(scene->objectNamesShown()) << "ticking Show Names did not reach the scene";
+    names->trigger();
+    EXPECT_FALSE(scene->objectNamesShown());
+
+    // The canvas commands are on the menu whatever is under the pointer, and
+    // stay there during a run, which is when framing the field matters most.
+    QMenu menu(&window);
+    window.addCanvasActionsForTest(&menu);
+    QStringList offered;
+    for (QAction *action : menu.actions())
+        offered << action->text();
+    for (const QString &wanted : { QStringLiteral("&Fit to Field"), QStringLiteral("Select &All"),
+                                   QStringLiteral("&Paste"), QStringLiteral("Show &Names") }) {
+        EXPECT_TRUE(offered.contains(wanted))
+            << qPrintable(wanted) << " is not on the canvas menu; it has: "
+            << qPrintable(offered.join(QStringLiteral(", ")));
+    }
+}
+
+TEST(Editing, TheSelectionCommandsHaveKeysAndFollowTheSelection)
+{
+    MainWindow window;
+    auto *scene = window.findChild<CanvasScene *>();
+    ASSERT_NE(scene, nullptr);
+    auto *selectAll = window.findChild<QAction *>(QStringLiteral("actionSelectAll"));
+    auto *duplicate = window.findChild<QAction *>(QStringLiteral("actionDuplicate"));
+    ASSERT_NE(selectAll, nullptr) << "there is no Select All action";
+    ASSERT_NE(duplicate, nullptr) << "there is no Duplicate action";
+
+    EXPECT_EQ(selectAll->shortcut(), QKeySequence(QStringLiteral("Ctrl+A")));
+    EXPECT_EQ(duplicate->shortcut(), QKeySequence(QStringLiteral("Ctrl+D")));
+
+    scene->setEditorMode(EditorMode::Edit);
+    EXPECT_FALSE(selectAll->isEnabled()) << "an empty field offers Select All";
+
+    const QVector<ShapeItem *> shapes = threeShapes(scene);
+    EXPECT_TRUE(selectAll->isEnabled()) << "the field has shapes and Select All is greyed out";
+    EXPECT_FALSE(duplicate->isEnabled()) << "nothing is picked and Duplicate is offered";
+
+    // Edit mode: one active shape and the rest alongside it.
+    selectAll->trigger();
+    ASSERT_NE(scene->activeItem(), nullptr) << "Select All left no active shape";
+    // The shape carrying the handles is deliberately not in the co-selection,
+    // so "all of them" is the active one plus the rest.
+    for (ShapeItem *shape : shapes) {
+        EXPECT_TRUE(shape == scene->activeItem() || shape->isCoSelected())
+            << qPrintable(shape->name()) << " was left unpicked by Select All";
+    }
+    EXPECT_EQ(scene->editSelection().size(), shapes.size() - 1);
+    EXPECT_TRUE(duplicate->isEnabled()) << "a selection is in hand and Duplicate is greyed out";
+
+    duplicate->trigger();
+    EXPECT_EQ(scene->shapes().size(), shapes.size() * 2) << "Duplicate copied nothing";
+
+    // Physics mode keeps its own selection, and picking a shape there picks
+    // the whole of its body.
+    scene->setEditorMode(EditorMode::Physics);
+    scene->clearPhysicsSelection();
+    ASSERT_TRUE(scene->physicsSelection().isEmpty());
+    selectAll->trigger();
+    EXPECT_EQ(scene->physicsSelection().size(), scene->shapes().size())
+        << "Select All did not fill the physics selection";
+}
+
+// Simulate, Step and Stop were mouse-only, and so were Create Body and the
+// command that dissolves one.
+// Select All on a real sceneful. Written as a loop over selectForPhysics it
+// repainted the scene and rebuilt every panel once per shape, which took
+// seconds on a few hundred of them. The budget is loose on purpose -- this is
+// catching a quadratic, not policing milliseconds.
+// The box looked for shapes and nothing else, so sweeping a field of
+// rangefinders and blasts did nothing whatever -- not even clear what was
+// picked before. And a selection used to be one kind at a time, so even once
+// the box saw them it could only have kept the topmost.
+TEST(Selection, ASweptBoxTakesBlastsRangefindersAndBodiesTogether)
+{
+    MainWindow window;
+    auto *scene = window.findChild<CanvasScene *>();
+    ASSERT_NE(scene, nullptr);
+    scene->setEditorMode(EditorMode::Physics);
+
+    RayItem *first = scene->addRay(QPointF(200, 200));
+    RayItem *second = scene->addRay(QPointF(300, 200));
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+    for (RayItem *ray : { first, second }) {
+        ray->setAngleDegrees(0.0);
+        ray->setLength(40.0);
+    }
+    ExplosionItem *left = scene->addExplosion(QPointF(200, 300));
+    ExplosionItem *right = scene->addExplosion(QPointF(300, 300));
+    ASSERT_NE(left, nullptr);
+    ASSERT_NE(right, nullptr);
+
+    auto *plate = new RectangleItem;
+    plate->setRect(QRectF(0, 0, 40, 40));
+    plate->setPos(QPointF(220, 380));
+    plate->setName(QStringLiteral("plate"));
+    scene->addItem(plate);
+    scene->notifyShapesChanged();
+    scene->selectForPhysics(plate, false);
+    PhysicsBody *body = scene->createBodyFromSelection();
+    ASSERT_NE(body, nullptr);
+    scene->clearCanvasSelection();
+
+    // One sweep over the lot: two blasts, two rangefinders and a body.
+    scene->applyRubberBand(QRectF(150, 150, 300, 300), false);
+    EXPECT_EQ(scene->raySelection().size(), 2) << "the box kept fewer rangefinders than it swept";
+    EXPECT_EQ(scene->explosionSelection().size(), 2) << "the box kept fewer blasts than it swept";
+    EXPECT_EQ(scene->physicsSelection().size(), 1) << "the box missed the body";
+
+    // The whole set moves together, which is most of what picking it is for.
+    const QPointF wasRay = first->pos();
+    const QPointF wasBlast = right->pos();
+    const QPointF wasShape = plate->pos();
+    ASSERT_TRUE(scene->nudgeSelection(QPointF(10, 0)));
+    EXPECT_EQ(first->pos(), wasRay + QPointF(10, 0)) << "the rangefinder stayed put";
+    EXPECT_EQ(right->pos(), wasBlast + QPointF(10, 0)) << "the blast stayed put";
+    EXPECT_EQ(plate->pos(), wasShape + QPointF(10, 0)) << "the body stayed put";
+
+    // A box round one kind replaces the selection rather than adding to it.
+    scene->applyRubberBand(QRectF(150, 250, 300, 100), false);
+    EXPECT_EQ(scene->explosionSelection().size(), 2);
+    EXPECT_TRUE(scene->raySelection().isEmpty()) << "the rangefinders survived a fresh sweep";
+    EXPECT_TRUE(scene->physicsSelection().isEmpty()) << "the body survived a fresh sweep";
+
+    // Shift adds, the way it does for shapes.
+    scene->applyRubberBand(QRectF(150, 150, 300, 100), true);
+    EXPECT_EQ(scene->explosionSelection().size(), 2) << "adding dropped the blasts";
+    EXPECT_EQ(scene->raySelection().size(), 2) << "Shift did not add the rangefinders";
+
+    // Delete takes all of it, not just whichever one the pane was showing.
+    scene->deleteActiveItem();
+    EXPECT_TRUE(scene->rays().isEmpty()) << "Delete left rangefinders behind";
+    EXPECT_TRUE(scene->explosions().isEmpty()) << "Delete left blasts behind";
+    EXPECT_TRUE(scene->raySelection().isEmpty());
+    EXPECT_TRUE(scene->explosionSelection().isEmpty());
+}
+
+TEST(Editing, PickingManyShapesIsOnePassOverThem)
+{
+    MainWindow window;
+    window.resize(900, 700);
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto *scene = window.findChild<CanvasScene *>();
+    ASSERT_NE(scene, nullptr);
+    auto *selectAll = window.findChild<QAction *>(QStringLiteral("actionSelectAll"));
+    ASSERT_NE(selectAll, nullptr);
+
+    constexpr int kShapes = 400;
+    for (int i = 0; i < kShapes; ++i) {
+        auto *shape = new RectangleItem;
+        shape->setRect(QRectF(0, 0, 10, 10));
+        shape->setPos(QPointF((i % 20) * 14, (i / 20) * 14));
+        shape->setName(QStringLiteral("box_%1").arg(i));
+        scene->addItem(shape);
+    }
+    scene->notifyShapesChanged();
+    ASSERT_EQ(scene->shapes().size(), kShapes);
+
+    // One signal for the whole command, not one per shape: that count is what
+    // every panel rebuild hangs off.
+    QSignalSpy editAnnounced(scene, &CanvasScene::editSelectionChanged);
+    QSignalSpy physicsAnnounced(scene, &CanvasScene::physicsSelectionChanged);
+
+    scene->setEditorMode(EditorMode::Edit);
+    QElapsedTimer clock;
+    clock.start();
+    selectAll->trigger();
+    const qint64 editMs = clock.elapsed();
+    EXPECT_EQ(scene->editSelection().size(), kShapes - 1);
+    EXPECT_EQ(editAnnounced.count(), 1)
+        << "Select All announced the edit selection " << editAnnounced.count()
+        << " times for " << kShapes << " shapes";
+
+    scene->setEditorMode(EditorMode::Physics);
+    scene->clearPhysicsSelection();
+    physicsAnnounced.clear();
+    clock.restart();
+    selectAll->trigger();
+    const qint64 physicsMs = clock.elapsed();
+    EXPECT_EQ(scene->physicsSelection().size(), kShapes);
+    EXPECT_EQ(physicsAnnounced.count(), 1)
+        << "Select All announced the physics selection " << physicsAnnounced.count()
+        << " times for " << kShapes << " shapes";
+
+    // The naive loop measured 6.9 s and 26 s here; one pass measures a few
+    // hundred milliseconds, nearly all of it building the shapes.
+    EXPECT_LT(editMs, 1500) << "Select All in Edit mode took " << editMs << " ms";
+    EXPECT_LT(physicsMs, 1500) << "Select All in Physics mode took " << physicsMs << " ms";
+
+    // A swept box picks the same way, and used to loop the same way. The band
+    // covers the whole field, so it catches every shape.
+    const QRectF whole = scene->itemsBoundingRect().adjusted(-50, -50, 50, 50);
+
+    scene->clearPhysicsSelection();
+    physicsAnnounced.clear();
+    clock.restart();
+    scene->applyRubberBand(whole, false);
+    const qint64 bandPhysicsMs = clock.elapsed();
+    EXPECT_EQ(scene->physicsSelection().size(), kShapes) << "the box missed shapes";
+    EXPECT_EQ(physicsAnnounced.count(), 1)
+        << "the box announced the physics selection " << physicsAnnounced.count() << " times";
+    EXPECT_LT(bandPhysicsMs, 1500) << "a box over " << kShapes << " shapes took "
+                                   << bandPhysicsMs << " ms";
+
+    scene->setEditorMode(EditorMode::Edit);
+    scene->clearEditSelection();
+    editAnnounced.clear();
+    clock.restart();
+    scene->applyRubberBand(whole, false);
+    const qint64 bandEditMs = clock.elapsed();
+    EXPECT_EQ(scene->editSelection().size(), kShapes - 1) << "the box missed shapes";
+    EXPECT_LE(editAnnounced.count(), 2)
+        << "the box announced the edit selection " << editAnnounced.count() << " times";
+    EXPECT_LT(bandEditMs, 1500) << "a box over " << kShapes << " shapes took " << bandEditMs
+                                << " ms";
+
+    // And so does what a paste leaves picked -- the same method, so the count
+    // is what matters here rather than the clock, which is mostly the copying.
+    auto *duplicate = window.findChild<QAction *>(QStringLiteral("actionDuplicate"));
+    ASSERT_NE(duplicate, nullptr);
+    ASSERT_TRUE(duplicate->isEnabled());
+    editAnnounced.clear();
+    duplicate->trigger();
+    ASSERT_EQ(scene->shapes().size(), kShapes * 2) << "the duplicate put down no shapes";
+    EXPECT_EQ(scene->editSelection().size(), kShapes - 1)
+        << "the duplicate left the wrong shapes picked";
+    EXPECT_LE(editAnnounced.count(), 3)
+        << "selecting what was pasted announced the edit selection " << editAnnounced.count()
+        << " times for " << kShapes << " shapes";
+}
+
+TEST(Editing, TheToolbarCommandsHaveTheirKeys)
+{
+    MainWindow window;
+    const QVector<QPair<QString, QString>> wanted {
+        { QStringLiteral("actionSimulate"), QStringLiteral("F5") },
+        { QStringLiteral("actionStep"), QStringLiteral("F6") },
+        { QStringLiteral("actionStop"), QStringLiteral("F8") },
+        { QStringLiteral("actionCreateBody"), QStringLiteral("Ctrl+G") },
+        { QStringLiteral("actionDissolveBody"), QStringLiteral("Ctrl+Shift+G") },
+        { QStringLiteral("actionFitToField"), QStringLiteral("Ctrl+Shift+0") },
+    };
+    for (const auto &one : wanted) {
+        auto *action = window.findChild<QAction *>(one.first);
+        ASSERT_NE(action, nullptr) << qPrintable(one.first) << " is not on the window";
+        EXPECT_EQ(action->shortcut(), QKeySequence(one.second))
+            << qPrintable(one.first) << " has no key, or the wrong one";
+    }
+
+    // View is rebuilt from scratch every time it opens, so the zoom commands on
+    // it are added inside that rebuild and are easy to leave out of it.
+    auto *view = window.findChild<QMenu *>(QStringLiteral("menuView"));
+    ASSERT_NE(view, nullptr) << "there is no View menu";
+    emit view->aboutToShow();
+    QStringList names;
+    for (QAction *action : view->actions())
+        names << action->text();
+    EXPECT_TRUE(names.contains(QStringLiteral("&Fit to Field")))
+        << "View does not offer Fit to Field; it has: " << qPrintable(names.join(QStringLiteral(", ")));
+    EXPECT_TRUE(names.contains(QStringLiteral("Reset Zoom")))
+        << "View does not offer Reset Zoom; it has: " << qPrintable(names.join(QStringLiteral(", ")));
+    // And it still lists the panels, which is what it was there for.
+    EXPECT_TRUE(names.contains(QStringLiteral("Properties")))
+        << "the zoom commands pushed the panel list off View";
+
+    // Every chord is one command's own: two on the same keys means one of them
+    // never fires, and Qt says nothing about it.
+    QHash<QString, QString> seen;
+    for (QAction *action : window.findChildren<QAction *>()) {
+        const QKeySequence key = action->shortcut();
+        if (key.isEmpty())
+            continue;
+        const QString text = key.toString();
+        EXPECT_FALSE(seen.contains(text))
+            << qPrintable(text) << " is on both " << qPrintable(seen.value(text)) << " and "
+            << qPrintable(action->objectName());
+        seen.insert(text, action->objectName());
+    }
+}
+
+// Zooming added a flat number of percent to the level, so one notch went
+// 100% -> 110% and the same notch went 500% -> 510%: coming back out from far
+// in took thirty of them. And only Shift zoomed, though Ctrl is what every
+// other editor uses.
+TEST(Editing, TheCanvasZoomsProportionallyUnderEitherModifier)
+{
+    MainWindow window;
+    auto *scene = window.findChild<CanvasScene *>();
+    ASSERT_NE(scene, nullptr);
+    scene->setScaleMin(1.0);
+    scene->setScaleMax(10000.0);
+    scene->setScaleStep(10.0);
+
+    const auto notch = [scene](Qt::KeyboardModifier modifier) {
+        QGraphicsSceneWheelEvent event(QEvent::GraphicsSceneWheel);
+        event.setScenePos(QPointF(0, 0));
+        event.setDelta(120);
+        event.setModifiers(modifier);
+        QCoreApplication::sendEvent(scene, &event);
+    };
+
+    scene->setCurrentScale(100.0);
+    notch(Qt::ControlModifier);
+    EXPECT_NEAR(scene->currentScale(), 110.0, 1e-6) << "Ctrl+wheel does not zoom";
+
+    scene->setCurrentScale(500.0);
+    notch(Qt::ShiftModifier);
+    EXPECT_NEAR(scene->currentScale(), 550.0, 1e-6)
+        << "the step is a flat number of percent rather than a share of the level";
+
+    // A bare wheel still does not zoom: it is how the view scrolls.
+    scene->setCurrentScale(100.0);
+    notch(Qt::NoModifier);
+    EXPECT_NEAR(scene->currentScale(), 100.0, 1e-6) << "a bare wheel zoomed the canvas";
+}
+
+// There was no way to frame the scene: the zoom box had presets and nothing
+// worked out what the field needed.
+TEST(Editing, FitToFieldFramesTheWholeField)
+{
+    MainWindow window;
+    window.resize(900, 700);
+    window.show();
+    QCoreApplication::processEvents();
+
+    auto *scene = window.findChild<CanvasScene *>();
+    auto *view = window.findChild<QGraphicsView *>(QStringLiteral("canvasView"));
+    ASSERT_NE(scene, nullptr);
+    ASSERT_NE(view, nullptr);
+
+    scene->setScaleMin(1.0);
+    scene->setScaleMax(10000.0);
+    scene->setFieldSize(4000.0, 3000.0);
+    scene->setCurrentScale(400.0);
+
+    window.fitToFieldForTest();
+
+    // The field fits in the viewport at the scale it chose, and is not so
+    // small that it would fit several times over.
+    const qreal factor = scene->currentScale() / 100.0;
+    const QSizeF shown(4000.0 * factor, 3000.0 * factor);
+    const QSize port = view->viewport()->size();
+    ASSERT_FALSE(port.isEmpty()) << "the view has no viewport to fit into";
+    EXPECT_LE(shown.width(), port.width() + 1.0) << "the field is wider than the view";
+    EXPECT_LE(shown.height(), port.height() + 1.0) << "the field is taller than the view";
+    EXPECT_GE(qMax(shown.width() / port.width(), shown.height() / port.height()), 0.8)
+        << "the field was shrunk far smaller than it had to be";
+}
+
+// Dropping a .phys on the window opens it. Nothing accepted drops at all, so a
+// file dragged in from the desktop did nothing.
+TEST(Editing, ASceneFileDroppedOnTheWindowOpensIt)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+
+    MainWindow source;
+    auto *sourceScene = source.findChild<CanvasScene *>();
+    ASSERT_NE(sourceScene, nullptr);
+    threeShapes(sourceScene);
+    const QString path = QDir(dir.path()).filePath(QStringLiteral("dropped.phys"));
+    ASSERT_TRUE(source.saveSceneAsForTest(path)) << "the scene to be dropped was not written";
+
+    MainWindow window;
+    auto *scene = window.findChild<CanvasScene *>();
+    ASSERT_NE(scene, nullptr);
+    ASSERT_TRUE(window.acceptDrops()) << "the window refuses drops";
+    ASSERT_TRUE(scene->shapes().isEmpty());
+
+    // Through the handler rather than a posted event: Qt delivers a drop via
+    // its own drag manager, so a QDropEvent sent at the window never arrives.
+    const auto drop = [&window](const QString &file) {
+        return window.dropUrlsForTest({ QUrl::fromLocalFile(file) });
+    };
+
+    EXPECT_TRUE(drop(path)) << "the drop was refused";
+    EXPECT_EQ(scene->shapes().size(), 3) << "the dropped scene was not opened";
+
+    // Anything else is left for whatever else wants it rather than swallowed.
+    const QString other = QDir(dir.path()).filePath(QStringLiteral("notes.txt"));
+    QFile note(other);
+    ASSERT_TRUE(note.open(QIODevice::WriteOnly));
+    note.write("not a scene");
+    note.close();
+    EXPECT_FALSE(drop(other)) << "a file that is not a scene was accepted";
+}
+
 TEST(Alignment, TheButtonFollowsTheSelection)
 {
     MainWindow window;
@@ -1169,6 +1707,131 @@ TEST(Shapes, ACircleAndARectangleComeApartIntoSegments)
     }
 }
 
+// A concave outline is only edges, so a body made of it alone has no mass and
+// cannot move. Split into Convex Pieces makes it solid without moving it: the
+// pieces stay in the body, in the polygon's own frame -- the body's origin is
+// its first shape's, and joints are anchored there -- and cover the same area.
+TEST(Shapes, AConcaveOutlineSplitsIntoSolidPiecesInItsBody)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Edit);
+
+    const auto sceneArea = [](const ShapeItem *shape) {
+        qreal twice = 0.0;
+        const int n = shape->nodeCount();
+        for (int i = 0; i < n; ++i) {
+            const QPointF a = shape->mapToScene(shape->nodePosition(i));
+            const QPointF b = shape->mapToScene(shape->nodePosition((i + 1) % n));
+            twice += a.x() * b.y() - b.x() * a.y();
+        }
+        return qAbs(twice) / 2.0;
+    };
+
+    QPolygonF ell;
+    ell << QPointF(0, 0) << QPointF(160, 0) << QPointF(160, 40) << QPointF(40, 40)
+        << QPointF(40, 120) << QPointF(0, 120);
+    auto *shape = new PolygonItem(ell, true);
+    shape->setName(QStringLiteral("ell"));
+    shape->setPos(300, 200);
+    shape->setRotation(30);
+    scene->addItem(shape);
+    scene->notifyShapesChanged();
+    const qreal area = sceneArea(shape);
+    ASSERT_FALSE(shape->hasInterior()) << "the test needs an outline that is not solid";
+    ASSERT_TRUE(scene->canSplitIntoConvexPieces(shape));
+
+    scene->setEditorMode(EditorMode::Physics);
+    scene->selectShapes({ shape }, false);
+    window.createBodyForTest(false);
+    PhysicsBody *body = shape->body();
+    ASSERT_TRUE(body);
+    const QPointF origin = body->originScenePos();
+    const qreal turned = body->rotationDegrees();
+
+    window.openConvexToolForTest(shape);
+    QCoreApplication::processEvents();
+    EXPECT_EQ(body->shapes().size(), 2) << "an L within the point limit is two pieces";
+
+    ToolOptionsBar *panel = window.findChild<ToolOptionsBar *>();
+    ASSERT_TRUE(panel);
+    QDoubleSpinBox *corners = panel->findChildren<QDoubleSpinBox *>().value(0);
+    ASSERT_TRUE(corners) << "the panel offers no corner limit";
+    corners->setValue(3);
+    QCoreApplication::processEvents();
+    window.applyToolForTest();
+    QCoreApplication::processEvents();
+
+    const QVector<ShapeItem *> pieces = body->shapes();
+    ASSERT_EQ(pieces.size(), 4) << "an L cut into triangles is four of them";
+    EXPECT_EQ(scene->shapes().size(), 4) << "the original was left behind";
+    EXPECT_EQ(pieces.first()->name(), QStringLiteral("ell")) << "the first piece lost the name";
+    qreal covered = 0.0;
+    for (ShapeItem *piece : pieces) {
+        EXPECT_TRUE(piece->hasInterior()) << qPrintable(piece->name()) << " is not solid";
+        EXPECT_EQ(piece->nodeCount(), 3) << qPrintable(piece->name()) << " is over the limit";
+        covered += sceneArea(piece);
+    }
+    EXPECT_NEAR(covered, area, 0.01) << "the pieces do not cover what the outline did";
+    EXPECT_NEAR(QLineF(body->originScenePos(), origin).length(), 0.0, 1e-6)
+        << "splitting moved the body's origin, and every joint with it";
+    EXPECT_DOUBLE_EQ(body->rotationDegrees(), turned);
+    for (ShapeItem *picked : scene->physicsSelection())
+        EXPECT_TRUE(pieces.contains(picked)) << "a deleted shape is still picked";
+
+    // Solid, so it has mass, so it is simulated -- a massless body is dropped.
+    body->props().type = physics::BodyType::Dynamic;
+    window.startRunForTest();
+    QCoreApplication::processEvents();
+    SimulationController *sim = window.findChild<SimulationController *>();
+    ASSERT_TRUE(sim);
+    for (int i = 0; i < 30; ++i)
+        sim->stepFrame();
+    EXPECT_GT(inRun(*sim, body)->originScenePos().y(), origin.y() + 1.0)
+        << "the split body did not fall";
+    window.stopRunForTest();
+    QCoreApplication::processEvents();
+
+    // Cancel puts the outline back as it was. A convex outline over the point
+    // limit is the other thing that cannot be solid.
+    scene->setEditorMode(EditorMode::Edit);
+    QPolygonF ring;
+    for (int i = 0; i < 12; ++i) {
+        const qreal angle = i * 2.0 * M_PI / 12;
+        ring << QPointF(60 * std::cos(angle), 60 * std::sin(angle));
+    }
+    auto *round = new PolygonItem(ring, true);
+    round->setName(QStringLiteral("ring"));
+    round->setPos(800, 200);
+    scene->addItem(round);
+    scene->notifyShapesChanged();
+    scene->selectShape(round);
+    window.openConvexToolForTest(round);
+    QCoreApplication::processEvents();
+    EXPECT_GT(scene->shapes().size(), 5) << "twelve corners within eight did not split";
+    for (ShapeItem *piece : scene->shapes())
+        EXPECT_LE(piece->nodeCount(), 8) << qPrintable(piece->name()) << " is over the limit";
+    window.cancelToolForTest();
+    QCoreApplication::processEvents();
+    ASSERT_EQ(scene->shapes().size(), 5) << "Cancel left pieces behind";
+    ShapeItem *back = nullptr;
+    for (ShapeItem *one : scene->shapes()) {
+        if (one->name() == QLatin1String("ring"))
+            back = one;
+    }
+    ASSERT_TRUE(back) << "Cancel did not put the outline back";
+    EXPECT_EQ(back->nodeCount(), 12);
+
+    // An outline that crosses itself has no inside to cut, and is left alone.
+    QPolygonF bow;
+    bow << QPointF(0, 0) << QPointF(100, 100) << QPointF(100, 0) << QPointF(0, 100);
+    auto *tie = new PolygonItem(bow, true);
+    scene->addItem(tie);
+    EXPECT_TRUE(scene->splitIntoConvexPieces(tie, 8).isEmpty());
+    EXPECT_EQ(tie->scene(), scene);
+}
+
 // Driving a tool the way the window does, not by calling the conversion
 // underneath it: the panel opens, its numbers are typed into, and Apply keeps
 // what is on screen. Converting deletes the shape that was selected, and a
@@ -1436,21 +2099,6 @@ TEST(Alignment, ARingOfRoundedBoxesStillCloses)
 // Copy was greyed out, and there was no way to make a second one like it.
 // They go through the same JSON the file uses, so the clipboard cannot drift
 // from what a scene can hold.
-// Copy and paste go through the system clipboard, which belongs to the
-// machine rather than to this program: on Windows another process can hold it
-// open, and then every setText is dropped and read back empty. A run on such a
-// machine says so and stands aside -- the alternative is a red test that means
-// "somebody else had the clipboard", which is not a fault anybody can fix here.
-bool theClipboardAnswers()
-{
-    QClipboard *clipboard = QGuiApplication::clipboard();
-    if (!clipboard)
-        return false;
-    const QString probe = QStringLiteral("physalis-clipboard-probe");
-    clipboard->setText(probe);
-    return clipboard->text() == probe;
-}
-
 TEST(Selection, ARayAndAnExplosionCopyAndPaste)
 {
     if (!theClipboardAnswers())
@@ -1475,6 +2123,7 @@ TEST(Selection, ARayAndAnExplosionCopyAndPaste)
     EXPECT_TRUE(copy->isEnabled()) << "a selected ray left Copy greyed out";
 
     copy->trigger();
+    SKIP_IF_THE_CLIPBOARD_STOPPED_ANSWERING();
     EXPECT_TRUE(paste->isEnabled()) << "a copied ray left Paste greyed out";
     paste->trigger();
 

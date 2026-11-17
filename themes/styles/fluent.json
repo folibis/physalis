@@ -1,0 +1,50 @@
+{
+    "label": "Fluent",
+    "order": 30,
+    "radius": {
+        "field": 4,
+        "small": 4,
+        "check": 4,
+        "handle": 9,
+        "card": 7,
+        "scroll": 3,
+        "spin": 3
+    },
+    "padding": {
+        "field": "5px 9px",
+        "button": "6px 18px"
+    },
+    "include": [
+        "underline-tabs.qss"
+    ],
+    "sheet": [
+        "QPushButton { background: qlineargradient(x1:0, y1:0, x2:0, y2:1,",
+        " stop:0 palette(base), stop:1 palette(alternate-base));",
+        " border-bottom-color: @borderStrong; min-height: 20px; }",
+        "QPushButton:hover { background: @hover; }",
+        "QLineEdit, QAbstractSpinBox, QComboBox, QTextEdit, QPlainTextEdit {",
+        " border: 1px solid palette(mid); border-bottom: 2px solid @borderStrong; }",
+        "QLineEdit:hover, QAbstractSpinBox:hover, QComboBox:hover {",
+        " background: palette(alternate-base); border-color: palette(mid);",
+        " border-bottom-color: @borderStrong; }",
+        "QLineEdit:focus, QAbstractSpinBox:focus, QComboBox:focus, QTextEdit:focus,",
+        " QPlainTextEdit:focus { border-color: palette(mid);",
+        " border-bottom: 2px solid palette(highlight); }",
+        "QLineEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled {",
+        " border-color: palette(midlight); border-bottom-color: palette(midlight); }",
+        "QCheckBox::indicator, QGroupBox::indicator { width: 17px; height: 17px; }",
+        "QRadioButton::indicator { width: 17px; height: 17px; border-radius: 9px; }",
+        "QRadioButton::indicator:checked { width: 9px; height: 9px; border-radius: 9px;",
+        " border: 5px solid palette(highlight); }",
+        "QSlider::groove:horizontal { height: 4px; }",
+        "QSlider::handle:horizontal { width: 10px; height: 10px; margin: -7px 0;",
+        " border: 4px solid palette(base); border-radius: 9px;",
+        " background: palette(highlight); }",
+        "QSlider::handle:horizontal:hover { border-width: 3px; }",
+        "QScrollBar:vertical { width: 12px; background: palette(base);",
+        " border-left: 1px solid palette(midlight); }",
+        "QScrollBar:horizontal { height: 12px; background: palette(base);",
+        " border-top: 1px solid palette(midlight); }",
+        "QScrollBar::handle { margin: 4px; }"
+    ]
+}

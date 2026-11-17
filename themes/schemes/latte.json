@@ -1,0 +1,15 @@
+{
+    "label": "Catppuccin Latte",
+    "order": 30,
+    "dark": false,
+    "window": "#E6E9EF",
+    "surface": "#DCE0E8",
+    "base": "#EFF1F5",
+    "alternate": "#E6E9EF",
+    "text": "#4C4F69",
+    "muted": "#6C6F85",
+    "border": "#BCC0CC",
+    "soft": "#CCD0DA",
+    "accent": "#8839EF",
+    "accentText": "#FFFFFF"
+}

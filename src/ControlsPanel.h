@@ -8,6 +8,7 @@
 #include "SceneControl.h"
 
 class CanvasScene;
+class QToolButton;
 class QVBoxLayout;
 
 // The Controls tab: the things a scene is worked with while it runs -- a box
@@ -36,7 +37,18 @@ private:
     QWidget *buildCard(int row, const SceneControl &control);
     void commit(int row, const SceneControl &control);
 
+    // A control is declared here and worked on the canvas, so a run reads this
+    // panel and does not write it -- the same bargain the rules and the
+    // variables keep. Without it an id could be renamed out from under a rule
+    // that was watching it, mid-run.
+    void setReadOnly(bool readOnly);
+    // Only ever disables, so coming back out of read-only rebuilds instead:
+    // which fields a card has belongs to its kind, and buildCard knows that.
+    void applyReadOnly();
+
     QPointer<CanvasScene> m_scene;
     QVBoxLayout *m_cards = nullptr;
+    QToolButton *m_add = nullptr;
     bool m_building = false;
+    bool m_readOnly = false;
 };

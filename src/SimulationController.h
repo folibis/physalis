@@ -99,18 +99,20 @@ public slots:
     // impulse properties take -- what the slingshot hands over on release.
     void shoot(PhysicsBody *body, const QPointF &impulse);
 
-    // Runs `use` with the scene as it stood when the run started -- every
-    // shape where it was, joint settings a rule has since changed put back,
-    // removed bodies and broken joints whole -- and the run's state back
-    // afterwards. What an export mid-run has to see: the scene, not a moment
-    // of the run. Stopped, it is just `use`.
-    void withSceneAsStarted(const std::function<void()> &use);
+    // The copy of the scene a run works on, or null when there is no run. The
+    // scene handed to the constructor is never written by a run.
+    CanvasScene *runScene() const { return m_run; }
+    // Called on each run's copy as soon as it is made, before anything is
+    // built from it: how it is drawn belongs to whoever shows it.
+    void setRunSceneSetup(std::function<void(CanvasScene *)> setup) { m_runSceneSetup = std::move(setup); }
 
     void pause();
     void resume();
     void stepFrame();
-    // Tears the world down and restores the pre-simulation transforms.
+    // Ends the run: the world and the copy of the scene are thrown away.
     void stop();
+    // A fresh run from the scene in place of this one, without ending it in between.
+    void restart();
 
 signals:
     void stateChanged();
@@ -128,9 +130,6 @@ private:
     void stepOnce();
     void syncTransforms();
     void captureSnapshot();
-    void captureJointParams();
-    void restoreJointParams();
-    void restoreSnapshot();
     void addFieldBounds(physics::IPhysicsEngine *engine) const;
 
     struct BoundShape {
@@ -174,7 +173,18 @@ private:
     Built m_previewBuilt;
     void dropPreview();
 
+    // The scene a run is started from; a run never writes to it.
+    CanvasScene *m_document = nullptr;
+    // The run's own copy, made by start() and thrown away by stop().
+    CanvasScene *m_run = nullptr;
+    // Whichever of the two is being worked: the copy during a run, the
+    // document otherwise.
     CanvasScene *m_scene = nullptr;
+    std::function<void(CanvasScene *)> m_runSceneSetup;
+    // What a restart hands the next run's controls.
+    QHash<QString, QVariant> m_carriedControls;
+    // The run's teardown, shared by stop() and restart(). False when there was no run.
+    bool endRun();
     std::unique_ptr<physics::IPhysicsEngine> m_engine;
     QTimer *m_timer = nullptr;
     State m_state = State::Stopped;
@@ -271,7 +281,6 @@ private:
     void cloneBody(PhysicsBody *parent, const QPointF &at);
     // What cloneBody made, deleted when the run ends.
     QVector<PhysicsBody *> m_clones;
-    void deleteClones();
     // Where each body stood, and which way it faced, as the run started.
     QHash<PhysicsBody *, QPair<QPointF, qreal>> m_startPoses;
     // Set while the answers are carried out, so an answer that removes the
@@ -295,15 +304,19 @@ private:
     qint64 m_plotStep = 0;
 
     void samplePlots();
+    // Where each drawing body's centre of mass has got to, handed to the
+    // scene. Per step for the reason the plots are: at x4 a frame is four
+    // steps, and a line through every fourth point cuts the corners off.
+    void sampleTrails();
+    // The centre of mass in each body's own frame. It does not move there,
+    // so it is worked out once and carried through the body's transform.
+    QHash<PhysicsBody *, QPointF> m_trailLocal;
 
     qreal m_elapsedSeconds = 0.0;
     qint64 m_frameCount = 0;
+    // Where each shape stood as the run started, which is where a clone of
+    // its body is made.
     QVector<Snapshot> m_snapshot;
-    // A joint's parameters as the document holds them, taken at the start of a
-    // run. Rules write live values over the top so the property table follows
-    // the run, and this puts the document back when the run ends -- otherwise
-    // a rule's change outlives the run, poisons the next one, and gets saved.
-    QHash<Joint *, QVariantMap> m_jointParamSnapshot;
     QStringList m_skippedBodies;
     QStringList m_problems;
     QStringList m_skippedJoints;
@@ -316,10 +329,13 @@ private:
     // over. Empty when nothing is pending.
     QString m_pendingRunAction;
     void applyPendingRunAction();
+    // A held run does not step, and rules are judged in a step -- so what a
+    // person does to it, a control or a key, is answered here instead.
+    void answerInputWhileHeld();
+    bool m_answeringInput = false;
 
     int m_stepsPerSecond = 60;
     // The body the scene keeps in view, as the run found it.
-    QString m_focusedAtStart;
     qreal m_speed = 1.0;
     qreal timeStep() const { return 1.0 / m_stepsPerSecond; }
     static constexpr int kMaxStepsPerTick = 5;
