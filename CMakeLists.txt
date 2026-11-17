@@ -110,7 +110,6 @@ option(WITH_EXPORTER_BOX2D_QT "Install the box2d/Qt export converter" ON)
 option(WITH_EXPORTER_WASM "Install the box2d3wasm web page export converter" ON)
 option(WITH_EXAMPLES "Install the example scenes" ON)
 option(WITH_DOCS "Install the documentation" ON)
-
 option(WITH_TESTS "Build the test suite" ON)
 
 if(WITH_TESTS AND NOT (WITH_BOX2D AND WITH_CHIPMUNK))

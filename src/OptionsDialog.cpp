@@ -396,7 +396,8 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
         color->setFixedSize(kSwatchWidth, kSwatchHeight);
         color->setStyleSheet(colorSwatchStyle(m_trailColor));
         bindSwatch(color, m_trailColor, tr("Choose Trail Color"));
-        color->setToolTip(tr("The line a body marked Draws a Trail leaves behind it during a run."));
+        color->setToolTip(tr("The colour of the first body's trail. Every other body that draws"
+                             " gets its own colour, turned further round the colour wheel."));
         form->addRow(tr("Color:"), color);
 
         m_trailLineWidth = new QDoubleSpinBox(group);

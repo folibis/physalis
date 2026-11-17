@@ -8,6 +8,9 @@
 #include <QPolygonF>
 #include <QSet>
 #include <QHash>
+#include <QImage>
+#include <QPen>
+#include <QTransform>
 #include <QVector>
 #include <QStringList>
 #include "ShapeItem.h"
@@ -705,11 +708,12 @@ public:
     // Everything the trails cover, for a picture that has to hold them.
     QRectF trailBounds() const;
 
-    // How a trail is drawn, the same for every body: whether one draws at
-    // all stays on the body. The width is screen pixels, so a trail reads the
-    // same at 50% as at 500%.
+    // How a trail is drawn: whether one draws at all stays on the body. The
+    // width is screen pixels, so a trail reads the same at 50% as at 500%.
+    // The colour is the first trail's; trailColorFor gives each body its own.
     void setTrailColor(const QColor &color);
     QColor trailColor() const { return m_trailColor; }
+    QColor trailColorFor(const PhysicsBody *body) const;
     void setTrailLineWidth(qreal width);
     qreal trailLineWidth() const { return m_trailLineWidth; }
     void setTrailLineStyle(Qt::PenStyle style);
@@ -1082,8 +1086,26 @@ private:
     QColor m_trailColor { 0xD6, 0x33, 0x6C };
     qreal m_trailLineWidth = 2.0;
     Qt::PenStyle m_trailLineStyle = Qt::SolidLine;
+    // What is already stroked, kept as pixels per view: a trail only grows,
+    // and stroking all of it every frame took a run to 10 fps in two minutes.
+    // A new zoom, a halving, a new pen or leaving the covered area draws it afresh.
+    struct TrailStroke {
+        int count = 0;
+        qreal length = 0.0; // device pixels so far, so a dash pattern carries on
+    };
+    struct TrailCache {
+        QImage image;
+        QTransform scale;
+        qreal dpr = 0.0;
+        QRect area;
+        QHash<const PhysicsBody *, TrailStroke> drawn;
+    };
+    // Two, for the canvas and the full-screen view at their own zooms.
+    mutable QVector<TrailCache> m_trailCache;
+    QPen trailPen(const QColor &color) const;
     void drawGrid(QPainter *painter, const QRectF &rect);
     void drawTrails(QPainter *painter) const;
+    void drawTrailsFromCache(QPainter *painter) const;
 
     QSet<int> m_selectedNodes;
     // The same nodes in the order they were picked. Which way round a closed

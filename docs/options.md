@@ -68,7 +68,8 @@ shapes.
 - **Slingshot** sets the colour of the pull line for a light pull and for a
   full pull, its width and its style. See [the slingshot](running.md#the-slingshot).
 - **Trail** sets the colour, width and line style of the line a body marked
-  **Draws a Trail** leaves behind it. See [trails](running.md#trails).
+  **Draws a Trail** leaves behind it. The colour is the first body's; every
+  other body that draws gets its own, turned further round the colour wheel. See [trails](running.md#trails).
 
 ## Joints
 

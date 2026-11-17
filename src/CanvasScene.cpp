@@ -19,6 +19,8 @@
 #include <QGraphicsView>
 #include <QScrollBar>
 #include <QLineF>
+#include <QImage>
+#include <QPaintEngine>
 #include <QPainter>
 #include <QPainterPathStroker>
 #include <QTransform>
@@ -3124,9 +3126,6 @@ void CanvasScene::drawBackground(QPainter *painter, const QRectF &rect)
     painter->fillRect(rect, background);
 
     drawGrid(painter, rect);
-    // On the field and under the shapes: a trail is where a body has been,
-    // and the body rides over its own line rather than being scribbled on.
-    drawTrails(painter);
 }
 
 void CanvasScene::drawGrid(QPainter *painter, const QRectF &rect)
@@ -4663,6 +4662,10 @@ void CanvasScene::drawObjectNames(QPainter *painter, const QRectF &visible) cons
 
 void CanvasScene::drawForeground(QPainter *painter, const QRectF &visibleForNames)
 {
+    // Over the shapes: a trail runs from the centre of mass, so under them a
+    // slow body hid nearly all of its own line.
+    drawTrails(painter);
+
     if (m_objectNamesShown)
     {
         drawObjectNames(painter, visibleForNames);
@@ -5126,16 +5129,15 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &visibleForName
         painter->restore();
     }
 
-    // A body that draws wears its pen: a ring in the trail's own colour round
-    // the centre of mass, which is the point the line is drawn from. Apart
-    // from the axes block above on purpose -- the axes can be switched off,
-    // and with them went the only sign of which bodies were going to draw.
+    // A body that draws is marked at its centre of mass, the point the line is
+    // drawn from: four ticks round it, open in the middle so the anchor and
+    // the axes there still show. Ticks rather than anything round, which
+    // vanished among the joint anchors at the same point.
     if (m_editorMode == EditorMode::Physics && layerVisible(RunLayer::Trails))
     {
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing, true);
-        // Screen pixels, like the line itself: the mark is the same size at
-        // any zoom.
+        // Screen pixels, so the mark is the same size at any zoom.
         const qreal pixel = 1.0 / qMax(painter->transform().m11(), 1e-6);
         for (PhysicsBody *body : std::as_const(m_bodies))
         {
@@ -5145,14 +5147,22 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &visibleForName
                 continue;
             }
             const QPointF at = body->centerOfMassScenePos();
-            QPen ring(m_trailColor, 1.5);
-            ring.setCosmetic(true);
-            painter->setPen(ring);
-            painter->setBrush(Qt::NoBrush);
-            painter->drawEllipse(at, 7.0 * pixel, 7.0 * pixel);
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(m_trailColor);
-            painter->drawEllipse(at, 3.0 * pixel, 3.0 * pixel);
+            QPainterPath ticks;
+            for (const QPointF &d : {QPointF(1, 0), QPointF(0, 1), QPointF(-1, 0), QPointF(0, -1)})
+            {
+                ticks.moveTo(at + d * 8.0 * pixel);
+                ticks.lineTo(at + d * 12.0 * pixel);
+            }
+            QPen edge(Qt::white, 5.0);
+            edge.setCosmetic(true);
+            edge.setCapStyle(Qt::RoundCap);
+            painter->setPen(edge);
+            painter->drawPath(ticks);
+            QPen pen(trailColorFor(body), 2.5);
+            pen.setCosmetic(true);
+            pen.setCapStyle(Qt::RoundCap);
+            painter->setPen(pen);
+            painter->drawPath(ticks);
         }
         painter->restore();
     }
@@ -5305,6 +5315,7 @@ void CanvasScene::extendTrail(PhysicsBody *body, const QPointF &point)
         }
         trail.points = kept;
         trail.stride *= 2;
+        m_trailCache.clear();
     }
     update();
 }
@@ -5316,6 +5327,7 @@ void CanvasScene::clearTrails()
         return;
     }
     m_trails.clear();
+    m_trailCache.clear();
     update();
 }
 
@@ -5341,19 +5353,58 @@ QRectF CanvasScene::trailBounds() const
 void CanvasScene::setTrailColor(const QColor &color)
 {
     m_trailColor = color;
+    m_trailCache.clear();
     update();
 }
 
 void CanvasScene::setTrailLineWidth(qreal width)
 {
     m_trailLineWidth = width;
+    m_trailCache.clear();
     update();
 }
 
 void CanvasScene::setTrailLineStyle(Qt::PenStyle style)
 {
     m_trailLineStyle = style;
+    m_trailCache.clear();
     update();
+}
+
+QColor CanvasScene::trailColorFor(const PhysicsBody *body) const
+{
+    // The first body that draws takes the colour from Options and each one
+    // after it is turned a golden angle further round the wheel, so no two
+    // trails share a colour however many there are.
+    int index = 0;
+    for (const PhysicsBody *other : std::as_const(m_bodies))
+    {
+        if (other == body)
+        {
+            break;
+        }
+        if (other->drawsTrail())
+        {
+            ++index;
+        }
+    }
+    if (index == 0)
+    {
+        return m_trailColor;
+    }
+    const QColor base = m_trailColor.toHsl();
+    const qreal hue = std::fmod(qMax(base.hslHueF(), 0.0) + index * 0.381966, 1.0);
+    // A grey has no hue to turn, so the ones after it are given some colour.
+    const qreal saturation = base.hslHueF() < 0 ? 0.7 : base.hslSaturationF();
+    const qreal lightness = base.hslHueF() < 0 ? qBound(0.35, base.lightnessF(), 0.6) : base.lightnessF();
+    return QColor::fromHslF(hue, saturation, lightness, base.alphaF());
+}
+
+QPen CanvasScene::trailPen(const QColor &color) const
+{
+    QPen pen(color, m_trailLineWidth, m_trailLineStyle, Qt::RoundCap, Qt::RoundJoin);
+    pen.setCosmetic(true);
+    return pen;
 }
 
 void CanvasScene::drawTrails(QPainter *painter) const
@@ -5363,19 +5414,103 @@ void CanvasScene::drawTrails(QPainter *painter) const
         return;
     }
     painter->save();
-    painter->setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(m_trailColor, m_trailLineWidth, m_trailLineStyle, Qt::RoundCap, Qt::RoundJoin);
-    pen.setCosmetic(true);
-    painter->setPen(pen);
-    painter->setBrush(Qt::NoBrush);
-    for (const Trail &trail : m_trails)
+    // SVG and PDF want the lines themselves, not a picture of them.
+    const bool raster = painter->paintEngine() && painter->paintEngine()->type() == QPaintEngine::Raster;
+    if (raster)
     {
-        if (trail.points.size() > 1)
+        drawTrailsFromCache(painter);
+    }
+    else
+    {
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->setBrush(Qt::NoBrush);
+        for (auto it = m_trails.cbegin(); it != m_trails.cend(); ++it)
         {
-            painter->drawPolyline(trail.points.constData(), int(trail.points.size()));
+            if (it->points.size() > 1)
+            {
+                painter->setPen(trailPen(trailColorFor(it.key())));
+                painter->drawPolyline(it->points.constData(), int(it->points.size()));
+            }
         }
     }
     painter->restore();
+}
+
+void CanvasScene::drawTrailsFromCache(QPainter *painter) const
+{
+    // The view's transform split in two: the zoom the pixels are drawn at, and
+    // the shift that places them -- which is all a pan or a followed body changes.
+    const QTransform view = painter->worldTransform();
+    const QTransform scale(view.m11(), view.m12(), view.m13(), view.m21(), view.m22(), view.m23(), 0, 0,
+                           view.m33());
+    const qreal dpr = painter->device()->devicePixelRatioF();
+    // The pixels depend on the zoom and nothing about the device, so a
+    // screenshot mid-run reuses them rather than adding a third.
+    auto found = std::find_if(m_trailCache.begin(), m_trailCache.end(),
+                              [&](const TrailCache &c) { return c.scale == scale && c.dpr == dpr; });
+    if (found == m_trailCache.end())
+    {
+        if (m_trailCache.size() >= 2)
+        {
+            m_trailCache.removeLast();
+        }
+        TrailCache fresh;
+        fresh.scale = scale;
+        fresh.dpr = dpr;
+        m_trailCache.prepend(fresh);
+        found = m_trailCache.begin();
+    }
+    else if (found != m_trailCache.begin())
+    {
+        std::rotate(m_trailCache.begin(), found, found + 1); // most recent first
+        found = m_trailCache.begin();
+    }
+    TrailCache &cache = *found;
+
+    // The pixels cover what is on screen and half a screen round it, so a
+    // trail of any size costs the same, and a pan or a followed body only
+    // redraws once the view has left that margin.
+    const QRect visible(QPoint(int(std::floor(-view.dx())), int(std::floor(-view.dy()))),
+                        QSize(painter->device()->width() + 1, painter->device()->height() + 1));
+    if (cache.image.isNull() || !cache.area.contains(visible))
+    {
+        const int padX = visible.width() / 2;
+        const int padY = visible.height() / 2;
+        const QRect area = visible.adjusted(-padX, -padY, padX, padY);
+        cache.area = area;
+        cache.image = QImage(area.size() * dpr, QImage::Format_ARGB32_Premultiplied);
+        cache.image.setDevicePixelRatio(dpr);
+        cache.image.fill(Qt::transparent);
+        cache.drawn.clear();
+    }
+
+    QPainter image(&cache.image);
+    image.setRenderHint(QPainter::Antialiasing, true);
+    image.setTransform(scale * QTransform::fromTranslate(-cache.area.left(), -cache.area.top()));
+    const qreal dashUnit = qMax(m_trailLineWidth, 1.0);
+    for (auto it = m_trails.cbegin(); it != m_trails.cend(); ++it)
+    {
+        const QVector<QPointF> &points = it->points;
+        TrailStroke &stroke = cache.drawn[it.key()];
+        const int from = qMax(stroke.count - 1, 0);
+        if (points.size() - from < 2)
+        {
+            continue;
+        }
+        QPen pen = trailPen(trailColorFor(it.key()));
+        pen.setDashOffset(stroke.length / dashUnit);
+        image.setPen(pen);
+        image.drawPolyline(points.constData() + from, int(points.size()) - from);
+        for (int i = from + 1; i < points.size(); ++i)
+        {
+            stroke.length += QLineF(scale.map(points.at(i - 1)), scale.map(points.at(i))).length();
+        }
+        stroke.count = int(points.size());
+    }
+    image.end();
+
+    painter->resetTransform();
+    painter->drawImage(QPointF(view.dx(), view.dy()) + cache.area.topLeft(), cache.image);
 }
 
 void CanvasScene::releaseShot()

@@ -175,17 +175,21 @@ leaves a line behind it: the path of its **centre of mass**. It is how a double
 pendulum is worth watching -- mark the lower arm and the run draws what no
 amount of staring at the arm itself would show.
 
-A body that draws wears a ring round its centre of mass, in the trail's own
-colour, so you can tell which ones will before the run starts.
+A body that draws is marked with four short ticks round its centre of mass,
+in the trail's own colour, in Physics mode, so you can tell which ones will
+before the run starts.
 
 The line stays for the **whole run** -- pause to study it -- and goes when the
-run stops, like everything else a run moves. It is drawn on the field, under
-the shapes, and takes one point for every step the engine calculates rather
+run stops, like everything else a run moves. It is drawn over the shapes, a
+long one costs a frame no more than a short one, and it takes one point for every step the engine calculates rather
 than every drawn frame, so it is the same line at any playback speed. **Save
 Screenshot** during a run keeps it, with the picture widened to hold all of it.
 
-Every trail is drawn the same way: the colour, width and line style are in
-[Options -> Physics -> Trail](options.md). **View -> Trails** hides them all
+Each body's trail has its own colour, and its ticks wear it, so you can tell
+whose line is whose. The first takes the colour in
+[Options -> Physics -> Trail](options.md) and each one after it is turned
+further round the colour wheel; the width and line style there are the same
+for all of them. **View -> Trails** hides them all
 without unmarking anything.
 
 ## The slingshot

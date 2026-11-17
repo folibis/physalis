@@ -593,19 +593,26 @@ it calls the same four itself.
 whether a body draws is the body's (`PhysicsBody::drawsTrail()`, the "Draws a
 Trail" row, `"trail": true` in the `*.phys` only when set) and how the line
 looks -- colour, width, style -- is an application setting (Options -> Physics
--> Trail). The point drawn from is the centre of mass, worked out once in the
+-> Trail). That colour is the first trail's: `CanvasScene::trailColorFor` turns
+each later body that draws a golden angle further round the wheel, counted in
+the scene's body order so a body keeps its colour from run to run, because
+several lines in one colour cannot be told apart. The point drawn from is the centre of mass, worked out once in the
 body's own frame and carried through its transform, and
 `SimulationController::sampleTrails` takes one point per *step*, for the reason
 the plots do: at x4 a frame is four steps, and a line through every fourth
 point cuts the corners off a pendulum. The points are the scene's
-(`extendTrail`, drawn in `drawBackground` after the grid, so a body rides over
-its own line) and are run state: there for the whole run, cleared by `stop()`
+(`extendTrail`, drawn in `drawForeground` over the shapes -- under them a slow
+body hid nearly all of its own line) and are run state. What is already drawn
+is kept as pixels covering the view and half a view round it, and a frame
+strokes only the new points: stroking the lot every frame took a run to 10 fps
+in two minutes. They are run state: there for the whole run, cleared by `stop()`
 before the clones that drew some of them are deleted. A trail that fills is
 halved and takes every other point from then on, the plots' bargain, and a body
 at rest adds nothing. `SceneScreenshot::contentArea` takes in
 `trailBounds()`, because a picture cut to the bodies alone loses most of the
-trace. A body that draws wears a ring round its centre of mass in the trail's
-colour -- painted apart from the body axes, which can be switched off and would
+trace. A body that draws is marked by four ticks round its centre of mass in the
+trail's colour, in Physics mode only -- open in the middle and not round,
+since anything round there was lost among the joint anchors -- painted apart from the body axes, which can be switched off and would
 have taken the only sign of it with them. The exporters do not carry trails.
 
 **Shapes lying over one another** are reached with Ctrl+click, in Edit and
