@@ -1045,6 +1045,14 @@ void CanvasScene::clearContents()
 
     m_rules.clear();
     announceChange(Change::Rules);
+    // Everything else the file holds goes too: a new scene that kept the last
+    // one's buttons and variables was still half the last scene.
+    setVariables({});
+    setControls({});
+    setCaption(QString(), false);
+    setStartsPaused(false);
+    setRandomSeed(0);
+    world().params.clear();
 
     qDeleteAll(m_explosions);
     m_explosions.clear();

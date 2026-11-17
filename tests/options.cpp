@@ -797,6 +797,18 @@ TEST(Options, TheFieldBelongsToTheSceneAndOptionsHoldsTheDefault)
     EXPECT_DOUBLE_EQ(read.gridCellSize(), 37.0);
     EXPECT_DOUBLE_EQ(read.fieldWidth(), 1234.0);
 
+    // And nothing else of the old scene comes along: its buttons, its
+    // variables, how it starts.
+    SceneControl start;
+    start.id = QStringLiteral("start_button");
+    start.kind = SceneControl::Kind::Button;
+    scene->setControls({ start });
+    scene->setVariables({ SceneVariable { QStringLiteral("running"), SceneVariable::Type::Bool,
+                                          false } });
+    scene->setStartsPaused(true);
+    scene->setRandomSeed(7);
+    scene->world().params[QStringLiteral("gravityY")] = 1.0;
+
     // A new scene is where the default is for.
     QAction *newScene = window.findChild<QAction *>(QStringLiteral("actionNewScene"));
     ASSERT_TRUE(newScene);
@@ -807,6 +819,26 @@ TEST(Options, TheFieldBelongsToTheSceneAndOptionsHoldsTheDefault)
     EXPECT_TRUE(scene->showGrid()) << "a new scene did not start with the default grid";
     EXPECT_DOUBLE_EQ(scene->gridCellSize(), 50.0);
     EXPECT_DOUBLE_EQ(scene->fieldWidth(), 800.0);
+
+    EXPECT_TRUE(scene->controls().isEmpty()) << "a new scene kept the last one's controls";
+    EXPECT_TRUE(scene->variables().isEmpty()) << "a new scene kept the last one's variables";
+    EXPECT_FALSE(scene->startsPaused()) << "a new scene kept starting paused";
+    EXPECT_EQ(scene->randomSeed(), 0u);
+    EXPECT_TRUE(scene->world().params.isEmpty()) << "a new scene kept the last one's world";
+
+    // What was seen: a scene built after New Scene, run, showing the old button.
+    window.resize(900, 700);
+    window.show();
+    scene->setEditorMode(EditorMode::Physics);
+    RectangleItem *box = scene->addRectangle(QPointF(0, 0));
+    scene->selectForPhysics(box, true);
+    ASSERT_TRUE(scene->createBodyFromSelection());
+    window.startRunForTest();
+    QCoreApplication::processEvents();
+    QWidget *panel = window.findChild<QWidget *>(QStringLiteral("SceneControls"));
+    ASSERT_TRUE(panel);
+    EXPECT_FALSE(panel->isVisible()) << "the new scene's run shows controls it does not have";
+    window.stopRunForTest();
 }
 
 // The Controls tab is cards, not a table: a slider has four numbers to declare
