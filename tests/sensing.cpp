@@ -79,7 +79,7 @@ struct World {
     }
 };
 
-const char *kEngines[] { "Box2D", "Chipmunk2D" };
+const char *kEngines[] { "Box2D" };
 
 } // namespace
 

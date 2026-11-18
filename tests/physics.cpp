@@ -18,8 +18,8 @@
 // against arithmetic, not against what it did last time. A run that is wrong
 // in the same way every time passes a golden-value test for ever.
 //
-// Each case is checked on both engines, because a scene is meant to mean the
-// same thing whichever one is loaded.
+// Each case is checked on every engine in kEngines, because a scene is meant to
+// mean the same thing whichever one is loaded.
 
 namespace {
 
@@ -98,17 +98,17 @@ qreal fallAfter(int steps, qreal gravity = kGravity, qreal dt = 1.0 / 60.0)
     return gravity * dt * dt * (qreal(steps) * (steps + 1) / 2.0) * kPpm;
 }
 
-// Textbook free fall, which is what the two of them straddle: Box2D adds
-// gravity on every one of the sixty steps and lands a step above this,
-// Chipmunk adds it on fifty-nine and lands a step below. Half a step either
-// way at sixty steps a second, so the thing worth asserting is the physics,
-// not one engine's convention about when in the step gravity arrives.
+// Textbook free fall: Box2D adds gravity on every one of the sixty steps and
+// lands a step above this, an engine that adds it on fifty-nine lands a step
+// below. Half a step either way at sixty steps a second, so the thing worth
+// asserting is the physics, not one engine's convention about when in the step
+// gravity arrives.
 qreal textbookFall(qreal seconds, qreal gravity = kGravity)
 {
     return 0.5 * gravity * seconds * seconds * kPpm;
 }
 
-const char *kEngines[] { "Box2D", "Chipmunk2D" };
+const char *kEngines[] { "Box2D" };
 
 } // namespace
 
@@ -117,7 +117,6 @@ const char *kEngines[] { "Box2D", "Chipmunk2D" };
 // scene is drawn in.
 TEST(Physics, AThingFallsAtTheRateGravitySays)
 {
-    QVector<qreal> fellOn;
     for (const char *engineName : kEngines) {
         Scene s { QString::fromLatin1(engineName) };
         ShapeItem *shape = s.box(QStringLiteral("faller"), QRectF(0, 0, 40, 40), QPointF(0, 0));
@@ -126,7 +125,6 @@ TEST(Physics, AThingFallsAtTheRateGravitySays)
         const qreal startY = s.at(shape)->pos().y();
         s.run(1.0);
         const qreal fell = s.at(shape)->pos().y() - startY;
-        fellOn.append(fell);
 
         // Within half a step of the textbook answer, which is the most either
         // integration convention can be out by.
@@ -144,11 +142,6 @@ TEST(Physics, AThingFallsAtTheRateGravitySays)
             << engineName << ": after four seconds it should be at " << textbookFall(4.0);
         s.sim.stop();
     }
-
-    ASSERT_EQ(fellOn.size(), 2);
-    EXPECT_NEAR(fellOn[0], fellOn[1], fellOn[0] * 0.05)
-        << "the two engines dropped the same body by different amounts in one second: "
-        << fellOn[0] << " against " << fellOn[1];
 }
 
 // Twice the gravity, twice the fall; no gravity, no fall. Gravity Scale is a
@@ -347,26 +340,4 @@ TEST(Physics, TheSameSceneTwiceGivesTheSameAnswer)
         EXPECT_NEAR(ends[0].x(), ends[1].x(), 1e-6) << engineName << " is not repeatable";
         EXPECT_NEAR(ends[0].y(), ends[1].y(), 1e-6) << engineName << " is not repeatable";
     }
-}
-
-
-// The two engines are meant to be interchangeable for a scene that uses only
-// what both of them have. They will not agree exactly -- different solvers --
-// but they have to agree about what happens.
-TEST(Physics, BothEnginesAgreeOnTheSameScene)
-{
-    QVector<qreal> restingY;
-    for (const char *engineName : kEngines) {
-        Scene s { QString::fromLatin1(engineName) };
-        ShapeItem *ground = s.box(QStringLiteral("ground"), QRectF(0, 0, 800, 40), QPointF(-400, 300));
-        ShapeItem *crate = s.box(QStringLiteral("crate"), QRectF(0, 0, 40, 40), QPointF(-20, -200));
-        s.bodyOf(ground, physics::BodyType::Static);
-        s.bodyOf(crate, physics::BodyType::Dynamic);
-        s.run(3.0);
-        restingY.append(s.at(crate)->pos().y());
-        s.sim.stop();
-    }
-    ASSERT_EQ(restingY.size(), 2);
-    EXPECT_NEAR(restingY[0], restingY[1], 3.0)
-        << "Box2D rested the crate at " << restingY[0] << " and Chipmunk at " << restingY[1];
 }

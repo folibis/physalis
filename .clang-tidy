@@ -8,7 +8,7 @@
 # a class's internals and keep their plain names.
 Checks: '-*,readability-identifier-naming'
 WarningsAsErrors: ''
-# Only this project's own headers, never Qt's, Box2D's or Chipmunk's.
+# Only this project's own headers, never Qt's or Box2D's.
 HeaderFilterRegex: '.*[/\\](src|include|engines[/\\][^/\\]+[/\\](include|src)|tests)[/\\].*'
 FormatStyle: file
 CheckOptions:

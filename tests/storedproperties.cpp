@@ -154,31 +154,19 @@ TEST(StoredProperties, Box2DBuildsTheShapeFromWhatTheTableSet)
     everyStoredPropertyArrives(QStringLiteral("Box2D"), On::Shape);
 }
 
-TEST(StoredProperties, ChipmunkBuildsTheBodyFromWhatTheTableSet)
-{
-    everyStoredPropertyArrives(QStringLiteral("Chipmunk2D"), On::Body);
-}
-
-TEST(StoredProperties, ChipmunkBuildsTheShapeFromWhatTheTableSet)
-{
-    everyStoredPropertyArrives(QStringLiteral("Chipmunk2D"), On::Shape);
-}
-
 // The exemption list is not a place to hide a property: every name in it has
 // to be a property some engine really publishes and really cannot answer for.
 TEST(StoredProperties, TheExemptionListIsHonest)
 {
+    auto engine = physics::EngineRegistry::create(QStringLiteral("Box2D"));
+    ASSERT_TRUE(engine);
+    physics::PropertyList all = engine->bodyProperties();
+    all += engine->shapeProperties();
+    all += engine->worldProperties();
     QSet<QString> unreadable;
-    for (const char *engineName : { "Box2D", "Chipmunk2D" }) {
-        auto engine = physics::EngineRegistry::create(QString::fromLatin1(engineName));
-        ASSERT_TRUE(engine);
-        physics::PropertyList all = engine->bodyProperties();
-        all += engine->shapeProperties();
-        all += engine->worldProperties();
-        for (const physics::JointParam &property : all) {
-            if (property.stored && !property.liveReadable)
-                unreadable.insert(property.key);
-        }
+    for (const physics::JointParam &property : all) {
+        if (property.stored && !property.liveReadable)
+            unreadable.insert(property.key);
     }
     for (auto it = kUnreadable.cbegin(); it != kUnreadable.cend(); ++it) {
         EXPECT_TRUE(unreadable.contains(it.key()))

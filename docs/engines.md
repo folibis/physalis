@@ -11,14 +11,9 @@ a plugin. The engine decides how bodies fall, collide, bounce and slide, and
 how joints hold them together. Physalis draws the result and lets you build and
 control the scene.
 
-Physalis comes with plugins for two well-known open-source engines:
-
-- **[Box2D](https://box2d.org)**, the default. It is fast and accurate, and is
-  used in a great many games. Its joints are Revolute, Distance, Weld,
-  Prismatic, Wheel, Motor and Filter.
-- **[Chipmunk2D](https://chipmunk-physics.net)**, a lightweight engine with a
-  wider choice of constraints: Pivot, Pin, Slide, Groove, Damped Spring, Rotary
-  Spring, Rotary Limit, Ratchet, Gear, Simple Motor and Mouse.
+Physalis comes with a plugin for **[Box2D](https://box2d.org)**, a well-known
+open-source engine. It is fast and accurate, and is used in a great many games.
+Its joints are Revolute, Distance, Weld, Prismatic, Wheel, Motor and Filter.
 
 **Help → About** lists the engine plugins Physalis found.
 
@@ -32,8 +27,7 @@ so the following all come from the engine:
 - the joint types and their settings;
 - the events a [rule](rules.md) can wait for, and the actions it can perform.
 
-The common properties have the same names in both engines: velocity, density,
-friction, restitution, damping, sensors and collision groups. The features
+The features
 Physalis adds on top, such as the slingshot, the log, **to be removed**,
 **starting simulation**, **Init state** and **Clone**, work in the same way
 whichever engine a scene uses.
@@ -50,7 +44,7 @@ A scene is built for one engine and keeps it:
 - Changing the engine in Options while a scene is open offers to save that
   scene, then starts a new, empty scene with the new engine.
 
-An existing scene cannot be moved to another engine, because the two offer
+An existing scene cannot be moved to another engine, because engines offer
 different joints and partly different properties, and part of the scene would
 be lost.
 
@@ -102,8 +96,8 @@ The engine object is a C++ class derived from `physics::IPhysicsEngine`
 (`include/IPhysicsEngine.h`). Because the interface passes Qt types such as
 `QString` and `QVariant`, a plugin must be built with the same compiler and the
 same Qt version as Physalis itself. The simplest way to do that is to build it
-as part of the Physalis source tree, next to `engines/box2d` and
-`engines/chipmunk`, which also serve as complete examples.
+as part of the Physalis source tree, next to `engines/box2d`,
+which also serves as a complete example.
 
 ### The engine describes itself
 

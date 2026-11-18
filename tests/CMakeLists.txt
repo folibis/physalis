@@ -16,7 +16,7 @@ target_link_libraries(PhysalisTests PRIVATE PhysalisCore GTest::gtest Qt${QT_VER
 target_compile_definitions(PhysalisTests PRIVATE
     PHYSALIS_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 # The engine is a plugin: it has to exist before a test can find it.
-add_dependencies(PhysalisTests physalis_box2d physalis_chipmunk)
+add_dependencies(PhysalisTests physalis_box2d)
 
 # The engine plugin is loaded from beside the running binary, and it is built
 # to the top of the build tree. Nothing else points the tests there on Linux --

@@ -31,9 +31,8 @@ is and how it is played.
 ## How the simulation works
 
 Physalis does not calculate the physics itself. The calculation is done by a
-**physics engine** that is loaded as a plugin. Physalis includes plugins for two
-widely used open-source engines, [Box2D](https://box2d.org) and
-[Chipmunk2D](https://chipmunk-physics.net). Everything the editor offers,
+**physics engine** that is loaded as a plugin. Physalis includes a plugin for the
+widely used open-source engine [Box2D](https://box2d.org). Everything the editor offers,
 including the properties you can set, the joint types, and the events and
 actions available to rules, comes from the engine the scene uses. See
 [Physics engines](engines.md).

@@ -24,9 +24,9 @@ machines: pendulums, cars, cranes, catapults and chains.
 
 The first body you selected is **body A** and the second is **body B**. For
 most joints the order makes no difference, but for some it does (see
-[Wheel joints](#wheel-joints-chassis-first) below). A few joint types hold a
-single body to a point in the world, and need only one body selected -- such as
-Chipmunk's **Mouse**.
+[Wheel joints](#wheel-joints-chassis-first) below). An engine may also offer joint
+types that hold a single body to a point in the world, and need only one body
+selected.
 
 Right-clicking a joint offers quick ways to place its anchors, such as
 **Move Anchor to *body* Center** or **Move Both Anchors to Their Centers**.
@@ -54,22 +54,6 @@ The joint types depend on the scene's [physics engine](engines.md).
   and torque budget, with an optional spring holding it where the joint was made.
 - **Filter**: holds nothing; it only stops the two bodies from colliding with
   each other.
-
-**Chipmunk2D** offers:
-
-- **Pivot**: pins two bodies together at a point, like Box2D's Revolute.
-- **Pin**: a rigid rod hinged at both ends.
-- **Slide**: keeps two points between a minimum and a maximum distance. With
-  no minimum, it behaves like a rope.
-- **Groove**: a slot in body A along which a pin on body B runs.
-- **Damped Spring**: a spring with a shock absorber between two points.
-- **Rotary Spring**: a torsion spring that turns body B back towards a set
-  angle.
-- **Rotary Limit**: stops body B from turning beyond a range of angles.
-- **Ratchet**: lets body B turn in one direction only.
-- **Gear**: makes the two bodies turn together at a fixed ratio.
-- **Simple Motor**: turns body B at a steady rate.
-- **Mouse**: pulls a point on a body towards a target point.
 
 ## Joint properties
 

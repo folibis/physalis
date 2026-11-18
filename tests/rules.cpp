@@ -33,8 +33,8 @@
 #include "EditorMode.h"
 
 // Rules: the part of the app with no physics in it and the most ways to be
-// silently wrong. Two things are checked here, for both engines -- that every
-// action either engine publishes actually does something when a rule performs
+// silently wrong. Two things are checked here, for every engine -- that every
+// action an engine publishes actually does something when a rule performs
 // it, and that the conditions a rule can be written with fire when they should
 // and not when they should not.
 
@@ -115,7 +115,7 @@ QVariant somethingElse(const physics::JointParam &param)
     return qFuzzyCompare(wanted, was) ? QVariant() : QVariant(wanted);
 }
 
-const char *kEngines[] { "Box2D", "Chipmunk2D" };
+const char *kEngines[] { "Box2D" };
 
 // An action that legitimately does nothing to a scene that has not changed
 // under it. Each one is named with why, so an action that does nothing by
@@ -232,11 +232,6 @@ void everyActionDoesSomething(const QString &engineName)
 TEST(Rules, Box2DActionsAllDoSomething)
 {
     everyActionDoesSomething(QStringLiteral("Box2D"));
-}
-
-TEST(Rules, ChipmunkActionsAllDoSomething)
-{
-    everyActionDoesSomething(QStringLiteral("Chipmunk2D"));
 }
 
 // The application's own actions on a body, which no engine knows about.
@@ -412,7 +407,7 @@ TEST(Rules, DisabledRulesAreSkippedAndOnceMeansOnce)
     }
 }
 
-// Touching: the event both engines raise and the most-used one there is.
+// Touching: the event every engine raises and the most-used one there is.
 TEST(Rules, ContactFiresWhenTwoShapesTouch)
 {
     for (const char *engineName : kEngines) {

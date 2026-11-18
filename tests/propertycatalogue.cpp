@@ -133,11 +133,6 @@ TEST(PropertyCatalogue, Box2DShowsEveryStoredProperty)
     everyStoredPropertyHasARow(QStringLiteral("Box2D"));
 }
 
-TEST(PropertyCatalogue, ChipmunkShowsEveryStoredProperty)
-{
-    everyStoredPropertyHasARow(QStringLiteral("Chipmunk2D"));
-}
-
 // Typing into each row leaves the value on the object, and saving and loading
 // gives it back. A row whose setter writes somewhere the scene does not save
 // looks right until the file is reopened.
@@ -197,11 +192,6 @@ TEST(PropertyCatalogue, Box2DKeepsWhatTheTableSets)
     everyRowHoldsWhatIsTypedIntoIt(QStringLiteral("Box2D"));
 }
 
-TEST(PropertyCatalogue, ChipmunkKeepsWhatTheTableSets)
-{
-    everyRowHoldsWhatIsTypedIntoIt(QStringLiteral("Chipmunk2D"));
-}
-
 // What a run answers with is shown, and shown read-only: a reading the engine
 // publishes but the table cannot show is a rule menu entry with no counterpart
 // anybody can see, and one shown as editable accepts typing it then discards.
@@ -238,11 +228,6 @@ void everyReadingIsShownReadOnly(const QString &engineName)
 TEST(PropertyCatalogue, Box2DShowsItsReadingsReadOnly)
 {
     everyReadingIsShownReadOnly(QStringLiteral("Box2D"));
-}
-
-TEST(PropertyCatalogue, ChipmunkShowsItsReadingsReadOnly)
-{
-    everyReadingIsShownReadOnly(QStringLiteral("Chipmunk2D"));
 }
 
 // A shape row speaks for every shape picked, not for the first of them. The
@@ -315,7 +300,3 @@ TEST(PropertyCatalogue, Box2DSetsEveryPickedShape)
     everyPickedShapeTakesWhatTheTableSets(QStringLiteral("Box2D"));
 }
 
-TEST(PropertyCatalogue, ChipmunkSetsEveryPickedShape)
-{
-    everyPickedShapeTakesWhatTheTableSets(QStringLiteral("Chipmunk2D"));
-}

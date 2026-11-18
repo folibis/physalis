@@ -105,18 +105,17 @@ endif()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(WITH_BOX2D "Build the Box2D engine plugin" ON)
-option(WITH_CHIPMUNK "Build the Chipmunk2D engine plugin" ON)
 option(WITH_EXPORTER_BOX2D_QT "Install the box2d/Qt export converter" ON)
 option(WITH_EXPORTER_WASM "Install the box2d3wasm web page export converter" ON)
 option(WITH_EXAMPLES "Install the example scenes" ON)
 option(WITH_DOCS "Install the documentation" ON)
 option(WITH_TESTS "Build the test suite" ON)
 
-if(WITH_TESTS AND NOT (WITH_BOX2D AND WITH_CHIPMUNK))
-    message(FATAL_ERROR "WITH_TESTS needs WITH_BOX2D and WITH_CHIPMUNK: the test suite runs "
-                        "scenes on both engines. Turn WITH_TESTS off to build without one.")
+if(WITH_TESTS AND NOT WITH_BOX2D)
+    message(FATAL_ERROR "WITH_TESTS needs WITH_BOX2D: the test suite runs scenes on it. "
+                        "Turn WITH_TESTS off to build without it.")
 endif()
-if(NOT WITH_BOX2D AND NOT WITH_CHIPMUNK)
+if(NOT WITH_BOX2D)
     message(WARNING "No engine plugin is being built: Physalis will find nothing to run a "
                     "scene with.")
 endif()
@@ -271,9 +270,6 @@ endif()
 
 if(WITH_BOX2D)
     add_subdirectory(engines/box2d)
-endif()
-if(WITH_CHIPMUNK)
-    add_subdirectory(engines/chipmunk)
 endif()
 
 install(TARGETS Physalis RUNTIME DESTINATION ${PHYSALIS_INSTALL_DIR}
@@ -466,7 +462,7 @@ else()
 "
         " joints between them, rules that fire on what happens. The simulation itself
 "
-        " comes from an engine plugin -- Box2D and Chipmunk2D are included.")
+        " comes from an engine plugin -- Box2D is included.")
 endif()
 
 include(CPack)

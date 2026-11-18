@@ -49,9 +49,8 @@ C++ program or a web page.
   slingshot for flinging bodies with the mouse, and a view that follows one
   chosen body through the run.
 - **Physics engines as plugins:** Physalis itself does not simulate anything.
-  It comes with plugins for [Box2D](https://box2d.org) and
-  [Chipmunk2D](https://chipmunk-physics.net), and further engines can be added
-  as plugins.
+  It comes with a plugin for [Box2D](https://box2d.org), and further engines
+  can be added as plugins.
 - **Export:** turn a scene into a standalone Box2D/Qt C++ project, or a single
   self-contained web page carrying the same engine compiled to WebAssembly.
   Both carry the whole scene -- rules, log, keys, controls and caption -- and
@@ -60,8 +59,8 @@ C++ program or a web page.
 
 ## Building
 
-Physalis is written in C++17 with Qt 6. It builds with CMake; Box2D,
-Chipmunk2D and GoogleTest are downloaded during configuration.
+Physalis is written in C++17 with Qt 6. It builds with CMake; Box2D and
+GoogleTest are downloaded during configuration.
 
 ```bash
 cmake -S . -B build

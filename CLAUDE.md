@@ -426,8 +426,6 @@ themes/           how the chrome looks, read at startup and not compiled in:
                   schemes/*.json and styles/*.json over one base.qss; the
                   format is docs/themes.md, which is the user's page for it
 engines/box2d/    one plugin: its own CMakeLists, include/ and src/
-engines/chipmunk/ another, on Chipmunk2D -- Box2D's keys and units wherever
-                  Chipmunk can honour them, its own constraints as joint types
 tests/            one .cpp per scenario, all built into a single binary
 exporters/        export converters -- one folder each, all JavaScript
     box2d-qt-project/  manifest.json, export.js, templates/ -> one plain Box2D
@@ -462,12 +460,11 @@ cmake --build build
 ctest --test-dir build
 ```
 
-Parts can be left out with options, all `ON` by default: `WITH_BOX2D`,
-`WITH_CHIPMUNK` (the engine plugins), `WITH_EXPORTER_BOX2D_QT` (which converter
+Parts can be left out with options, all `ON` by default: `WITH_BOX2D`
+(the engine plugin), `WITH_EXPORTER_BOX2D_QT` (which converter
 folders are installed -- they are JavaScript, nothing is compiled) and
 `WITH_TESTS`. The
-suite runs scenes on both engines, so `WITH_TESTS` refuses to configure
-without both plugins.
+suite runs scenes on Box2D, so `WITH_TESTS` refuses to configure without it.
 
 Run one test: `ctest --test-dir build -R RuleSource --output-on-failure`, or
 `build/PhysalisTests.exe --gtest_filter=RuleSource.*` with the Qt bin directory
@@ -555,7 +552,7 @@ A's, which is the engine's own reference. The direction turns round with the
 end, since the anchor running along the rail then travels the opposite way.
 
 **Joints are coloured and drawn by kind, not by type.** A type id belongs to one
-engine (`revolute` is Box2D's, `pin` is Chipmunk's); the five `JointVisual`
+engine (`revolute` is Box2D's); the five `JointVisual`
 kinds every engine tags its types with -- pivot, segment, axis, rigid, link --
 belong to all of them. Options carries one colour and one line style per kind
 (`jointKindColors` / `jointKindStyles` in the INI), so the list does not grow a

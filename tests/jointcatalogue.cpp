@@ -18,7 +18,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-// Every joint type both engines publish, every parameter each type declares,
+// Every joint type an engine publishes, every parameter each type declares,
 // every reading it offers -- rather than the two or three types somebody had
 // trouble with. A type appears in the toolbar because its engine published it,
 // so publishing it is a promise that it can be made, that its settings reach
@@ -122,11 +122,6 @@ TEST(JointCatalogue, Box2DMakesEveryTypeItPublishes)
     everyTypeCanBeMade(QStringLiteral("Box2D"));
 }
 
-TEST(JointCatalogue, ChipmunkMakesEveryTypeItPublishes)
-{
-    everyTypeCanBeMade(QStringLiteral("Chipmunk2D"));
-}
-
 // Every parameter a type declares reaches the solver: set it to something
 // other than its default, build the world, and ask the engine what it holds.
 // A parameter in the panel that the joint is built without is a row that does
@@ -178,11 +173,6 @@ void everyParameterArrives(const QString &engineName)
 TEST(JointCatalogue, Box2DBuildsJointsFromWhatThePanelSet)
 {
     everyParameterArrives(QStringLiteral("Box2D"));
-}
-
-TEST(JointCatalogue, ChipmunkBuildsJointsFromWhatThePanelSet)
-{
-    everyParameterArrives(QStringLiteral("Chipmunk2D"));
 }
 
 // Everything a type says it measures answers during a run. A reading offered
@@ -268,19 +258,9 @@ TEST(JointCatalogue, Box2DShowsEachJointRowOnce)
     noRowIsShownTwice(QStringLiteral("Box2D"));
 }
 
-TEST(JointCatalogue, ChipmunkShowsEachJointRowOnce)
-{
-    noRowIsShownTwice(QStringLiteral("Chipmunk2D"));
-}
-
 TEST(JointCatalogue, Box2DAnswersForEverythingItMeasures)
 {
     everyReadingAnswers(QStringLiteral("Box2D"));
-}
-
-TEST(JointCatalogue, ChipmunkAnswersForEverythingItMeasures)
-{
-    everyReadingAnswers(QStringLiteral("Chipmunk2D"));
 }
 
 // A joint the engine says is a spring is drawn as one. The editor finds that
@@ -341,11 +321,6 @@ TEST(JointCatalogue, Box2DSpringsAreDrawnAsSprings)
     springsAreRecognised(QStringLiteral("Box2D"));
 }
 
-TEST(JointCatalogue, ChipmunkSpringsAreDrawnAsSprings)
-{
-    springsAreRecognised(QStringLiteral("Chipmunk2D"));
-}
-
 // A joint of every type survives the file with its settings.
 void everyTypeSurvivesTheFile(const QString &engineName)
 {
@@ -386,11 +361,6 @@ TEST(JointCatalogue, Box2DJointsSurviveTheFile)
     everyTypeSurvivesTheFile(QStringLiteral("Box2D"));
 }
 
-TEST(JointCatalogue, ChipmunkJointsSurviveTheFile)
-{
-    everyTypeSurvivesTheFile(QStringLiteral("Chipmunk2D"));
-}
-
 // The editor can only draw what it can ask for by role. It draws a spring
 // because three parameters are tagged with the spring roles; the travel limits
 // were in every catalogue under the engine's own names and tagged with
@@ -426,11 +396,6 @@ void everyLimitIsTagged(const QString &engineName)
 TEST(JointCatalogue, Box2DTagsItsTravelLimits)
 {
     everyLimitIsTagged(QStringLiteral("Box2D"));
-}
-
-TEST(JointCatalogue, ChipmunkTagsItsTravelLimits)
-{
-    everyLimitIsTagged(QStringLiteral("Chipmunk2D"));
 }
 
 // A lower stop above its upper one is a contradiction, not a narrow limit: an
@@ -498,11 +463,6 @@ void limitsStayInOrder(const QString &engineName)
 TEST(JointCatalogue, Box2DKeepsItsLimitsInOrder)
 {
     limitsStayInOrder(QStringLiteral("Box2D"));
-}
-
-TEST(JointCatalogue, ChipmunkKeepsItsLimitsInOrder)
-{
-    limitsStayInOrder(QStringLiteral("Chipmunk2D"));
 }
 
 // One thing is picked at a time. A joint used to let go of nothing, so the

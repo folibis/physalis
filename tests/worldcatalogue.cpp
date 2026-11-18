@@ -99,8 +99,3 @@ TEST(WorldCatalogue, Box2DAppliesWhatItPublishes)
 {
     checkEveryStoredProperty(QStringLiteral("Box2D"));
 }
-
-TEST(WorldCatalogue, ChipmunkAppliesWhatItPublishes)
-{
-    checkEveryStoredProperty(QStringLiteral("Chipmunk2D"));
-}
