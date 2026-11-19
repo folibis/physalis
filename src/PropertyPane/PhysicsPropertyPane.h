@@ -34,7 +34,7 @@ private:
     static std::vector<PropertyRow> shotRows(ShotSettings *shot, const std::function<void()> &changed);
     // Not static: taking the focus off whatever had it is the scene's to do.
     PropertyRow focusRow(PhysicsBody *body) const;
-    PropertyRow trailRow(PhysicsBody *body, const std::function<void()> &changed) const;
+    std::vector<PropertyRow> trailRows(PhysicsBody *body, const std::function<void()> &changed) const;
     // `picked` is how many shapes the section is speaking for, which only the
     // name row cares about -- see there.
     static std::vector<PropertyRow> shapeIdentityRows(ShapeItem *shape, int picked);

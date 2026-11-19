@@ -81,7 +81,7 @@
             "op": "set",
             "property": "",
             "subject": "@world",
-            "target": "circle_1",
+            "target": "body_2",
             "value": 0,
             "watch": "frame",
             "when": 100

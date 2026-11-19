@@ -1,7 +1,28 @@
 //! What a rule puts into words, over the canvas under the log. The editor's
-//! caption is rich text, so the page is given it as it stands.
-function showCaption(html, shown) {
+//! caption is rich text, so the page is given it as it stands -- or, where it
+//! has fields, a function that fills them in, asked again every frame.
+var captionWords = null;
+var captionShownHtml = "";
+
+function showCaption(words, shown) {
+    captionWords = shown ? words : null;
+    captionShownHtml = null;
+    refreshCaption();
+}
+
+function refreshCaption() {
     var box = dom("caption");
+    var html = typeof captionWords === "function" ? captionWords() : (captionWords || "");
+    if (html === captionShownHtml)
+        return;
+    captionShownHtml = html;
     box.innerHTML = html;
-    box.hidden = !shown || !html;
+    box.hidden = !html;
+}
+
+//! The same number the editor writes: two decimals, or three figures when small.
+function captionNumber(v) {
+    if (v === 0 || Math.abs(v) >= 1)
+        return v.toFixed(2);
+    return Number(v.toPrecision(3)).toString();
 }

@@ -221,6 +221,50 @@ struct Rule {
         return list;
     }
 
+    // A body's trail, the application's own, offered beside the engine's
+    // body properties: whether it is drawing and how long its line stays.
+    // Read, set and toggled like any other property; no engine has heard of
+    // either. Like everything a rule writes, they last as long as the run.
+    static QString drawsTrailKey() { return QStringLiteral("drawsTrail"); }
+    static QString trailFadeKey() { return QStringLiteral("trailFadeMs"); }
+    static bool isTrailKey(const QString &key)
+    {
+        return key == drawsTrailKey() || key == trailFadeKey();
+    }
+    static physics::PropertyList trailProperties()
+    {
+        const auto tr = [](const char *text) {
+            return QCoreApplication::translate("Rule", text);
+        };
+        physics::JointParam draws;
+        draws.key = drawsTrailKey();
+        draws.label = tr("Draws a Trail");
+        draws.type = physics::ParamType::Bool;
+        draws.defaultValue = false;
+        draws.tooltip = tr("Whether the body is drawing its trail. Set false, the line so far"
+                           " stays and nothing is added; set true again, a new line starts"
+                           " with a gap rather than joining across.");
+        draws.liveReadable = true;
+        draws.liveSettable = true;
+        draws.rulesOnly = true;
+
+        physics::JointParam fade;
+        fade.key = trailFadeKey();
+        fade.label = tr("Trail Fade (ms)");
+        fade.type = physics::ParamType::Integer;
+        fade.defaultValue = 0;
+        fade.minValue = 0.0;
+        fade.maxValue = 600000.0;
+        fade.decimals = 0;
+        fade.step = 100.0;
+        fade.tooltip = tr("How long each part of the line stays, in milliseconds of simulation"
+                          " time. 0 keeps the whole line.");
+        fade.liveReadable = true;
+        fade.liveSettable = true;
+        fade.rulesOnly = true;
+        return {draws, fade};
+    }
+
     // The scene's own variables, addressed as properties of one object the way
     // time and the frame count are properties of the world -- so a scene with
     // twenty of them still puts one entry in the object lists.
@@ -384,6 +428,10 @@ struct Rule {
     static QString cloneAction() { return QStringLiteral("@clone"); }
     static QString cloneXParam() { return QStringLiteral("x"); }
     static QString cloneYParam() { return QStringLiteral("y"); }
+
+    // An action on a body, the application's own: wipe the trail it has drawn
+    // so far. Whether it is drawing is a property -- see trailProperties.
+    static QString clearTrailAction() { return QStringLiteral("@clearTrail"); }
 
     static bool isRunAction(const RuleAction &action)
     {

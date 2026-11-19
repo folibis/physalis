@@ -6,6 +6,7 @@
 #include "ExplosionItem.h"
 #include "RayItem.h"
 #include "SceneControl.h"
+#include "ValueText.h"
 #include "ShapeItem.h"
 
 #include <QSet>
@@ -406,6 +407,12 @@ QVariant SimulationController::initialValue(const QString &name, const QString &
     }
     if (m_scene->rayNamed(name))
         return {};
+    if (Rule::isTrailKey(key)) {
+        for (PhysicsBody *body : m_scene->bodies()) {
+            if (body->name() == name)
+                return trailValue(body, key);
+        }
+    }
 
     if (!m_preview) {
         m_preview = EngineRegistry::create(m_engineName);
@@ -885,6 +892,7 @@ void SimulationController::sampleTrails()
 {
     if (!m_scene)
         return;
+    m_scene->setTrailClock(m_elapsedSeconds);
     for (const BoundBody &bound : std::as_const(m_bound)) {
         if (!bound.body->drawsTrail())
             continue;
@@ -908,7 +916,7 @@ void SimulationController::sampleTrails()
         QTransform bodyToScene;
         bodyToScene.translate(state.position.x(), state.position.y());
         bodyToScene.rotate(state.rotationDegrees);
-        m_scene->extendTrail(bound.body, bodyToScene.map(*local));
+        m_scene->extendTrail(bound.body, bodyToScene.map(*local), m_elapsedSeconds);
     }
 }
 
@@ -1320,7 +1328,7 @@ QVariant SimulationController::readValue(const QString &name, const QString &key
         if (key == QLatin1String("time"))
             return m_elapsedSeconds;
         if (key == QLatin1String("frame"))
-            return double(m_frameCount);
+            return qint64(m_frameCount);
         // Chance is read, not kept: every time a rule asks, it is a new number.
         // "Chance < 20" on an event is that event one time in five.
         if (key == QLatin1String("chance"))
@@ -1329,7 +1337,34 @@ QVariant SimulationController::readValue(const QString &name, const QString &key
             return m_state == State::Running;
         // Everything else the world can be asked is the engine's to answer.
     }
+    if (Rule::isTrailKey(key)) {
+        for (PhysicsBody *body : m_scene->bodies()) {
+            if (body->name() == name)
+                return trailValue(body, key);
+        }
+    }
     return readFrom(m_engine.get(), m_bodyByName, m_jointByName, name, key);
+}
+
+QString SimulationController::expandCaption(const QString &html) const
+{
+    if (!m_scene || !ValueText::hasFields(html))
+        return html;
+    return ValueText::expand(html, [this](const ValueText::Field &field) -> QVariant {
+        // A bare name is the scene's own variable first -- it is the scene's
+        // word -- and only then something the world answers to.
+        if (field.object.isEmpty()) {
+            if (m_variables.contains(field.property) || m_scene->variableNamed(field.property))
+                return readValue(Rule::variables(), field.property);
+            return readValue(Rule::world(), field.property);
+        }
+        QVariant value = readValue(field.object, field.property);
+        if (!value.isValid())
+            value = m_scene->readSceneValue(field.object, field.property);
+        if (!value.isValid() && m_scene->controlWithId(field.object))
+            value = readValue(Rule::controls(), SceneControl::key(field.object, field.property));
+        return value;
+    });
 }
 
 QVariantMap SimulationController::defaultsFor(const QString &actionId) const
@@ -1344,6 +1379,13 @@ QVariantMap SimulationController::defaultsFor(const QString &actionId) const
             params.insert(param.key, param.defaultValue);
     }
     return params;
+}
+
+QVariant SimulationController::trailValue(const PhysicsBody *body, const QString &key)
+{
+    if (key == Rule::drawsTrailKey())
+        return body->drawsTrail();
+    return body->trailFadeMs();
 }
 
 void SimulationController::takeOutOfView(PhysicsBody *body)
@@ -1478,6 +1520,21 @@ void SimulationController::applyAction(const RuleAction &action,
         const QVariant follow = action.actionParams.value(Rule::keepInViewParam());
         if (wanted)
             m_scene->setFocusedBody(!follow.isValid() || follow.toBool() ? wanted : nullptr);
+        return;
+    }
+
+    // A trail is the application's drawing, and nothing the engine knows.
+    if (action.actionId == Rule::clearTrailAction()) {
+        PhysicsBody *target = nullptr;
+        for (PhysicsBody *body : m_scene->bodies()) {
+            if (body->name() == action.targetName)
+                target = body;
+        }
+        for (ShapeItem *shape : m_scene->shapes()) {
+            if (!target && shape->name() == action.targetName)
+                target = shape->body();
+        }
+        m_scene->clearTrail(target);
         return;
     }
 
@@ -1686,6 +1743,17 @@ void SimulationController::applyAction(const RuleAction &action,
     for (PhysicsBody *body : m_scene->bodies()) {
         if (body->name() != target)
             continue;
+        // The trail is the application's: written to the run's copy of the
+        // body, never handed to the engine.
+        if (action.propertyKey == Rule::drawsTrailKey()) {
+            m_scene->setTrailDrawing(body, compute(body->drawsTrail()).toBool());
+            return;
+        }
+        if (action.propertyKey == Rule::trailFadeKey()) {
+            body->setTrailFadeMs(qRound(compute(body->trailFadeMs()).toDouble()));
+            m_scene->update();
+            return;
+        }
         const auto it = m_bodyByName.constFind(target);
         if (it == m_bodyByName.constEnd())
             return;

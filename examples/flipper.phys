@@ -211,7 +211,7 @@
                     },
                     "op": "set",
                     "property": "",
-                    "target": "circle_1",
+                    "target": "body_3",
                     "value": false
                 },
                 {
@@ -226,7 +226,7 @@
             "op": "set",
             "property": "",
             "subject": "@world",
-            "target": "circle_1",
+            "target": "body_3",
             "value": false,
             "watch": "frame",
             "when": 200

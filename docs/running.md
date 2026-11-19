@@ -186,10 +186,22 @@ than every drawn frame, so it is the same line at any playback speed. **Save
 Screenshot** during a run keeps it, with the picture widened to hold all of it.
 
 Each body's trail has its own colour, and its ticks wear it, so you can tell
-whose line is whose. The first takes the colour in
-[Options -> Physics -> Trail](options.md) and each one after it is turned
-further round the colour wheel; the width and line style there are the same
-for all of them. **View -> Trails** hides them all
+whose line is whose. [Options -> Physics -> Trail](options.md) holds six
+colours: the bodies that draw take them in the order they are listed, and any
+after the sixth come round again turned further round the colour wheel. The
+width and line style there are the same for all of them.
+
+**Trail Fade (ms)**, under Draws a Trail on the body's page, turns its line
+into a tail: each part of it stays for that many milliseconds of simulation
+time, fading as it goes, and then disappears. Each body has its own, so one
+can keep a second of tail and another five. A paused run keeps its tail where
+it is. At 0, the default, the whole line stays.
+
+A [rule](rules.md) can work the pen while the run goes: **Draws a Trail** and
+**Trail Fade (ms)** are properties of the body like any other, to set or
+toggle -- a pen lifted and put down again leaves a gap in the line, not a
+join -- and the **Clear trail** action wipes what it has drawn. A body a rule
+starts takes the next colour after the ones already drawing. **View -> Trails** hides them all
 without unmarking anything.
 
 ## The slingshot

@@ -385,20 +385,28 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
         compactColorGroup(group);
     }
 
-    // How a trail looks. The same for every body -- whether one draws at all
-    // is the body's own row.
+    // How a trail looks: a colour per body that draws, and one width and
+    // style for all of them. Whether a body draws at all is its own row.
     {
-        m_trailColor = current.trailColor;
         auto *group = new QGroupBox(tr("Trail"), m_ui->physicsTab);
         auto *form = new QFormLayout(group);
 
-        auto *color = new QToolButton(group);
-        color->setFixedSize(kSwatchWidth, kSwatchHeight);
-        color->setStyleSheet(colorSwatchStyle(m_trailColor));
-        bindSwatch(color, m_trailColor, tr("Choose Trail Color"));
-        color->setToolTip(tr("The colour of the first body's trail. Every other body that draws"
-                             " gets its own colour, turned further round the colour wheel."));
-        form->addRow(tr("Color:"), color);
+        auto *colors = new QWidget(group);
+        auto *row = new QHBoxLayout(colors);
+        row->setContentsMargins(0, 0, 0, 0);
+        row->setSpacing(4);
+        for (int i = 0; i < int(m_trailColors.size()); ++i) {
+            m_trailColors[i] = current.trailColors.value(i, CanvasScene::defaultTrailColors().value(i));
+            auto *color = new QToolButton(colors);
+            color->setFixedSize(kSwatchHeight + 6, kSwatchHeight);
+            bindSwatch(color, m_trailColors[i], tr("Choose Trail Color %1").arg(i + 1));
+            color->setToolTip(tr("Trail %1, counting the bodies that draw in the order they are"
+                                 " listed. Past the last, the colours come round again, turned"
+                                 " further round the colour wheel.").arg(i + 1));
+            row->addWidget(color);
+        }
+        row->addStretch();
+        form->addRow(tr("Colors:"), colors);
 
         m_trailLineWidth = new QDoubleSpinBox(group);
         m_trailLineWidth->setRange(0.5, 12.0);
@@ -913,7 +921,7 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.shotFullColor = m_shotFullColor;
     s.shotLineWidth = m_shotLineWidth->value();
     s.shotLineStyle = static_cast<Qt::PenStyle>(m_shotLineStyle->currentData().toInt());
-    s.trailColor = m_trailColor;
+    s.trailColors = QVector<QColor>(m_trailColors.begin(), m_trailColors.end());
     s.trailLineWidth = m_trailLineWidth->value();
     s.trailLineStyle = static_cast<Qt::PenStyle>(m_trailLineStyle->currentData().toInt());
     s.jointSelectionLineStyle =

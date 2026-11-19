@@ -165,7 +165,8 @@ function exportScene(scene, io) {
         CONTROLS_STATE: controlsState(),
         CONTROLS_RESET: hasControls() ? render("objects/controls-reset.cpp.tmpl", {}) : "",
         CAPTION: CAPTION_USED ? render("objects/caption.cpp.tmpl", {}) : "",
-        CAPTION_RESET: CAPTION_USED ? "showCaption(QString(), false);" : "",
+        CAPTION_RESET: CAPTION_USED ? "showCaption(nullptr, false);" : "",
+        DRAW_CAPTION: CAPTION_USED ? "refreshCaption();" : null,
         OVERLAY_UI: overlayUi(),
         LOG: readout.code,
         DRAW_LOG: readout.call,
@@ -344,6 +345,62 @@ function keyText(key) {
 // A string as C++ source, so a caption with a quote in it cannot end the line
 // it is written on.
 function quoted(text) { return JSON.stringify(String(text)); }
+
+// A caption's fields -- "{score}", "{time}", "{ball:angle}" -- read live, the
+// way the editor fills them in: a bare name is a variable, or failing that the
+// world's; otherwise a property of a named object, or of a control by its id.
+// The caption goes over as a lambda the window asks again every frame. A field
+// nothing answers to stays as written, which is what the editor shows too.
+var CAPTION_FIELD = /\{([^{}<>\s][^{}<>]*)\}/g;
+
+function captionSource(scene, html) {
+    var parts = [];
+    var from = 0;
+    var match;
+    CAPTION_FIELD.lastIndex = 0;
+    while ((match = CAPTION_FIELD.exec(html)) !== null) {
+        var value = captionField(scene, unescapeHtml(match[1]).trim());
+        if (!value)
+            continue;
+        parts.push("QStringLiteral(" + quoted(html.slice(from, match.index)) + ")");
+        parts.push(value);
+        from = match.index + match[0].length;
+    }
+    parts.push("QStringLiteral(" + quoted(html.slice(from)) + ")");
+    return "[] { return " + parts.join(" + ") + "; }";
+}
+
+function captionField(scene, inside) {
+    var colon = inside.indexOf(":");
+    var place, key;
+    if (colon < 0) {
+        key = inside;
+        place = VARIABLES && VARIABLES[key] ? { kind: "variables" } : { kind: "world" };
+    } else {
+        var object = inside.slice(0, colon).trim();
+        key = inside.slice(colon + 1).trim();
+        place = resolve(scene, object);
+        if (!place) {
+            // A control's address is the two things it is, as the file keeps it.
+            place = { kind: "controls" };
+            key = { control: object, property: key };
+        }
+    }
+    var p = property(place, key);
+    if (!p || !p.read)
+        return null;
+    var value = p.unit === "bool" ? "QString(" + p.read + " ? \"true\" : \"false\")"
+              : p.unit === "int" ? "QString::number(qint64(" + p.read + "))"
+              : p.unit === "text" ? "QString(" + p.read + ")"
+              : "captionNumber(" + outOfBox2D(p.unit, p.read) + ")";
+    var guard = live(place);
+    return "(" + (guard ? guard + " ? " + value + " : QStringLiteral(\"--\")" : value) + ")";
+}
+
+function unescapeHtml(text) {
+    return text.split("&lt;").join("<").split("&gt;").join(">")
+               .split("&quot;").join("\"").split("&amp;").join("&");
+}
 
 // --- the log ---------------------------------------------------------------
 
@@ -2534,7 +2591,7 @@ function actionLines(scene, rule, target) {
         CAPTION_USED = true;
         var words = params.text === undefined ? "" : String(params.text);
         var up = params.shown === undefined || !!params.shown;
-        return ["showCaption(" + quoted(words) + ", " + (up ? "true" : "false") + ");"];
+        return ["showCaption(" + captionSource(scene, words) + ", " + (up ? "true" : "false") + ");"];
     }
     if (rule.action === "@stopRun")
         return ["pendingRun = 1;"];

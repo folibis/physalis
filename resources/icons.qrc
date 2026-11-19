@@ -21,6 +21,8 @@
         <file alias="rotate.svg">icons/rotate.svg</file>
         <file alias="delete.svg">icons/delete.svg</file>
         <file alias="reset_scale.svg">icons/reset_scale.svg</file>
+        <file alias="measure_distance.svg">icons/measure_distance.svg</file>
+        <file alias="measure_angle.svg">icons/measure_angle.svg</file>
         <file alias="create_body.svg">icons/create_body.svg</file>
         <file alias="dissolve_body.svg">icons/dissolve_body.svg</file>
         <file alias="simulate.svg">icons/simulate.svg</file>

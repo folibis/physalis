@@ -493,7 +493,7 @@
             "op": "set",
             "property": "",
             "subject": "@world",
-            "target": "circle_10",
+            "target": "body_16",
             "value": false,
             "watch": "frame",
             "when": 200

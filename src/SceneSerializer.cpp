@@ -411,6 +411,8 @@ QJsonObject save(const CanvasScene *scene)
         }
         if (body->drawsTrail())
             entry.insert("trail", true);
+        if (body->trailFadeMs() > 0)
+            entry.insert("trailFadeMs", body->trailFadeMs());
         // Only the one body that has it, so a scene with none says nothing.
         if (body->isFocused())
             entry.insert("focus", true);
@@ -628,6 +630,7 @@ PhysicsBody *readBody(CanvasScene *scene, const QJsonObject &o,
     body->shot().fullImpulse = shot.value("fullImpulse").toDouble(untouched.fullImpulse);
     body->shot().maxPull = shot.value("maxPull").toDouble(untouched.maxPull);
     body->setDrawsTrail(o.value("trail").toBool());
+    body->setTrailFadeMs(o.value("trailFadeMs").toInt());
     // Through the scene, which is what keeps it to one body -- a file with
     // two of them marked leaves the last one followed rather than both.
     if (o.value("focus").toBool())
@@ -761,6 +764,8 @@ QJsonObject fragmentToJson(const CanvasScene *scene, const QVector<ShapeItem *> 
         }
         if (body->drawsTrail())
             entry.insert("trail", true);
+        if (body->trailFadeMs() > 0)
+            entry.insert("trailFadeMs", body->trailFadeMs());
         bodyArray.append(entry);
     }
     if (!bodyArray.isEmpty())

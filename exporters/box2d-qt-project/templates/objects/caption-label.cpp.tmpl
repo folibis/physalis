@@ -5,8 +5,16 @@ captionLabel->setContentsMargins(9, 7, 9, 7);
 captionLabel->setMaximumWidth(420);
 captionLabel->hide();
 overlayColumn->addWidget(captionLabel);
-showCaption = [captionLabel, overlay](const QString &html, bool shown) {
+auto captionWords = std::make_shared<CaptionWords>();
+showCaption = [captionWords](const CaptionWords &words, bool shown) {
+    *captionWords = shown ? words : CaptionWords();
+    refreshCaption();
+};
+refreshCaption = [captionLabel, captionWords, overlay] {
+    const QString html = *captionWords ? (*captionWords)() : QString();
+    if (html == captionLabel->text() && captionLabel->isVisible() == !html.isEmpty())
+        return;
     captionLabel->setText(html);
-    captionLabel->setVisible(shown && !html.isEmpty());
+    captionLabel->setVisible(!html.isEmpty());
     overlay->adjustSize();
 };

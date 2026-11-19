@@ -23,6 +23,7 @@
 #include "ShapeStyle.h"
 #include "PhysicsTypes.h"
 #include "JointTypes.h"
+#include "Units.h"
 
 class RectangleItem;
 class CircleItem;
@@ -699,20 +700,29 @@ public:
     Qt::PenStyle shotLineStyle() const { return m_shotLineStyle; }
 
     // Where each body marked to draw has been this run -- its centre of mass,
-    // a point per step. Run state: the run writes it, the scene draws it on
-    // the field under the shapes, and it is gone when the run stops, like
-    // every position on the canvas.
-    void extendTrail(PhysicsBody *body, const QPointF &point);
+    // a point per step, with the run's time it was there. Run state: the run
+    // writes it, the scene draws it over the shapes, and it is gone when the
+    // run stops, like every position on the canvas.
+    void extendTrail(PhysicsBody *body, const QPointF &point, qreal seconds);
+    // The run's time now: a body with a fade loses what is older than it.
+    void setTrailClock(qreal seconds);
+    // A rule lifting or lowering the pen. Lowered again, the line starts a new
+    // stroke rather than joining the old one across the gap.
+    void setTrailDrawing(PhysicsBody *body, bool drawing);
+    void clearTrail(PhysicsBody *body);
     void clearTrails();
+    // Every point, strokes run together; trailStrokes keeps the gaps.
     QVector<QPointF> trail(const PhysicsBody *body) const;
+    QVector<QVector<QPointF>> trailStrokes(const PhysicsBody *body) const;
     // Everything the trails cover, for a picture that has to hold them.
     QRectF trailBounds() const;
 
     // How a trail is drawn: whether one draws at all stays on the body. The
     // width is screen pixels, so a trail reads the same at 50% as at 500%.
-    // The colour is the first trail's; trailColorFor gives each body its own.
-    void setTrailColor(const QColor &color);
-    QColor trailColor() const { return m_trailColor; }
+    // One colour per body that draws, in body order; trailColorFor picks it.
+    static QVector<QColor> defaultTrailColors();
+    void setTrailColors(const QVector<QColor> &colors);
+    QVector<QColor> trailColors() const { return m_trailColors; }
     QColor trailColorFor(const PhysicsBody *body) const;
     void setTrailLineWidth(qreal width);
     qreal trailLineWidth() const { return m_trailLineWidth; }
@@ -802,6 +812,19 @@ public:
     void setCurrentScale(qreal scale);
     qreal currentScale() const { return m_currentScale; }
 
+    // A ruler and a protractor laid on the canvas. What they measure is not
+    // part of the scene: no undo step, nothing in the file, and it goes when
+    // the tool does. The distance is written in the rulers' unit.
+    enum class Measure { None, Distance, Angle };
+    void setMeasureTool(Measure tool);
+    Measure measureTool() const { return m_measureTool; }
+    void setMeasureUnit(Units::Unit unit);
+    // The points laid down so far: two for a distance, a vertex and two arms
+    // for an angle. Empty when nothing has been measured.
+    QVector<QPointF> measurePoints() const { return m_measurePoints; }
+    // What it reads, as it is written on the canvas.
+    QString measureText() const;
+
     void setScaleMin(qreal value);
     qreal scaleMin() const { return m_scaleMin; }
 
@@ -822,6 +845,8 @@ public slots:
 
 signals:
     void editorModeChanged(EditorMode mode);
+    // Esc with nothing left to clear puts the tool away.
+    void measureToolChanged(CanvasScene::Measure tool);
     void physicsSelectionChanged();
     void editSelectionChanged();
     void captionChanged();
@@ -894,6 +919,19 @@ private:
     void deactivate();
 
     QPointF snapScenePoint(const QPointF &scenePoint) const;
+
+    bool measurePress(QGraphicsSceneMouseEvent *event);
+    bool measureMove(QGraphicsSceneMouseEvent *event);
+    bool measureRelease(QGraphicsSceneMouseEvent *event);
+    QPointF measureSnap(const QPointF &scenePoint, Qt::KeyboardModifiers modifiers) const;
+    void drawMeasurement(QPainter *painter) const;
+    void measureLay();
+    Measure m_measureTool = Measure::None;
+    Units::Unit m_measureUnit = Units::Unit::Scene;
+    QVector<QPointF> m_measurePoints;
+    // Which point follows the pointer, or -1 once the measurement is laid.
+    int m_measureLive = -1;
+    bool m_measureDragging = false;
 
     bool m_snapSuspended = false;
     bool m_editsMuted = false;
@@ -1077,19 +1115,31 @@ private:
     // A series fills, and then it is halved and takes every other point from
     // there on -- the bargain the plots make, so a run of any length keeps
     // the whole of its shape rather than losing its beginning.
-    struct Trail {
+    struct TrailStroke {
         QVector<QPointF> points;
+        QVector<qreal> times;
+    };
+    struct Trail {
+        QVector<TrailStroke> strokes;
+        bool lifted = false;
+        // Given when the trail starts and kept, so a body that starts drawing
+        // mid-run takes a new colour rather than shifting everyone else's.
+        int colorIndex = -1;
         int stride = 1;
         int passed = 0;
     };
     QHash<PhysicsBody *, Trail> m_trails;
-    QColor m_trailColor { 0xD6, 0x33, 0x6C };
+    int m_nextTrailColor = 0;
+    qreal m_trailClock = 0.0;
+    QVector<QColor> m_trailColors = defaultTrailColors();
     qreal m_trailLineWidth = 2.0;
     Qt::PenStyle m_trailLineStyle = Qt::SolidLine;
+    QColor trailColorAt(int index) const;
     // What is already stroked, kept as pixels per view: a trail only grows,
     // and stroking all of it every frame took a run to 10 fps in two minutes.
     // A new zoom, a halving, a new pen or leaving the covered area draws it afresh.
-    struct TrailStroke {
+    struct TrailDrawn {
+        int stroke = 0;
         int count = 0;
         qreal length = 0.0; // device pixels so far, so a dash pattern carries on
     };
@@ -1098,7 +1148,7 @@ private:
         QTransform scale;
         qreal dpr = 0.0;
         QRect area;
-        QHash<const PhysicsBody *, TrailStroke> drawn;
+        QHash<const PhysicsBody *, TrailDrawn> drawn;
     };
     // Two, for the canvas and the full-screen view at their own zooms.
     mutable QVector<TrailCache> m_trailCache;
@@ -1106,6 +1156,9 @@ private:
     void drawGrid(QPainter *painter, const QRectF &rect);
     void drawTrails(QPainter *painter) const;
     void drawTrailsFromCache(QPainter *painter) const;
+    // Fading changes every pixel every frame, so it is drawn afresh, oldest
+    // faintest -- the tail it keeps is short enough for that to be cheap.
+    void drawFadingTrails(QPainter *painter) const;
 
     QSet<int> m_selectedNodes;
     // The same nodes in the order they were picked. Which way round a closed

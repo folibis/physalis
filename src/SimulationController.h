@@ -53,6 +53,9 @@ public:
     // its speed from the velocity it is given -- asked of a world built from
     // the scene and never stepped. During a run it is readValue.
     QVariant initialValue(const QString &name, const QString &key);
+    // A caption with each of its fields filled in from the run -- see
+    // ValueText for what a field is.
+    QString expandCaption(const QString &html) const;
     void setEngineName(const QString &name);
 
     // Every step of each watch marked for plotting, as (seconds, value).
@@ -308,6 +311,7 @@ private:
     // scene. Per step for the reason the plots are: at x4 a frame is four
     // steps, and a line through every fourth point cuts the corners off.
     void sampleTrails();
+    static QVariant trailValue(const PhysicsBody *body, const QString &key);
     // The centre of mass in each body's own frame. It does not move there,
     // so it is worked out once and carried through the body's transform.
     QHash<PhysicsBody *, QPointF> m_trailLocal;

@@ -632,6 +632,60 @@ TEST(Simulation, ABodyMarkedToDrawLeavesATrailForTheRun)
     EXPECT_GT(lowest, startedAt.y() + 100.0) << "the arm fell and the line did not follow";
 
     sim.stop();
+
+    // Rules work the pen like any flag: toggled off at frame 60 and set on at
+    // 120, the line is two strokes with a gap between, not one joined across
+    // it; wiped at 150, only what was drawn since is left.
+    const auto atFrame = [&](int frame) {
+        Rule rule;
+        rule.conditions[0].subjectName = Rule::world();
+        rule.conditions[0].conditionKey = QStringLiteral("frame");
+        rule.conditions[0].compare = Rule::Compare::Equal;
+        rule.conditions[0].conditionValue = frame;
+        rule.actions[0].targetName = lower->name();
+        return rule;
+    };
+    Rule lift = atFrame(60);
+    lift.actions[0].propertyKey = Rule::drawsTrailKey();
+    lift.actions[0].op = Rule::Op::Toggle;
+    Rule lower_ = atFrame(120);
+    lower_.actions[0].propertyKey = Rule::drawsTrailKey();
+    lower_.actions[0].op = Rule::Op::Set;
+    lower_.actions[0].value = true;
+    Rule wipe = atFrame(150);
+    wipe.actions[0].actionId = Rule::clearTrailAction();
+    scene.setRules({ lift, lower_, wipe });
+    SimulationController pen(&scene, nullptr);
+    pen.setEngineName(QStringLiteral("Box2D"));
+    pen.start();
+    for (int i = 0; i < 140; ++i)
+        pen.stepFrame();
+    const QVector<QVector<QPointF>> strokes = pen.runScene()->trailStrokes(inRun(pen, lower));
+    ASSERT_EQ(strokes.size(), 2) << "lifting and lowering the pen did not leave a gap";
+    EXPECT_GT(QLineF(strokes[0].last(), strokes[1].first()).length(), 5.0)
+        << "the gap is where the body went while the pen was up";
+    EXPECT_TRUE(lower->drawsTrail()) << "a rule lifted the scene's own pen";
+    for (int i = 0; i < 40; ++i)
+        pen.stepFrame();
+    const QVector<QVector<QPointF>> wiped = pen.runScene()->trailStrokes(inRun(pen, lower));
+    ASSERT_EQ(wiped.size(), 1) << "clearing left the old line behind";
+    EXPECT_LE(wiped[0].size(), 31) << "more is left than was drawn since the wipe";
+    pen.stop();
+
+    // With a fade set on the body, only the last half second of its line is
+    // kept -- and it is the body's, so it reaches the run's copy through the
+    // file the copy is made from.
+    scene.setRules({});
+    lower->setTrailFadeMs(500);
+    SimulationController fading(&scene, nullptr);
+    fading.setEngineName(QStringLiteral("Box2D"));
+    fading.start();
+    for (int i = 0; i < 240; ++i)
+        fading.stepFrame();
+    const QVector<QPointF> tail = fading.runScene()->trail(inRun(fading, lower));
+    EXPECT_GT(tail.size(), 10) << "the tail faded away while the body was still moving";
+    EXPECT_LE(tail.size(), 31) << "points older than the fade were kept";
+    fading.stop();
 }
 
 // What is plotted is part of the scene, not of the session.

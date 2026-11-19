@@ -26,7 +26,7 @@ to no engine, which the exported program has to provide for itself:
 - the scene's own **controls**, as real widgets over the canvas, which the
   exported rules read and write exactly as they do here;
 - the **keys** a rule watches, with the same chords;
-- the **caption** a rule puts up;
+- the **caption** a rule puts up, with its fields read live;
 - the scene's own **variables**, and the actions that belong to the
   application rather than to the engine -- init state, clone, stop and hold.
 

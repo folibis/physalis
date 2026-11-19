@@ -249,6 +249,7 @@ function exportScene(scene, io) {
         OVERLAY: overlayHtml(),
         CAPTION: CAPTION_USED ? render("objects/caption.js.tmpl", {}) : "",
         CAPTION_RESET: CAPTION_USED ? "showCaption(\"\", false);" : "",
+        DRAW_CAPTION: CAPTION_USED ? "refreshCaption();" : null,
         CONTROLS_STATE: toJavaScript(controlsState()),
         CONTROLS_SHOW: toJavaScript(controlsShow()),
         CONTROLS_RESET: hasControls() ? render("objects/controls-reset.js.tmpl", {}) : "",
@@ -2835,7 +2836,7 @@ function actionLines(scene, rule, target) {
         CAPTION_USED = true;
         var words = params.text === undefined ? "" : String(params.text);
         var up = params.shown === undefined || !!params.shown;
-        return ["showCaption(" + quoted(words) + ", " + (up ? "true" : "false") + ");"];
+        return ["showCaption(" + captionSource(scene, words) + ", " + (up ? "true" : "false") + ");"];
     }
     if (rule.action === "@stopRun")
         return ["pendingRun = 1;"];
@@ -3489,6 +3490,67 @@ function has(map, key) { return Object.prototype.hasOwnProperty.call(map, key); 
 // A string as JavaScript source, so a caption with a quote in it cannot end
 // the line it is written on.
 function quoted(text) { return JSON.stringify(String(text)); }
+
+// A caption's fields -- "{score}", "{time}", "{ball:angle}" -- read live, the
+// way the editor fills them in: a bare name is a variable, or failing that the
+// world's; otherwise a property of a named object, or of a control by its id.
+// A caption with none is the words as they stand; one with fields becomes a
+// function the page asks again every frame. A field nothing answers to stays
+// as written, which is what the editor shows too.
+var CAPTION_FIELD = /\{([^{}<>\s][^{}<>]*)\}/g;
+
+function captionSource(scene, html) {
+    var parts = [];
+    var from = 0;
+    var any = false;
+    var match;
+    CAPTION_FIELD.lastIndex = 0;
+    while ((match = CAPTION_FIELD.exec(html)) !== null) {
+        var value = captionField(scene, unescapeHtml(match[1]).trim());
+        if (!value)
+            continue;
+        parts.push(quoted(html.slice(from, match.index)));
+        parts.push(value);
+        from = match.index + match[0].length;
+        any = true;
+    }
+    if (!any)
+        return quoted(html);
+    parts.push(quoted(html.slice(from)));
+    return "function () { return " + parts.join(" + ") + "; }";
+}
+
+function captionField(scene, inside) {
+    var colon = inside.indexOf(":");
+    var place, key;
+    if (colon < 0) {
+        key = inside;
+        place = VARIABLES && VARIABLES[key] ? { kind: "variables" } : { kind: "world" };
+    } else {
+        var object = inside.slice(0, colon).trim();
+        key = inside.slice(colon + 1).trim();
+        place = resolve(scene, object);
+        if (!place) {
+            // A control's address is the two things it is, as the file keeps it.
+            place = { kind: "controls" };
+            key = { control: object, property: key };
+        }
+    }
+    var p = property(place, key);
+    if (!p || !p.read)
+        return null;
+    var value = p.unit === "bool" ? "(" + p.read + " ? \"true\" : \"false\")"
+              : p.unit === "int" ? "String(Math.round(" + p.read + "))"
+              : p.unit === "text" ? "String(" + p.read + ")"
+              : "captionNumber(" + outOfBox2D(p.unit, p.read) + ")";
+    var guard = live(place);
+    return "(" + (guard ? guard + " ? " + value + " : \"--\"" : value) + ")";
+}
+
+function unescapeHtml(text) {
+    return text.split("&lt;").join("<").split("&gt;").join(">")
+               .split("&quot;").join("\"").split("&amp;").join("&");
+}
 function pick(map, key, fallback) { return has(map, key) ? map[key] : fallback; }
 
 // A threshold at the editor's top end is Box2D's default of never, and left out.

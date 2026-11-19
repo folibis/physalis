@@ -109,6 +109,8 @@ QIcon edit() { return themed(QStringLiteral(":/icons/edit.svg")); }
 QIcon rotate() { return themed(QStringLiteral(":/icons/rotate.svg")); }
 QIcon deleteShape() { return themed(QStringLiteral(":/icons/delete.svg")); }
 QIcon resetScale() { return themed(QStringLiteral(":/icons/reset_scale.svg")); }
+QIcon measureDistance() { return themed(QStringLiteral(":/icons/measure_distance.svg")); }
+QIcon measureAngle() { return themed(QStringLiteral(":/icons/measure_angle.svg")); }
 QIcon createBody() { return themed(QStringLiteral(":/icons/create_body.svg")); }
 QIcon dissolveBody() { return themed(QStringLiteral(":/icons/dissolve_body.svg")); }
 QIcon simulate() { return themed(QStringLiteral(":/icons/simulate.svg")); }

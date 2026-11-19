@@ -1,3 +1,14 @@
 //! What a rule puts into words, over the canvas under the log. The editor's
-//! caption is rich text, so the label is given it as it stands.
-std::function<void(const QString &, bool)> showCaption = [](const QString &, bool) {};
+//! caption is rich text, so the label is given it as it stands; a caption with
+//! fields in it is asked again every frame for what they read now.
+using CaptionWords = std::function<QString()>;
+std::function<void(const CaptionWords &, bool)> showCaption = [](const CaptionWords &, bool) {};
+std::function<void()> refreshCaption = [] {};
+
+// The same number the editor writes: two decimals, or three figures when small.
+QString captionNumber(double v)
+{
+    if (v == 0.0 || std::abs(v) >= 1.0)
+        return QString::number(v, 'f', 2);
+    return QString::number(v, 'g', 3);
+}

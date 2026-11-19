@@ -140,6 +140,8 @@ OptionsDialog::Settings distinctive()
     s.shotLineWidth = 4.5;
     // One of the four the slingshot combo offers; it cannot show any other.
     s.shotLineStyle = Qt::DashDotLine;
+    s.trailColors = {QColor(1, 1, 2), QColor(1, 1, 3), QColor(1, 1, 4),
+                     QColor(1, 1, 5), QColor(1, 1, 6), QColor(1, 1, 7)};
 
     s.jointColor = QColor(3, 2, 1);
     s.jointKindColors.insert(0, QColor(12, 34, 56));
@@ -216,6 +218,7 @@ void everyFieldComesBack(const OptionsDialog::Settings &in, const OptionsDialog:
     SAME(simulationSpeed); SAME(simulationFullScreen);
 
     SAME(shotLightColor); SAME(shotFullColor); SAME(shotLineWidth);
+    SAME(trailColors);
     EXPECT_EQ(int(out.shotLineStyle), int(in.shotLineStyle))
         << "Options lost or changed shotLineStyle";
 

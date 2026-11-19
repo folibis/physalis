@@ -4,6 +4,7 @@
 
 #include <QDialog>
 
+#include <array>
 #include <memory>
 #include <QColor>
 #include <QHash>
@@ -123,7 +124,7 @@ public:
         Qt::PenStyle shotLineStyle = Qt::DotLine;
 
         // How a body's trail is drawn, for every body that leaves one.
-        QColor trailColor { 0xD6, 0x33, 0x6C };
+        QVector<QColor> trailColors = CanvasScene::defaultTrailColors();
         qreal trailLineWidth = 2.0;
         Qt::PenStyle trailLineStyle = Qt::SolidLine;
 
@@ -203,7 +204,8 @@ private:
     // The Trail group, built the same way.
     QDoubleSpinBox *m_trailLineWidth = nullptr;
     QComboBox *m_trailLineStyle = nullptr;
-    QColor m_trailColor;
+    // Fixed in size: each swatch holds a reference to its own entry.
+    std::array<QColor, 6> m_trailColors;
     // Joint anchors' opacity, a row added to the form's joint drawing group.
     QSlider *m_jointAnchorOpacity = nullptr;
     // Builds the Export tab from whatever converters were found, and removes

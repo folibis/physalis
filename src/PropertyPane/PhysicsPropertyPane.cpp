@@ -68,7 +68,7 @@ std::vector<PropertyRow> PhysicsPropertyPane::rows(EditorMode mode) const
         result.push_back(focusRow(body));
         // Scenery has nowhere to have been.
         if (body->props().type != physics::BodyType::Static)
-            result.push_back(trailRow(body, notify));
+            append(trailRows(body, notify));
         if (body->props().type == physics::BodyType::Dynamic)
             append(shotRows(&body->shot(), notify));
         if (engine) {
@@ -168,6 +168,13 @@ std::vector<PropertyRow> PhysicsPropertyPane::defaultRows(EditorMode mode) const
         row.defaultValue = false;
         result.push_back(std::move(row));
     }
+    {
+        PropertyRow row {QObject::tr("Trail Fade (ms)"), PropertyFieldType::Numeric,
+            [] { return 0; }, [](const QVariant &) {},
+            0.0, 600000.0, {}, 0, 100.0, bodySection()};
+        row.defaultValue = 0;
+        result.push_back(std::move(row));
+    }
     for (PropertyRow &row : shotRows(&pristineShot, [] {}))
         result.push_back(std::move(row));
     if (auto engine = physics::EngineRegistry::create(m_scene->simulationEngineName())) {
@@ -239,8 +246,10 @@ PropertyRow PhysicsPropertyPane::focusRow(PhysicsBody *body) const
     return row;
 }
 
-PropertyRow PhysicsPropertyPane::trailRow(PhysicsBody *body, const std::function<void()> &changed) const
+std::vector<PropertyRow> PhysicsPropertyPane::trailRows(PhysicsBody *body,
+                                                       const std::function<void()> &changed) const
 {
+    std::vector<PropertyRow> result;
     CanvasScene *scene = m_scene;
     PropertyRow row {QObject::tr("Draws a Trail"), PropertyFieldType::Boolean,
         [body] { return body->drawsTrail(); },
@@ -254,10 +263,23 @@ PropertyRow PhysicsPropertyPane::trailRow(PhysicsBody *body, const std::function
         -100000.0, 100000.0, {}, -1, 0.0, bodySection()};
     row.defaultValue = false;
     row.tooltip = QObject::tr("While a run is going, the body leaves a line where its centre of"
-                              " mass has been. The line stays for the whole run and goes when it"
-                              " stops; its colour, width and style are in Options -> Physics. A"
-                              " body that draws wears a ring round its centre of mass.");
-    return row;
+                              " mass has been, and it goes when the run stops; its colour, width"
+                              " and style are in Options -> Physics. In Physics mode a body that"
+                              " draws is marked by four ticks round its centre of mass.");
+    result.push_back(std::move(row));
+
+    // Not tied to the box above: a rule can start a body drawing that is not
+    // marked, and its line fades by this too.
+    PropertyRow fade {QObject::tr("Trail Fade (ms)"), PropertyFieldType::Numeric,
+        [body] { return body->trailFadeMs(); },
+        [body, changed](const QVariant &v) { body->setTrailFadeMs(qRound(v.toDouble())); changed(); },
+        0.0, 600000.0, {}, 0, 100.0, bodySection()};
+    fade.defaultValue = 0;
+    fade.tooltip = QObject::tr("How long each part of the line stays, in milliseconds of"
+                               " simulation time: older parts fade out and go, leaving a tail"
+                               " behind the body. 0 keeps the whole line.");
+    result.push_back(std::move(fade));
+    return result;
 }
 
 std::vector<PropertyRow> PhysicsPropertyPane::shotRows(ShotSettings *shot, const std::function<void()> &changed)

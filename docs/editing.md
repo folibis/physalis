@@ -266,3 +266,26 @@ reading the names is exactly what a run is watched with.
   [Options → Common](options.md). The field's size and colour can also be
   changed for the current scene in its properties: click an empty part of the
   canvas to show them.
+
+## Measuring
+
+The two buttons after the zoom on the toolbar are a ruler and a protractor.
+Neither changes the scene: what they measure is not saved and cannot be
+undone, and it goes when you put the tool away. Both work in Edit mode, in
+Physics mode and on a running scene.
+
+- **Measure Distance** -- drag from one point to another, or click at each
+  end. The label reads the length in the rulers' unit, with **Δx** and **Δy**
+  under it, to as many decimals as a screen pixel is worth at this zoom.
+- **Measure Angle** -- click the corner, then the end of each arm, or drag out
+  the first arm and click the end of the second. The label reads the angle
+  between the arms, from 0° to 180°.
+
+A point you place is drawn to the nearest corner, centre or edge of a shape,
+a body's centre of mass or a joint's anchor, and otherwise to the grid if
+snapping is on. Hold **Shift** to place it exactly where the pointer is.
+**Ctrl** turns the arm you are placing in steps of 15°; for the second arm of
+an angle, the steps count from the first arm. **Esc** takes the measurement
+up, and a second **Esc** puts the tool away. So does clicking its button
+again. The unit is the rulers' own, so right-click a ruler to measure in
+metres instead.

@@ -244,6 +244,7 @@ private:
     // The log readout, pinned to the canvas corner.
     QLabel *m_logOverlay = nullptr;
     QLabel *m_caption = nullptr;
+    QString m_captionShown;
     QWidget *m_controls = nullptr;
     QHash<QString, QWidget *> m_controlWidgets;
     void updateLogOverlay();
@@ -263,6 +264,8 @@ private:
     void placeLogOverlay();
     // Words a rule put up, under the log in the top-left corner.
     void updateCaption();
+    // Fields in the caption change with the run; this redoes it when they do.
+    void refreshCaptionValues();
     // The body the scene says to keep in view, put back in the middle after
     // every step of a run.
     void followFocusedBody();
@@ -399,6 +402,9 @@ private:
     int m_pasteCount = 0;
     SimulationController *m_simulation = nullptr;
     QAction *m_resetScaleAction = nullptr;
+    QAction *m_measureDistanceAction = nullptr;
+    QAction *m_measureAngleAction = nullptr;
+    CanvasScene::Measure checkedMeasureTool() const;
     QLabel *m_statusHelpLabel = nullptr;
     QHash<int, QToolButton *> m_modeButtons;
     QComboBox *m_scaleCombo = nullptr;

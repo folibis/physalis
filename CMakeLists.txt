@@ -164,6 +164,8 @@ add_library(PhysalisCore OBJECT
     src/RulerWidget.cpp
     src/Units.h
     src/Units.cpp
+    src/ValueText.h
+    src/ValueText.cpp
     src/FullScreenView.h
     src/FullScreenView.cpp
     src/ViewLayersCombo.h

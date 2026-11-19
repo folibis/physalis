@@ -1400,7 +1400,9 @@ TEST(Exporters, WhatAHandDoesToASceneSurvivesTheExport)
     saysSo.actions[0].targetName = Rule::world();
     saysSo.actions[0].actionId = Rule::showCaptionAction();
     saysSo.actions[0].actionParams.insert(Rule::captionTextParam(),
-                                          QStringLiteral("<b>Up</b> speeds it up"));
+                                          QStringLiteral("<b>Up</b> speeds it up -- {score},"
+                                                         " {time}, {speed:value},"
+                                                         " {crateBody:angle}, {nobody}"));
     saysSo.actions[0].actionParams.insert(Rule::captionShownParam(), true);
 
     Rule renames;
@@ -1435,6 +1437,13 @@ TEST(Exporters, WhatAHandDoesToASceneSurvivesTheExport)
         EXPECT_TRUE(out.text.contains(press.id)) << who << " wrote no button";
         EXPECT_TRUE(out.text.contains(QStringLiteral("Up</b> speeds it up")))
             << who << " wrote no caption";
+        // A field is read live, and one that names nothing stays as written.
+        for (const char *field : { "{score}", "{time}", "{speed:value}", "{crateBody:angle}" }) {
+            EXPECT_FALSE(out.text.contains(QLatin1String(field)))
+                << who << " wrote the field " << field << " as words";
+        }
+        EXPECT_TRUE(out.text.contains(QStringLiteral("{nobody}")))
+            << who << " dropped a field that names nothing";
         EXPECT_TRUE(out.text.contains(QStringLiteral("Again")))
             << who << " cannot change what a control says";
         // The address the cards spell with punctuation is theirs alone.

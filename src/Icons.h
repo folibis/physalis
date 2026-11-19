@@ -31,6 +31,8 @@ QIcon edit();
 QIcon rotate();
 QIcon deleteShape();
 QIcon resetScale();
+QIcon measureDistance();
+QIcon measureAngle();
 QIcon createBody();
 QIcon dissolveBody();
 QIcon simulate();

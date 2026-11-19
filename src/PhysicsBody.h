@@ -62,9 +62,12 @@ public:
     // Whether the body leaves a line behind it while a run goes: where its
     // centre of mass has been. The application's own flag, like the one
     // above -- no engine draws -- and how the line looks is an Option, the
-    // same for every body.
+    // same for every body. How long its line stays is the body's: 0 keeps
+    // all of it, anything else is milliseconds of run time.
     bool drawsTrail() const { return m_drawsTrail; }
     void setDrawsTrail(bool draws) { m_drawsTrail = draws; }
+    int trailFadeMs() const { return m_trailFadeMs; }
+    void setTrailFadeMs(int ms) { m_trailFadeMs = qMax(0, ms); }
 
     QPointF originScenePos() const;
 
@@ -103,6 +106,7 @@ private:
     ShotSettings m_shot;
     bool m_focused = false;
     bool m_drawsTrail = false;
+    int m_trailFadeMs = 0;
     bool m_asleep = false;
     bool m_removed = false;
     bool m_runOnly = false;

@@ -321,6 +321,13 @@ simulation runs: choose **Property** instead of **Value**, then name the
 object, its property and an offset to add. This is how one object can follow
 another, for example a platform that always stays 50 units below a ball.
 
+A body also has two properties of its [trail](running.md#trails), set,
+toggled and watched like any other: **Draws a Trail** and **Trail Fade (ms)**.
+Set **Draws a Trail** false and the line drawn so far stays while nothing more
+is added; set it true again and a new line starts, with a gap rather than a
+join. It works on a body that is not marked to draw as well, so a rule can
+start a trail only when something happens.
+
 ### Performing an action
 
 Actions do something rather than set a value. The ones that come with every
@@ -338,6 +345,8 @@ engine are:
   it go again. One body at a time, and when the run ends the view goes back to
   whatever the scene itself keeps in view. See
   [Keeping one body in view](running.md#keeping-one-body-in-view).
+- **Clear trail** wipes what this body has drawn so far. If it is still
+  drawing, a new line starts from where it is.
 - **Explode** sets off an [explosion](physics.md#explosions).
 - **Break** destroys a joint.
 - **Stop the simulation** (on **World**) ends the run, just like the Stop
@@ -355,6 +364,24 @@ engine are:
   and underline, a typeface, a size and a colour. Untick **shown** to take the
   caption down again. A caption is run state like everything else:
   stopping the run clears it.
+
+  A caption can show values that change while the run goes. Write a **field**
+  in braces and the caption shows what it reads now:
+
+  | Field | Shows |
+  |---|---|
+  | `{score}` | the variable called *score* |
+  | `{time}`, `{frame}` | something the world answers to -- the elapsed time, the frame count |
+  | `{ball:speed}` | a property of the object called *ball*: a body, a shape, a joint or a ray |
+  | `{power:value}` | a control's value, by its id |
+
+  A bare name is a variable first, and only then something the world reads.
+  **Insert value** in the editor lists everything there is to read, object by
+  object, and writes the field for you, so you never need to know how a
+  property is spelt. A whole number shows as one, a flag as *true* or *false*,
+  anything else with two decimals. A field that names nothing is left as you
+  wrote it, so a typo shows on the canvas rather than disappearing.
+  `<b>Score:</b> {score} -- {time} s` is a scoreboard and a clock in one line.
 
 Engines add their own actions, such as a push or a force at a point on a body,
 or working out a body's mass again after its shapes have changed.

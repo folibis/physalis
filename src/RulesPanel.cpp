@@ -11,6 +11,7 @@
 #include "ObjectIcons.h"
 #include "Theme.h"
 #include "EngineRegistry.h"
+#include "ValueText.h"
 
 #include <QMenu>
 #include <QApplication>
@@ -1528,6 +1529,7 @@ QVector<RuleChoice> RulesPanel::watchChoices(const QString &name) const
             continue;
         addEvents(eventsFor(name));
         addReadable(engine->bodyProperties());
+        addReadable(Rule::trailProperties());
         return choices;
     }
     for (ShapeItem *shape : m_scene->shapes()) {
@@ -1858,6 +1860,7 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
         result.append({actionKey(Rule::initStateAction()), tr("Init state")});
         result.append({actionKey(Rule::cloneAction()), tr("Clone")});
         result.append({actionKey(Rule::keepInViewAction()), tr("Keep in view")});
+        result.append({actionKey(Rule::clearTrailAction()), tr("Clear trail")});
     };
 
     if (m_scene->explosionNamed(name)) {
@@ -1872,6 +1875,7 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
     for (PhysicsBody *body : m_scene->bodies()) {
         if (body->name() == name) {
             addSettable(engine->bodyProperties(), false);
+            addSettable(Rule::trailProperties(), false);
             addActions();
             addInitState();
             return result;
@@ -1890,6 +1894,7 @@ QVector<RuleChoice> RulesPanel::propertiesOf(const QString &name) const
         addSettable(engine->shapeProperties(), false);
     } else if (name == Rule::otherObjectBody()) {
         addSettable(engine->bodyProperties(), false);
+        addSettable(Rule::trailProperties(), false);
         addActions();
         addInitState();
     }
@@ -1910,7 +1915,8 @@ static physics::ActionType applicationAction(const QString &id)
         text.label = QObject::tr("Text");
         text.type = physics::ParamType::Text;
         text.defaultValue = QString();
-        text.tooltip = QObject::tr("Write it in the editor behind the button.");
+        text.tooltip = QObject::tr("Write it in the editor behind the button. A field such as"
+                                   " {score} or {time} shows that value as the run goes.");
         action.params.append(text);
 
         physics::JointParam shown;
@@ -1938,6 +1944,13 @@ static physics::ActionType applicationAction(const QString &id)
         follow.tooltip = QObject::tr("Off stops the view following anything, which is how a rule"
                                      " lets a body go.");
         action.params.append(follow);
+        return action;
+    }
+
+    if (id == Rule::clearTrailAction()) {
+        action.id = id;
+        action.description = QObject::tr("Wipes the trail this body has drawn so far. If it is"
+                                         " still drawing, a new line starts from where it is.");
         return action;
     }
 
@@ -2307,6 +2320,41 @@ bool RulesPanel::editCaptionText(QString *text)
         showColour(picked);
         edit->setFocus();
     });
+
+    // A value the run fills in, written as a field: the menu lists what a rule
+    // can read, so nobody has to remember how a property is keyed.
+    auto *insert = new QToolButton(&dialog);
+    insert->setText(tr("Insert value"));
+    insert->setToolTip(tr("Put a live value into the caption, such as a variable or the"
+                          " elapsed time. It is filled in while the run goes."));
+    insert->setPopupMode(QToolButton::InstantPopup);
+    auto *fields = new QMenu(insert);
+    for (const RuleChoice &object : sourceObjectChoices()) {
+        QMenu *sub = fields->addMenu(object.icon, object.label);
+        connect(sub, &QMenu::aboutToShow, sub, [this, sub, edit, name = object.data] {
+            if (!sub->isEmpty())
+                return;
+            const QVector<RuleChoice> readables = readablesOf(name);
+            if (readables.isEmpty())
+                sub->addAction(tr("(nothing readable)"))->setEnabled(false);
+            for (const RuleChoice &reading : readables) {
+                ValueText::Field field{ name, reading.data };
+                if (name == Rule::variables() || name == Rule::world()) {
+                    field.object.clear();
+                } else if (name == Rule::controls()) {
+                    const SceneControl::Address address = SceneControl::parse(reading.data);
+                    field = { address.control, address.property };
+                }
+                connect(sub->addAction(reading.label), &QAction::triggered, edit,
+                        [edit, text = ValueText::field(field)] {
+                            edit->insertPlainText(text);
+                            edit->setFocus();
+                        });
+            }
+        });
+    }
+    insert->setMenu(fields);
+    tools->addWidget(insert);
 
     tools->addStretch(1);
 
@@ -2914,7 +2962,8 @@ const physics::JointParam *RulesPanel::describe(const QString &objectName,
     if (!matched) {
         for (PhysicsBody *body : m_scene->bodies()) {
             if (body->name() == objectName) {
-                candidates = engine->bodyProperties();
+                // The trail is the application's, and reaches the card the same way.
+                candidates = engine->bodyProperties() + Rule::trailProperties();
                 matched = true;
             }
         }
@@ -2931,7 +2980,7 @@ const physics::JointParam *RulesPanel::describe(const QString &objectName,
         if (objectName == Rule::otherObject())
             candidates = engine->shapeProperties();
         else if (objectName == Rule::otherObjectBody())
-            candidates = engine->bodyProperties();
+            candidates = engine->bodyProperties() + Rule::trailProperties();
     }
 
     for (const physics::JointParam &p : candidates) {

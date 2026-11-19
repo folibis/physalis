@@ -151,6 +151,19 @@ names. It is deliberately **not** a `RunLayer`: those are all on while editing,
 and this one has to default off, since a field of labels is in the way of the
 drawing most of the time.
 
+**Measuring is the canvas's, and is not the scene.** `CanvasScene::Measure`
+-- a distance or an angle -- puts points in `m_measurePoints` and nowhere
+else: no item, no undo step, nothing in the file. They are drawn in device
+pixels by `drawMeasurement`, for the same reason the names are, and each label
+stands off along its own direction by the size of its box, because a fixed
+offset put it on the line it was reading. The tool takes the left button
+before anything else on the canvas, the slingshot included, since it was
+picked on purpose. A point is pulled to a corner, a centre, a centre of mass
+or an anchor within 8 device pixels, and otherwise to the grid. A distance is
+written in the rulers' unit (`setMeasureUnit`, set where the rulers are),
+to a step of one device pixel. The window applies the checked tool to the
+scene and to a run's copy alike.
+
 **The canvas's right-click menu carries the canvas's own commands**
 (`MainWindow::addCanvasActions`), appended to every branch so the three menus
 cannot drift. The empty-canvas menu used to be Add and nothing else. The menu
@@ -178,6 +191,19 @@ the `...` button on the rule card. Run state like everything else, so `stop()`
 clears it. `MainWindow` stacks the three -- log, caption, controls -- as
 widgets over the canvas rather than drawing them into the scene, so they keep
 their size whatever the zoom and a control can actually be clicked.
+
+**A caption can carry fields**, `{score}`, `{time}`, `{ball:speed}`,
+`{power:value}`, and the grammar is `ValueText`'s: what a field is, how
+it is spelt, and how a value is written for a person, which the log shares.
+A bare name is a variable, then a world reading; `object:property` is
+anything a rule can read, then a control by its id. The scene keeps the
+caption as written, and `SimulationController::expandCaption` fills it in on
+each step; the window redoes the box only when the words change. A field
+nothing answers to is left as written, since a typo should show. The field
+needs no space after the brace, because the editor's own HTML carries
+`p, li { white-space: pre-wrap; }`. Both converters write a caption with
+fields as a function the page or window asks every frame, with the same
+reads their rules use.
 
 **The grammar of that address lives in `SceneControl` and nowhere else.** The
 cards show a property as one string, `Start:caption`; the separator, the
@@ -410,6 +436,8 @@ src/              the application (Qt widgets, canvas, panels, serialization)
     SceneVariable.h   a named value the scene carries and no engine knows
     SceneControl.h    a checkbox, button or slider the scene is worked with,
                       and the grammar of how a rule addresses one
+    ValueText         how a value is written for a person, and a caption's
+                      {fields}
     ControlsPanel     the Controls tab: one card per control
     RulesPanel        the rule cards
     VariablesPanel    the Variables tab beside them
@@ -590,10 +618,39 @@ it calls the same four itself.
 whether a body draws is the body's (`PhysicsBody::drawsTrail()`, the "Draws a
 Trail" row, `"trail": true` in the `*.phys` only when set) and how the line
 looks -- colour, width, style -- is an application setting (Options -> Physics
--> Trail). That colour is the first trail's: `CanvasScene::trailColorFor` turns
-each later body that draws a golden angle further round the wheel, counted in
-the scene's body order so a body keeps its colour from run to run, because
-several lines in one colour cannot be told apart. The point drawn from is the centre of mass, worked out once in the
+-> Trail). Options holds six colours, `trailColors` in the INI (the single
+`trailColor` before it is read as the first): `CanvasScene::trailColorFor`
+gives each body that draws the next one, counted in the scene's body order so
+a body keeps its colour from run to run, and past the sixth turns them a
+golden angle further round the wheel, because several lines in one colour
+cannot be told apart. A trail takes its colour index when it starts and keeps
+it, so a body a rule starts mid-run takes the next one rather than shifting
+everyone after it in the list.
+
+**A rule works the pen through properties, not an action.** Whether a body
+draws and its fade are flags like any other, so they are set, toggled and
+watched like any other: `Rule::trailProperties()` puts them beside the
+engine's body properties, the way `runProperties()` does for the world, and
+`SimulationController` answers those two keys from the run's copy of the body
+before anything is asked of the engine. A Draw trail action with an on/off
+parameter came first and was a second way of writing a boolean. Wiping is
+`clearTrailAction()`, since it is not a value. Lifting the pen is
+`setDrawsTrail(false)` on the run's copy, so the scene's own flag is untouched. A trail is a list of strokes: lowered again, the next
+point starts a new one, so a gap is a gap and not a line joined across it.
+The converters carry no trails, so a rule with either action is reported and
+left out of an export, as any rule they cannot write is.
+
+**The fade is the body's** (`PhysicsBody::trailFadeMs`, the "Trail Fade (ms)"
+row, `"trailFadeMs"` in the `*.phys` only when set; 0 keeps the whole line),
+because two bodies in one scene want different tails -- it was an Option for
+an hour. Every point carries the run time it was taken, and `setTrailClock`
+drops what is older than each body's own fade every step. A fading line
+changes every pixel every frame, so it skips the pixel cache and is drawn
+afresh by `drawFadingTrails`, in 24 bands of one strength: drawn a segment at
+a time, the round ends of translucent segments overlapped in a bead at every
+joint. The cache resets the painter's transform to lay its pixels down, which
+is why `drawTrails` saves round it -- the fading trails after it are drawn in
+the scene's. The point drawn from is the centre of mass, worked out once in the
 body's own frame and carried through its transform, and
 `SimulationController::sampleTrails` takes one point per *step*, for the reason
 the plots do: at x4 a frame is four steps, and a line through every fourth

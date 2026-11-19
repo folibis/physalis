@@ -1638,7 +1638,9 @@ TEST(RuleSource, ARuleShowsAndHidesACaption)
     scene.addItem(box);
     scene.notifyShapesChanged();
     scene.selectForPhysics(box, true);
-    ASSERT_TRUE(scene.createBodyFromSelection());
+    PhysicsBody *crate = scene.createBodyFromSelection();
+    ASSERT_TRUE(crate);
+    crate->setName(QStringLiteral("crate"));
 
     const auto saying = [](const QString &key, const QString &text, bool shown) {
         Rule rule;
@@ -1651,6 +1653,12 @@ TEST(RuleSource, ARuleShowsAndHidesACaption)
         rule.actions[0].actionParams.insert(Rule::captionShownParam(), shown);
         return rule;
     };
+    SceneVariable score;
+    score.name = QStringLiteral("score");
+    score.type = SceneVariable::Type::Integer;
+    score.initial = 3;
+    scene.setVariables({ score });
+
     scene.setRules({ saying(QStringLiteral("A"), QStringLiteral("<b>Go</b>"), true),
                      saying(QStringLiteral("B"), QStringLiteral("<b>Go</b>"), false) });
 
@@ -1671,6 +1679,16 @@ TEST(RuleSource, ARuleShowsAndHidesACaption)
     QCoreApplication::sendEvent(&live, &hide);
     sim.advance(1.0 / 60.0);
     EXPECT_FALSE(live.captionShown()) << "turning Shown off left the caption up";
+
+    // Fields read the run: a variable by its name, the world's own readings,
+    // any object's property and a control's; a field nothing answers to is
+    // left as written, and the editor's own style sheet is not a field.
+    const QString fields = sim.expandCaption(QStringLiteral(
+        "<style>p { white-space: pre-wrap; }</style>"
+        "{score} {frame} {crate:angle} {nobody} {crate:nothing}"));
+    EXPECT_EQ(fields, QStringLiteral("<style>p { white-space: pre-wrap; }</style>"
+                                     "3 3 0.00 {nobody} {crate:nothing}"))
+        << fields.toStdString();
 
     // It belongs to the run. A has to come up before it can go down again --
     // a key held is not a key pressed twice.

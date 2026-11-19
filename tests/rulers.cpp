@@ -3,9 +3,13 @@
 #include "CanvasScene.h"
 #include "MainWindow.h"
 #include "OptionsDialog.h"
+#include "RectangleItem.h"
 #include "RulerWidget.h"
 #include "Units.h"
 
+#include <QAction>
+#include <QGraphicsSceneMouseEvent>
+#include <QKeyEvent>
 #include <QSignalSpy>
 #include <gtest/gtest.h>
 
@@ -81,4 +85,77 @@ TEST(Rulers, TheUnitIsOneChoiceForBothEdgesAndIsRemembered)
     EXPECT_EQ(picked.count(), 1);
     EXPECT_EQ(top->unit(), Units::Unit::Metres) << "picking on one ruler left the other behind";
     EXPECT_EQ(left->unit(), Units::Unit::Metres);
+}
+
+// The canvas measures in the rulers' unit, and what it measures is no part of
+// the scene. A drag or two clicks lays a distance; a corner draws an end to
+// it; three clicks lay an angle; Esc takes the measurement up and then the tool.
+TEST(Rulers, TheCanvasMeasuresADistanceAndAnAngleInTheRulersUnit)
+{
+    MainWindow window;
+    auto *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    OptionsDialog::Settings s = window.settingsSnapshotForTest();
+    s.rulerUnit = Units::Unit::Metres;
+    s.snapToGrid = false;
+    window.applySettingsForTest(s);
+    scene->setPixelsPerMeter(100.0);
+    scene->setCurrentScale(100.0);
+
+    QAction *distance = nullptr;
+    QAction *angle = nullptr;
+    for (QAction *action : window.findChildren<QAction *>()) {
+        if (action->text() == QLatin1String("Measure Distance"))
+            distance = action;
+        if (action->text() == QLatin1String("Measure Angle"))
+            angle = action;
+    }
+    ASSERT_TRUE(distance && angle) << "the toolbar has no measuring tools";
+
+    const auto mouse = [scene](QEvent::Type type, const QPointF &at) {
+        QGraphicsSceneMouseEvent event(type);
+        event.setScenePos(at);
+        event.setButton(type == QEvent::GraphicsSceneMouseMove ? Qt::NoButton : Qt::LeftButton);
+        event.setButtons(type == QEvent::GraphicsSceneMouseRelease ? Qt::NoButton : Qt::LeftButton);
+        QCoreApplication::sendEvent(scene, &event);
+    };
+    const auto click = [&](const QPointF &at) {
+        mouse(QEvent::GraphicsSceneMousePress, at);
+        mouse(QEvent::GraphicsSceneMouseRelease, at);
+    };
+
+    distance->trigger();
+    ASSERT_EQ(scene->measureTool(), CanvasScene::Measure::Distance);
+    const int undoable = scene->items().size();
+    mouse(QEvent::GraphicsSceneMousePress, QPointF(1000, 1000));
+    mouse(QEvent::GraphicsSceneMouseMove, QPointF(1300, 1400));
+    mouse(QEvent::GraphicsSceneMouseRelease, QPointF(1300, 1400));
+    EXPECT_EQ(scene->measureText().section(QLatin1Char('\n'), 0, 0).toStdString(), "5.00 m")
+        << "a 3-4-5 drag at 100 px per metre";
+    EXPECT_EQ(scene->items().size(), undoable) << "a measurement put something in the scene";
+
+    // Clicked rather than dragged, and the end lands on a corner near it.
+    RectangleItem *box = scene->addRectangle(QPointF(0, 0));
+    const QPointF corner = box->mapToScene(box->rect().topRight());
+    click(QPointF(1000, 1000));
+    click(corner + QPointF(3, -2));
+    ASSERT_EQ(scene->measurePoints().size(), 2);
+    EXPECT_EQ(scene->measurePoints().at(1), corner) << "the end was not drawn to the corner";
+
+    // Picking the other tool puts this one away.
+    angle->trigger();
+    EXPECT_FALSE(distance->isChecked());
+    ASSERT_EQ(scene->measureTool(), CanvasScene::Measure::Angle);
+    click(QPointF(1000, 1000));
+    click(QPointF(1100, 1000));
+    click(QPointF(1000, 900));
+    EXPECT_EQ(scene->measureText().toStdString(), "90.0°");
+
+    QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+    QCoreApplication::sendEvent(scene, &escape);
+    EXPECT_TRUE(scene->measurePoints().isEmpty()) << "Esc left the measurement down";
+    EXPECT_EQ(scene->measureTool(), CanvasScene::Measure::Angle) << "one Esc put the tool away";
+    QCoreApplication::sendEvent(scene, &escape);
+    EXPECT_EQ(scene->measureTool(), CanvasScene::Measure::None);
+    EXPECT_FALSE(angle->isChecked()) << "the toolbar still shows the tool in hand";
 }

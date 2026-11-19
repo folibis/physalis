@@ -4671,6 +4671,8 @@ void CanvasScene::drawForeground(QPainter *painter, const QRectF &visibleForName
         drawObjectNames(painter, visibleForNames);
     }
 
+    drawMeasurement(painter);
+
     if (m_dragMode == DragMode::RubberBand && !m_bandRect.isNull())
     {
         const QColor colour =
@@ -5286,42 +5288,114 @@ namespace {
 constexpr int kMaxTrailPoints = 20000;
 }
 
-void CanvasScene::extendTrail(PhysicsBody *body, const QPointF &point)
+void CanvasScene::extendTrail(PhysicsBody *body, const QPointF &point, qreal seconds)
 {
     if (!body)
     {
         return;
     }
     Trail &trail = m_trails[body];
+    if (trail.colorIndex < 0)
+    {
+        trail.colorIndex = m_nextTrailColor++;
+    }
     if (++trail.passed % trail.stride != 0)
     {
         return;
     }
+    const bool fresh = trail.lifted || trail.strokes.isEmpty();
     // A body at rest adds nothing: the same point again is no more line, and
     // a scene left running overnight would spend its whole budget on it.
-    if (!trail.points.isEmpty()
-        && QLineF(trail.points.constLast(), point).length() < 0.05)
+    if (!fresh && QLineF(trail.strokes.constLast().points.constLast(), point).length() < 0.05)
     {
         return;
     }
-    trail.points.append(point);
-    if (trail.points.size() >= kMaxTrailPoints)
+    if (fresh)
     {
-        QVector<QPointF> kept;
-        kept.reserve(trail.points.size() / 2 + 1);
-        for (int i = 0; i < trail.points.size(); i += 2)
+        trail.strokes.append(TrailStroke());
+        trail.lifted = false;
+    }
+    trail.strokes.last().points.append(point);
+    trail.strokes.last().times.append(seconds);
+
+    int total = 0;
+    for (const TrailStroke &stroke : std::as_const(trail.strokes))
+    {
+        total += int(stroke.points.size());
+    }
+    if (total >= kMaxTrailPoints)
+    {
+        for (TrailStroke &stroke : trail.strokes)
         {
-            kept.append(trail.points.at(i));
+            TrailStroke kept;
+            for (int i = 0; i < stroke.points.size(); i += 2)
+            {
+                kept.points.append(stroke.points.at(i));
+                kept.times.append(stroke.times.at(i));
+            }
+            stroke = kept;
         }
-        trail.points = kept;
         trail.stride *= 2;
         m_trailCache.clear();
     }
     update();
 }
 
+void CanvasScene::setTrailClock(qreal seconds)
+{
+    m_trailClock = seconds;
+    for (auto it = m_trails.begin(); it != m_trails.end(); ++it)
+    {
+        if (it.key()->trailFadeMs() <= 0)
+        {
+            continue;
+        }
+        const qreal oldest = seconds - it.key()->trailFadeMs() / 1000.0;
+        Trail &trail = *it;
+        for (TrailStroke &stroke : trail.strokes)
+        {
+            int gone = 0;
+            while (gone < stroke.times.size() && stroke.times.at(gone) < oldest)
+            {
+                ++gone;
+            }
+            stroke.points.remove(0, gone);
+            stroke.times.remove(0, gone);
+        }
+        trail.strokes.removeIf([](const TrailStroke &stroke) { return stroke.points.isEmpty(); });
+    }
+    update();
+}
+
+void CanvasScene::setTrailDrawing(PhysicsBody *body, bool drawing)
+{
+    if (!body)
+    {
+        return;
+    }
+    body->setDrawsTrail(drawing);
+    if (!drawing && m_trails.contains(body))
+    {
+        m_trails[body].lifted = true;
+    }
+    update();
+}
+
+void CanvasScene::clearTrail(PhysicsBody *body)
+{
+    auto found = m_trails.find(body);
+    if (found == m_trails.end())
+    {
+        return;
+    }
+    found->strokes.clear();
+    m_trailCache.clear();
+    update();
+}
+
 void CanvasScene::clearTrails()
 {
+    m_nextTrailColor = 0;
     if (m_trails.isEmpty())
     {
         return;
@@ -5333,7 +5407,26 @@ void CanvasScene::clearTrails()
 
 QVector<QPointF> CanvasScene::trail(const PhysicsBody *body) const
 {
-    return m_trails.value(const_cast<PhysicsBody *>(body)).points;
+    QVector<QPointF> points;
+    for (const QVector<QPointF> &stroke : trailStrokes(body))
+    {
+        points += stroke;
+    }
+    return points;
+}
+
+QVector<QVector<QPointF>> CanvasScene::trailStrokes(const PhysicsBody *body) const
+{
+    QVector<QVector<QPointF>> strokes;
+    const auto found = m_trails.constFind(const_cast<PhysicsBody *>(body));
+    if (found != m_trails.constEnd())
+    {
+        for (const TrailStroke &stroke : found->strokes)
+        {
+            strokes.append(stroke.points);
+        }
+    }
+    return strokes;
 }
 
 QRectF CanvasScene::trailBounds() const
@@ -5345,14 +5438,23 @@ QRectF CanvasScene::trailBounds() const
     }
     for (const Trail &trail : m_trails)
     {
-        bounds |= QPolygonF(trail.points).boundingRect();
+        for (const TrailStroke &stroke : trail.strokes)
+        {
+            bounds |= QPolygonF(stroke.points).boundingRect();
+        }
     }
     return bounds;
 }
 
-void CanvasScene::setTrailColor(const QColor &color)
+QVector<QColor> CanvasScene::defaultTrailColors()
 {
-    m_trailColor = color;
+    return {QColor(0xD6, 0x33, 0x6C), QColor(0x2F, 0x7F, 0xD8), QColor(0x2E, 0x9E, 0x4F),
+            QColor(0xE0, 0x8A, 0x1E), QColor(0x7E, 0x4F, 0xC9), QColor(0x1A, 0xA3, 0xA3)};
+}
+
+void CanvasScene::setTrailColors(const QVector<QColor> &colors)
+{
+    m_trailColors = colors.isEmpty() ? defaultTrailColors() : colors;
     m_trailCache.clear();
     update();
 }
@@ -5373,27 +5475,40 @@ void CanvasScene::setTrailLineStyle(Qt::PenStyle style)
 
 QColor CanvasScene::trailColorFor(const PhysicsBody *body) const
 {
-    // The first body that draws takes the colour from Options and each one
-    // after it is turned a golden angle further round the wheel, so no two
-    // trails share a colour however many there are.
-    int index = 0;
+    const auto found = m_trails.constFind(const_cast<PhysicsBody *>(body));
+    if (found != m_trails.constEnd())
+    {
+        return trailColorAt(found->colorIndex);
+    }
+    // Not started yet: the colour it will take, counting the bodies before it
+    // that are also waiting for their first point.
+    int index = m_nextTrailColor;
     for (const PhysicsBody *other : std::as_const(m_bodies))
     {
         if (other == body)
         {
             break;
         }
-        if (other->drawsTrail())
+        if (other->drawsTrail() && !m_trails.contains(const_cast<PhysicsBody *>(other)))
         {
             ++index;
         }
     }
-    if (index == 0)
+    return trailColorAt(index);
+}
+
+QColor CanvasScene::trailColorAt(int index) const
+{
+    // The colours from Options in turn; past the last they come round again
+    // turned a golden angle further round the wheel, so no two trails share a
+    // colour however many there are.
+    const QColor base = m_trailColors.at(index % m_trailColors.size()).toHsl();
+    const int round = index / m_trailColors.size();
+    if (round == 0)
     {
-        return m_trailColor;
+        return base;
     }
-    const QColor base = m_trailColor.toHsl();
-    const qreal hue = std::fmod(qMax(base.hslHueF(), 0.0) + index * 0.381966, 1.0);
+    const qreal hue = std::fmod(qMax(base.hslHueF(), 0.0) + round * 0.381966, 1.0);
     // A grey has no hue to turn, so the ones after it are given some colour.
     const qreal saturation = base.hslHueF() < 0 ? 0.7 : base.hslSaturationF();
     const qreal lightness = base.hslHueF() < 0 ? qBound(0.35, base.lightnessF(), 0.6) : base.lightnessF();
@@ -5418,7 +5533,11 @@ void CanvasScene::drawTrails(QPainter *painter) const
     const bool raster = painter->paintEngine() && painter->paintEngine()->type() == QPaintEngine::Raster;
     if (raster)
     {
+        // It resets the transform to lay its pixels down, and the fading
+        // trails below are drawn in the scene's.
+        painter->save();
         drawTrailsFromCache(painter);
+        painter->restore();
     }
     else
     {
@@ -5426,14 +5545,73 @@ void CanvasScene::drawTrails(QPainter *painter) const
         painter->setBrush(Qt::NoBrush);
         for (auto it = m_trails.cbegin(); it != m_trails.cend(); ++it)
         {
-            if (it->points.size() > 1)
+            if (it.key()->trailFadeMs() > 0)
             {
-                painter->setPen(trailPen(trailColorFor(it.key())));
-                painter->drawPolyline(it->points.constData(), int(it->points.size()));
+                continue;
+            }
+            painter->setPen(trailPen(trailColorAt(it->colorIndex)));
+            for (const TrailStroke &stroke : it->strokes)
+            {
+                if (stroke.points.size() > 1)
+                {
+                    painter->drawPolyline(stroke.points.constData(), int(stroke.points.size()));
+                }
             }
         }
     }
+    drawFadingTrails(painter);
     painter->restore();
+}
+
+void CanvasScene::drawFadingTrails(QPainter *painter) const
+{
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setBrush(Qt::NoBrush);
+    const QTransform toDevice = painter->worldTransform();
+    const qreal dashUnit = qMax(m_trailLineWidth, 1.0);
+    // Drawn in bands of one strength rather than a segment at a time: where
+    // two translucent segments meet, their round ends overlap and leave a
+    // darker bead, and a band has a join only at each end.
+    constexpr int kBands = 24;
+    for (auto it = m_trails.cbegin(); it != m_trails.cend(); ++it)
+    {
+        if (it.key()->trailFadeMs() <= 0)
+        {
+            continue;
+        }
+        const qreal fade = it.key()->trailFadeMs() / 1000.0;
+        const auto bandOf = [&](qreal seconds) {
+            const qreal age = qBound(0.0, (m_trailClock - seconds) / fade, 1.0);
+            return qMin(kBands - 1, int(age * kBands));
+        };
+        const QColor color = trailColorAt(it->colorIndex);
+        for (const TrailStroke &stroke : it->strokes)
+        {
+            qreal length = 0.0;
+            int start = 0;
+            while (start + 1 < stroke.points.size())
+            {
+                const int band = bandOf(stroke.times.at(start + 1));
+                int end = start + 1;
+                while (end + 1 < stroke.points.size() && bandOf(stroke.times.at(end + 1)) == band)
+                {
+                    ++end;
+                }
+                QColor shade = color;
+                shade.setAlphaF(color.alphaF() * (1.0 - (band + 0.5) / kBands));
+                QPen pen = trailPen(shade);
+                pen.setDashOffset(length / dashUnit);
+                painter->setPen(pen);
+                painter->drawPolyline(stroke.points.constData() + start, end - start + 1);
+                for (int i = start + 1; i <= end; ++i)
+                {
+                    length += QLineF(toDevice.map(stroke.points.at(i - 1)),
+                                     toDevice.map(stroke.points.at(i))).length();
+                }
+                start = end;
+            }
+        }
+    }
 }
 
 void CanvasScene::drawTrailsFromCache(QPainter *painter) const
@@ -5490,22 +5668,35 @@ void CanvasScene::drawTrailsFromCache(QPainter *painter) const
     const qreal dashUnit = qMax(m_trailLineWidth, 1.0);
     for (auto it = m_trails.cbegin(); it != m_trails.cend(); ++it)
     {
-        const QVector<QPointF> &points = it->points;
-        TrailStroke &stroke = cache.drawn[it.key()];
-        const int from = qMax(stroke.count - 1, 0);
-        if (points.size() - from < 2)
+        if (it.key()->trailFadeMs() > 0)
         {
-            continue;
+            continue; // changes every frame, so drawn afresh by drawFadingTrails
         }
-        QPen pen = trailPen(trailColorFor(it.key()));
-        pen.setDashOffset(stroke.length / dashUnit);
-        image.setPen(pen);
-        image.drawPolyline(points.constData() + from, int(points.size()) - from);
-        for (int i = from + 1; i < points.size(); ++i)
+        TrailDrawn &drawn = cache.drawn[it.key()];
+        image.setPen(trailPen(trailColorAt(it->colorIndex)));
+        // From where the last frame left off: the rest of the stroke it was
+        // on, then any started since.
+        for (int s = drawn.stroke; s < it->strokes.size(); ++s)
         {
-            stroke.length += QLineF(scale.map(points.at(i - 1)), scale.map(points.at(i))).length();
+            const QVector<QPointF> &points = it->strokes.at(s).points;
+            if (s != drawn.stroke)
+            {
+                drawn = TrailDrawn{s, 0, 0.0};
+            }
+            const int from = qMax(drawn.count - 1, 0);
+            if (points.size() - from >= 2)
+            {
+                QPen pen = image.pen();
+                pen.setDashOffset(drawn.length / dashUnit);
+                image.setPen(pen);
+                image.drawPolyline(points.constData() + from, int(points.size()) - from);
+                for (int i = from + 1; i < points.size(); ++i)
+                {
+                    drawn.length += QLineF(scale.map(points.at(i - 1)), scale.map(points.at(i))).length();
+                }
+            }
+            drawn.count = int(points.size());
         }
-        stroke.count = int(points.size());
     }
     image.end();
 
@@ -5600,6 +5791,24 @@ void CanvasScene::keyPressEvent(QKeyEvent *event)
     if (isAimingShot() && event->key() == Qt::Key_Escape)
     {
         cancelShot();
+        event->accept();
+        return;
+    }
+
+    // Esc takes the measurement up, and a second one puts the tool away.
+    if (m_measureTool != Measure::None && event->key() == Qt::Key_Escape)
+    {
+        if (!m_measurePoints.isEmpty())
+        {
+            m_measurePoints.clear();
+            m_measureLive = -1;
+            update();
+        }
+        else
+        {
+            setMeasureTool(Measure::None);
+            emit measureToolChanged(Measure::None);
+        }
         event->accept();
         return;
     }
@@ -5909,6 +6118,13 @@ void CanvasScene::handleEditModeEnter()
 void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     m_snapSuspended = event->modifiers().testFlag(Qt::ShiftModifier);
+
+    // A tool picked on purpose has the left button before anything on the
+    // canvas does, a body that could be shot included.
+    if (measurePress(event))
+    {
+        return;
+    }
 
     // The slingshot has the mouse while it is aiming: any other button calls
     // the shot off. A left press on a body that can be shot starts one; a
@@ -6423,6 +6639,11 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
     m_snapSuspended = event->modifiers().testFlag(Qt::ShiftModifier);
 
+    if (measureMove(event))
+    {
+        return;
+    }
+
     if (isAimingShot())
     {
         aimShot(event->scenePos());
@@ -6661,6 +6882,11 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 
 void CanvasScene::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (measureRelease(event))
+    {
+        m_snapSuspended = false;
+        return;
+    }
     m_snapSuspended = false;
 
     if (isAimingShot())
@@ -6944,4 +7170,351 @@ void CanvasScene::wheelEvent(QGraphicsSceneWheelEvent *event)
         return;
     }
     QGraphicsScene::wheelEvent(event);
+}
+
+void CanvasScene::setMeasureTool(Measure tool)
+{
+    if (m_measureTool == tool)
+    {
+        return;
+    }
+    m_measureTool = tool;
+    m_measurePoints.clear();
+    m_measureLive = -1;
+    m_measureDragging = false;
+    for (QGraphicsView *view : views())
+    {
+        // The point still to be placed follows the pointer with no button held.
+        view->viewport()->setMouseTracking(true);
+        if (tool == Measure::None)
+        {
+            view->viewport()->unsetCursor();
+        }
+        else
+        {
+            view->viewport()->setCursor(Qt::CrossCursor);
+        }
+    }
+    update();
+}
+
+void CanvasScene::setMeasureUnit(Units::Unit unit)
+{
+    m_measureUnit = unit;
+    update();
+}
+
+// Drawn to the corners, centres and anchors a measurement is usually taken
+// between, then to the grid. Shift lets go of both, as it does for a drag;
+// Ctrl turns the arm being placed in steps of 15 degrees -- for the second arm
+// of an angle, 15 degrees from the first.
+QPointF CanvasScene::measureSnap(const QPointF &scenePoint, Qt::KeyboardModifiers modifiers) const
+{
+    QPointF at = scenePoint;
+    if (!modifiers.testFlag(Qt::ShiftModifier))
+    {
+        const qreal reach = 8.0 / qMax(0.01, m_currentScale / 100.0);
+        qreal nearest = reach;
+        bool found = false;
+        const auto consider = [&](const QPointF &candidate) {
+            const qreal gap = QLineF(scenePoint, candidate).length();
+            if (gap < nearest)
+            {
+                nearest = gap;
+                at = candidate;
+                found = true;
+            }
+        };
+        for (ShapeItem *shape : shapes())
+        {
+            if (!shape->isVisible())
+            {
+                continue;
+            }
+            const QRectF r = shape->rect();
+            consider(shape->mapToScene(r.center()));
+            if (shape->supportsNodeEditing())
+            {
+                for (int i = 0; i < shape->nodeCount(); ++i)
+                {
+                    consider(shape->mapToScene(shape->nodePosition(i)));
+                }
+            }
+            else if (dynamic_cast<CircleItem *>(shape))
+            {
+                for (const QPointF &edge : { QPointF(r.left(), r.center().y()),
+                                             QPointF(r.right(), r.center().y()),
+                                             QPointF(r.center().x(), r.top()),
+                                             QPointF(r.center().x(), r.bottom()) })
+                {
+                    consider(shape->mapToScene(edge));
+                }
+            }
+            else
+            {
+                for (const QPointF &corner : { r.topLeft(), r.topRight(), r.bottomLeft(),
+                                               r.bottomRight() })
+                {
+                    consider(shape->mapToScene(corner));
+                }
+            }
+        }
+        for (PhysicsBody *body : m_bodies)
+        {
+            if (body && !body->shapes().isEmpty())
+            {
+                consider(body->centerOfMassScenePos());
+            }
+        }
+        for (Joint *joint : m_joints)
+        {
+            consider(joint->anchorScenePos(Joint::End::A));
+            consider(joint->anchorScenePos(Joint::End::B));
+        }
+        if (!found)
+        {
+            at = snapScenePoint(scenePoint);
+        }
+    }
+
+    if (modifiers.testFlag(Qt::ControlModifier) && m_measureLive >= 1)
+    {
+        const QPointF from = m_measurePoints.first();
+        QLineF arm(from, at);
+        qreal base = 0.0;
+        if (m_measureTool == Measure::Angle && m_measureLive == 2)
+        {
+            base = QLineF(from, m_measurePoints.at(1)).angle();
+        }
+        arm.setAngle(base + std::round((arm.angle() - base) / 15.0) * 15.0);
+        at = arm.p2();
+    }
+    return at;
+}
+
+// The point that was following the pointer stays where it is; the next one,
+// if the tool needs another, takes over.
+void CanvasScene::measureLay()
+{
+    const int needed = m_measureTool == Measure::Distance ? 2 : 3;
+    if (m_measureLive + 1 >= needed)
+    {
+        m_measureLive = -1;
+        return;
+    }
+    m_measurePoints << m_measurePoints.at(m_measureLive);
+    ++m_measureLive;
+}
+
+bool CanvasScene::measurePress(QGraphicsSceneMouseEvent *event)
+{
+    if (m_measureTool == Measure::None || event->button() != Qt::LeftButton)
+    {
+        return false;
+    }
+    if (m_measureLive < 0)
+    {
+        const QPointF at = measureSnap(event->scenePos(), event->modifiers());
+        m_measurePoints = { at, at };
+        m_measureLive = 1;
+        m_measureDragging = true;
+    }
+    else
+    {
+        m_measurePoints[m_measureLive] = measureSnap(event->scenePos(), event->modifiers());
+        measureLay();
+    }
+    update();
+    event->accept();
+    return true;
+}
+
+bool CanvasScene::measureMove(QGraphicsSceneMouseEvent *event)
+{
+    if (m_measureTool == Measure::None || m_measureLive < 0)
+    {
+        return false;
+    }
+    m_measurePoints[m_measureLive] = measureSnap(event->scenePos(), event->modifiers());
+    update();
+    event->accept();
+    return true;
+}
+
+// Dragged, the release lays the point; clicked, the point keeps following the
+// pointer until the next click. Either way of measuring works.
+bool CanvasScene::measureRelease(QGraphicsSceneMouseEvent *event)
+{
+    if (m_measureTool == Measure::None || event->button() != Qt::LeftButton)
+    {
+        return false;
+    }
+    if (m_measureDragging && m_measureLive >= 1)
+    {
+        const qreal moved = QLineF(m_measurePoints.at(m_measureLive - 1),
+                                   m_measurePoints.at(m_measureLive)).length()
+                            * m_currentScale / 100.0;
+        if (moved > 4.0)
+        {
+            measureLay();
+        }
+    }
+    m_measureDragging = false;
+    update();
+    event->accept();
+    return true;
+}
+
+QString CanvasScene::measureText() const
+{
+    if (m_measurePoints.size() < 2)
+    {
+        return QString();
+    }
+    const QPointF vertex = m_measurePoints.at(0);
+    if (m_measureTool == Measure::Angle)
+    {
+        if (m_measurePoints.size() < 3)
+        {
+            return QString();
+        }
+        const QPointF a = m_measurePoints.at(1) - vertex;
+        const QPointF b = m_measurePoints.at(2) - vertex;
+        if (a.isNull() || b.isNull())
+        {
+            return QString();
+        }
+        const qreal degrees = qRadiansToDegrees(
+            std::atan2(std::abs(a.x() * b.y() - a.y() * b.x()), a.x() * b.x() + a.y() * b.y()));
+        return QString::number(degrees, 'f', 1) + QChar(0x00B0);
+    }
+
+    // Quoted to what a device pixel is worth in the unit, which is as fine as
+    // a point placed by hand can be.
+    const qreal ppm = pixelsPerMeter();
+    const qreal pixel = 1.0 / qMax(0.01, m_currentScale / 100.0);
+    const qreal step = Units::niceStep(Units::fromScene(pixel, m_measureUnit, ppm));
+    const auto write = [&](qreal sceneValue) {
+        return Units::format(sceneValue, m_measureUnit, ppm, step);
+    };
+    const QPointF d = m_measurePoints.at(1) - vertex;
+    return write(QLineF(QPointF(), d).length()) + QLatin1Char(' ')
+           + Units::suffix(m_measureUnit) + QLatin1Char('\n')
+           + tr("%1x %2   %1y %3").arg(QChar(0x0394), write(d.x()), write(d.y()));
+}
+
+// In device pixels, the way object names are: a ruler laid on the screen
+// reads the same at any zoom.
+void CanvasScene::drawMeasurement(QPainter *painter) const
+{
+    if (m_measureTool == Measure::None || m_measurePoints.size() < 2)
+    {
+        return;
+    }
+    const QTransform toDevice = painter->worldTransform();
+    QVector<QPointF> at;
+    for (const QPointF &point : m_measurePoints)
+    {
+        at << toDevice.map(point);
+    }
+
+    painter->save();
+    painter->resetTransform();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+
+    const QColor ink(226, 88, 22);
+    const QPen halo(QColor(255, 255, 255, 210), 4.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    const QPen line(ink, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    QPainterPath path;
+    // The label stands off from `labelFrom` along `labelOut`, by `labelGap`
+    // and then by however far its own box reaches that way, so it never sits
+    // on the line it is reading.
+    QPointF labelFrom;
+    QPointF labelOut;
+    qreal labelGap = 8.0;
+    bool labelled = false;
+
+    if (m_measureTool == Measure::Distance)
+    {
+        const QLineF ruler(at.at(0), at.at(1));
+        path.moveTo(ruler.p1());
+        path.lineTo(ruler.p2());
+        QPointF side(0.0, -1.0);
+        if (ruler.length() > 0.5)
+        {
+            const QLineF normal = ruler.normalVector().unitVector();
+            side = normal.p2() - normal.p1();
+            for (const QPointF &end : { ruler.p1(), ruler.p2() })
+            {
+                path.moveTo(end - side * 6.0);
+                path.lineTo(end + side * 6.0);
+            }
+            // Beside the middle of the line, on its upper side.
+            if (side.y() > 0.0)
+            {
+                side = -side;
+            }
+        }
+        labelFrom = ruler.center();
+        labelOut = side;
+        labelled = true;
+    }
+    else
+    {
+        path.moveTo(at.at(0));
+        path.lineTo(at.at(1));
+        if (at.size() > 2)
+        {
+            path.moveTo(at.at(0));
+            path.lineTo(at.at(2));
+            const QLineF first(at.at(0), at.at(1));
+            const QLineF second(at.at(0), at.at(2));
+            if (first.length() > 1.0 && second.length() > 1.0)
+            {
+                qreal sweep = second.angle() - first.angle();
+                while (sweep > 180.0)
+                    sweep -= 360.0;
+                while (sweep <= -180.0)
+                    sweep += 360.0;
+                const qreal radius = qMin(36.0, 0.6 * qMin(first.length(), second.length()));
+                const QRectF round(at.at(0) - QPointF(radius, radius),
+                                   QSizeF(2.0 * radius, 2.0 * radius));
+                path.arcMoveTo(round, first.angle());
+                path.arcTo(round, first.angle(), sweep);
+                labelFrom = at.at(0);
+                labelOut = QLineF::fromPolar(1.0, first.angle() + sweep / 2.0).p2();
+                labelGap = radius + 6.0;
+                labelled = true;
+            }
+        }
+    }
+
+    painter->strokePath(path, halo);
+    painter->strokePath(path, line);
+    painter->setPen(QPen(Qt::white, 1.2));
+    painter->setBrush(ink);
+    for (const QPointF &point : at)
+    {
+        painter->drawEllipse(point, 3.0, 3.0);
+    }
+
+    const QString text = measureText();
+    if (labelled && !text.isEmpty())
+    {
+        QFont font = painter->font();
+        font.setPointSizeF(8.5);
+        painter->setFont(font);
+        const QFontMetricsF metrics(font);
+        QRectF box = metrics.boundingRect(QRectF(0, 0, 400, 100), Qt::AlignCenter, text)
+                         .adjusted(-5.0, -2.0, 5.0, 2.0);
+        const qreal reach = std::abs(labelOut.x()) * box.width() / 2.0
+                            + std::abs(labelOut.y()) * box.height() / 2.0;
+        box.moveCenter(labelFrom + labelOut * (labelGap + reach));
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(QColor(0, 0, 0, 165));
+        painter->drawRoundedRect(box, 3.0, 3.0);
+        painter->setPen(QColor(255, 255, 255, 235));
+        painter->drawText(box, Qt::AlignCenter, text);
+    }
+    painter->restore();
 }

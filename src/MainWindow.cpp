@@ -21,6 +21,7 @@
 #include "ShapeStyle.h"
 #include "ControlsPanel.h"
 #include "SceneControl.h"
+#include "ValueText.h"
 #include "VariablesPanel.h"
 #include "UndoStack.h"
 #include "RectangleItem.h"
@@ -466,6 +467,32 @@ MainWindow::MainWindow(QWidget *parent)
     toolBar->addAction(m_ui->actionSaveScreenshot);
     squareButton(toolBar, m_ui->actionSaveScreenshot);
 
+    // Measuring is looking too, and works on whatever the canvas shows -- the
+    // scene being edited or a run's copy of it.
+    m_measureDistanceAction = toolBar->addAction(Icons::measureDistance(), tr("Measure Distance"));
+    m_measureDistanceAction->setToolTip(
+        tr("Measure a distance: drag across the canvas, or click at each end. It is written"
+           " in the rulers' unit. Ctrl turns it in steps of 15 degrees, Shift lets go of"
+           " corners and the grid, Esc takes it up."));
+    m_measureAngleAction = toolBar->addAction(Icons::measureAngle(), tr("Measure Angle"));
+    m_measureAngleAction->setToolTip(
+        tr("Measure an angle: click its corner, then the end of each arm -- or drag out the"
+           " first arm and click the second. Ctrl turns an arm in steps of 15 degrees,"
+           " Esc takes it up."));
+    auto *measuring = new QActionGroup(this);
+    measuring->setExclusionPolicy(QActionGroup::ExclusionPolicy::ExclusiveOptional);
+    for (QAction *action : { m_measureDistanceAction, m_measureAngleAction }) {
+        action->setCheckable(true);
+        measuring->addAction(action);
+        squareButton(toolBar, action);
+        connect(action, &QAction::toggled, this, [this] {
+            const CanvasScene::Measure tool = checkedMeasureTool();
+            m_scene->setMeasureTool(tool);
+            if (shownScene() != m_scene)
+                shownScene()->setMeasureTool(tool);
+        });
+    }
+
     auto *toolBarSpacer = new QWidget(toolBar);
     toolBarSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     toolBar->addWidget(toolBarSpacer);
@@ -626,6 +653,10 @@ MainWindow::MainWindow(QWidget *parent)
         " border-radius: 4px; }"));
     m_caption->hide();
     connect(m_scene, &CanvasScene::captionChanged, this, &MainWindow::updateCaption);
+    connect(m_scene, &CanvasScene::measureToolChanged, this, [this] {
+        for (QAction *action : { m_measureDistanceAction, m_measureAngleAction })
+            action->setChecked(false);
+    });
 
     m_controls = new QWidget(m_ui->canvasView);
     m_controls->setObjectName(QStringLiteral("SceneControls"));
@@ -648,6 +679,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_simulation, &SimulationController::stateChanged, this, &MainWindow::updateLogOverlay);
     connect(m_simulation, &SimulationController::stepped, this, &MainWindow::updateLogOverlay);
     connect(m_simulation, &SimulationController::stepped, this, &MainWindow::followFocusedBody);
+    connect(m_simulation, &SimulationController::stepped, this, &MainWindow::refreshCaptionValues);
     // Centred as soon as it is chosen, rather than at the next step: a run
     // that is paused would otherwise leave it where it was.
     connect(m_scene, &CanvasScene::focusedBodyChanged, this, &MainWindow::followFocusedBody);
@@ -656,6 +688,14 @@ MainWindow::MainWindow(QWidget *parent)
         run->setObjectNamesShown(m_scene->objectNamesShown());
         connect(run, &CanvasScene::captionChanged, this, &MainWindow::updateCaption);
         connect(run, &CanvasScene::controlValuesChanged, this, &MainWindow::refreshControls);
+        run->setMeasureUnit(m_ui->topRuler->unit());
+        run->setMeasureTool(checkedMeasureTool());
+        connect(run, &CanvasScene::measureToolChanged, this, [this] {
+            for (QAction *action : { m_measureDistanceAction, m_measureAngleAction })
+                action->setChecked(false);
+        });
+        // A control worked while the run is held changes a value with no step.
+        connect(run, &CanvasScene::controlValuesChanged, this, &MainWindow::refreshCaptionValues);
         connect(run, &CanvasScene::focusedBodyChanged, this, &MainWindow::followFocusedBody);
         connect(run, &CanvasScene::scaleChanged, m_scene, &CanvasScene::setCurrentScale);
     });
@@ -1915,15 +1955,6 @@ QString MainWindow::logLabelFor(const CanvasScene::Watch &watch) const
     return watch.label;
 }
 
-// Two decimals for most things, but a light body's energy or mass is a few
-// thousandths, and two decimals made it read as zero.
-static QString formatLogNumber(double v)
-{
-    if (v == 0.0 || qAbs(v) >= 1.0)
-        return QString::number(v, 'f', 2);
-    return QString::number(v, 'g', 3);
-}
-
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == m_ui->canvasView && event->type() == QEvent::Resize) {
@@ -2139,7 +2170,10 @@ void MainWindow::updateCaption()
     if (!show)
         return;
 
-    m_caption->setText(shownScene()->caption());
+    m_captionShown = m_simulation && m_simulation->isActive()
+                         ? m_simulation->expandCaption(shownScene()->caption())
+                         : shownScene()->caption();
+    m_caption->setText(m_captionShown);
 
     // A wrapped label cannot size itself: its hint is the width the text would
     // want on one line, so adjustSize() gave a box too narrow for what it then
@@ -2162,7 +2196,7 @@ void MainWindow::updateCaption()
 
     QTextDocument wrapped;
     wrapped.setDefaultFont(m_caption->font());
-    wrapped.setHtml(shownScene()->caption());
+    wrapped.setHtml(m_captionShown);
     // What it would take on the lines it chooses for itself, which for text
     // with no break in it is one line and for text with breaks is the longest
     // of them.
@@ -2180,6 +2214,15 @@ void MainWindow::updateCaption()
                                    : kMargin);
     m_caption->raise();
     refreshControls();
+}
+
+void MainWindow::refreshCaptionValues()
+{
+    if (!m_caption || !m_caption->isVisible() || !ValueText::hasFields(shownScene()->caption()))
+        return;
+    // Sizing the box is the costly part, so only when the words have changed.
+    if (m_simulation->expandCaption(shownScene()->caption()) != m_captionShown)
+        updateCaption();
 }
 
 void MainWindow::moveOverlaysForTest(QGraphicsView *host)
@@ -2417,7 +2460,7 @@ void MainWindow::updateLogOverlay()
         if (value.isValid()) {
             shown = value.userType() == QMetaType::Bool
                         ? (value.toBool() ? tr("true") : tr("false"))
-                        : formatLogNumber(value.toDouble());
+                        : ValueText::number(value.toDouble());
         }
         // "@world" is an internal handle, not something to show a reader.
         const QString who = watch.objectName == Rule::world() ? tr("World")
@@ -3795,7 +3838,7 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.shotFullColor = m_scene->shotFullColor();
     current.shotLineWidth = m_scene->shotLineWidth();
     current.shotLineStyle = m_scene->shotLineStyle();
-    current.trailColor = m_scene->trailColor();
+    current.trailColors = m_scene->trailColors();
     current.trailLineWidth = m_scene->trailLineWidth();
     current.trailLineStyle = m_scene->trailLineStyle();
     current.jointAnchorRadius = m_scene->jointAnchorRadius();
@@ -3836,6 +3879,18 @@ void MainWindow::applyRulerUnit(Units::Unit unit)
 {
     m_ui->topRuler->setUnit(unit);
     m_ui->leftRuler->setUnit(unit);
+    m_scene->setMeasureUnit(unit);
+    if (shownScene() != m_scene)
+        shownScene()->setMeasureUnit(unit);
+}
+
+CanvasScene::Measure MainWindow::checkedMeasureTool() const
+{
+    if (m_measureDistanceAction && m_measureDistanceAction->isChecked())
+        return CanvasScene::Measure::Distance;
+    if (m_measureAngleAction && m_measureAngleAction->isChecked())
+        return CanvasScene::Measure::Angle;
+    return CanvasScene::Measure::None;
 }
 
 void MainWindow::applySceneLook(CanvasScene *scene, const OptionsDialog::Settings &s)
@@ -3890,7 +3945,7 @@ void MainWindow::applySceneLook(CanvasScene *scene, const OptionsDialog::Setting
     scene->setShotLineColors(s.shotLightColor, s.shotFullColor);
     scene->setShotLineWidth(s.shotLineWidth);
     scene->setShotLineStyle(s.shotLineStyle);
-    scene->setTrailColor(s.trailColor);
+    scene->setTrailColors(s.trailColors);
     scene->setTrailLineWidth(s.trailLineWidth);
     scene->setTrailLineStyle(s.trailLineStyle);
     scene->setJointAnchorRadius(s.jointAnchorRadius);
@@ -4126,9 +4181,16 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile(const QString &path) co
     s.shotLineWidth = settings.value("shotLineWidth", s.shotLineWidth).toDouble();
     s.shotLineStyle = static_cast<Qt::PenStyle>(
         settings.value("shotLineStyle", static_cast<int>(s.shotLineStyle)).toInt());
-    const QColor trail(settings.value("trailColor").toString());
-    if (trail.isValid())
-        s.trailColor = trail;
+    // The single trailColor that came before the list is kept as the first.
+    const QStringList trails = settings.value("trailColors").toStringList();
+    for (int i = 0; i < trails.size() && i < s.trailColors.size(); ++i) {
+        const QColor color(trails.at(i));
+        if (color.isValid())
+            s.trailColors[i] = color;
+    }
+    const QColor oldTrail(settings.value("trailColor").toString());
+    if (trails.isEmpty() && oldTrail.isValid())
+        s.trailColors[0] = oldTrail;
     s.trailLineWidth = settings.value("trailLineWidth", s.trailLineWidth).toDouble();
     s.trailLineStyle = static_cast<Qt::PenStyle>(
         settings.value("trailLineStyle", static_cast<int>(s.trailLineStyle)).toInt());
@@ -4280,7 +4342,11 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("shotFullColor", s.shotFullColor.name(QColor::HexArgb));
     settings.setValue("shotLineWidth", s.shotLineWidth);
     settings.setValue("shotLineStyle", static_cast<int>(s.shotLineStyle));
-    settings.setValue("trailColor", s.trailColor.name(QColor::HexArgb));
+    QStringList trails;
+    for (const QColor &color : s.trailColors)
+        trails.append(color.name(QColor::HexArgb));
+    settings.setValue("trailColors", trails);
+    settings.remove("trailColor");
     settings.setValue("trailLineWidth", s.trailLineWidth);
     settings.setValue("trailLineStyle", static_cast<int>(s.trailLineStyle));
     settings.endGroup();
