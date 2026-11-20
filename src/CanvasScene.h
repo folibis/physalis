@@ -813,8 +813,8 @@ public:
     qreal currentScale() const { return m_currentScale; }
 
     // A ruler and a protractor laid on the canvas. What they measure is not
-    // part of the scene: no undo step, nothing in the file, and it goes when
-    // the tool does. The distance is written in the rulers' unit.
+    // part of the scene: no undo step, nothing in the file. It is there while
+    // the tool is, and the canvas can be worked on around it.
     enum class Measure { None, Distance, Angle };
     void setMeasureTool(Measure tool);
     Measure measureTool() const { return m_measureTool; }
@@ -822,6 +822,8 @@ public:
     // The points laid down so far: two for a distance, a vertex and two arms
     // for an angle. Empty when nothing has been measured.
     QVector<QPointF> measurePoints() const { return m_measurePoints; }
+    bool hasMeasurement() const { return !m_measurePoints.isEmpty(); }
+    void clearMeasurement();
     // What it reads, as it is written on the canvas.
     QString measureText() const;
 
@@ -926,7 +928,13 @@ private:
     QPointF measureSnap(const QPointF &scenePoint, Qt::KeyboardModifiers modifiers) const;
     void drawMeasurement(QPainter *painter) const;
     void measureLay();
+    QPointF measureCatch(const QVector<QPointF> &moving) const;
+    int measurePointAt(const QPointF &scenePoint) const;
+    void setMeasureCursor(bool overPoint);
     Measure m_measureTool = Measure::None;
+    bool m_measurePressed = false;
+    // A laid point picked up to be moved.
+    bool m_measureGrabbed = false;
     Units::Unit m_measureUnit = Units::Unit::Scene;
     QVector<QPointF> m_measurePoints;
     // Which point follows the pointer, or -1 once the measurement is laid.

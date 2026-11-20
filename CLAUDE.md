@@ -158,7 +158,12 @@ pixels by `drawMeasurement`, for the same reason the names are, and each label
 stands off along its own direction by the size of its box, because a fixed
 offset put it on the line it was reading. The tool takes the left button
 before anything else on the canvas, the slingshot included, since it was
-picked on purpose. A point is pulled to a corner, a centre, a centre of mass
+picked on purpose -- but only while there is a point to place. Once the
+measurement is laid, a press on one of its points picks that point up and any
+other press is the canvas's, so shapes are drawn and moved with it in view;
+it lives exactly as long as the toolbar button is down. A shape dragged near
+one of its points is caught by it (`measureCatch`, over the same
+`keyPointsOf` a point being placed is pulled to). A point is pulled to a corner, a centre, a centre of mass
 or an anchor within 8 device pixels, and otherwise to the grid. A distance is
 written in the rulers' unit (`setMeasureUnit`, set where the rulers are),
 to a step of one device pixel. The window applies the checked tool to the

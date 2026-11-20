@@ -271,8 +271,7 @@ reading the names is exactly what a run is watched with.
 
 The two buttons after the zoom on the toolbar are a ruler and a protractor.
 Neither changes the scene: what they measure is not saved and cannot be
-undone, and it goes when you put the tool away. Both work in Edit mode, in
-Physics mode and on a running scene.
+undone. Both work in Edit mode, in Physics mode and on a running scene.
 
 - **Measure Distance** -- drag from one point to another, or click at each
   end. The label reads the length in the rulers' unit, with **Δx** and **Δy**
@@ -285,7 +284,18 @@ A point you place is drawn to the nearest corner, centre or edge of a shape,
 a body's centre of mass or a joint's anchor, and otherwise to the grid if
 snapping is on. Hold **Shift** to place it exactly where the pointer is.
 **Ctrl** turns the arm you are placing in steps of 15°; for the second arm of
-an angle, the steps count from the first arm. **Esc** takes the measurement
-up, and a second **Esc** puts the tool away. So does clicking its button
-again. The unit is the rulers' own, so right-click a ruler to measure in
-metres instead.
+an angle, the steps count from the first arm. The unit is the rulers' own, so
+right-click a ruler to measure in metres instead.
+
+The measurement is there for as long as its button stays down, and the
+canvas goes on working around it: select, add and drag shapes as usual. A
+shape dragged near one of the measurement's points is laid on it -- its
+nearest corner, centre or circle edge lands exactly there -- which is how a
+shape is put at a measured distance. Hold **Shift** while dragging to let it
+pass. Drag any point of the measurement to move it; it is drawn to corners
+and centres as it was when placed.
+
+Click the button again to put the tool away, and the measurement goes with
+it. **Esc** takes the measurement up so the next press begins a new one, and
+a second **Esc** puts the tool away; **Clear Measurement** on the canvas's
+right-click menu does the same as the first.

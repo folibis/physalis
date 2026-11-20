@@ -1606,6 +1606,8 @@ void MainWindow::addCanvasActions(QMenu *menu)
     if (m_resetScaleAction)
         menu->addAction(m_resetScaleAction);
     menu->addAction(m_ui->actionShowObjectNames);
+    if (CanvasScene *shown = shownScene(); shown && shown->hasMeasurement())
+        menu->addAction(tr("Clear Measurement"), shown, &CanvasScene::clearMeasurement);
 }
 
 // The field, not the view's own scene rect: a run widens that to hold a

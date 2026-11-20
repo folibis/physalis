@@ -55,6 +55,35 @@ qreal angleAt(const QPointF &origin, const QPointF &pos)
     return qRadiansToDegrees(std::atan2(d.y(), d.x()));
 }
 
+// What of a shape a measurement is taken from, and what of it is laid onto
+// one: its centre and corners, a polygon's nodes, a circle's edges.
+QVector<QPointF> keyPointsOf(const ShapeItem *shape)
+{
+    const QRectF r = shape->rect();
+    QVector<QPointF> local { r.center() };
+    if (shape->supportsNodeEditing())
+    {
+        for (int i = 0; i < shape->nodeCount(); ++i)
+        {
+            local << shape->nodePosition(i);
+        }
+    }
+    else if (dynamic_cast<const CircleItem *>(shape))
+    {
+        local << QPointF(r.left(), r.center().y()) << QPointF(r.right(), r.center().y())
+              << QPointF(r.center().x(), r.top()) << QPointF(r.center().x(), r.bottom());
+    }
+    else
+    {
+        local << r.topLeft() << r.topRight() << r.bottomLeft() << r.bottomRight();
+    }
+    QVector<QPointF> scene;
+    for (const QPointF &point : local)
+    {
+        scene << shape->mapToScene(point);
+    }
+    return scene;
+}
 } // namespace
 
 CanvasScene::CanvasScene(QObject *parent) : QGraphicsScene(parent)
@@ -1041,6 +1070,7 @@ PhysicsBody *CanvasScene::createEmptyBody(bool announce)
 
 void CanvasScene::clearContents()
 {
+    clearMeasurement();
     deactivate();
     clearCanvasSelection();
     clearWatches();
@@ -5798,11 +5828,9 @@ void CanvasScene::keyPressEvent(QKeyEvent *event)
     // Esc takes the measurement up, and a second one puts the tool away.
     if (m_measureTool != Measure::None && event->key() == Qt::Key_Escape)
     {
-        if (!m_measurePoints.isEmpty())
+        if (hasMeasurement())
         {
-            m_measurePoints.clear();
-            m_measureLive = -1;
-            update();
+            clearMeasurement();
         }
         else
         {
@@ -6721,10 +6749,31 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 
         // Every piece moves by what the leading one moved, so their relative
         // layout -- and the joints anchored to them -- survives the drag.
-        const QPointF applied = shift - m_bodyDragLeadStart;
+        QPointF applied = shift - m_bodyDragLeadStart;
         for (int i = 0; i < m_bodyDragShapes.size(); ++i)
         {
             m_bodyDragShapes[i]->setPos(m_bodyDragStartPositions[i] + applied);
+        }
+        if (hasMeasurement())
+        {
+            QVector<QPointF> moving;
+            for (ShapeItem *shape : std::as_const(m_bodyDragShapes))
+            {
+                moving << keyPointsOf(shape);
+            }
+            for (const QPointF &start : std::as_const(m_bodyDragRayStarts))
+            {
+                moving << start + applied;
+            }
+            for (const QPointF &start : std::as_const(m_bodyDragExplosionStarts))
+            {
+                moving << start + applied;
+            }
+            applied += measureCatch(moving);
+            for (int i = 0; i < m_bodyDragShapes.size(); ++i)
+            {
+                m_bodyDragShapes[i]->setPos(m_bodyDragStartPositions[i] + applied);
+            }
         }
         for (int i = 0; i < m_bodyDragRays.size(); ++i)
         {
@@ -6774,6 +6823,20 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
             m_editSelection[i]->setPos(m_groupStartPositions.at(i) + applied);
         }
         // The pivot travels with the shapes it belongs to, wherever it was put.
+        if (hasMeasurement())
+        {
+            QVector<QPointF> moving = keyPointsOf(m_active);
+            for (ShapeItem *shape : std::as_const(m_editSelection))
+            {
+                moving << keyPointsOf(shape);
+            }
+            const QPointF caught = measureCatch(moving);
+            m_active->setPos(m_active->pos() + caught);
+            for (ShapeItem *shape : std::as_const(m_editSelection))
+            {
+                shape->setPos(shape->pos() + caught);
+            }
+        }
         if (!m_editSelection.isEmpty())
         {
             m_groupOrigin += m_active->pos() - previous;
@@ -7179,23 +7242,85 @@ void CanvasScene::setMeasureTool(Measure tool)
         return;
     }
     m_measureTool = tool;
-    m_measurePoints.clear();
-    m_measureLive = -1;
     m_measureDragging = false;
+    m_measureGrabbed = false;
     for (QGraphicsView *view : views())
     {
         // The point still to be placed follows the pointer with no button held.
         view->viewport()->setMouseTracking(true);
-        if (tool == Measure::None)
-        {
-            view->viewport()->unsetCursor();
-        }
-        else
+    }
+    clearMeasurement();
+}
+
+void CanvasScene::clearMeasurement()
+{
+    m_measurePoints.clear();
+    m_measureLive = -1;
+    setMeasureCursor(false);
+    update();
+}
+
+// A cross while there is a point to place; over a laid point, a hand that
+// says it can be moved; otherwise whatever the canvas shows.
+void CanvasScene::setMeasureCursor(bool overPoint)
+{
+    for (QGraphicsView *view : views())
+    {
+        if (m_measureTool != Measure::None && (m_measurePoints.isEmpty() || m_measureLive >= 0))
         {
             view->viewport()->setCursor(Qt::CrossCursor);
         }
+        else if (m_measureTool != Measure::None && overPoint)
+        {
+            view->viewport()->setCursor(Qt::SizeAllCursor);
+        }
+        else
+        {
+            view->viewport()->unsetCursor();
+        }
     }
-    update();
+}
+
+int CanvasScene::measurePointAt(const QPointF &scenePoint) const
+{
+    const qreal reach = 8.0 / qMax(0.01, m_currentScale / 100.0);
+    int found = -1;
+    qreal nearest = reach;
+    for (int i = 0; i < m_measurePoints.size(); ++i)
+    {
+        const qreal gap = QLineF(scenePoint, m_measurePoints.at(i)).length();
+        if (gap < nearest)
+        {
+            nearest = gap;
+            found = i;
+        }
+    }
+    return found;
+}
+
+// The offset that lays the nearest of the dragged points onto a point of the
+// measurement lying on the canvas, if one is within reach.
+QPointF CanvasScene::measureCatch(const QVector<QPointF> &moving) const
+{
+    if (m_measureLive >= 0 || m_measurePoints.isEmpty() || m_snapSuspended)
+    {
+        return QPointF();
+    }
+    qreal nearest = 8.0 / qMax(0.01, m_currentScale / 100.0);
+    QPointF offset;
+    for (const QPointF &mark : m_measurePoints)
+    {
+        for (const QPointF &point : moving)
+        {
+            const qreal gap = QLineF(point, mark).length();
+            if (gap < nearest)
+            {
+                nearest = gap;
+                offset = mark - point;
+            }
+        }
+    }
+    return offset;
 }
 
 void CanvasScene::setMeasureUnit(Units::Unit unit)
@@ -7231,32 +7356,9 @@ QPointF CanvasScene::measureSnap(const QPointF &scenePoint, Qt::KeyboardModifier
             {
                 continue;
             }
-            const QRectF r = shape->rect();
-            consider(shape->mapToScene(r.center()));
-            if (shape->supportsNodeEditing())
+            for (const QPointF &point : keyPointsOf(shape))
             {
-                for (int i = 0; i < shape->nodeCount(); ++i)
-                {
-                    consider(shape->mapToScene(shape->nodePosition(i)));
-                }
-            }
-            else if (dynamic_cast<CircleItem *>(shape))
-            {
-                for (const QPointF &edge : { QPointF(r.left(), r.center().y()),
-                                             QPointF(r.right(), r.center().y()),
-                                             QPointF(r.center().x(), r.top()),
-                                             QPointF(r.center().x(), r.bottom()) })
-                {
-                    consider(shape->mapToScene(edge));
-                }
-            }
-            else
-            {
-                for (const QPointF &corner : { r.topLeft(), r.topRight(), r.bottomLeft(),
-                                               r.bottomRight() })
-                {
-                    consider(shape->mapToScene(corner));
-                }
+                consider(point);
             }
         }
         for (PhysicsBody *body : m_bodies)
@@ -7300,30 +7402,45 @@ void CanvasScene::measureLay()
     if (m_measureLive + 1 >= needed)
     {
         m_measureLive = -1;
+        setMeasureCursor(true);
         return;
     }
     m_measurePoints << m_measurePoints.at(m_measureLive);
     ++m_measureLive;
 }
 
+// With nothing measured yet a press begins it. Once it is laid, a press on
+// one of its points picks that point up, and any other press is the canvas's,
+// so shapes can be drawn and moved against it.
 bool CanvasScene::measurePress(QGraphicsSceneMouseEvent *event)
 {
     if (m_measureTool == Measure::None || event->button() != Qt::LeftButton)
     {
         return false;
     }
-    if (m_measureLive < 0)
+    if (m_measurePoints.isEmpty())
     {
         const QPointF at = measureSnap(event->scenePos(), event->modifiers());
         m_measurePoints = { at, at };
         m_measureLive = 1;
         m_measureDragging = true;
     }
-    else
+    else if (m_measureLive >= 0)
     {
         m_measurePoints[m_measureLive] = measureSnap(event->scenePos(), event->modifiers());
         measureLay();
     }
+    else
+    {
+        const int grabbed = measurePointAt(event->scenePos());
+        if (grabbed < 0)
+        {
+            return false;
+        }
+        m_measureLive = grabbed;
+        m_measureGrabbed = true;
+    }
+    m_measurePressed = true;
     update();
     event->accept();
     return true;
@@ -7331,8 +7448,13 @@ bool CanvasScene::measurePress(QGraphicsSceneMouseEvent *event)
 
 bool CanvasScene::measureMove(QGraphicsSceneMouseEvent *event)
 {
-    if (m_measureTool == Measure::None || m_measureLive < 0)
+    if (m_measureTool == Measure::None)
     {
+        return false;
+    }
+    if (m_measureLive < 0)
+    {
+        setMeasureCursor(!m_measurePoints.isEmpty() && measurePointAt(event->scenePos()) >= 0);
         return false;
     }
     m_measurePoints[m_measureLive] = measureSnap(event->scenePos(), event->modifiers());
@@ -7345,11 +7467,17 @@ bool CanvasScene::measureMove(QGraphicsSceneMouseEvent *event)
 // pointer until the next click. Either way of measuring works.
 bool CanvasScene::measureRelease(QGraphicsSceneMouseEvent *event)
 {
-    if (m_measureTool == Measure::None || event->button() != Qt::LeftButton)
+    if (!m_measurePressed || event->button() != Qt::LeftButton)
     {
         return false;
     }
-    if (m_measureDragging && m_measureLive >= 1)
+    m_measurePressed = false;
+    if (m_measureGrabbed)
+    {
+        m_measureGrabbed = false;
+        m_measureLive = -1;
+    }
+    else if (m_measureDragging && m_measureLive >= 1)
     {
         const qreal moved = QLineF(m_measurePoints.at(m_measureLive - 1),
                                    m_measurePoints.at(m_measureLive)).length()

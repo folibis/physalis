@@ -88,8 +88,9 @@ TEST(Rulers, TheUnitIsOneChoiceForBothEdgesAndIsRemembered)
 }
 
 // The canvas measures in the rulers' unit, and what it measures is no part of
-// the scene. A drag or two clicks lays a distance; a corner draws an end to
-// it; three clicks lay an angle; Esc takes the measurement up and then the tool.
+// the scene. The measurement is there while the button is down: the canvas
+// is worked on around it, a shape dragged near one of its points is laid onto
+// it, its points can be moved, and letting the button up takes it away.
 TEST(Rulers, TheCanvasMeasuresADistanceAndAnAngleInTheRulersUnit)
 {
     MainWindow window;
@@ -133,16 +134,29 @@ TEST(Rulers, TheCanvasMeasuresADistanceAndAnAngleInTheRulersUnit)
     EXPECT_EQ(scene->measureText().section(QLatin1Char('\n'), 0, 0).toStdString(), "5.00 m")
         << "a 3-4-5 drag at 100 px per metre";
     EXPECT_EQ(scene->items().size(), undoable) << "a measurement put something in the scene";
+    EXPECT_TRUE(distance->isChecked()) << "the button came up when the measurement was laid";
 
-    // Clicked rather than dragged, and the end lands on a corner near it.
+    // The canvas has its mouse back away from the measurement, and a corner
+    // dragged near an end of it is laid on it.
     RectangleItem *box = scene->addRectangle(QPointF(0, 0));
-    const QPointF corner = box->mapToScene(box->rect().topRight());
-    click(QPointF(1000, 1000));
-    click(corner + QPointF(3, -2));
-    ASSERT_EQ(scene->measurePoints().size(), 2);
-    EXPECT_EQ(scene->measurePoints().at(1), corner) << "the end was not drawn to the corner";
+    const QPointF grab = box->mapToScene(box->rect().center());
+    const QPointF toEnd = QPointF(1300, 1400) - box->mapToScene(box->rect().topRight());
+    mouse(QEvent::GraphicsSceneMousePress, grab);
+    mouse(QEvent::GraphicsSceneMouseMove, grab + toEnd + QPointF(3, -2));
+    mouse(QEvent::GraphicsSceneMouseRelease, grab + toEnd + QPointF(3, -2));
+    EXPECT_EQ(box->mapToScene(box->rect().topRight()), QPointF(1300, 1400))
+        << "the shape was not laid on the end of the measurement";
+    ASSERT_EQ(scene->measurePoints().size(), 2) << "working on the canvas took the measurement up";
 
-    // Picking the other tool puts this one away.
+    // A point is picked up and moved, and is drawn to a corner near where it lands.
+    const QPointF corner = box->mapToScene(box->rect().bottomLeft());
+    mouse(QEvent::GraphicsSceneMousePress, QPointF(1002, 999));
+    mouse(QEvent::GraphicsSceneMouseMove, corner + QPointF(3, -2));
+    mouse(QEvent::GraphicsSceneMouseRelease, corner + QPointF(3, -2));
+    EXPECT_EQ(scene->measurePoints().at(0), corner) << "the start was not moved to the corner";
+    EXPECT_EQ(scene->measurePoints().at(1), QPointF(1300, 1400)) << "the other end moved too";
+
+    // Picking the other tool puts this one away, measurement and all.
     angle->trigger();
     EXPECT_FALSE(distance->isChecked());
     ASSERT_EQ(scene->measureTool(), CanvasScene::Measure::Angle);
@@ -153,9 +167,18 @@ TEST(Rulers, TheCanvasMeasuresADistanceAndAnAngleInTheRulersUnit)
 
     QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
     QCoreApplication::sendEvent(scene, &escape);
-    EXPECT_TRUE(scene->measurePoints().isEmpty()) << "Esc left the measurement down";
+    EXPECT_FALSE(scene->hasMeasurement()) << "Esc left the measurement down";
     EXPECT_EQ(scene->measureTool(), CanvasScene::Measure::Angle) << "one Esc put the tool away";
     QCoreApplication::sendEvent(scene, &escape);
     EXPECT_EQ(scene->measureTool(), CanvasScene::Measure::None);
     EXPECT_FALSE(angle->isChecked()) << "the toolbar still shows the tool in hand";
+
+    // Letting the button up takes the measurement with it.
+    angle->trigger();
+    click(QPointF(1000, 1000));
+    click(QPointF(1100, 1000));
+    click(QPointF(1000, 900));
+    ASSERT_TRUE(scene->hasMeasurement());
+    angle->trigger();
+    EXPECT_FALSE(scene->hasMeasurement()) << "the measurement outlived its button";
 }
