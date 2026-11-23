@@ -128,10 +128,11 @@ example, has **Body**, **Shape** and **Collision** pages.
   contacts it has. Before a simulation they show what the object starts with.
   During a simulation they show the live value and update as it runs.
 - **Hover over a name** to see an explanation of the property.
-- **Right-click a name** and choose **Add to Log** to watch that value during a
-  simulation, or **Add to Log as Plot** to record it and draw it on the **Plot**
-  tab as well. Logged values are listed in the top-left corner of the canvas
-  while the simulation runs. See [Watching values](running.md#watching-values).
+- **Right-click a name** and tick **Show in Log** to watch that value during a
+  simulation, or **Show on Plot** to record it and draw it on the **Plot** tab.
+  The two are separate: a value can be in either or both, and the tick says
+  which it is in. Logged values are
+  listed in the top-left corner of the canvas while the simulation runs. See [Watching values](running.md#watching-values).
 
 ## A scene from start to finish
 

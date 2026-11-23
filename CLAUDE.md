@@ -250,8 +250,11 @@ writes into its drawing list -- which is why `SceneExporter` hands converters
 each property's `role`, by name rather than by number.
 
 **The log says what a value is; a plot says what it did.** A `CanvasScene::Watch`
-carries `plotted` -- "Add to Log as Plot", or "Plot as Well" on one already
-logged -- and `SimulationController::samplePlots` takes one sample of each
+carries `logged` and `plotted`, two separate choices (ticked menu items, "Show in
+Log" and "Show on Plot"), and goes when it is in neither; a plot-only watch is in no log, the
+exported ones included, and the file writes `"logged": false` only when it is
+off, so older scenes read as they did. `SimulationController::samplePlots`
+takes one sample of each
 marked watch per *step*, not per frame: a frame is not a step, at x4 it is four
 of them, and a scene that cannot keep up drops some. The samples belong to the
 run and go when it stops. A series fills at 20000 points, and then every series

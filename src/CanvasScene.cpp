@@ -84,6 +84,69 @@ QVector<QPointF> keyPointsOf(const ShapeItem *shape)
     }
     return scene;
 }
+
+// The rim of a closed convex outline, one piece per side reaching `thickness`
+// in from it, so neighbours share an edge and leave no gap. As thick as the
+// outline is deep or more, the pieces meet in the middle and fill it.
+QVector<QPolygonF> rimPieces(const QVector<QPointF> &corners, qreal thickness)
+{
+    QVector<QPolygonF> pieces;
+    const int count = corners.size();
+    if (count < 3 || thickness <= 0.0)
+    {
+        return pieces;
+    }
+    QPointF centre;
+    for (const QPointF &corner : corners)
+    {
+        centre += corner;
+    }
+    centre /= count;
+
+    QVector<QPointF> inward(count);
+    qreal depth = std::numeric_limits<qreal>::max();
+    for (int i = 0; i < count; ++i)
+    {
+        const QLineF side(corners.at(i), corners.at((i + 1) % count));
+        const QLineF unit = side.normalVector().unitVector();
+        QPointF normal = unit.p2() - unit.p1();
+        const qreal reach = QPointF::dotProduct(centre - side.p1(), normal);
+        if (reach < 0.0)
+        {
+            normal = -normal;
+        }
+        inward[i] = normal;
+        depth = qMin(depth, qAbs(reach));
+    }
+
+    QVector<QPointF> inner(count);
+    for (int i = 0; i < count; ++i)
+    {
+        if (thickness >= depth)
+        {
+            inner[i] = centre;
+            continue;
+        }
+        // Where the two sides meeting at this corner cross once both are moved in.
+        const QPointF before = inward.at((i + count - 1) % count);
+        const QPointF after = inward.at(i);
+        inner[i] = corners.at(i)
+                   + (before + after) * (thickness / (1.0 + QPointF::dotProduct(before, after)));
+    }
+
+    for (int i = 0; i < count; ++i)
+    {
+        const int next = (i + 1) % count;
+        QPolygonF piece { corners.at(i), corners.at(next) };
+        piece << inner.at(next);
+        if (inner.at(i) != inner.at(next))
+        {
+            piece << inner.at(i);
+        }
+        pieces << piece;
+    }
+    return pieces;
+}
 } // namespace
 
 CanvasScene::CanvasScene(QObject *parent) : QGraphicsScene(parent)
@@ -563,6 +626,76 @@ ShapeItem *CanvasScene::convertCircleToChain(ShapeItem *shape, int segments, qre
     // came out a filled polygon rather than a ring with an inside.
     json.insert(QStringLiteral("outline"), true);
     return replaceShape(shape, json);
+}
+
+// The circle's rim as solid pieces, one per segment and each reaching
+// `thickness` in from the rim, with nothing inside: a wheel that has mass,
+// where a chain is only edges. The first piece takes the circle's place --
+// its name, its body -- and the rest join the same body. Each keeps the
+// circle's own frame and only its points change, since the first shape of a
+// body is the body's transform and joints are anchored in it.
+QVector<ShapeItem *> CanvasScene::convertCircleToPolygons(ShapeItem *shape, int segments,
+                                                          qreal startAngle, qreal thickness)
+{
+    QVector<ShapeItem *> made;
+    if (!shape || shape->scene() != this || shape->typeName() != QLatin1String("circle"))
+    {
+        return made;
+    }
+    const QVector<QPolygonF> pieces =
+        rimPieces(outlineCorners(shape, segments, startAngle), thickness);
+    if (pieces.isEmpty())
+    {
+        return made;
+    }
+
+    QJsonObject json = SceneSerializer::shapeToJson(shape);
+    json.insert(QStringLiteral("type"), QStringLiteral("polygon"));
+    json.insert(QStringLiteral("closed"), true);
+    json.insert(QStringLiteral("outline"), false);
+    json.insert(QStringLiteral("smoothChain"), false);
+    json.insert(QStringLiteral("cornerRadius"), 0.0);
+    const QString stem = shape->name();
+    const qreal z = shape->zValue();
+    PhysicsBody *body = shape->body();
+    for (int i = 0; i < pieces.size(); ++i)
+    {
+        QJsonArray points;
+        for (const QPointF &p : pieces.at(i))
+        {
+            points.append(QJsonObject { { "x", p.x() }, { "y", p.y() } });
+        }
+        json.insert(QStringLiteral("points"), points);
+        if (i == 0)
+        {
+            ShapeItem *first = replaceShape(shape, json);
+            if (!first)
+            {
+                return made;
+            }
+            made.append(first);
+            continue;
+        }
+        ShapeItem *piece = SceneSerializer::shapeFromJson(json);
+        if (!piece)
+        {
+            continue;
+        }
+        piece->setZValue(z);
+        addItem(piece);
+        piece->setName(Naming::nextName(stem, takenNames(piece)));
+        if (body)
+        {
+            body->addShape(piece);
+        }
+        made.append(piece);
+    }
+    announceChange(Change::Shapes);
+    if (body)
+    {
+        announceChange(Change::Bodies);
+    }
+    return made;
 }
 
 ExplosionItem *CanvasScene::addExplosion(const QPointF &scenePos)
@@ -2327,8 +2460,23 @@ void CanvasScene::setPhysicsSelectionColor(const QColor &color)
 
 void CanvasScene::addWatch(const Watch &watch)
 {
-    if (watch.objectName.isEmpty() || watch.propertyKey.isEmpty() || m_watches.contains(watch))
+    if (watch.objectName.isEmpty() || watch.propertyKey.isEmpty()
+        || (!watch.logged && !watch.plotted))
     {
+        return;
+    }
+    // Already watched: adding it to the log or the plot adds to what it is in.
+    const int at = m_watches.indexOf(watch);
+    if (at >= 0)
+    {
+        if (watch.logged && !m_watches.at(at).logged)
+        {
+            setWatchLogged(watch.objectName, watch.propertyKey, true);
+        }
+        if (watch.plotted && !m_watches.at(at).plotted)
+        {
+            setWatchPlotted(watch.objectName, watch.propertyKey, true);
+        }
         return;
     }
     m_watches.append(watch);
@@ -2441,9 +2589,37 @@ void CanvasScene::setWatchPlotted(const QString &objectName, const QString &prop
         if (watch.objectName == objectName && watch.propertyKey == propertyKey
             && watch.plotted != plotted)
         {
+            if (!plotted && !watch.logged)
+            {
+                removeWatch(objectName, propertyKey);
+                return;
+            }
             watch.plotted = plotted;
             emit watchesChanged();
-            notifyEdit(tr("Change log"));
+            notifyEdit(plotted ? tr("Add %1 to the plot").arg(watch.label)
+                               : tr("Take %1 off the plot").arg(watch.label));
+            return;
+        }
+    }
+}
+
+void CanvasScene::setWatchLogged(const QString &objectName, const QString &propertyKey,
+                                 bool logged)
+{
+    for (Watch &watch : m_watches)
+    {
+        if (watch.objectName == objectName && watch.propertyKey == propertyKey
+            && watch.logged != logged)
+        {
+            if (!logged && !watch.plotted)
+            {
+                removeWatch(objectName, propertyKey);
+                return;
+            }
+            watch.logged = logged;
+            emit watchesChanged();
+            notifyEdit(logged ? tr("Add %1 to the log").arg(watch.label)
+                              : tr("Take %1 off the log").arg(watch.label));
             return;
         }
     }
@@ -2457,6 +2633,36 @@ bool CanvasScene::isPlotted(const QString &objectName, const QString &propertyKe
             return watch.plotted;
     }
     return false;
+}
+
+bool CanvasScene::isLogged(const QString &objectName, const QString &propertyKey) const
+{
+    for (const Watch &watch : m_watches)
+    {
+        if (watch.objectName == objectName && watch.propertyKey == propertyKey)
+            return watch.logged;
+    }
+    return false;
+}
+
+void CanvasScene::clearLog()
+{
+    QVector<Watch> kept;
+    for (Watch watch : std::as_const(m_watches))
+    {
+        if (watch.plotted)
+        {
+            watch.logged = false;
+            kept.append(watch);
+        }
+    }
+    if (kept == m_watches)
+    {
+        return;
+    }
+    m_watches = kept;
+    emit watchesChanged();
+    notifyEdit(tr("Clear the log"));
 }
 
 void CanvasScene::removeWatch(const QString &objectName, const QString &propertyKey)

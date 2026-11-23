@@ -588,12 +588,17 @@ QJsonObject save(const CanvasScene *scene)
 
     QJsonArray watches;
     for (const CanvasScene::Watch &watch : scene->watches()) {
-        watches.append(QJsonObject {
+        QJsonObject o {
             {"object", watch.objectName},
             {"property", watch.propertyKey},
             {"label", watch.label},
             {"plotted", watch.plotted},
-        });
+        };
+        // Written only when off: every watch a file held before the plot was
+        // a choice of its own was in the log.
+        if (!watch.logged)
+            o.insert("logged", false);
+        watches.append(o);
     }
     if (!watches.isEmpty())
         document.insert("log", watches);
@@ -1067,6 +1072,7 @@ bool load(CanvasScene *scene, const QJsonObject &document, QString *error)
         watch.propertyKey = o.value("property").toString();
         watch.label = o.value("label").toString();
         watch.plotted = o.value("plotted").toBool(false);
+        watch.logged = o.value("logged").toBool(true);
         if (!watch.objectName.isEmpty() && !watch.propertyKey.isEmpty())
             watches.append(watch);
     }

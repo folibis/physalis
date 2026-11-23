@@ -409,7 +409,8 @@ function unescapeHtml(text) {
 // carries the list; what each one is called and how it is read belong to the
 // catalogue, exactly as they do when a rule reads one.
 function logCode(scene, style) {
-    var watches = scene.log || [];
+    // A watch that is only plotted is not in the log.
+    var watches = (scene.log || []).filter(function (watch) { return watch.logged !== false; });
     if (!watches.length)
         return { code: "", call: null };
 

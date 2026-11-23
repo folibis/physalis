@@ -116,9 +116,9 @@ by the length of a simulation step -- about 17 ms at the usual rate -- so it
 steps straight over most exact values, and a condition waiting for one of them
 would never fire.
 
-**Add to Log** on a variable's right-click menu shows it in the readout pinned
-to the canvas, so you can watch it count while the scene runs. The entry says
-**Remove from Log** once it is there.
+**Show in Log** on a variable's right-click menu shows it in the readout pinned
+to the canvas, so you can watch it count while the scene runs. The entry is
+ticked once it is there; click it again to take it off.
 
 Double-click a name to rename it, the way a rule card's title is renamed.
 Renaming carries every rule and log row that named it along with it. **Remove
@@ -479,7 +479,7 @@ itself is left as it was.
 - Give meaningful names to the objects your rules use. The rule cards show
   names, and `ball` is easier to recognise than `circle_7`.
 - To see why a rule does or does not fire, add the watched property to the log
-  (right-click it in the Properties tab and choose **Add to Log**) and watch it
+  (right-click it in the Properties tab and tick **Show in Log**) and watch it
   during the run. A variable goes in the log from the Variables tab the same
   way.
 - Untick a rule to switch it off for a moment instead of deleting it.

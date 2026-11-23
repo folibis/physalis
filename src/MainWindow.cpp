@@ -2437,7 +2437,11 @@ void MainWindow::updateLogOverlay()
     // Only while a run is going: outside one the values are simply what the
     // property table already shows, and the readout would sit over the canvas
     // saying nothing new.
-    const QVector<CanvasScene::Watch> watches = m_scene->watches();
+    QVector<CanvasScene::Watch> watches;
+    for (const CanvasScene::Watch &watch : m_scene->watches()) {
+        if (watch.logged)
+            watches.append(watch);
+    }
     if (watches.isEmpty() || !m_simulation || !m_simulation->isActive()) {
         m_logOverlay->hide();
         updateCaption(); // the caption moves up into the space
@@ -3021,6 +3025,46 @@ void MainWindow::circleToChain(ShapeItem *item)
               });
 }
 
+// Each re-run starts from the circle as it was, so Cancel can put it back and
+// a change of count does not cut up the pieces the last run left.
+void MainWindow::circleToPolygons(ShapeItem *item)
+{
+    if (!item || item->typeName() != QLatin1String("circle"))
+        return;
+
+    m_toolOriginal = SceneSerializer::shapeToJson(item);
+    m_toolShape = item;
+
+    const QRectF own = item->rect();
+    const qreal radius = qMin(own.width(), own.height()) / 2.0;
+    const QVector<ToolOption> options {
+        { QStringLiteral("segments"), tr("Segments"), 12.0, 3.0, 400.0, 1.0, 0, {}, {} },
+        { QStringLiteral("angle"), tr("Start angle"), 0.0, -360.0, 360.0, 5.0, 1,
+          QStringLiteral("°"), {} },
+        { QStringLiteral("thickness"), tr("Thickness"), std::round(radius / 5.0), 1.0, radius,
+          1.0, 1, {}, {} },
+    };
+    beginTool(tr("Circle to Polygons"), tr("Convert %1 to polygons").arg(item->name()), options,
+              [this] {
+                  if (!m_toolShape)
+                      return;
+                  ShapeItem *was = m_toolShape.data();
+                  ShapeItem *now = m_scene->replaceShape(was, m_toolOriginal);
+                  m_toolShape = now ? now : was;
+                  if (!m_toolShape)
+                      return;
+                  const QVector<ShapeItem *> pieces = m_scene->convertCircleToPolygons(
+                      m_toolShape.data(), int(m_toolOptions->value(QStringLiteral("segments"))),
+                      m_toolOptions->value(QStringLiteral("angle")),
+                      m_toolOptions->value(QStringLiteral("thickness")));
+                  if (pieces.isEmpty())
+                      return;
+                  m_toolShape = pieces.first();
+                  for (int i = 1; i < pieces.size(); ++i)
+                      m_toolCreated.append(pieces.at(i));
+              });
+}
+
 // Every re-run starts from the polygon as it was, so a smaller corner limit
 // cuts the original rather than the pieces the last run left.
 void MainWindow::splitIntoConvexPieces(ShapeItem *item)
@@ -3516,8 +3560,8 @@ void MainWindow::on_canvasView_customContextMenuRequested(const QPoint &pos)
         if (item->typeName() == QLatin1String("circle")) {
             QAction *toChain = menu.addAction(tr("Convert to Chain…"), this,
                                               [this, item] { circleToChain(item); });
-            toChain->setToolTip(tr("Replaces it with a closed chain of links round its rim,"
-                                   " each one its own body, jointed to its neighbours."));
+            toChain->setToolTip(tr("Replaces it with one closed outline of segments round its"
+                                   " rim: a hoop for other shapes to sit in."));
             toChain->setEnabled(!(m_simulation && m_simulation->isActive()));
         }
 
@@ -3529,6 +3573,15 @@ void MainWindow::on_canvasView_customContextMenuRequested(const QPoint &pos)
                                       " its own shape and in no body -- so they can be made"
                                       " into bodies and jointed together."));
             toSegments->setEnabled(!(m_simulation && m_simulation->isActive()));
+        }
+
+        if (item->typeName() == QLatin1String("circle")) {
+            QAction *toPolygons = menu.addAction(tr("Convert to Polygons…"), this,
+                                                 [this, item] { circleToPolygons(item); });
+            toPolygons->setToolTip(tr("Replaces it with solid pieces round its rim, as thick as"
+                                      " you choose and with nothing inside: a wheel that has"
+                                      " mass. They stay in its body."));
+            toPolygons->setEnabled(!(m_simulation && m_simulation->isActive()));
         }
 
         if (item->typeName() == QLatin1String("rectangle")) {

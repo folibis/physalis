@@ -1,0 +1,831 @@
+{
+    "bodies": [
+        {
+            "isEnabled": true,
+            "name": "body_4",
+            "physics": {
+            },
+            "shapes": [
+                1,
+                2
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_5",
+            "physics": {
+            },
+            "shapes": [
+                3,
+                4,
+                5
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_6",
+            "physics": {
+            },
+            "shapes": [
+                6
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_7",
+            "physics": {
+            },
+            "shapes": [
+                7
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_8",
+            "physics": {
+            },
+            "shapes": [
+                8
+            ],
+            "type": "static"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_9",
+            "physics": {
+            },
+            "shapes": [
+                9
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_10",
+            "physics": {
+            },
+            "shapes": [
+                10
+            ],
+            "type": "dynamic"
+        },
+        {
+            "isEnabled": true,
+            "name": "body_11",
+            "physics": {
+            },
+            "shapes": [
+                11
+            ],
+            "type": "dynamic"
+        }
+    ],
+    "engine": "Box2D",
+    "field": {
+        "backgroundColor": "#fffffeed",
+        "gridCellSize": 20,
+        "gridColor": "#ffe6e6e6",
+        "height": 800,
+        "showGrid": true,
+        "width": 1200
+    },
+    "format": "shape-editor-scene",
+    "joints": [
+        {
+            "anchorA": {
+                "x": -260,
+                "y": 260
+            },
+            "anchorB": {
+                "x": -260,
+                "y": 260
+            },
+            "axis": {
+                "x": 0.9456481806687794,
+                "y": -0.32519151034094923
+            },
+            "bodyA": "body_6",
+            "bodyB": "body_5",
+            "collideConnected": false,
+            "name": "revolute_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": false,
+                "enableMotor": true,
+                "enableSpring": false,
+                "forceThreshold": 1000000,
+                "hertz": 0,
+                "lowerAngle": 0,
+                "maxMotorTorque": 10,
+                "motorSpeed": -180,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "torqueThreshold": 1000000,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": -80,
+                "y": 260
+            },
+            "anchorB": {
+                "x": -80,
+                "y": 260
+            },
+            "axis": {
+                "x": -0.8356327136603268,
+                "y": -0.5492886016118289
+            },
+            "bodyA": "body_7",
+            "bodyB": "body_5",
+            "collideConnected": false,
+            "name": "revolute_2",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": false,
+                "forceThreshold": 1000000,
+                "hertz": 0,
+                "lowerAngle": 0,
+                "maxMotorTorque": 0,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "torqueThreshold": 1000000,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": -220,
+                "y": 200
+            },
+            "anchorB": {
+                "x": -220,
+                "y": 199.99999999999997
+            },
+            "axis": {
+                "x": -0.878679078839734,
+                "y": -0.47741289929091435
+            },
+            "bodyA": "body_5",
+            "bodyB": "body_4",
+            "collideConnected": true,
+            "name": "revolute_3",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0,
+                "drawSize": 0.25,
+                "enableLimit": true,
+                "enableMotor": true,
+                "enableSpring": false,
+                "forceThreshold": 1000000,
+                "hertz": 0,
+                "lowerAngle": -30,
+                "maxMotorTorque": 1000,
+                "motorSpeed": 60,
+                "referenceAngle": 0,
+                "targetAngle": 0,
+                "torqueThreshold": 1000000,
+                "upperAngle": 0
+            },
+            "type": "revolute"
+        },
+        {
+            "anchorA": {
+                "x": 500,
+                "y": 260
+            },
+            "anchorB": {
+                "x": 440,
+                "y": 260
+            },
+            "axis": {
+                "x": 1,
+                "y": 0
+            },
+            "bodyA": "body_8",
+            "bodyB": "body_9",
+            "collideConnected": false,
+            "name": "prismatic_1",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0.25,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": true,
+                "forceThreshold": 1000000,
+                "hertz": 2,
+                "lowerTranslation": 0,
+                "maxMotorForce": 0,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetTranslation": 0,
+                "torqueThreshold": 1000000,
+                "upperTranslation": 0
+            },
+            "type": "prismatic"
+        },
+        {
+            "anchorA": {
+                "x": -500,
+                "y": 260
+            },
+            "anchorB": {
+                "x": -440,
+                "y": 260
+            },
+            "axis": {
+                "x": 1,
+                "y": 0
+            },
+            "bodyA": "body_8",
+            "bodyB": "body_10",
+            "collideConnected": false,
+            "name": "prismatic_2",
+            "params": {
+                "constraintDampingRatio": 2,
+                "constraintHertz": 60,
+                "dampingRatio": 0.25,
+                "enableLimit": false,
+                "enableMotor": false,
+                "enableSpring": true,
+                "forceThreshold": 1000000,
+                "hertz": 2,
+                "lowerTranslation": 0,
+                "maxMotorForce": 0,
+                "motorSpeed": 0,
+                "referenceAngle": 0,
+                "targetTranslation": 0,
+                "torqueThreshold": 1000000,
+                "upperTranslation": 0
+            },
+            "type": "prismatic"
+        }
+    ],
+    "log": [
+        {
+            "label": "Constraint Torque (N·m)",
+            "logged": false,
+            "object": "prismatic_1",
+            "plotted": true,
+            "property": "constraintTorque"
+        },
+        {
+            "label": "Constraint Force Y (N)",
+            "logged": false,
+            "object": "prismatic_1",
+            "plotted": true,
+            "property": "constraintForceY"
+        }
+    ],
+    "rules": [
+        {
+            "compare": ">",
+            "name": "right spring pushed in: drive left",
+            "op": "negate",
+            "property": "motorSpeed",
+            "subject": "prismatic_1",
+            "target": "revolute_1",
+            "watch": "translation",
+            "when": 30
+        },
+        {
+            "action": "@clone",
+            "actionParams": {
+                "x": 245,
+                "y": 0
+            },
+            "actions": [
+                {
+                    "action": "@clone",
+                    "actionParams": {
+                        "x": 245,
+                        "y": 0
+                    },
+                    "op": "set",
+                    "property": "",
+                    "target": "body_11",
+                    "value": null
+                },
+                {
+                    "op": "set",
+                    "property": "loaded",
+                    "target": "@variables",
+                    "value": true
+                }
+            ],
+            "compare": ">",
+            "conditions": [
+                {
+                    "compare": ">",
+                    "subject": "prismatic_1",
+                    "watch": "translation",
+                    "when": 30
+                },
+                {
+                    "compare": "=",
+                    "subject": "@variables",
+                    "watch": "loaded",
+                    "when": false
+                }
+            ],
+            "join": "all",
+            "name": "right spring pushed in, empty: load one ball",
+            "op": "set",
+            "property": "",
+            "subject": "prismatic_1",
+            "target": "body_11",
+            "value": null,
+            "watch": "translation",
+            "when": 30
+        },
+        {
+            "compare": "<",
+            "name": "left spring pushed in: drive right",
+            "op": "negate",
+            "property": "motorSpeed",
+            "subject": "prismatic_2",
+            "target": "revolute_1",
+            "watch": "translation",
+            "when": -30
+        },
+        {
+            "actions": [
+                {
+                    "op": "set",
+                    "property": "motorSpeed",
+                    "target": "revolute_3",
+                    "value": -120
+                },
+                {
+                    "op": "set",
+                    "property": "loaded",
+                    "target": "@variables",
+                    "value": false
+                }
+            ],
+            "compare": "<",
+            "conditions": [
+                {
+                    "compare": "<",
+                    "subject": "prismatic_2",
+                    "watch": "translation",
+                    "when": -30
+                },
+                {
+                    "compare": "=",
+                    "subject": "@variables",
+                    "watch": "loaded",
+                    "when": true
+                }
+            ],
+            "join": "all",
+            "name": "left spring pushed in, loaded: tip the ball out",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "prismatic_2",
+            "target": "revolute_3",
+            "value": -120,
+            "watch": "translation",
+            "when": -30
+        },
+        {
+            "compare": ">",
+            "conditions": [
+                {
+                    "compare": ">",
+                    "subject": "body_5",
+                    "watch": "positionX",
+                    "when": -150
+                },
+                {
+                    "compare": "<",
+                    "subject": "revolute_3",
+                    "watch": "angle",
+                    "when": -10
+                }
+            ],
+            "join": "all",
+            "name": "car clear of the left: bed back down",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "body_5",
+            "target": "revolute_3",
+            "value": 60,
+            "watch": "positionX",
+            "when": -150
+        }
+    ],
+    "shapes": [
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 1,
+            "joinStyle": "round",
+            "name": "rectangle_1",
+            "origin": {
+                "x": 0,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": -30.05423409166491,
+                    "y": 39.959266924749784
+                },
+                {
+                    "x": 90.76518896989182,
+                    "y": 25.72315049250045
+                },
+                {
+                    "x": 96.33913820381218,
+                    "y": 44.93072946377322
+                },
+                {
+                    "x": -24.48028485774455,
+                    "y": 59.166845896022494
+                }
+            ],
+            "pos": {
+                "x": -312.14789846784066,
+                "y": 128.41515794254548
+            },
+            "rect": {
+                "height": 33.44369540352204,
+                "width": 126.39337229547709,
+                "x": -30.05423409166491,
+                "y": 25.72315049250045
+            },
+            "rotation": 16.182480531962682,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 2,
+            "joinStyle": "round",
+            "name": "rectangle_2",
+            "origin": {
+                "x": 0,
+                "y": 40
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": -102.34274595498232,
+                    "y": 19.270239759363662
+                },
+                {
+                    "x": 14.047853405551507,
+                    "y": 26.566018024613726
+                },
+                {
+                    "x": 2.7051860700264285,
+                    "y": 43.038537495405464
+                },
+                {
+                    "x": -113.68541329050743,
+                    "y": 35.742759230155386
+                }
+            ],
+            "pos": {
+                "x": -124.95131751037644,
+                "y": 99.03158288086044
+            },
+            "rect": {
+                "height": 23.768297736041802,
+                "width": 127.73326669605893,
+                "x": -113.68541329050743,
+                "y": 19.270239759363662
+            },
+            "rotation": 325.44943236016104,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 3,
+            "joinStyle": "round",
+            "name": "rectangle_3",
+            "origin": {
+                "x": 10,
+                "y": -30
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -240,
+                "y": 270
+            },
+            "rect": {
+                "height": 40,
+                "width": 220,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 4,
+            "joinStyle": "round",
+            "name": "rectangle_4",
+            "origin": {
+                "x": 10,
+                "y": -30
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -20,
+                "y": 270
+            },
+            "rect": {
+                "height": 40,
+                "width": 100,
+                "x": -100,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "closed": true,
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 5,
+            "joinStyle": "round",
+            "name": "rectangle_5",
+            "origin": {
+                "x": 10,
+                "y": -30
+            },
+            "outline": false,
+            "physics": {
+            },
+            "points": [
+                {
+                    "x": -101,
+                    "y": -90
+                },
+                {
+                    "x": -40,
+                    "y": -90
+                },
+                {
+                    "x": 0,
+                    "y": -50
+                },
+                {
+                    "x": 0,
+                    "y": -10
+                },
+                {
+                    "x": -50,
+                    "y": -10
+                },
+                {
+                    "x": -100,
+                    "y": -10
+                },
+                {
+                    "x": -100.5,
+                    "y": -50
+                }
+            ],
+            "pos": {
+                "x": -20,
+                "y": 230
+            },
+            "rect": {
+                "height": 80,
+                "width": 101,
+                "x": -101,
+                "y": -90
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "polygon"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 6,
+            "joinStyle": "round",
+            "name": "circle_1",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -260,
+                "y": 260
+            },
+            "rect": {
+                "height": 80,
+                "width": 80,
+                "x": -40,
+                "y": -40
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 7,
+            "joinStyle": "round",
+            "name": "circle_2",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -80,
+                "y": 260
+            },
+            "rect": {
+                "height": 80,
+                "width": 80,
+                "x": -40,
+                "y": -40
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 8,
+            "joinStyle": "round",
+            "name": "rectangle_6",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 400,
+                "y": 350
+            },
+            "rect": {
+                "height": 40,
+                "width": 1000,
+                "x": -900,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 9,
+            "joinStyle": "round",
+            "name": "rectangle_7",
+            "origin": {
+                "x": 80,
+                "y": -10
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": 360,
+                "y": 270
+            },
+            "rect": {
+                "height": 80,
+                "width": 40,
+                "x": 60,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 10,
+            "joinStyle": "round",
+            "name": "rectangle_8",
+            "origin": {
+                "x": 80,
+                "y": -10
+            },
+            "outline": false,
+            "physics": {
+            },
+            "pos": {
+                "x": -520,
+                "y": 270
+            },
+            "rect": {
+                "height": 80,
+                "width": 40,
+                "x": 60,
+                "y": -50
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "rectangle"
+        },
+        {
+            "capStyle": "round",
+            "cornerRadius": 0,
+            "filled": true,
+            "id": 11,
+            "joinStyle": "round",
+            "name": "circle_3",
+            "origin": {
+                "x": 0,
+                "y": 0
+            },
+            "outline": false,
+            "physics": {
+                "restitution": 0.2
+            },
+            "pos": {
+                "x": 5060,
+                "y": -160
+            },
+            "rect": {
+                "height": 120,
+                "width": 120,
+                "x": -60,
+                "y": -60
+            },
+            "rotation": 0,
+            "smoothChain": false,
+            "type": "circle"
+        }
+    ],
+    "variables": [
+        {
+            "name": "loaded",
+            "type": "bool",
+            "value": false
+        }
+    ],
+    "version": 1,
+    "world": {
+        "physics": {
+        },
+        "pixelsPerMeter": 100,
+        "randomSeed": 0,
+        "solidBounds": false
+    }
+}

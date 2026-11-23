@@ -23,6 +23,7 @@
 #include "UndoStack.h"
 #include <QTreeWidget>
 #include <QAction>
+#include <QLabel>
 
 // The transport: start, pause, step, speed, stop. None of it is physics -- it
 // is what the toolbar does -- and all of it decides what the user sees.
@@ -688,24 +689,60 @@ TEST(Simulation, ABodyMarkedToDrawLeavesATrailForTheRun)
     fading.stop();
 }
 
-// What is plotted is part of the scene, not of the session.
-TEST(Simulation, WhatIsPlottedSurvivesTheFile)
+// What is logged and what is plotted are part of the scene, not of the
+// session, and are two choices: a value can be plotted without crowding the
+// log, and goes altogether only once it is in neither.
+TEST(Simulation, WhatIsLoggedAndPlottedSurvivesTheFile)
 {
-    CanvasScene scene;
-    scene.setSimulationEngineName(QStringLiteral("Box2D"));
-    scene.addWatch({QStringLiteral("@world"), QStringLiteral("time"),
-                    QStringLiteral("Elapsed"), true});
-    scene.addWatch({QStringLiteral("@world"), QStringLiteral("frame"),
-                    QStringLiteral("Frame"), false});
+    const QString world = QStringLiteral("@world");
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    CanvasScene::Watch both { world, QStringLiteral("time"), QStringLiteral("Elapsed"), true };
+    CanvasScene::Watch logOnly { world, QStringLiteral("frame"), QStringLiteral("Frame"), false };
+    CanvasScene::Watch plotOnly { world, QStringLiteral("gravityY"), QStringLiteral("Pull"), true,
+                                  false };
+    scene->addWatch(both);
+    scene->addWatch(logOnly);
+    scene->addWatch(plotOnly);
 
     CanvasScene reopened;
     QString error;
-    ASSERT_TRUE(SceneSerializer::load(&reopened, SceneSerializer::save(&scene), &error))
+    ASSERT_TRUE(SceneSerializer::load(&reopened, SceneSerializer::save(scene), &error))
         << error.toStdString();
+    ASSERT_EQ(reopened.watches().size(), 3);
+    EXPECT_TRUE(reopened.isPlotted(world, QStringLiteral("time")));
+    EXPECT_TRUE(reopened.isLogged(world, QStringLiteral("time")));
+    EXPECT_FALSE(reopened.isPlotted(world, QStringLiteral("frame")));
+    EXPECT_TRUE(reopened.isPlotted(world, QStringLiteral("gravityY")));
+    EXPECT_FALSE(reopened.isLogged(world, QStringLiteral("gravityY")))
+        << "plotting a value put it in the log as well";
 
-    ASSERT_EQ(reopened.watches().size(), 2);
-    EXPECT_TRUE(reopened.isPlotted(QStringLiteral("@world"), QStringLiteral("time")));
-    EXPECT_FALSE(reopened.isPlotted(QStringLiteral("@world"), QStringLiteral("frame")));
+    // The log on the canvas shows what is logged and nothing that is only plotted.
+    ShapeItem *crate = scene->addRectangle(QPointF(0, 0));
+    scene->setEditorMode(EditorMode::Physics);
+    scene->selectShapes({ crate }, false);
+    window.createBodyForTest(false);
+    window.startRunForTest();
+    QCoreApplication::processEvents();
+    auto *sim = window.findChild<SimulationController *>();
+    ASSERT_TRUE(sim && sim->isActive());
+    sim->stepFrame();
+    QCoreApplication::processEvents();
+    auto *log = window.findChild<QLabel *>(QStringLiteral("LogOverlay"));
+    ASSERT_TRUE(log);
+    EXPECT_EQ(log->text().split(QChar::LineFeed).size(), 2)
+        << "the log is not the two logged values: " << log->text().toStdString();
+    window.stopRunForTest();
+
+    // Taken off the one it is in, it goes; taken off one of two, it stays in the other.
+    scene->setWatchPlotted(world, QStringLiteral("gravityY"), false);
+    EXPECT_FALSE(scene->isWatched(world, QStringLiteral("gravityY")));
+    scene->setWatchLogged(world, QStringLiteral("time"), false);
+    EXPECT_TRUE(scene->isPlotted(world, QStringLiteral("time")));
+    scene->clearLog();
+    EXPECT_FALSE(scene->isWatched(world, QStringLiteral("frame"))) << "Clear Log left a logged value";
+    EXPECT_TRUE(scene->isPlotted(world, QStringLiteral("time"))) << "Clear Log took a plot away";
 }
 
 namespace {

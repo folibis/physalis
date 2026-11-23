@@ -11,6 +11,7 @@
 #include "Theme.h"
 
 #include <QScrollBar>
+#include <algorithm>
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QVBoxLayout>
@@ -550,35 +551,41 @@ void PropertyPanel::showRowMenu(const Row &row, const QPoint &globalPos)
     // different things.
     const QString label = row.group.isEmpty() ? row.label
                                               : tr("%1 · %2").arg(row.group, row.label);
-    const auto watchFor = [object, row, label](bool plotted) {
+    const auto watchFor = [object, row, label](bool logged, bool plotted) {
         CanvasScene::Watch watch;
         watch.objectName = object;
         watch.propertyKey = row.key;
         watch.label = label;
+        watch.logged = logged;
         watch.plotted = plotted;
         return watch;
     };
 
-    if (watched) {
-        menu.addAction(tr("Remove from Log"), this, [this, object, row] {
-            m_scene->removeWatch(object, row.key);
-        });
-        // Already logged: the only thing left to say is whether it is also
-        // kept, which is the whole difference between a number and a trace.
-        const bool plotted = m_scene->isPlotted(object, row.key);
-        menu.addAction(plotted ? tr("Stop Plotting") : tr("Plot as Well"), this,
-                       [this, object, row, plotted] {
-                           m_scene->setWatchPlotted(object, row.key, !plotted);
-                       });
-    } else {
-        menu.addAction(tr("Add to Log"), this,
-                       [this, watchFor] { m_scene->addWatch(watchFor(false)); });
-        menu.addAction(tr("Add to Log as Plot"), this,
-                       [this, watchFor] { m_scene->addWatch(watchFor(true)); });
-    }
-    if (!m_scene->watches().isEmpty()) {
+    // Two separate choices, each ticked when it is made: the log reads the
+    // number as the run goes, the plot draws what it did.
+    QAction *inLog = menu.addAction(tr("Show in Log"));
+    inLog->setCheckable(true);
+    inLog->setChecked(m_scene->isLogged(object, row.key));
+    connect(inLog, &QAction::toggled, this, [this, object, row, watchFor](bool on) {
+        if (on)
+            m_scene->addWatch(watchFor(true, false));
+        else
+            m_scene->setWatchLogged(object, row.key, false);
+    });
+    QAction *onPlot = menu.addAction(tr("Show on Plot"));
+    onPlot->setCheckable(true);
+    onPlot->setChecked(m_scene->isPlotted(object, row.key));
+    connect(onPlot, &QAction::toggled, this, [this, object, row, watchFor](bool on) {
+        if (on)
+            m_scene->addWatch(watchFor(false, true));
+        else
+            m_scene->setWatchPlotted(object, row.key, false);
+    });
+    const bool anyLogged = std::any_of(m_scene->watches().cbegin(), m_scene->watches().cend(),
+                                       [](const CanvasScene::Watch &w) { return w.logged; });
+    if (anyLogged) {
         menu.addSeparator();
-        menu.addAction(tr("Clear Log"), this, [this] { m_scene->clearWatches(); });
+        menu.addAction(tr("Clear Log"), this, [this] { m_scene->clearLog(); });
     }
     menu.exec(globalPos);
 }

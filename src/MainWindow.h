@@ -321,6 +321,7 @@ public:
     QWidget *overlayHostForTest() const;
     void openSegmentsToolForTest(ShapeItem *shape) { shapeToSegments(shape); }
     void openChainToolForTest(ShapeItem *shape) { circleToChain(shape); }
+    void openPolygonsToolForTest(ShapeItem *shape) { circleToPolygons(shape); }
     void openConvexToolForTest(ShapeItem *shape) { splitIntoConvexPieces(shape); }
     void runToolForTest() { runTool(); }
     void applyToolForTest() { applyTool(); }
@@ -364,6 +365,7 @@ private:
                                          qreal margin);
     void circleToChain(ShapeItem *item);
     void shapeToSegments(ShapeItem *item);
+    void circleToPolygons(ShapeItem *item);
     void splitIntoConvexPieces(ShapeItem *item);
     void duplicateShape(ShapeItem *item);
     void duplicateShapes(const QVector<ShapeItem *> &source);

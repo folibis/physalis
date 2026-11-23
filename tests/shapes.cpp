@@ -1637,6 +1637,89 @@ TEST(Shapes, ACircleConvertsToAChainOfSegments)
     EXPECT_EQ(window.circleToChainForTest(turned, 2), nullptr);
 }
 
+// Convert to Polygons makes a wheel: solid pieces round the rim, as deep as
+// asked, in the circle's body and with nothing inside. A chain or segments
+// are only edges and a body of them has no mass; this one has, so it moves,
+// and what is inside it stays there.
+TEST(Shapes, ACircleConvertsToASolidRimWithNothingInside)
+{
+    MainWindow window;
+    CanvasScene *scene = window.findChild<CanvasScene *>();
+    ASSERT_TRUE(scene);
+    scene->setEditorMode(EditorMode::Edit);
+
+    ShapeItem *circle = scene->addCircle(QPointF(0, 0));
+    circle->setRect(QRectF(-100, -100, 200, 200));
+    const QString name = circle->name();
+    const QPointF centre = circle->mapToScene(QPointF(0, 0));
+    scene->setEditorMode(EditorMode::Physics);
+    scene->selectShapes({ circle }, false);
+    window.createBodyForTest(true);
+    PhysicsBody *wheel = circle->body();
+    ASSERT_TRUE(wheel);
+
+    window.openPolygonsToolForTest(circle);
+    QCoreApplication::processEvents();
+    ToolOptionsBar *panel = window.findChild<ToolOptionsBar *>();
+    ASSERT_TRUE(panel);
+    const QList<QDoubleSpinBox *> boxes = panel->findChildren<QDoubleSpinBox *>();
+    ASSERT_EQ(boxes.size(), 3) << "segments, start angle and thickness";
+    boxes.at(0)->setValue(16);
+    boxes.at(2)->setValue(10);
+    QCoreApplication::processEvents();
+    window.applyToolForTest();
+    QCoreApplication::processEvents();
+
+    const QVector<ShapeItem *> pieces = wheel->shapes();
+    ASSERT_EQ(pieces.size(), 16) << "one piece per segment, all in the circle's body";
+    EXPECT_EQ(scene->shapes().size(), 16) << "the circle was left behind";
+    EXPECT_EQ(pieces.first()->name(), name) << "the first piece lost the circle's name";
+    const qreal inner = 100.0 * std::cos(M_PI / 16) - 10.0;
+    for (ShapeItem *piece : pieces) {
+        EXPECT_TRUE(piece->hasInterior()) << qPrintable(piece->name()) << " is not solid";
+        qreal nearest = std::numeric_limits<qreal>::max();
+        qreal furthest = 0.0;
+        QPolygonF outline;
+        for (int i = 0; i < piece->nodeCount(); ++i) {
+            outline << piece->mapToScene(piece->nodePosition(i));
+            const qreal r = QLineF(centre, outline.last()).length();
+            nearest = qMin(nearest, r);
+            furthest = qMax(furthest, r);
+        }
+        EXPECT_NEAR(furthest, 100.0, 0.001) << "a piece does not reach the rim";
+        EXPECT_GT(nearest, inner - 0.001) << "a piece reaches further in than the thickness";
+        EXPECT_FALSE(outline.containsPoint(centre, Qt::OddEvenFill)) << "the middle is not empty";
+    }
+
+    // A ball inside a wheel that holds still stays inside it.
+    CircleItem *ball = scene->addCircle(QPointF(0, 0));
+    ball->setRect(QRectF(-10, -10, 20, 20));
+    scene->selectShapes({ ball }, false);
+    window.createBodyForTest(false);
+    ASSERT_TRUE(ball->body());
+    window.startRunForTest();
+    QCoreApplication::processEvents();
+    SimulationController *sim = window.findChild<SimulationController *>();
+    ASSERT_TRUE(sim);
+    for (int i = 0; i < 120; ++i)
+        sim->stepFrame();
+    EXPECT_LT(QLineF(centre, inRun(*sim, ball->body())->originScenePos()).length(), inner)
+        << "the ball fell through the rim";
+    window.stopRunForTest();
+    QCoreApplication::processEvents();
+
+    // And a wheel that moves is simulated, which one made of lines is not.
+    wheel->props().type = physics::BodyType::Dynamic;
+    window.startRunForTest();
+    QCoreApplication::processEvents();
+    EXPECT_FALSE(sim->skippedBodies().contains(wheel->name())) << "the wheel has no mass";
+    for (int i = 0; i < 30; ++i)
+        sim->stepFrame();
+    EXPECT_GT(inRun(*sim, wheel)->originScenePos().y(), centre.y() + 1.0) << "the wheel did not fall";
+    window.stopRunForTest();
+    QCoreApplication::processEvents();
+}
+
 // Convert to Segments leaves one line per side, each a shape of its own and in
 // no body -- which is the point: a joint connects bodies, so the pieces have
 // to be separable. A rectangle keeps its corners, however finely it is split.

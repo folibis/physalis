@@ -253,26 +253,6 @@
                 14
             ],
             "type": "dynamic"
-        },
-        {
-            "isEnabled": true,
-            "name": "body_16",
-            "physics": {
-            },
-            "shapes": [
-                15
-            ],
-            "type": "dynamic"
-        },
-        {
-            "isEnabled": true,
-            "name": "body_17",
-            "physics": {
-            },
-            "shapes": [
-                16
-            ],
-            "type": "dynamic"
         }
     ],
     "engine": "Box2D",
@@ -289,11 +269,11 @@
         {
             "anchorA": {
                 "x": -200,
-                "y": -100
+                "y": -101
             },
             "anchorB": {
                 "x": -200,
-                "y": -100
+                "y": -101
             },
             "axis": {
                 "x": 0.9948488910391416,
@@ -383,7 +363,7 @@
                 "enableSpring": false,
                 "hertz": 0,
                 "lowerAngle": 0,
-                "maxMotorTorque": 100,
+                "maxMotorTorque": 2000000,
                 "motorSpeed": -180,
                 "referenceAngle": 0,
                 "targetAngle": 0,
@@ -393,12 +373,12 @@
         },
         {
             "anchorA": {
-                "x": 682.5,
-                "y": 202.5
+                "x": 640,
+                "y": 200
             },
             "anchorB": {
-                "x": 682.5,
-                "y": 201.38888888888889
+                "x": 640,
+                "y": 201.11111111111111
             },
             "axis": {
                 "x": 0,
@@ -417,7 +397,7 @@
                 "enableSpring": false,
                 "hertz": 0,
                 "lowerTranslation": -300,
-                "maxMotorForce": 2,
+                "maxMotorForce": 100,
                 "motorSpeed": 90,
                 "referenceAngle": 0,
                 "targetTranslation": 0,
@@ -459,76 +439,6 @@
                 "upperAngle": 0
             },
             "type": "revolute"
-        },
-        {
-            "anchorA": {
-                "x": 560,
-                "y": 80
-            },
-            "anchorB": {
-                "x": 560,
-                "y": 80
-            },
-            "axis": {
-                "x": 0.9492493331914286,
-                "y": 0.3145245673005979
-            },
-            "bodyA": "body_16",
-            "bodyB": "body_14",
-            "collideConnected": false,
-            "name": "revolute_5",
-            "params": {
-                "constraintDampingRatio": 2,
-                "constraintHertz": 60,
-                "dampingRatio": 0.1,
-                "drawSize": 0.25,
-                "enableLimit": false,
-                "enableMotor": false,
-                "enableSpring": true,
-                "hertz": 0.5,
-                "lowerAngle": 0,
-                "maxMotorTorque": 0,
-                "motorSpeed": 0,
-                "referenceAngle": 0,
-                "targetAngle": 0,
-                "upperAngle": 0
-            },
-            "type": "revolute"
-        },
-        {
-            "anchorA": {
-                "x": 700,
-                "y": 80
-            },
-            "anchorB": {
-                "x": 700,
-                "y": 80
-            },
-            "axis": {
-                "x": -0.5029818483514207,
-                "y": 0.86429697455735
-            },
-            "bodyA": "body_17",
-            "bodyB": "body_14",
-            "collideConnected": false,
-            "name": "revolute_6",
-            "params": {
-                "constraintDampingRatio": 2,
-                "constraintHertz": 60,
-                "dampingRatio": 0.1,
-                "drawSize": 0.25,
-                "enableLimit": false,
-                "enableMotor": false,
-                "enableSpring": true,
-                "hertz": 0.5,
-                "lowerAngle": 0,
-                "maxMotorTorque": 0,
-                "motorSpeed": 0,
-                "referenceAngle": 0,
-                "targetAngle": 0,
-                "upperAngle": 0
-            },
-            "type": "revolute"
         }
     ],
     "log": [
@@ -547,48 +457,45 @@
     ],
     "rules": [
         {
-            "conditions": [
-                {
-                    "event": "contactBegin",
-                    "subject": "rectangle_4",
-                    "when": "rectangle_5"
-                },
-                {
-                    "event": "contactBegin",
-                    "subject": "rectangle_6",
-                    "when": "rectangle_8"
-                }
-            ],
             "event": "contactBegin",
-            "join": "any",
-            "name": "left wall turn",
-            "op": "negate",
+            "name": "left wall: drive right",
+            "op": "set",
             "property": "motorSpeed",
             "subject": "rectangle_4",
             "target": "revolute_3",
+            "value": -180,
             "when": "rectangle_5"
         },
         {
-            "conditions": [
-                {
-                    "event": "contactBegin",
-                    "subject": "rectangle_5",
-                    "when": "rectangle_10"
-                },
-                {
-                    "event": "contactBegin",
-                    "subject": "rectangle_5",
-                    "when": "rectangle_7"
-                }
-            ],
+            "compare": ">",
+            "name": "lift down: drive left",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "prismatic_1",
+            "target": "revolute_3",
+            "value": 180,
+            "watch": "translation",
+            "when": -2
+        },
+        {
             "event": "contactBegin",
-            "join": "any",
-            "name": "elevator ascent",
-            "op": "negate",
+            "name": "pendulum: lift up",
+            "op": "set",
             "property": "motorSpeed",
             "subject": "rectangle_5",
             "target": "prismatic_1",
+            "value": -90,
             "when": "rectangle_10"
+        },
+        {
+            "event": "contactBegin",
+            "name": "lift wall: lift down",
+            "op": "set",
+            "property": "motorSpeed",
+            "subject": "rectangle_5",
+            "target": "prismatic_1",
+            "value": 90,
+            "when": "rectangle_7"
         }
     ],
     "shapes": [
@@ -767,7 +674,7 @@
             },
             "rect": {
                 "height": 40,
-                "width": 700,
+                "width": 697,
                 "x": -100,
                 "y": -50
             },
@@ -817,16 +724,16 @@
                     "y": 40
                 },
                 {
-                    "x": 47.58620689655169,
-                    "y": 119.3103448275862
+                    "x": 60,
+                    "y": 121
                 }
             ],
             "pos": {
                 "x": -400,
-                "y": -100
+                "y": -101
             },
             "rect": {
-                "height": 119.3103448275862,
+                "height": 121,
                 "width": 200,
                 "x": 0,
                 "y": 0
@@ -1028,7 +935,7 @@
             },
             "pos": {
                 "x": 600,
-                "y": 248.88888888888889
+                "y": 250
             },
             "rect": {
                 "height": 40,
@@ -1069,7 +976,7 @@
             },
             "pos": {
                 "x": 700,
-                "y": 148.88888888888889
+                "y": 150
             },
             "rect": {
                 "height": 160,
@@ -1151,7 +1058,7 @@
             },
             "pos": {
                 "x": 600,
-                "y": -11.111111111111114
+                "y": -10
             },
             "rect": {
                 "height": 40,
@@ -1190,62 +1097,6 @@
             "rotation": 0,
             "smoothChain": false,
             "type": "rectangle"
-        },
-        {
-            "capStyle": "round",
-            "cornerRadius": 0,
-            "filled": true,
-            "id": 15,
-            "joinStyle": "round",
-            "name": "circle_3",
-            "origin": {
-                "x": 0,
-                "y": 0
-            },
-            "outline": false,
-            "physics": {
-            },
-            "pos": {
-                "x": 560,
-                "y": 80
-            },
-            "rect": {
-                "height": 80,
-                "width": 80,
-                "x": -40,
-                "y": -40
-            },
-            "rotation": 0,
-            "smoothChain": false,
-            "type": "circle"
-        },
-        {
-            "capStyle": "round",
-            "cornerRadius": 0,
-            "filled": true,
-            "id": 16,
-            "joinStyle": "round",
-            "name": "circle_4",
-            "origin": {
-                "x": 0,
-                "y": 0
-            },
-            "outline": false,
-            "physics": {
-            },
-            "pos": {
-                "x": 700,
-                "y": 80
-            },
-            "rect": {
-                "height": 80,
-                "width": 80,
-                "x": -40,
-                "y": -40
-            },
-            "rotation": 0,
-            "smoothChain": false,
-            "type": "circle"
         }
     ],
     "version": 1,

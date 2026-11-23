@@ -142,6 +142,13 @@ Right-clicking a shape offers these commands:
 - **Convert to Segments...** (circles and rectangles) replaces the shape with
   that many separate line shapes, each of which can be given a body and joined
   to its neighbours.
+- **Convert to Polygons...** (circles only) replaces the circle with solid
+  pieces round its rim, one per segment, each reaching **Thickness** in from
+  the edge, with nothing inside. A chain or segments are only lines, and a
+  body made only of lines has no mass, so it is left out of a run; these
+  pieces have mass, so a wheel made of them turns and holds what is inside it.
+  The pieces stay in the circle's body and the first keeps its name. Choose
+  how many there are, which angle they start at, and how thick the rim is.
 - **Split into Convex Pieces...** (closed polygons that are concave or have
   more points than a solid shape may) cuts the outline into convex pieces that
   together cover exactly the same area, so it can be solid and belong to a body

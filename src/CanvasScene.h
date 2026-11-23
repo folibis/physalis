@@ -63,6 +63,10 @@ public:
     // replaced it, or nullptr if it was not a rectangle to begin with.
     ShapeItem *convertToPolygon(ShapeItem *shape);
     ShapeItem *convertCircleToChain(ShapeItem *shape, int segments, qreal startAngle);
+    // A circle's rim as that many solid pieces `thickness` deep, in its body
+    // and with nothing inside -- a wheel. The first takes the circle's place.
+    QVector<ShapeItem *> convertCircleToPolygons(ShapeItem *shape, int segments,
+                                                 qreal startAngle, qreal thickness);
     ShapeItem *replaceShape(ShapeItem *shape, const QJsonObject &json);
     void destroyShape(ShapeItem *shape);
     // A circle or a rectangle broken into one line per side, each its own
@@ -599,10 +603,12 @@ public:
         QString objectName;
         QString propertyKey;
         QString label;
-        // Kept as well as shown: the run records every step of it, and the
-        // Plot tab draws the lot against time. Reading one number as it goes
-        // says what a value is; the trace says what it did.
+        // Recorded every step and drawn on the Plot tab against time. Reading
+        // one number as it goes says what a value is; the trace says what it
+        // did. The log and the plot are separate choices: a watch is in
+        // either, or both, and goes when it is in neither.
         bool plotted = false;
+        bool logged = true;
         bool operator==(const Watch &other) const
         {
             return objectName == other.objectName && propertyKey == other.propertyKey;
@@ -611,6 +617,10 @@ public:
     const QVector<Watch> &watches() const { return m_watches; }
     void addWatch(const Watch &watch);
     void setWatchPlotted(const QString &objectName, const QString &propertyKey, bool plotted);
+    void setWatchLogged(const QString &objectName, const QString &propertyKey, bool logged);
+    bool isLogged(const QString &objectName, const QString &propertyKey) const;
+    // Everything off the log; what is also plotted stays on the plot.
+    void clearLog();
     // Drops every watch whose object has gone, and every watch on a property
     // its object no longer has -- a joint that changes type keeps its name and
     // loses half its readings. Called wherever either can happen.

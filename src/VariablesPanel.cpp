@@ -447,8 +447,8 @@ void VariablesPanel::toggleLog(int row)
         return;
 
     const SceneVariable variable = m_scene->variables().at(row);
-    if (m_scene->isWatched(Rule::variables(), variable.name))
-        m_scene->removeWatch(Rule::variables(), variable.name);
+    if (m_scene->isLogged(Rule::variables(), variable.name))
+        m_scene->setWatchLogged(Rule::variables(), variable.name, false);
     else
         m_scene->addWatch({ Rule::variables(), variable.name, variable.name });
 }
@@ -469,9 +469,9 @@ void VariablesPanel::showMenu(int row, const QPoint &globalPos)
     // was opened for rather than reading the selection: the two are not always
     // the same row, and an entry that says one thing and does another is worse
     // than no entry at all.
-    const bool watched = m_scene->isWatched(Rule::variables(), variable.name);
-    menu.addAction(watched ? tr("Remove from Log") : tr("Add to Log"),
-                   this, [this, row] { toggleLog(row); });
+    QAction *inLog = menu.addAction(tr("Show in Log"), this, [this, row] { toggleLog(row); });
+    inLog->setCheckable(true);
+    inLog->setChecked(m_scene->isLogged(Rule::variables(), variable.name));
     if (!m_readOnly) {
         menu.addSeparator();
         menu.addAction(tr("Remove Variable"), this, [this, row] { removeVariable(row); });

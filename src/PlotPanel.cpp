@@ -137,7 +137,7 @@ void PlotPanel::paintEvent(QPaintEvent *event)
         painter.drawText(rect().adjusted(12, 0, -12, 0), Qt::AlignCenter | Qt::TextWordWrap,
                          anyMarked
                              ? tr("Play the scene to trace what was marked.")
-                             : tr("Right-click a property and choose \"Add to Log as Plot\"."));
+                             : tr("Right-click a property and choose \"Show on Plot\"."));
         return;
     }
 

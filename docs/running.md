@@ -106,13 +106,14 @@ whole field again.
 
 To follow a value while the simulation runs, such as a ball's speed, a
 joint's angle or the time elapsed, right-click its name in the Properties tab
-and choose **Add to Log**. Logged values are listed in the top-left corner of
+and tick **Show in Log**. Logged values are listed in the top-left corner of
 the canvas while the simulation runs, each with the name of its object, and
-they update every frame. Right-click a logged property again and choose
-**Remove from Log** to stop watching it, or **Clear Log** to remove them all.
+they update every frame. Right-click a logged property again and untick
+**Show in Log** to stop watching it, or choose **Clear Log** to empty the log.
+Clearing the log leaves anything that is also plotted on the plot.
 
 A scene's own [variables](rules.md#variables) go in the log the same way:
-right-click one on the **Variables** tab and choose **Add to Log**. That is how
+right-click one on the **Variables** tab and tick **Show in Log**. That is how
 to watch a score count up, or a timer count on, while the scene runs.
 
 The log is also the quickest way to find out why a [rule](rules.md) does or
@@ -134,8 +135,10 @@ what is shown.
 ## Plotting values
 
 A logged value shows one number at a time. To see what it did over the whole
-run, right-click its name and choose **Add to Log as Plot** -- or, if it is
-already logged, **Plot as Well**. It is then drawn on the **Plot** tab.
+run, right-click its name and tick **Show on Plot**. It is then drawn on the
+**Plot** tab. Plotting a value does not put it in the log: add it to both if
+you want the number on the canvas as well, and unticking **Show on Plot**
+takes it off the plot alone.
 
 Each value gets a band of its own, with its own vertical scale: a force in
 newtons and a position in scene units share no scale worth sharing. The band is
