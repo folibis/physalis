@@ -36,7 +36,7 @@ QString number(double value)
 
 QString of(const QVariant &value)
 {
-    switch (value.typeId()) {
+    switch (value.userType()) {
     case QMetaType::Bool:
         return value.toBool() ? QStringLiteral("true") : QStringLiteral("false");
     case QMetaType::Int:

@@ -507,7 +507,11 @@ TEST(Editing, TheObjectsTreeCanBeFilteredByName)
     odd->setName(QStringLiteral("lever_arm"));
     scene->addItem(odd);
     scene->notifyShapesChanged();
+    // processEvents() alone is not promised to deliver a queued call: on
+    // Qt5's glib dispatcher it does not, and the tree was read unrebuilt.
+    // sendPostedEvents() delivers it whatever the event loop is.
     QCoreApplication::processEvents(); // the tree rebuilds queued
+    QCoreApplication::sendPostedEvents();
 
     const auto showing = [rows] {
         QStringList names;

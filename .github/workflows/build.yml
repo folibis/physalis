@@ -45,6 +45,35 @@ jobs:
       - name: Test
         run: xvfb-run -a ctest --test-dir build --output-on-failure
 
+  # 22.04 has no Qt6 Svg or Qml, so CMake falls back to the distribution's
+  # Qt5 -- the build the ubuntu22.04 .deb is made from. Without this job that
+  # path was first compiled on release day.
+  linux-qt5:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Qt and system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build xvfb libgl1-mesa-dev \
+            qtbase5-dev libqt5svg5-dev qtdeclarative5-dev
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      # A half-found Qt6 would win over Qt5 and test the wrong thing.
+      - name: Check it picked Qt5
+        run: |
+          grep -E '^Qt[56]_DIR' build/CMakeCache.txt
+          grep -q '^Qt5_DIR' build/CMakeCache.txt
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: xvfb-run -a ctest --test-dir build --output-on-failure
+
   windows:
     runs-on: windows-latest
     defaults:

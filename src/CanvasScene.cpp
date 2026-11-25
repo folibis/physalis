@@ -137,8 +137,8 @@ QVector<QPolygonF> rimPieces(const QVector<QPointF> &corners, qreal thickness)
     for (int i = 0; i < count; ++i)
     {
         const int next = (i + 1) % count;
-        QPolygonF piece { corners.at(i), corners.at(next) };
-        piece << inner.at(next);
+        QPolygonF piece;
+        piece << corners.at(i) << corners.at(next) << inner.at(next);
         if (inner.at(i) != inner.at(next))
         {
             piece << inner.at(i);
@@ -5598,7 +5598,9 @@ void CanvasScene::setTrailClock(qreal seconds)
             stroke.points.remove(0, gone);
             stroke.times.remove(0, gone);
         }
-        trail.strokes.removeIf([](const TrailStroke &stroke) { return stroke.points.isEmpty(); });
+        trail.strokes.erase(std::remove_if(trail.strokes.begin(), trail.strokes.end(),
+                                           [](const TrailStroke &stroke) { return stroke.points.isEmpty(); }),
+                            trail.strokes.end());
     }
     update();
 }

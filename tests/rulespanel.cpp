@@ -93,7 +93,11 @@ TEST(TimerVariable, TheOpBoxFollowsWhetherThePropertyIsATimer)
     QComboBox *property = propertyBox(&panel);
     ASSERT_NE(property, nullptr) << "the action row has no property box";
     property->setCurrentIndex(property->findText(QStringLiteral("clock")));
+    // processEvents() alone is not promised to deliver a queued call: on
+    // Qt5's glib dispatcher it does not, and the card was read unrebuilt.
+    // sendPostedEvents() delivers it whatever the event loop is.
     QCoreApplication::processEvents();
+    QCoreApplication::sendPostedEvents();
 
     op = opBox(&panel);
     ASSERT_NE(op, nullptr) << "the op box did not survive the property changing";
@@ -109,11 +113,13 @@ TEST(TimerVariable, TheOpBoxFollowsWhetherThePropertyIsATimer)
     // card no longer offers.
     op->setCurrentIndex(op->findText(QStringLiteral("Start")));
     QCoreApplication::processEvents();
+    QCoreApplication::sendPostedEvents();
     ASSERT_FALSE(scene.rules().isEmpty());
     EXPECT_EQ(scene.rules().at(0).actions[0].op, Rule::Op::TimerStart);
 
     property->setCurrentIndex(property->findText(QStringLiteral("score")));
     QCoreApplication::processEvents();
+    QCoreApplication::sendPostedEvents();
     EXPECT_FALSE(Rule::isTimerVerb(scene.rules().at(0).actions[0].op))
         << "a plain number was left holding a timer verb";
 }
@@ -442,7 +448,11 @@ TEST(RulesPanel, OneAddPerListAndEveryRowCanBeTakenAway)
     const QVector<QToolButton *> addThen = buttons(&panel, "Add another action");
     ASSERT_EQ(addThen.size(), 1) << "the Then list wants one add button, under its last row";
     addThen.at(0)->click();     // the buttons are queued: they outlive their own click
+    // processEvents() alone is not promised to deliver a queued call: on
+    // Qt5's glib dispatcher it does not, and the card was read unrebuilt.
+    // sendPostedEvents() delivers it whatever the event loop is.
     QCoreApplication::processEvents();
+    QCoreApplication::sendPostedEvents();
 
     ASSERT_EQ(scene.rules().size(), 1);
     QVector<RuleAction> actions = scene.rules().at(0).actions;
@@ -457,6 +467,7 @@ TEST(RulesPanel, OneAddPerListAndEveryRowCanBeTakenAway)
     EXPECT_TRUE(dropThen.at(0)->isEnabled()) << "the first action could not be removed";
     dropThen.at(0)->click();
     QCoreApplication::processEvents();
+    QCoreApplication::sendPostedEvents();
 
     actions = scene.rules().at(0).actions;
     ASSERT_EQ(actions.size(), 3);
