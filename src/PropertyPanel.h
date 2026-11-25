@@ -12,13 +12,13 @@ class QTableWidgetItem;
 
 #include "PropertyPane/PropertyPane.h"
 #include "EditorMode.h"
+#include "CanvasScene.h"
 
 class QTableWidget;
 class QTabWidget;
 class QLabel;
 class QToolButton;
 class ShapeItem;
-class CanvasScene;
 class PropertyPaneFactory;
 
 class PropertyPanel : public QWidget
@@ -68,6 +68,9 @@ private:
 
     void setActivePane(PropertyPane *pane);
     void updateActivePane();
+    // The tool whose measurement is selected, and so belongs in the table.
+    // None otherwise.
+    CanvasScene::Measure wantedMeasure() const;
     void updateEditable();
     void refreshRows(bool readingsOnly);
     // Turns a row's setter call into an undo step; see the wrapper in addRow().
@@ -112,4 +115,6 @@ private:
     bool m_rebuilding = false;
     std::vector<Row> m_rows;
     bool m_updating = false; // guards against editor->setter->refresh feedback loops
+    // Which tool's measurement the table is showing; None when it is not.
+    CanvasScene::Measure m_shownMeasure = CanvasScene::Measure::None;
 };

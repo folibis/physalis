@@ -3837,6 +3837,7 @@ OptionsDialog::Settings MainWindow::currentSettingsSnapshot() const
     current.gridCellSize = m_fieldDefaults.gridCellSize;
     current.gridColor = m_fieldDefaults.gridColor;
     current.snapToGrid = m_scene->snapToGrid();
+    current.snapToMeasurement = m_scene->snapToMeasurement();
     current.snapPoint = m_scene->snapPoint();
     current.snapStep = m_scene->snapStep();
     current.snapSensitivity = m_scene->snapSensitivity();
@@ -3951,6 +3952,7 @@ CanvasScene::Measure MainWindow::checkedMeasureTool() const
 void MainWindow::applySceneLook(CanvasScene *scene, const OptionsDialog::Settings &s)
 {
     scene->setSnapToGrid(s.snapToGrid);
+    scene->setSnapToMeasurement(s.snapToMeasurement);
     scene->setSnapPoint(s.snapPoint);
     scene->setSnapStep(s.snapStep);
     scene->setSnapSensitivity(s.snapSensitivity);
@@ -4113,6 +4115,7 @@ OptionsDialog::Settings MainWindow::loadSettingsFromFile(const QString &path) co
     s.gridCellSize = settings.value("cellSize", s.gridCellSize).toDouble();
     s.gridColor = QColor(settings.value("gridColor", s.gridColor.name()).toString());
     s.snapToGrid = settings.value("snapToGrid", s.snapToGrid).toBool();
+    s.snapToMeasurement = settings.value("snapToMeasurement", s.snapToMeasurement).toBool();
     s.snapPoint = static_cast<SnapPoint>(settings.value("snapPoint", static_cast<int>(s.snapPoint)).toInt());
     s.snapStep = settings.value("snapStep", s.snapStep).toDouble();
     s.snapSensitivity = settings.value("snapSensitivity", s.snapSensitivity).toDouble();
@@ -4304,6 +4307,7 @@ void MainWindow::saveSettingsToFile(const OptionsDialog::Settings &s) const
     settings.setValue("cellSize", s.gridCellSize);
     settings.setValue("gridColor", s.gridColor.name());
     settings.setValue("snapToGrid", s.snapToGrid);
+    settings.setValue("snapToMeasurement", s.snapToMeasurement);
     settings.setValue("snapPoint", static_cast<int>(s.snapPoint));
     settings.setValue("snapStep", s.snapStep);
     settings.setValue("snapSensitivity", s.snapSensitivity);

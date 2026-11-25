@@ -9,6 +9,7 @@
 #include "ExplosionPropertyPane.h"
 #include "RayPropertyPane.h"
 #include "SensorPropertyPane.h"
+#include "MeasurementPropertyPane.h"
 
 #include <typeinfo>
 
@@ -39,6 +40,14 @@ PropertyPane *PropertyPaneFactory::paneForSelection(CanvasScene *scene)
         m_selectionPane = new SelectionPropertyPane(this);
     m_selectionPane->attach(scene);
     return m_selectionPane;
+}
+
+PropertyPane *PropertyPaneFactory::paneForMeasurement(CanvasScene *scene)
+{
+    if (!m_measurementPane)
+        m_measurementPane = new MeasurementPropertyPane(this);
+    m_measurementPane->attach(scene);
+    return m_measurementPane;
 }
 
 PropertyPane *PropertyPaneFactory::paneForPhysics(CanvasScene *scene)

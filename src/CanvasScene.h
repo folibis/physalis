@@ -765,6 +765,11 @@ public:
     void setSnapToGrid(bool snap);
     bool snapToGrid() const { return m_snapToGrid; }
 
+    // Whether a shape dragged, resized or drawn near a point of the
+    // measurement on the canvas is pulled onto it. On unless Options says not.
+    void setSnapToMeasurement(bool snap) { m_snapToMeasurement = snap; }
+    bool snapToMeasurement() const { return m_snapToMeasurement; }
+
     // Which point of the shape gets pulled onto the grid while moving.
     void setSnapPoint(SnapPoint point);
     SnapPoint snapPoint() const { return m_snapPoint; }
@@ -833,7 +838,19 @@ public:
     // for an angle. Empty when nothing has been measured.
     QVector<QPointF> measurePoints() const { return m_measurePoints; }
     bool hasMeasurement() const { return !m_measurePoints.isEmpty(); }
+    // Every point the tool needs is down and none is still following the
+    // pointer to be placed -- one picked up to be moved still counts, so the
+    // property table does not come and go under a drag.
+    bool isMeasurementLaid() const;
+    // Laid, picked -- by being laid or clicked -- and not let go of since by a
+    // press elsewhere or anything else being picked. It is what the property
+    // table shows, and it is drawn with handles to say so.
+    bool isMeasurementSelected() const;
+    // Typed in rather than placed: replaces the points of a laid measurement
+    // one for one, and does nothing to one still being placed.
+    void setMeasurePoints(const QVector<QPointF> &points);
     void clearMeasurement();
+    Units::Unit measureUnit() const { return m_measureUnit; }
     // What it reads, as it is written on the canvas.
     QString measureText() const;
 
@@ -859,6 +876,9 @@ signals:
     void editorModeChanged(EditorMode mode);
     // Esc with nothing left to clear puts the tool away.
     void measureToolChanged(CanvasScene::Measure tool);
+    // A point of the measurement was placed, moved or typed in, or it went.
+    void measurementChanged();
+    void measureUnitChanged();
     void physicsSelectionChanged();
     void editSelectionChanged();
     void captionChanged();
@@ -939,7 +959,10 @@ private:
     void drawMeasurement(QPainter *painter) const;
     void measureLay();
     QPointF measureCatch(const QVector<QPointF> &moving) const;
+    QPointF measurePull(const QPointF &scenePoint) const;
     int measurePointAt(const QPointF &scenePoint) const;
+    bool measureLineAt(const QPointF &scenePoint) const;
+    bool onActiveShapeGrip(const QPointF &scenePos) const;
     void setMeasureCursor(bool overPoint);
     Measure m_measureTool = Measure::None;
     bool m_measurePressed = false;
@@ -947,6 +970,7 @@ private:
     bool m_measureGrabbed = false;
     Units::Unit m_measureUnit = Units::Unit::Scene;
     QVector<QPointF> m_measurePoints;
+    bool m_measureSelected = false;
     // Which point follows the pointer, or -1 once the measurement is laid.
     int m_measureLive = -1;
     bool m_measureDragging = false;
@@ -1223,6 +1247,7 @@ private:
     QColor m_gridColor = QColor(230, 230, 230);
     QColor m_backgroundColor = Qt::white;
     bool m_snapToGrid = false;
+    bool m_snapToMeasurement = true;
 
     QColor m_sensorColor { 0x05, 0xC9, 0x36 };
     Qt::BrushStyle m_sensorPattern = Qt::DiagCrossPattern;

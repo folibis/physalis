@@ -37,6 +37,9 @@ struct PropertyRow {
     // Shown but not editable: a value the canvas or the running engine owns.
     // Without this the editor still accepts typing and silently discards it.
     bool readOnly = false;
+    // False for a row over something that is not part of the scene, such as
+    // a measurement: setting it is no undo step and leaves the file unsaved.
+    bool editsScene = true;
     // Editable only while this answers true -- a setting that means nothing
     // until another one is switched on.
     std::function<bool()> enabledWhen;

@@ -191,6 +191,8 @@ add_library(PhysalisCore OBJECT
     src/PropertyPane/CatalogueRows.cpp
     src/PropertyPane/ExplosionPropertyPane.h
     src/PropertyPane/ExplosionPropertyPane.cpp
+    src/PropertyPane/MeasurementPropertyPane.h
+    src/PropertyPane/MeasurementPropertyPane.cpp
     src/PropertyPane/RayPropertyPane.h
     src/PropertyPane/RayPropertyPane.cpp
     src/PropertyPane/SelectionPropertyPane.cpp

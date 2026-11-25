@@ -464,6 +464,16 @@
              </property>
             </widget>
            </item>
+           <item row="4" column="1">
+            <widget class="QCheckBox" name="snapToMeasurement">
+             <property name="toolTip">
+              <string>While a distance or an angle is measured on the canvas, a shape moved, resized or drawn near one of its points is pulled onto it. Holding Shift lets go for that drag.</string>
+             </property>
+             <property name="text">
+              <string>Snap shape to measurement points</string>
+             </property>
+            </widget>
+           </item>
           </layout>
          </widget>
         </item>

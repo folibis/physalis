@@ -152,6 +152,28 @@ QVector<QPolygonF> rimPieces(const QVector<QPointF> &corners, qreal thickness)
 CanvasScene::CanvasScene(QObject *parent) : QGraphicsScene(parent)
 {
     setSceneRect(-m_fieldWidth / 2.0, -m_fieldHeight / 2.0, m_fieldWidth, m_fieldHeight);
+
+    // Anything else picked lets the measurement go -- or it would be selected
+    // again the moment that was dropped -- and none of these picks repaint
+    // the foreground it is drawn in.
+    const auto redrawMeasurement = [this] {
+        if (!hasMeasurement())
+        {
+            return;
+        }
+        if (m_active || !m_editSelection.isEmpty() || !m_physicsSelection.isEmpty()
+            || selectedJoint() || selectedRay() || selectedExplosion())
+        {
+            m_measureSelected = false;
+        }
+        update();
+    };
+    connect(this, &CanvasScene::activeItemChanged, this, redrawMeasurement);
+    connect(this, &CanvasScene::editSelectionChanged, this, redrawMeasurement);
+    connect(this, &CanvasScene::physicsSelectionChanged, this, redrawMeasurement);
+    connect(this, &CanvasScene::selectedJointChanged, this, redrawMeasurement);
+    connect(this, &CanvasScene::selectedRayChanged, this, redrawMeasurement);
+    connect(this, &CanvasScene::selectedExplosionChanged, this, redrawMeasurement);
 }
 
 PropertyPane *CanvasScene::makePropertyPane() const
@@ -4611,8 +4633,15 @@ void CanvasScene::setNodeSelection(const QSet<int> &indices)
     }
 }
 
+// A point of the measurement within reach wins over the grid: it was laid
+// there on purpose, and a grid line is only wherever the step happens to fall.
 QPointF CanvasScene::snapScenePoint(const QPointF &scenePoint) const
 {
+    const QPointF pulled = measurePull(scenePoint);
+    if (pulled != scenePoint)
+    {
+        return pulled;
+    }
     if (!m_snapToGrid || m_snapSuspended)
     {
         return scenePoint;
@@ -6384,7 +6413,7 @@ void CanvasScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
     {
         if (event->button() == Qt::LeftButton)
         {
-            m_polygonScenePoints << event->scenePos();
+            m_polygonScenePoints << measurePull(event->scenePos());
             update();
         }
         return;
@@ -6897,7 +6926,7 @@ void CanvasScene::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 
     if (m_polygonDrawing)
     {
-        m_polygonCursorScenePos = event->scenePos();
+        m_polygonCursorScenePos = measurePull(event->scenePos());
         if (!m_polygonScenePoints.isEmpty())
         {
             update();
@@ -7463,9 +7492,37 @@ void CanvasScene::setMeasureTool(Measure tool)
 void CanvasScene::clearMeasurement()
 {
     m_measurePoints.clear();
+    m_measureSelected = false;
     m_measureLive = -1;
     setMeasureCursor(false);
     update();
+    emit measurementChanged();
+}
+
+bool CanvasScene::isMeasurementLaid() const
+{
+    const int needed = m_measureTool == Measure::Distance ? 2 : 3;
+    return m_measureTool != Measure::None && m_measurePoints.size() == needed
+           && (m_measureLive < 0 || m_measureGrabbed);
+}
+
+bool CanvasScene::isMeasurementSelected() const
+{
+    return isMeasurementLaid() && m_measureSelected && !m_active && m_editSelection.isEmpty()
+           && m_physicsSelection.isEmpty() && !selectedJoint() && !selectedRay()
+           && !selectedExplosion();
+}
+
+void CanvasScene::setMeasurePoints(const QVector<QPointF> &points)
+{
+    if (!isMeasurementLaid() || points.size() != m_measurePoints.size()
+        || points == m_measurePoints)
+    {
+        return;
+    }
+    m_measurePoints = points;
+    update();
+    emit measurementChanged();
 }
 
 // A cross while there is a point to place; over a laid point, a hand that
@@ -7506,11 +7563,57 @@ int CanvasScene::measurePointAt(const QPointF &scenePoint) const
     return found;
 }
 
+// A resize handle, a node, an origin or the group's own handles: whatever a
+// press there would take hold of on the shape in hand.
+bool CanvasScene::onActiveShapeGrip(const QPointF &scenePos) const
+{
+    if (!m_active)
+    {
+        return false;
+    }
+    if (groupHandleAt(scenePos) >= 0 || groupOriginHandleContains(scenePos))
+    {
+        return true;
+    }
+    const QPointF local = m_active->mapFromScene(scenePos);
+    switch (m_active->mode())
+    {
+    case ShapeMode::Selected:
+        return m_active->handleAt(local) != HandleId::None;
+    case ShapeMode::Editing:
+        return m_active->nodeAt(local) >= 0;
+    case ShapeMode::Rotating:
+        return m_active->originHandleContains(local);
+    default:
+        return false;
+    }
+}
+
+// On one of the lines from A, within the reach a point has.
+bool CanvasScene::measureLineAt(const QPointF &scenePoint) const
+{
+    const qreal reach = 8.0 / qMax(0.01, m_currentScale / 100.0);
+    for (int i = 1; i < m_measurePoints.size(); ++i)
+    {
+        const QPointF from = m_measurePoints.first();
+        const QPointF along = m_measurePoints.at(i) - from;
+        const qreal span = QPointF::dotProduct(along, along);
+        const qreal t = span > 0.0
+                            ? qBound(0.0, QPointF::dotProduct(scenePoint - from, along) / span, 1.0)
+                            : 0.0;
+        if (QLineF(scenePoint, from + along * t).length() < reach)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 // The offset that lays the nearest of the dragged points onto a point of the
 // measurement lying on the canvas, if one is within reach.
 QPointF CanvasScene::measureCatch(const QVector<QPointF> &moving) const
 {
-    if (m_measureLive >= 0 || m_measurePoints.isEmpty() || m_snapSuspended)
+    if (!m_snapToMeasurement || m_measureLive >= 0 || m_measurePoints.isEmpty() || m_snapSuspended)
     {
         return QPointF();
     }
@@ -7531,10 +7634,22 @@ QPointF CanvasScene::measureCatch(const QVector<QPointF> &moving) const
     return offset;
 }
 
+// One point -- a handle, a node, an origin -- onto a point of the
+// measurement within reach, or left where it is.
+QPointF CanvasScene::measurePull(const QPointF &scenePoint) const
+{
+    return scenePoint + measureCatch({ scenePoint });
+}
+
 void CanvasScene::setMeasureUnit(Units::Unit unit)
 {
+    if (m_measureUnit == unit)
+    {
+        return;
+    }
     m_measureUnit = unit;
     update();
+    emit measureUnitChanged();
 }
 
 // Drawn to the corners, centres and anchors a measurement is usually taken
@@ -7610,6 +7725,7 @@ void CanvasScene::measureLay()
     if (m_measureLive + 1 >= needed)
     {
         m_measureLive = -1;
+        m_measureSelected = true;
         setMeasureCursor(true);
         return;
     }
@@ -7640,16 +7756,40 @@ bool CanvasScene::measurePress(QGraphicsSceneMouseEvent *event)
     }
     else
     {
+        // A press on it picks the measurement, and whatever was picked lets
+        // go, so the property table shows it; on a point, that point is also
+        // taken up to be moved. A press anywhere else lets the measurement go
+        // and is the canvas's.
+        //
+        // Drawing a polygon, a press is a vertex, which the measurement's
+        // points are there to catch rather than to be picked up by. And a
+        // grip of the shape in hand is that shape's: a corner, node or origin
+        // caught by a point sits right on it, and could otherwise never be
+        // grabbed again.
         const int grabbed = measurePointAt(event->scenePos());
-        if (grabbed < 0)
+        if (m_polygonDrawing || onActiveShapeGrip(event->scenePos())
+            || (grabbed < 0 && !measureLineAt(event->scenePos())))
         {
+            if (m_measureSelected)
+            {
+                m_measureSelected = false;
+                update();
+                emit measurementChanged();
+            }
             return false;
         }
-        m_measureLive = grabbed;
-        m_measureGrabbed = true;
+        deactivate();
+        clearCanvasSelection();
+        m_measureSelected = true;
+        if (grabbed >= 0)
+        {
+            m_measureLive = grabbed;
+            m_measureGrabbed = true;
+        }
     }
     m_measurePressed = true;
     update();
+    emit measurementChanged();
     event->accept();
     return true;
 }
@@ -7667,6 +7807,7 @@ bool CanvasScene::measureMove(QGraphicsSceneMouseEvent *event)
     }
     m_measurePoints[m_measureLive] = measureSnap(event->scenePos(), event->modifiers());
     update();
+    emit measurementChanged();
     event->accept();
     return true;
 }
@@ -7697,6 +7838,7 @@ bool CanvasScene::measureRelease(QGraphicsSceneMouseEvent *event)
     }
     m_measureDragging = false;
     update();
+    emit measurementChanged();
     event->accept();
     return true;
 }
@@ -7759,8 +7901,13 @@ void CanvasScene::drawMeasurement(QPainter *painter) const
     painter->setRenderHint(QPainter::Antialiasing, true);
 
     const QColor ink(226, 88, 22);
-    const QPen halo(QColor(255, 255, 255, 210), 4.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-    const QPen line(ink, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    // Selected, it wears handles the way a picked shape does: a heavier line
+    // and square grips on its points, rather than a box drawn round it.
+    const bool selected = isMeasurementSelected();
+    const qreal weight = selected ? 2.4 : 1.6;
+    const QPen halo(QColor(255, 255, 255, 210), weight + 2.9, Qt::SolidLine, Qt::RoundCap,
+                    Qt::RoundJoin);
+    const QPen line(ink, weight, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
     QPainterPath path;
     // The label stands off from `labelFrom` along `labelOut`, by `labelGap`
     // and then by however far its own box reaches that way, so it never sits
@@ -7769,6 +7916,38 @@ void CanvasScene::drawMeasurement(QPainter *painter) const
     QPointF labelOut;
     qreal labelGap = 8.0;
     bool labelled = false;
+
+    // A mark every grid cell from A along an arm, and a longer one every
+    // fifth, the way the grid draws its darker lines. Marks closer together
+    // than a few pixels are a smear, so the short ones go first. Stroked
+    // finer than the line, so they read as a scale on it and not as part of it.
+    QPainterPath marks;
+    const auto markCells = [&](const QLineF &arm, int end) {
+        const qreal sceneLength = QLineF(m_measurePoints.at(0), m_measurePoints.at(end)).length();
+        if (arm.length() < 0.5 || sceneLength <= 0.0)
+        {
+            return;
+        }
+        const qreal cellOnScreen = m_gridCellSize * arm.length() / sceneLength;
+        if (cellOnScreen * 5.0 < 3.0)
+        {
+            return;
+        }
+        const QLineF normal = arm.normalVector().unitVector();
+        const QPointF across = normal.p2() - normal.p1();
+        for (int i = 1; i * m_gridCellSize < sceneLength; ++i)
+        {
+            const bool major = i % 5 == 0;
+            const QPointF mark = arm.pointAt(i * m_gridCellSize / sceneLength);
+            if ((!major && cellOnScreen < 3.0) || QLineF(mark, arm.p2()).length() < 2.0)
+            {
+                continue;
+            }
+            const qreal reach = major ? 4.5 : 2.5;
+            marks.moveTo(mark - across * reach);
+            marks.lineTo(mark + across * reach);
+        }
+    };
 
     if (m_measureTool == Measure::Distance)
     {
@@ -7785,6 +7964,7 @@ void CanvasScene::drawMeasurement(QPainter *painter) const
                 path.moveTo(end - side * 6.0);
                 path.lineTo(end + side * 6.0);
             }
+            markCells(ruler, 1);
             // Beside the middle of the line, on its upper side.
             if (side.y() > 0.0)
             {
@@ -7799,10 +7979,12 @@ void CanvasScene::drawMeasurement(QPainter *painter) const
     {
         path.moveTo(at.at(0));
         path.lineTo(at.at(1));
+        markCells(QLineF(at.at(0), at.at(1)), 1);
         if (at.size() > 2)
         {
             path.moveTo(at.at(0));
             path.lineTo(at.at(2));
+            markCells(QLineF(at.at(0), at.at(2)), 2);
             const QLineF first(at.at(0), at.at(1));
             const QLineF second(at.at(0), at.at(2));
             if (first.length() > 1.0 && second.length() > 1.0)
@@ -7825,13 +8007,22 @@ void CanvasScene::drawMeasurement(QPainter *painter) const
         }
     }
 
+    painter->strokePath(marks, QPen(halo.color(), 2.6, Qt::SolidLine, Qt::FlatCap));
     painter->strokePath(path, halo);
     painter->strokePath(path, line);
+    painter->strokePath(marks, QPen(ink, 1.0, Qt::SolidLine, Qt::FlatCap));
     painter->setPen(QPen(Qt::white, 1.2));
     painter->setBrush(ink);
     for (const QPointF &point : at)
     {
-        painter->drawEllipse(point, 3.0, 3.0);
+        if (selected)
+        {
+            painter->drawRect(QRectF(point - QPointF(4.5, 4.5), QSizeF(9.0, 9.0)));
+        }
+        else
+        {
+            painter->drawEllipse(point, 3.0, 3.0);
+        }
     }
 
     const QString text = measureText();

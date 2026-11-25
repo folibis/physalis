@@ -44,6 +44,7 @@ public:
         qreal gridCellSize = 20.0;
         QColor gridColor { 230, 230, 230 };
         bool snapToGrid = false;
+        bool snapToMeasurement = true;
         SnapPoint snapPoint = SnapPoint::Position;
         qreal snapStep = 20.0;
         qreal snapSensitivity = 10.0;

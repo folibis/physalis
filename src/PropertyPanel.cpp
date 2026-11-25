@@ -215,11 +215,13 @@ void PropertyPanel::addRow(QTableWidget *table, const PropertyRow &row)
     table->setCellWidget(tableRow, 0, nameCell);
 
     const QString editLabel = row.label;
+    const bool editsScene = row.editsScene;
     const std::function<void(const QVariant &)> rawSetter = row.setter;
     const std::function<void(const QVariant &)> setter =
-        [this, rawSetter, editLabel](const QVariant &value) {
+        [this, rawSetter, editLabel, editsScene](const QVariant &value) {
             rawSetter(value);
-            reportEdit(editLabel);
+            if (editsScene)
+                reportEdit(editLabel);
             // A setting moves what a reading starts at -- density moves mass.
             // Queued, after the edit has reached the scene.
             QMetaObject::invokeMethod(this, &PropertyPanel::refreshReadings, Qt::QueuedConnection);
@@ -234,12 +236,12 @@ void PropertyPanel::addRow(QTableWidget *table, const PropertyRow &row)
         const bool fineGrained = (row.maxValue - row.minValue) <= 2.0;
         spin->setDecimals(row.decimals >= 0 ? row.decimals : (fineGrained ? 2 : 1));
         spin->setSingleStep(row.step > 0.0 ? row.step : (fineGrained ? 0.05 : 1.0));
-        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, setter](double v) {
+        connect(spin, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this, setter, editsScene](double v) {
             if (m_updating)
                 return;
             setter(v);
             updateModifiedMarks();
-            if (!m_item)
+            if (!m_item && editsScene)
                 emit fieldSettingsChanged();
         });
         editor = spin;
@@ -657,6 +659,15 @@ void PropertyPanel::setScene(CanvasScene *scene)
     // Picking a second shape changes which table belongs here, and nothing
     // else was telling the panel about it.
     connect(m_scene, &CanvasScene::editSelectionChanged, this, &PropertyPanel::updateActivePane);
+    // Only its coming and going changes the pane; a point moving is the
+    // pane's own valueChanged. Queued, since a row typed into can be what
+    // moved it, and switching panes deletes that row's editor.
+    connect(m_scene, &CanvasScene::measurementChanged, this, [this] {
+        QMetaObject::invokeMethod(this, [this] {
+            if (wantedMeasure() != m_shownMeasure)
+                updateActivePane();
+        }, Qt::QueuedConnection);
+    });
 
     // Dragging on the canvas writes to the same values the table shows, and
     // nothing was telling the table. Turn a selection with the mouse and the
@@ -688,8 +699,15 @@ void PropertyPanel::setActiveItem(ShapeItem *item)
     updateActivePane();
 }
 
+CanvasScene::Measure PropertyPanel::wantedMeasure() const
+{
+    return m_scene && m_scene->isMeasurementSelected() ? m_scene->measureTool()
+                                                       : CanvasScene::Measure::None;
+}
+
 void PropertyPanel::updateActivePane()
 {
+    m_shownMeasure = CanvasScene::Measure::None;
 
     if (!m_scene) {
         setTitle(EditorModes::name(m_mode));
@@ -712,6 +730,15 @@ void PropertyPanel::updateActivePane()
             setTitle(tr("Joint"));
             setActivePane(m_factory->paneForJoints(m_scene));
         }
+        return;
+    }
+
+    // In place of the field's or the world's rows, which is what an empty
+    // pick shows otherwise: the measurement is what is on the canvas to read.
+    if (const CanvasScene::Measure measure = wantedMeasure(); measure != CanvasScene::Measure::None) {
+        m_shownMeasure = measure;
+        setTitle(measure == CanvasScene::Measure::Angle ? tr("Angle") : tr("Distance"));
+        setActivePane(m_factory->paneForMeasurement(m_scene));
         return;
     }
 

@@ -179,6 +179,7 @@ OptionsDialog::OptionsDialog(const Settings &current, QWidget *parent)
     m_ui->showGrid->setChecked(current.showGrid);
     m_ui->cellSize->setValue(current.gridCellSize);
     m_ui->snapToGrid->setChecked(current.snapToGrid);
+    m_ui->snapToMeasurement->setChecked(current.snapToMeasurement);
     selectData(m_ui->snapPoint, int(current.snapPoint));
     m_ui->snapStep->setValue(current.snapStep);
     m_ui->undoDepth->setValue(current.undoDepth);
@@ -935,6 +936,7 @@ OptionsDialog::Settings OptionsDialog::settings() const
     s.gridCellSize = m_ui->cellSize->value();
     s.gridColor = m_gridColor;
     s.snapToGrid = m_ui->snapToGrid->isChecked();
+    s.snapToMeasurement = m_ui->snapToMeasurement->isChecked();
     s.snapPoint = static_cast<SnapPoint>(m_ui->snapPoint->currentData().toInt());
     s.snapStep = m_ui->snapStep->value();
     s.snapSensitivity = m_ui->snapSensitivity->value();

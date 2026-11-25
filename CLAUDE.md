@@ -159,15 +159,57 @@ stands off along its own direction by the size of its box, because a fixed
 offset put it on the line it was reading. The tool takes the left button
 before anything else on the canvas, the slingshot included, since it was
 picked on purpose -- but only while there is a point to place. Once the
-measurement is laid, a press on one of its points picks that point up and any
-other press is the canvas's, so shapes are drawn and moved with it in view;
-it lives exactly as long as the toolbar button is down. A shape dragged near
-one of its points is caught by it (`measureCatch`, over the same
-`keyPointsOf` a point being placed is pulled to). A point is pulled to a corner, a centre, a centre of mass
-or an anchor within 8 device pixels, and otherwise to the grid. A distance is
-written in the rulers' unit (`setMeasureUnit`, set where the rulers are),
-to a step of one device pixel. The window applies the checked tool to the
-scene and to a run's copy alike.
+measurement is laid, a press on one of its points picks that point up, a press
+on one of its lines picks it without moving anything, and any other press is
+the canvas's, so shapes are drawn and moved with it in view; it lives exactly
+as long as the toolbar button is down. Two presses on a point are not the
+measurement's: one while a polygon is being drawn, which is a vertex the point
+is there to catch, and one on a grip of the shape in hand
+(`onActiveShapeGrip` -- a handle, a node, an origin, the group's handles),
+since a corner caught by a point sits right on it and could otherwise never be
+grabbed again. A point being placed is pulled to a corner, a centre, a centre
+of mass or an anchor within 8 device pixels, and otherwise to the grid. A
+distance is written in the rulers' unit (`setMeasureUnit`, set where the
+rulers are), to a step of one device pixel. The window applies the checked
+tool to the scene and to a run's copy alike.
+
+**A measurement catches shapes, unless Options says not.** A shape dragged
+near one of its points is caught by it (`measureCatch`, over the same
+`keyPointsOf` a point being placed is pulled to), and every single point the
+canvas places -- a resize handle, a node, an origin, the pivot, a joint
+anchor -- is pulled onto one within 8 device pixels before the grid is tried,
+because `snapScenePoint` asks `measurePull` first: a point was laid there on
+purpose, and a grid line is only wherever the step happens to fall. A polygon's
+vertices take the pull alone, since drawing one never snapped to the grid.
+Shift lets go of it as it does of the grid. It is on by default and switched
+by Options -> Common -> Snap (`snapToMeasurement`, `Field/snapToMeasurement`
+in the INI).
+
+**A measurement is selected like an object, and is not one.** It is picked by
+being laid or clicked, and let go of by a press elsewhere or by anything else
+being picked -- the flag is `m_measureSelected`, and it has to be cleared on
+another pick, or dropping that pick would hand the selection straight back.
+`isMeasurementSelected` is the one answer the canvas and the property panel
+both ask. Selected, it is drawn with handles -- a heavier line and square
+grips -- rather than a box round it, and the Properties tab shows
+`MeasurementPropertyPane`: the width from A to B (and A to C for an angle) in
+the rulers' unit, every point's coordinates, and the angle at A, each turning
+or stretching about A so that setting the angle keeps the width and setting
+the width keeps the angle. Its rows carry `PropertyRow::editsScene = false`,
+so typing into one is no undo step and leaves the file saved, the same as a
+point dragged. Every row reads back after any of them is set, queued behind
+the editor's own signal: a point moved changes the widths and the angle beside
+it. The panel only rebuilds when the measurement comes, goes or changes tool,
+and remembers which tool it is showing -- switching straight from Distance to
+Angle once left the ruler's rows up. During a run the table does not show it:
+the panel watches the scene, and a measurement taken mid-run is on the run's
+copy.
+
+**A ruler and both arms of an angle are marked off in grid cells** from A, a
+long mark every fifth the way the grid draws its darker lines, finer than the
+line so they read as a scale on it. Short marks closer than three device
+pixels are a smear and go first, then the long ones. They follow the cell size
+whether or not the grid is shown.
 
 **The canvas's right-click menu carries the canvas's own commands**
 (`MainWindow::addCanvasActions`), appended to every branch so the three menus
